@@ -12,6 +12,7 @@ public class ActiveOrder{
     private final UUID memberId;
     private final UUID eventId;
     private final Instant createdAt;
+    private OrderStatus status;
      
     /**
      * Creates an ActiveOrder without a memberId (guest order).
@@ -47,5 +48,8 @@ public class ActiveOrder{
     }
 
     public UUID getId() { return id; }
+
+    public boolean isActive() { return status == OrderStatus.ACTIVE; }
+    public boolean isExpired() { return status == OrderStatus.EXPIRED; }
     
 }

@@ -8,4 +8,6 @@ public interface IActiveOrderRepository {
     Optional<ActiveOrder> findActiveBySessionId(UUID sessionId);
 
     void save(ActiveOrder order);
+
+    Optional<ActiveOrder> findById(UUID orderId);
 }

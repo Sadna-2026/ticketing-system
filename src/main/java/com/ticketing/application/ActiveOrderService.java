@@ -63,6 +63,37 @@ public class ActiveOrderService {
         return order.getId();
     }
 
+    /**
+     * Adds a specific assigned seat to the active order.
+     */
+    public UUID addSeatToOrder(String token, UUID orderId, UUID zoneId, UUID seatId) {
+        // validate token
+        validateToken(token);
+
+        log.info("Adding seat to order: orderId={}, zoneId={}, seatId={}", orderId, zoneId, seatId);
+
+        ActiveOrder order = findActiveOrder(orderId);
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+
+        InventoryZone zone = event.findZone(zoneId);
+        if (!zone.isAssigned()) {
+            throw new IllegalStateException("Zone is not an assigned seating zone");
+        }
+
+        zone.lockSeat(seatId);
+        eventRepository.save(event);
+
+        OrderItem item = OrderItem.forSeat(UUID.randomUUID(), zoneId, seatId, zone.getPricePerTicket());
+        order.addItem(item);
+        activeOrderRepository.save(order);
+
+        checkAndPublishSoldOut(event);
+
+        log.info("Seat added to order: orderId={}, seatId={}", orderId, seatId);
+        return item.getId();
+    }
+
     private void validateToken(String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Authentication token is required");
@@ -75,5 +106,14 @@ public class ActiveOrderService {
     private Event findEvent(UUID eventId) {
         return eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+    }
+
+    private ActiveOrder findActiveOrder(UUID orderId) {
+        ActiveOrder order = activeOrderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+        if (!order.isActive()) {
+            throw new IllegalStateException("Order is not active (status: " + order.getStatus() + ")");
+        }
+        return order;
     }
 }
