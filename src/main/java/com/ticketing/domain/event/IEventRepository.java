@@ -6,5 +6,7 @@ import java.util.UUID;
 public interface IEventRepository {
 
     Optional<Event> findById(UUID eventId);
-    
+
+    void save(Event event);
+
 }

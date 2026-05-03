@@ -63,4 +63,11 @@ public class Event{
 
     public LockTimerDuration getLockTimerDuration() { return lockTimerDuration; }
 
+    public InventoryZone findZone(UUID zoneId) {
+        return zones.stream()
+                .filter(z -> z.getId().equals(zoneId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Zone not found: " + zoneId));
+    }
+
 }

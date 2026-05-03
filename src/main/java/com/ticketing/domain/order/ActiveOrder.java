@@ -14,6 +14,7 @@ public class ActiveOrder{
     private final UUID eventId;
     private final Instant createdAt;
     private OrderStatus status;
+    private final List<OrderItem> items;
      
     /**
      * Creates an ActiveOrder without a memberId (guest order).
@@ -46,6 +47,7 @@ public class ActiveOrder{
         this.memberId = memberId;
         this.eventId = eventId;
         this.createdAt = createdAt;
+        this.items = new ArrayList<>();
     }
 
     public UUID getId() { return id; }
@@ -57,6 +59,21 @@ public class ActiveOrder{
 
     public boolean isExpiredAt(Instant now, Duration lockDuration) {
         return now.isAfter(createdAt.plus(lockDuration));
+    }
+
+    /**
+     * Adds an item to the order. Only on ACTIVE orders.
+     */
+    public void addItem(OrderItem item) {
+        validateActive();
+        if (item == null) throw new IllegalArgumentException("OrderItem cannot be null");
+        items.add(item);
+    }
+
+    private void validateActive() {
+        if (!isActive()) {
+            throw new IllegalStateException("Order is not active (status: " + status + ")");
+        }
     }
     
 }
