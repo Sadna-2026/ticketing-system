@@ -52,5 +52,6 @@ public class ActiveOrder{
     public boolean isActive() { return status == OrderStatus.ACTIVE; }
     public boolean isExpired() { return status == OrderStatus.EXPIRED; }
     public OrderStatus getStatus() { return status; }
+    public UUID getEventId() { return eventId; }
     
 }

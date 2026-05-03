@@ -116,4 +116,10 @@ public class ActiveOrderService {
         }
         return order;
     }
+
+    private void validateOrderNotExpired(ActiveOrder order, Event event) {
+        if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
+            throw new IllegalStateException("Order has expired");
+        }
+    }
 }
