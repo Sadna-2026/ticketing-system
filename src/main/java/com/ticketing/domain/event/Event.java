@@ -61,4 +61,6 @@ public class Event{
         this.version = 0;
     }
 
+    public LockTimerDuration getLockTimerDuration() { return lockTimerDuration; }
+
 }

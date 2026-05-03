@@ -1,5 +1,6 @@
 package com.ticketing.domain.order;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,5 +54,9 @@ public class ActiveOrder{
     public boolean isExpired() { return status == OrderStatus.EXPIRED; }
     public OrderStatus getStatus() { return status; }
     public UUID getEventId() { return eventId; }
+
+    public boolean isExpiredAt(Instant now, Duration lockDuration) {
+        return now.isAfter(createdAt.plus(lockDuration));
+    }
     
 }
