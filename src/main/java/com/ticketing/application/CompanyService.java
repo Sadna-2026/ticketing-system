@@ -1,0 +1,74 @@
+package com.ticketing.application;
+import org.slf4j.LoggerFactory;
+
+import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.company.IMemberRepository;
+import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.domain.user.Member;
+import com.ticketing.domain.user.Producer;
+import com.ticketing.domain.user.ProducerRole;
+import com.ticketing.domain.user.RoleFactory;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.UUID;
+
+import javax.management.relation.Role;
+
+public class CompanyService {
+    private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
+
+    private final ICompanyRepository companyRepository;
+    private final IMemberRepository memberRepository;
+    private final IDomainEventPublisher eventPublisher;
+    private final ISessionTokenService sessionTokenService;
+    private final ISystemClock systemClock;
+
+    public CompanyService(ICompanyRepository companyRepository, IMemberRepository memberRepository, IDomainEventPublisher eventPublisher, ISessionTokenService sessionTokenService, ISystemClock systemClock) {
+        this.companyRepository = companyRepository;
+        this.memberRepository = memberRepository;
+        this.eventPublisher = eventPublisher;
+        this.sessionTokenService = sessionTokenService;
+        this.systemClock = systemClock;
+    }
+
+    /**
+     * Creates a new production company. The creating member becomes the Founder
+     * and initial Owner (via a Founder StaffAppointment in the Member aggregate).
+     *
+     * @param token token of the member creating the company
+     * @param name the company name
+     * @param description optional company description
+     * @return the new company's name (unique identifier)
+     */
+    public String openProductionCompany(String token, String name, String description) {
+        UUID founderId = validateToken(token);
+        log.info("Creating company: founderId={}, name={}", founderId, name);
+
+        Member founder = memberRepository.findById(founderId);
+
+        Company company = new Company(name, description, founderId);
+        companyRepository.save(company);
+
+        // Assign Founder appointment to the member
+        ProducerRole founderRole = RoleFactory.createFounder();
+        Producer founderAppointment = new Producer(company.getName(), founderId, null, founderRole);
+        founder.addCompanyRole(founderAppointment);
+        memberRepository.save(founder);
+
+        log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
+        return company.getName();
+    }
+
+    private UUID validateToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Authentication token is required");
+        }
+        if (!sessionTokenService.isValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired authentication token");
+        }
+        return sessionTokenService.extractMemberId(token);
+    }
+}
