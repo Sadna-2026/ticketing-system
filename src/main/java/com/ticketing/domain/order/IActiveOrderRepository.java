@@ -6,4 +6,6 @@ import java.util.UUID;
 
 public interface IActiveOrderRepository {
     Optional<ActiveOrder> findActiveBySessionId(UUID sessionId);
+
+    void save(ActiveOrder order);
 }
