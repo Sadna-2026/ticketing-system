@@ -86,4 +86,10 @@ public class Event{
         this.status = EventStatus.SOLD_OUT;
     }
 
+    public UUID getId() {
+        return id;
+    }
+    public void incrementVersion() { this.version++; }
+    public int getVersion() { return this.version; }
+
 }
