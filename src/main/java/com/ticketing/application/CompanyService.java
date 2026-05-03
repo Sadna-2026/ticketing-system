@@ -3,7 +3,7 @@ import org.slf4j.LoggerFactory;
 
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
-import com.ticketing.domain.company.IMemberRepository;
+import com.ticketing.domain.user.IMemberRepository;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.user.Member;
 import com.ticketing.domain.user.Producer;
@@ -22,16 +22,13 @@ public class CompanyService {
 
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
-    private final IDomainEventPublisher eventPublisher;
+    //private final IDomainEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
-    private final ISystemClock systemClock;
 
-    public CompanyService(ICompanyRepository companyRepository, IMemberRepository memberRepository, IDomainEventPublisher eventPublisher, ISessionTokenService sessionTokenService, ISystemClock systemClock) {
+    public CompanyService(ICompanyRepository companyRepository, IMemberRepository memberRepository, ISessionTokenService sessionTokenService) {
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
-        this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
-        this.systemClock = systemClock;
     }
 
     /**
