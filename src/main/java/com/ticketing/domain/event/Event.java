@@ -17,7 +17,6 @@ public class Event{
     private EventStatus status;
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
-    private VenueMap venueMap;
     private final EventPurchasePolicy eventPurchasePolicy;
     private final EventDiscountPolicy eventDiscountPolicy;
     private int version;

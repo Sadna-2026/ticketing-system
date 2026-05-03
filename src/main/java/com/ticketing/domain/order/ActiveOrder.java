@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public class ActiveOrder{
@@ -74,6 +75,15 @@ public class ActiveOrder{
         if (!isActive()) {
             throw new IllegalStateException("Order is not active (status: " + status + ")");
         }
+    }
+
+    /**
+     * Finds an order item by zone ID (for GA quantity updates).
+     */
+    public Optional<OrderItem> findItemByZoneId(UUID zoneId) {
+        return items.stream()
+                .filter(i -> i.getZoneId().equals(zoneId) && i.isGA())
+                .findFirst();
     }
     
 }

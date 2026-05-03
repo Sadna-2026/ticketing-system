@@ -1,5 +1,6 @@
 package com.ticketing.application;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -95,6 +96,47 @@ public class ActiveOrderService {
         log.info("Seat added to order: orderId={}, seatId={}", orderId, seatId);
         return item.getId();
     }
+
+    
+     /* Adds GA tickets from a zone to the active order.*/
+    public UUID addGATicketsToOrder(String token, UUID orderId, UUID zoneId, int quantity) {
+        // validate token
+        validateToken(token);
+        log.info("Adding GA tickets: orderId={}, zoneId={}, quantity={}", orderId, zoneId, quantity);
+
+        ActiveOrder order = findActiveOrder(orderId);
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+
+        InventoryZone zone = event.findZone(zoneId);
+        if (!zone.isGA()) {
+            throw new IllegalStateException("Zone is not a General Admission zone");
+        }
+
+        Optional<OrderItem> existingItem = order.findItemByZoneId(zoneId);
+        UUID itemId;
+        if (existingItem.isPresent()) {
+            int additionalQuantity = quantity;
+            zone.lockGA(additionalQuantity);
+            eventRepository.save(event);
+            int oldQuantity = existingItem.get().getQuantity();
+            existingItem.get().updateQuantity(oldQuantity + additionalQuantity);
+            itemId = existingItem.get().getId();
+        } else {
+            zone.lockGA(quantity);
+            eventRepository.save(event);
+            OrderItem item = OrderItem.forGA(UUID.randomUUID(), zoneId, quantity, zone.getPricePerTicket());
+            order.addItem(item);
+            itemId = item.getId();
+        }
+
+        activeOrderRepository.save(order);
+        checkAndPublishSoldOut(event);
+
+        log.info("GA tickets added: orderId={}, zoneId={}, quantity={}", orderId, zoneId, quantity);
+        return itemId;
+    }
+
 
     private void validateToken(String token) {
         if (token == null || token.isBlank()) {
