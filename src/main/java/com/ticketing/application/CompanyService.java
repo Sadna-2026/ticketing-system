@@ -43,6 +43,14 @@ public class CompanyService {
     public String openProductionCompany(String token, String name, String description) {
         UUID founderId = validateToken(token);
         log.info("Creating company: founderId={}, name={}", founderId, name);
+        
+        if (founderId == null) {
+            throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
+        }
+
+        if (companyRepository.existsByName(name)) {
+            throw new IllegalArgumentException("A production company with this name already exists.");
+        }
 
         Member founder = memberRepository.findById(founderId);
 
