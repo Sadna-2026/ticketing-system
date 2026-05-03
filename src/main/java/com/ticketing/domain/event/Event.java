@@ -70,4 +70,21 @@ public class Event{
                 .orElseThrow(() -> new IllegalArgumentException("Zone not found: " + zoneId));
     }
 
+    public boolean hasAvailableTickets() {
+        return getTotalAvailableTickets() > 0;
+    }
+
+    public int getTotalAvailableTickets() {
+        return zones.stream().mapToInt(InventoryZone::getAvailableCount).sum();
+    }
+
+    public boolean isPublished() { return status == EventStatus.PUBLISHED; }
+
+    public void markSoldOut() {
+        if (status != EventStatus.PUBLISHED) {
+            throw new IllegalStateException("Can only mark a PUBLISHED event as sold out");
+        }
+        this.status = EventStatus.SOLD_OUT;
+    }
+
 }

@@ -54,7 +54,7 @@ public class ActiveOrderService {
 
         Event event = findEvent(eventId);
 
-        if (!event.isPurchasable()) {
+        if (!event.isPublished()) {
             throw new IllegalStateException("Event is not available for purchase");
         }
 
@@ -124,4 +124,14 @@ public class ActiveOrderService {
             throw new IllegalStateException("Order has expired");
         }
     }
+
+    private void checkAndPublishSoldOut(Event event) {
+        if (!event.hasAvailableTickets() && event.isPublished()) {
+            event.markSoldOut();
+            eventRepository.save(event);
+            // TODO: send event sold out messages to all listeners
+        }
+    }
+
+
 }
