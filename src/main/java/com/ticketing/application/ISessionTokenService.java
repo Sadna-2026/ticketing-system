@@ -1,3 +1,5 @@
+package com.ticketing.application;
+
 import java.util.Set;
 import java.util.UUID;
 
