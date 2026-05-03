@@ -13,6 +13,9 @@ public class ActiveOrderService {
      * @return the new order's UUID
      */
     public UUID createOrder(String token, UUID eventId) {
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);     // null for guests
+        activeOrderRepository.findActiveBySessionId(sessionId).ifPresent(...);
         UUID memberId = validateToken(token); // null if guest
     }
 
