@@ -2,6 +2,7 @@ import java.util.UUID;
 
 public class ActiveOrderService {
 
+    private ISessionTokenService sessionTokenService;
 
     /**
      * Creates an active order for the given session and event.
@@ -12,16 +13,16 @@ public class ActiveOrderService {
      * @return the new order's UUID
      */
     public UUID createOrder(String token, UUID eventId) {
-        UUID memberId = validateToken(token);
+        UUID memberId = validateToken(token); // null if guest
     }
 
     private UUID validateToken(String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Authentication token is required");
         }
-        if (!tokenService.isValid(token)) {
+        if (!sessionTokenService.isValid(token)) {
             throw new IllegalArgumentException("Invalid or expired authentication token");
         }
-        return tokenService.extractMemberId(token);
+        return sessionTokenService.extractMemberId(token); // null if guest
     }
 }
