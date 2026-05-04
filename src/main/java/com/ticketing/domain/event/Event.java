@@ -17,8 +17,8 @@ public class Event{
     private EventStatus status;
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
-    private final EventPurchasePolicy eventPurchasePolicy;
-    private final EventDiscountPolicy eventDiscountPolicy;
+    //private final EventPurchasePolicy eventPurchasePolicy;
+    //private final EventDiscountPolicy eventDiscountPolicy;
     private int version;
 
     /**
@@ -36,15 +36,15 @@ public class Event{
      * @param eventDiscountPolicy the event's discount policy (required, per V1)
      */
     public Event(UUID id, UUID companyId, String name, String description,
-                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration,
-                 EventPurchasePolicy eventPurchasePolicy, EventDiscountPolicy eventDiscountPolicy) {
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration){
+                 //EventPurchasePolicy eventPurchasePolicy, EventDiscountPolicy eventDiscountPolicy) {
         if (id == null) throw new IllegalArgumentException("Event ID is required");
         if (companyId == null) throw new IllegalArgumentException("Company ID is required");
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Event name is required");
         if (schedule == null) throw new IllegalArgumentException("Event schedule is required");
         if (lockTimerDuration == null) throw new IllegalArgumentException("Lock timer duration is required");
-        if (eventPurchasePolicy == null) throw new IllegalArgumentException("EventPurchasePolicy is required");
-        if (eventDiscountPolicy == null) throw new IllegalArgumentException("EventDiscountPolicy is required");
+        //if (eventPurchasePolicy == null) throw new IllegalArgumentException("EventPurchasePolicy is required");
+        //if (eventDiscountPolicy == null) throw new IllegalArgumentException("EventDiscountPolicy is required");
 
         this.id = id;
         this.companyId = companyId;
@@ -55,8 +55,8 @@ public class Event{
         this.status = EventStatus.DRAFT;
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
-        this.eventPurchasePolicy = eventPurchasePolicy;
-        this.eventDiscountPolicy = eventDiscountPolicy;
+        //this.eventPurchasePolicy = eventPurchasePolicy;
+        //this.eventDiscountPolicy = eventDiscountPolicy;
         this.version = 0;
     }
 
@@ -91,5 +91,29 @@ public class Event{
     }
     public void incrementVersion() { this.version++; }
     public int getVersion() { return this.version; }
+
+    public void addZone(InventoryZone zone) {
+        validateModifiable();
+        if (zone == null) throw new IllegalArgumentException("Zone cannot be null");
+        zones.add(zone);
+    }
+
+    private void validateModifiable() {
+        if (isCancelled()) {
+            throw new IllegalStateException("Cannot modify a cancelled event");
+        }
+    }
+    
+    public boolean isCancelled() { return status == EventStatus.CANCELLED; }
+
+    public void publish() {
+        if (status != EventStatus.DRAFT) {
+            throw new IllegalStateException("Can only publish a DRAFT event");
+        }
+        if (zones.isEmpty()) {
+            throw new IllegalStateException("Event must have at least one inventory zone to publish");
+        }
+        this.status = EventStatus.PUBLISHED;
+    }
 
 }

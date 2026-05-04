@@ -6,12 +6,13 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.order.IActiveOrderRepository;
 import com.ticketing.domain.order.OrderItem;
+import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 
 public class ActiveOrderService {

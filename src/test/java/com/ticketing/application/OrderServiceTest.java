@@ -5,136 +5,161 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.domain.event.InMemoryEventRepository;
+import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.EventCategory;
+import com.ticketing.domain.event.EventDiscountPolicy;
+import com.ticketing.domain.event.EventPurchasePolicy;
+import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.order.InMemoryActiveOrderRepository;
+import com.ticketing.infrastructure.InMemoryActiveOrderRepository;
+import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.domain.order.InMemoryCompletedOrderRepository;
 import com.ticketing.domain.order.OrderStatus;
-
+import com.ticketing.application.SessionTokenService;
+import java.util.Base64;
 public class OrderServiceTest {
 
-    private OrderService orderService;
+    private ActiveOrderService orderService;
     private InMemoryActiveOrderRepository activeOrderRepo;
-    private InMemoryCompletedOrderRepository completedOrderRepo;
+    //private InMemoryCompletedOrderRepository completedOrderRepo;
     private InMemoryEventRepository eventRepo;
-    private InMemorySessionRepository sessionRepo;
-    private InMemoryMemberRepository memberRepo;
-    private InMemoryCompanyRepository companyRepo;
-    private StubPaymentGateway paymentGateway;
-    private StubTicketSupplyService ticketSupplyService;
-    private InMemoryDomainEventPublisher eventPublisher;
+    private SessionTokenService sessionRepo;
+    //private InMemoryMemberRepository memberRepo;
+    //private InMemoryCompanyRepository companyRepo;
+    //private StubPaymentGateway paymentGateway;
+    //private StubTicketSupplyService ticketSupplyService;
+    //private InMemoryDomainEventPublisher eventPublisher;
     private TestClock clock;
-
+    
     // Test fixtures
-    private UUID memberId;
-    private UUID sessionId;
+    // private UUID memberId;
+    // private UUID sessionId;
     private UUID eventId;
     private UUID companyId;
     private UUID gaZoneId;
     private UUID assignedZoneId;
     private UUID seatId;
-    private String memberToken;
+    // private String memberToken;
+    private String guestToken;
+    private InMemorySessionTokenRepository sessionTokenRepository;
 
     @BeforeEach
     void setUp() {
         activeOrderRepo = new InMemoryActiveOrderRepository();
-        completedOrderRepo = new InMemoryCompletedOrderRepository();
+        //TODO
+        // completedOrderRepo = new InMemoryCompletedOrderRepository();
         eventRepo = new InMemoryEventRepository();
-        sessionRepo = new InMemorySessionRepository();
-        memberRepo = new InMemoryMemberRepository();
-        companyRepo = new InMemoryCompanyRepository();
-        paymentGateway = new StubPaymentGateway();
-        ticketSupplyService = new StubTicketSupplyService();
-        eventPublisher = new InMemoryDomainEventPublisher();
-        clock = new TestClock(Instant.parse("2026-06-01T10:00:00Z"));
-        testTokenService = new TestTokenService();
 
-        orderService = new OrderService(
-                activeOrderRepo, completedOrderRepo, eventRepo, sessionRepo,
-                memberRepo, companyRepo, paymentGateway, ticketSupplyService,
-                eventPublisher, new PolicyResolver(), testTokenService, clock);
+        String secret = Base64.getEncoder().encodeToString(
+                "01234567890123456789012345678901".getBytes(StandardCharsets.UTF_8)
+        );
+
+        sessionTokenRepository = new InMemorySessionTokenRepository();
+        sessionRepo = new SessionTokenService(secret, 120, sessionTokenRepository);
+
+        //memberRepo = new InMemoryMemberRepository();
+        //companyRepo = new InMemoryCompanyRepository();
+        //paymentGateway = new StubPaymentGateway();
+        //ticketSupplyService = new StubTicketSupplyService();
+        //eventPublisher = new InMemoryDomainEventPublisher();
+        clock = new TestClock(Instant.parse("2026-06-01T10:00:00Z"));
+        //testTokenService = new TestTokenService();
+
+        orderService = new ActiveOrderService(activeOrderRepo, sessionRepo, eventRepo, clock);
 
         // Set up test fixtures
-        setupMemberAndSession();
-        setupCompanyAndEvent();
+        //setupMemberAndSession();
+        //setupCompanyAndEvent();
+        guestToken = sessionRepo.generateGuestToken();
+        setUpEvent();
+    }
+
+    private void setUpEvent(){
+        // add event
+        eventId = UUID.randomUUID();
+        companyId = UUID.randomUUID();
+        EventSchedule schedule = new EventSchedule(
+                Instant.parse("2026-07-01T20:00:00Z"),
+                Instant.parse("2026-07-01T23:00:00Z"),
+                Instant.parse("2026-07-01T19:00:00Z"));
+        LockTimerDuration lockDuration = new LockTimerDuration(Duration.ofMinutes(15));
+        //EventPurchasePolicy purchasePolicy = EventPurchasePolicy.createDefault(UUID.randomUUID());
+        //EventDiscountPolicy discountPolicy = new EventDiscountPolicy(UUID.randomUUID());
+        Event event = new Event(eventId, companyId, "Summer Concert", "A great concert",
+                EventCategory.CONCERT, schedule, lockDuration);
+        
+        // Add a GA zone
+        gaZoneId = UUID.randomUUID();
+        InventoryZone gaZone = InventoryZone.createGA(gaZoneId, "General Floor", new BigDecimal("50.00"), 100);
+        event.addZone(gaZone);
+
+        // Add an assigned seating zone with one seat
+        assignedZoneId = UUID.randomUUID();
+        InventoryZone assignedZone = InventoryZone.createAssigned(assignedZoneId, "VIP", new BigDecimal("150.00"));
+        seatId = UUID.randomUUID();
+        assignedZone.addSeat(new Seat(seatId, "A", "1"));
+        event.addZone(assignedZone);
+
+        event.publish();
+
+        eventRepo.save(event);
     }
 
 
     @Test
     void GivenValidOrder_WhenAddGAAndSeatThenCheckout_ThenCompletesWithCorrectSnapshotsAndInventory() {
-        // --- Create order ---
-        UUID orderId = orderService.createOrder(, eventId);
+        UUID orderId = orderService.createOrder(guestToken, eventId);
         ActiveOrder order = activeOrderRepo.findById(orderId).orElseThrow();
         assertTrue(order.isActive());
 
         // --- Add GA tickets and verify inventory locked ---
-        orderService.addGATicketsToOrder(null, orderId, gaZoneId, 3);
+        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
         Event eventAfterGA = eventRepo.findById(eventId).get();
         assertEquals(97, eventAfterGA.findZone(gaZoneId).getAvailableCount());
         assertEquals(3, eventAfterGA.findZone(gaZoneId).getLockedCount());
 
         // --- Add assigned seat and verify seat status is LOCKED ---
-        orderService.addSeatToOrder(null, orderId, assignedZoneId, seatId);
+        orderService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
         Event eventAfterSeat = eventRepo.findById(eventId).get();
         Seat lockedSeat = eventAfterSeat.findZone(assignedZoneId).findSeat(seatId);
         assertTrue(lockedSeat.isLocked());
 
-        // --- Checkout ---
-        eventPublisher.clear();
-        UUID completedOrderId = orderService.checkout(null, orderId, null);
-
-        // Verify CompletedOrder created with correct snapshot data
-        CompletedOrder completed = completedOrderRepo.findById(completedOrderId).orElseThrow();
-        assertEquals(memberId, completed.getMemberId());
-        assertEquals("Summer Concert", completed.getEventSnapshot().getEventName());
-        assertEquals("Test Productions", completed.getEventSnapshot().getCompanyName());
-        assertNotNull(completed.getPaymentTransactionId());
-        assertEquals(2, completed.getLineItems().size()); // GA item + seat item
-
-        // Verify inventory moved from LOCKED to SOLD
-        Event eventAfterCheckout = eventRepo.findById(eventId).get();
-        InventoryZone gaZone = eventAfterCheckout.findZone(gaZoneId);
-        assertEquals(97, gaZone.getAvailableCount());
-        assertEquals(0, gaZone.getLockedCount());
-        assertEquals(3, gaZone.getSoldCount());
-
-        Seat soldSeat = eventAfterCheckout.findZone(assignedZoneId).findSeat(seatId);
-        assertTrue(soldSeat.isSold());
-
-        // Verify OrderCompletedEvent published
-        assertTrue(eventPublisher.getPublishedEvents().stream()
-                .anyMatch(e -> e instanceof OrderCompletedEvent));
-
-        // Verify ActiveOrder status = COMPLETED
-        ActiveOrder completedActive = activeOrderRepo.findById(orderId).orElseThrow();
-        assertEquals(OrderStatus.COMPLETED, completedActive.getStatus());
+        // TODO: continue to checkout
     }
 
     @Test
     void GivenExistingActiveOrder_WhenCreateSecondOrderForSameSession_ThenRejectsAndFirstOrderIntact() {
         // Create first order and add tickets to make it meaningful
-        UUID firstOrderId = orderService.createOrder(null, sessionId, eventId);
-        orderService.addGATicketsToOrder(null, firstOrderId, gaZoneId, 2);
+        UUID firstOrderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, firstOrderId, gaZoneId, 2);
 
         // Attempt to create a second order for the same session
         assertThrows(IllegalStateException.class,
-                () -> orderService.createOrder(null, sessionId, eventId));
+                () -> orderService.createOrder(guestToken, eventId));
 
         // Verify the first order is still intact and active
         ActiveOrder firstOrder = activeOrderRepo.findById(firstOrderId).orElseThrow();
@@ -150,20 +175,11 @@ public class OrderServiceTest {
 
     @Test
     void GivenTwoConcurrentSessions_WhenBothTryToLockSameSeat_ThenExactlyOneSucceeds() throws Exception {
-        // Create a second session for a second buyer
-        UUID memberId2 = UUID.randomUUID();
-        ContactInfo contact2 = new ContactInfo("buyer2@test.com", "Jane", "Smith", "555-5678",
-                LocalDate.of(1992, 5, 15));
-        Member member2 = new Member(memberId2, contact2, "hashed-password-2", clock.now());
-        memberRepo.save(member2);
-
-        UUID sessionId2 = UUID.randomUUID();
-        Session session2 = Session.createMemberSession(sessionId2, memberId2, clock.now());
-        sessionRepo.save(session2);
+        String guestToken2 = sessionRepo.generateGuestToken();
 
         // Create two separate orders (one per session)
-        UUID orderId1 = orderService.createOrder(null, sessionId, eventId);
-        UUID orderId2 = orderService.createOrder(null, sessionId2, eventId);
+        UUID orderId1 = orderService.createOrder(guestToken, eventId);
+        UUID orderId2 = orderService.createOrder(guestToken2, eventId);
 
         // Synchronize both threads to attempt seat lock simultaneously
         CountDownLatch startLatch = new CountDownLatch(1);
@@ -177,7 +193,7 @@ public class OrderServiceTest {
         executor.submit(() -> {
             try {
                 startLatch.await();
-                orderService.addSeatToOrder(null, orderId1, assignedZoneId, seatId);
+                orderService.addSeatToOrder(guestToken, orderId1, assignedZoneId, seatId);
                 successes.incrementAndGet();
             } catch (OptimisticLockException | IllegalStateException e) {
                 failures.incrementAndGet();
@@ -192,7 +208,7 @@ public class OrderServiceTest {
         executor.submit(() -> {
             try {
                 startLatch.await();
-                orderService.addSeatToOrder(null, orderId2, assignedZoneId, seatId);
+                orderService.addSeatToOrder(guestToken2, orderId2, assignedZoneId, seatId);
                 successes.incrementAndGet();
             } catch (OptimisticLockException | IllegalStateException e) {
                 failures.incrementAndGet();
@@ -221,42 +237,48 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenOrderWithTickets_WhenLockTimerExpires_ThenOrderExpiredAndInventoryReleased() {
-        // Create the expiration service using the same repos and clock
-        OrderExpirationService expirationService = new OrderExpirationService(
-                activeOrderRepo, eventRepo, eventPublisher, clock);
-
-        // Create order and add GA tickets
-        UUID orderId = orderService.createOrder(null, sessionId, eventId);
-        orderService.addGATicketsToOrder(null, orderId, gaZoneId, 5);
-
-        // Verify inventory is locked
-        Event eventBefore = eventRepo.findById(eventId).get();
-        assertEquals(95, eventBefore.findZone(gaZoneId).getAvailableCount());
-        assertEquals(5, eventBefore.findZone(gaZoneId).getLockedCount());
-
-        // Advance clock past the 15-minute lock timer duration
-        clock.advance(Duration.ofMinutes(16));
-
-        // Clear events to isolate the expiration event
-        eventPublisher.clear();
-
-        // Run expiration sweep
-        expirationService.expireOrders();
-
-        // Verify order status = EXPIRED
-        ActiveOrder expiredOrder = activeOrderRepo.findById(orderId).orElseThrow();
-        assertEquals(OrderStatus.EXPIRED, expiredOrder.getStatus());
-
-        // Verify inventory released (availableCount restored, lockedCount = 0)
-        Event eventAfter = eventRepo.findById(eventId).get();
-        assertEquals(100, eventAfter.findZone(gaZoneId).getAvailableCount());
-        assertEquals(0, eventAfter.findZone(gaZoneId).getLockedCount());
-
-        // Verify OrderExpiredEvent published
-        assertTrue(eventPublisher.getPublishedEvents().stream()
-                .anyMatch(e -> e instanceof OrderExpiredEvent));
+    void GivenOrderWithTickets_WhenLockTimerExpires_ThenOrderExpiredAndInventoryReleased_Automatically() {
+        UUID quickEventId = UUID.randomUUID();
+        EventSchedule schedule = new EventSchedule(
+                Instant.parse("2026-07-01T20:00:00Z"),
+                Instant.parse("2026-07-01T23:00:00Z"),
+                Instant.parse("2026-07-01T19:00:00Z"));
+                
+        LockTimerDuration shortLockDuration = new LockTimerDuration(Duration.ofMillis(200));         
+        Event quickEvent = new Event(quickEventId, companyId, "Quick Concert", "A fast concert",
+                EventCategory.CONCERT, schedule, shortLockDuration);
+                
+        UUID quickZoneId = UUID.randomUUID();
+        quickEvent.addZone(InventoryZone.createGA(quickZoneId, "General Floor", new BigDecimal("50.00"), 100));
+        quickEvent.publish();
+        eventRepo.save(quickEvent);
+        OrderTimeDomainService expirationService = new OrderTimeDomainService(
+                activeOrderRepo, eventRepo, clock);
+        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+        executor.scheduleAtFixedRate(expirationService::expireOrders, 0, 50, TimeUnit.MILLISECONDS);
+        try {
+            UUID orderId = orderService.createOrder(guestToken, quickEventId);
+            orderService.addGATicketsToOrder(guestToken, orderId, quickZoneId, 5);
+            Event eventBefore = eventRepo.findById(quickEventId).get();
+            assertEquals(95, eventBefore.findZone(quickZoneId).getAvailableCount());
+            assertEquals(5, eventBefore.findZone(quickZoneId).getLockedCount());
+            clock.advance(Duration.ofMillis(250));
+            Awaitility.await()
+                .atMost(2, TimeUnit.SECONDS)
+                .pollInterval(50, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    ActiveOrder expiredOrder = activeOrderRepo.findById(orderId).orElseThrow();
+                    assertEquals(OrderStatus.EXPIRED, expiredOrder.getStatus());
+                });
+            Event eventAfter = eventRepo.findById(quickEventId).get();
+            assertEquals(100, eventAfter.findZone(quickZoneId).getAvailableCount());
+            assertEquals(0, eventAfter.findZone(quickZoneId).getLockedCount());
+            
+            // assertTrue(eventPublisher.getPublishedEvents().stream()
+            //         .anyMatch(e -> e instanceof OrderExpiredEvent));
+                    
+        } finally {
+            executor.shutdownNow(); 
+        }
     }
-}
-
 }

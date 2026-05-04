@@ -49,6 +49,7 @@ public class ActiveOrder{
         this.memberId = memberId;
         this.eventId = eventId;
         this.createdAt = createdAt;
+        this.status = OrderStatus.ACTIVE;
         this.items = new ArrayList<>();
         this.version = 0;
     }
@@ -91,5 +92,17 @@ public class ActiveOrder{
     public UUID getSessionId() { return sessionId; }
     public int getVersion() { return version; }
     public void incrementVersion() { this.version++; }
+    public int getTotalTicketCount() {
+        return items.stream().mapToInt(OrderItem::getQuantity).sum();
+    }
+
+    public void expire() {
+        if (status == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot expire a completed order");
+        }
+        this.status = OrderStatus.EXPIRED;
+    }
+
+    public List<OrderItem> getItems() { return items; }
     
 }
