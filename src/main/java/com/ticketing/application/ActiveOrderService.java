@@ -1,4 +1,6 @@
-package com.ticketing.application;
+package  com.ticketing.application;
+
+import com.ticketing.infrastructure.Interface.*;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -8,7 +10,6 @@ import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.OrderItem;
@@ -178,3 +179,4 @@ public class ActiveOrderService {
 
 
 }
+

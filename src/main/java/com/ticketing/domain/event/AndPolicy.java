@@ -1,4 +1,6 @@
-package com.ticketing.domain.event;
+package  com.ticketing.domain.event;
+
+import com.ticketing.infrastructure.Interface.*;
 
 
 import com.ticketing.domain.member.User;
@@ -24,3 +26,4 @@ public class AndPolicy implements IPurchasePolicy {
         return PolicyResult.success();
     }
 }
+

@@ -1,4 +1,6 @@
-package com.ticketing.domain.event;
+package  com.ticketing.domain.event;
+
+import com.ticketing.infrastructure.Interface.*;
 
 
 import java.util.List;
@@ -28,3 +30,4 @@ public class OrPolicy implements IPurchasePolicy {
         return PolicyResult.failure("ALL_OR_CONDITIONS_FAILED", "No policies in the OR condition passed.");
     }
 }
+

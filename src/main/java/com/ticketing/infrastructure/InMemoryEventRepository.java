@@ -1,11 +1,12 @@
-package com.ticketing.infrastructure;
+package  com.ticketing.infrastructure;
+
+import com.ticketing.infrastructure.Interface.*;
 
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.exception.OptimisticLockException;
 
 /**
@@ -51,3 +52,5 @@ public class InMemoryEventRepository implements IEventRepository {
         }
     }
 }
+
+

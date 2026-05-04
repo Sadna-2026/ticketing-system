@@ -15,6 +15,8 @@ import static org.mockito.Mockito.when;
 
 import com.ticketing.domain.member.User;
 import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.infrastructure.Interface.IDiscountPolicy;
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
 class PolicyFrameworkTest {
 

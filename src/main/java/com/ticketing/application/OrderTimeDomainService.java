@@ -1,4 +1,6 @@
-package com.ticketing.application;
+package  com.ticketing.application;
+
+import com.ticketing.infrastructure.Interface.*;
 
 import java.time.Instant;
 import java.util.List;
@@ -6,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
@@ -87,3 +88,4 @@ public class OrderTimeDomainService {
         // log.info("Order expired: orderId={}, eventId={}", order.getId(), order.getEventId());
     }
 }
+
