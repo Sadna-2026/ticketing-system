@@ -1,13 +1,13 @@
 package com.ticketing.infrastructure.Interface;
 
-import com.ticketing.domain.event.Money;
+import java.math.BigDecimal;
 
-
-import com.ticketing.domain.member.User;
 import com.ticketing.domain.order.ActiveOrder;
 
 
 public interface IDiscountPolicy {
-    Money applyTo(ActiveOrder order, User mockUser);
+    BigDecimal applyTo(ActiveOrder order, 
+                    String couponCode, 
+                    java.time.Instant systemClock);
 }
 

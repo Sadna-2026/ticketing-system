@@ -1,5 +1,6 @@
 package com.ticketing.domain.member;
 
+import java.time.LocalDate;
 import java.util.Hashtable;
 import java.util.UUID;
 
@@ -10,8 +11,10 @@ public class Member {
     private Hashtable<String,StaffAppointment> staffAppointments; // key is CompanyId
     private String email;
     private String encryptedPassword;
+    private String phoneNumber;
+    private LocalDate dateOfBirth;
 
-    public Member(UUID memberId, String username, String email, String encryptedPassword) {
+    public Member(UUID memberId, String username, String email, String encryptedPassword, String phoneNumber, LocalDate dateOfBirth) {
         if (memberId == null) {
             throw new IllegalArgumentException("memberId cannot be null");
         }
@@ -33,9 +36,10 @@ public class Member {
         this.email = email;
         this.encryptedPassword = encryptedPassword;
         this.staffAppointments  = new Hashtable<>();
-
+        this.phoneNumber = phoneNumber;
+        this.dateOfBirth = dateOfBirth;
     }
-
+    
     // Getters
     public UUID getId() {
         return memberId;
@@ -51,6 +55,14 @@ public class Member {
 
     public String getEncryptedPassword() {
         return encryptedPassword;
+    }
+
+     public String getPhoneNumber() {
+        return this.phoneNumber;
+    }
+
+     public LocalDate getDateOfBirth() {
+        return this.dateOfBirth;
     }
 
 
@@ -107,11 +119,4 @@ public class Member {
     public void clearStaffAppointments() {
         staffAppointments.clear();
     }
-
-
-
-
-
-
-
 }
