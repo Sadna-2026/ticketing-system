@@ -1,5 +1,97 @@
 package com.ticketing.domain.member;
 
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
 public class StaffAppointment {
-    
+
+    private final String companyId;
+    private final UUID appointedByMemberId;
+    private StaffRole role;
+    private Set<ManagerPermission> permissions;
+
+    public StaffAppointment(
+            String companyId,
+            UUID appointedByMemberId,
+            StaffRole role,
+            Set<ManagerPermission> permissions
+    ) {
+        if (companyId == null || companyId.isBlank()) {
+            throw new IllegalArgumentException("companyId cannot be null or blank");
+        }
+
+        if (role == null) {
+            throw new IllegalArgumentException("role cannot be null");
+        }
+
+        this.companyId = normalizeCompanyId(companyId);
+        this.appointedByMemberId = appointedByMemberId;
+        this.role = role;
+        this.permissions = copyPermissions(permissions);
+    }
+
+    public String getCompanyId() {
+        return companyId;
+    }
+
+    public UUID getAppointedByMemberId() {
+        return appointedByMemberId;
+    }
+
+    public StaffRole getRole() {
+        return role;
+    }
+
+    public Set<ManagerPermission> getPermissions() {
+        return Collections.unmodifiableSet(permissions);
+    }
+
+    public boolean isOwner() {
+        return role == StaffRole.OWNER;
+    }
+
+    public boolean isManager() {
+        return role == StaffRole.MANAGER;
+    }
+
+    public boolean hasPermission(ManagerPermission permission) {
+        if (permission == null) {
+            return false;
+        }
+
+        return isOwner() || permissions.contains(permission);
+    }
+
+    public void promoteToOwner() {
+        this.role = StaffRole.OWNER;
+        this.permissions = Collections.emptySet();
+    }
+
+    public void updateManagerPermissions(Set<ManagerPermission> newPermissions) {
+        if (isOwner()) {
+            throw new IllegalStateException("Owner does not need manager permissions.");
+        }
+
+        this.permissions = copyPermissions(newPermissions);
+    }
+
+    private Set<ManagerPermission> copyPermissions(Set<ManagerPermission> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return Collections.unmodifiableSet(new HashSet<>(permissions));
+    }
+
+    private String normalizeCompanyId(String companyId) {
+        return companyId.trim().toLowerCase();
+    }
+
+    public enum StaffRole {
+        OWNER,
+        MANAGER
+    }
 }

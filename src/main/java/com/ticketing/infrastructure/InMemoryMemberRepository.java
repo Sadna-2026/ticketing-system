@@ -22,17 +22,20 @@ public class InMemoryMemberRepository implements IMemberRepository {
             throw new IllegalArgumentException("member cannot be null");
         }
 
-        if (idsByUsername.containsKey(member.getUsername())) {
+        String username = normalizeUsername(member.getUsername());
+        String email = normalizeEmail(member.getEmail());
+
+        if (idsByUsername.containsKey(username)) {
             return false;
         }
 
-        if (idsByEmail.containsKey(member.getEmail())) {
+        if (idsByEmail.containsKey(email)) {
             return false;
         }
 
         membersById.put(member.getId(), member);
-        idsByUsername.put(member.getUsername(), member.getId());
-        idsByEmail.put(member.getEmail(), member.getId());
+        idsByUsername.put(username, member.getId());
+        idsByEmail.put(email, member.getId());
 
         return true;
     }
@@ -52,13 +55,8 @@ public class InMemoryMemberRepository implements IMemberRepository {
             return Optional.empty();
         }
 
-        UUID memberId = idsByUsername.get(username);
-
-        if (memberId == null) {
-            return Optional.empty();
-        }
-
-        return findById(memberId);
+        UUID memberId = idsByUsername.get(normalizeUsername(username));
+        return memberId == null ? Optional.empty() : findById(memberId);
     }
 
     @Override
@@ -67,27 +65,30 @@ public class InMemoryMemberRepository implements IMemberRepository {
             return Optional.empty();
         }
 
-        UUID memberId = idsByEmail.get(email);
-
-        if (memberId == null) {
-            return Optional.empty();
-        }
-
-        return findById(memberId);
+        UUID memberId = idsByEmail.get(normalizeEmail(email));
+        return memberId == null ? Optional.empty() : findById(memberId);
     }
 
     @Override
     public boolean existsByUsername(String username) {
-        return username != null && idsByUsername.containsKey(username);
+        return username != null && idsByUsername.containsKey(normalizeUsername(username));
     }
 
     @Override
     public boolean existsByEmail(String email) {
-        return email != null && idsByEmail.containsKey(email);
+        return email != null && idsByEmail.containsKey(normalizeEmail(email));
     }
 
     @Override
     public long count() {
         return membersById.size();
+    }
+
+    private String normalizeUsername(String username) {
+        return username.trim();
+    }
+
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase();
     }
 }

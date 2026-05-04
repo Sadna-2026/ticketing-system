@@ -16,6 +16,9 @@ public class PasswordEncryptionUtils {
      * @return BCrypt hashed password
      */
     public String hashPassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("Password cannot be null or blank");
+        }
         return passwordEncoder.encode(password);
     }
 

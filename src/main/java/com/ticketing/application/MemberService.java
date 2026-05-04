@@ -15,10 +15,11 @@ import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @Service
 public class MemberService {
-    
+
     private final IMemberRepository memberRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
     private final ISessionTokenService sessionTokenService;
+    private static final System.Logger logger = System.getLogger(MemberService.class.getName());
 
     public MemberService(
             IMemberRepository memberRepository,
@@ -88,6 +89,7 @@ public class MemberService {
         boolean saved = memberRepository.saveIfUsernameAndEmailAvailable(member);
 
         if (!saved) {
+            logger.log(System.Logger.Level.WARNING, "Failed to save new member: " + username);
             return RegisterResponse.failure("Registration details already in use.");
         }
 
@@ -98,7 +100,7 @@ public class MemberService {
         );
        
 
-
+        logger.log(System.Logger.Level.INFO, "New member registered: " + username );
         return RegisterResponse.success(MemberMapper.toDto(member), memberToken);
     }
 
