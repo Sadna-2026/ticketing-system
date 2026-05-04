@@ -1,25 +1,20 @@
-package com.ticketing.application;
-
-import com.ticketing.domain.event.AlwaysAllowPolicy;
-import com.ticketing.domain.event.AndPolicy;
-import com.ticketing.domain.event.IDiscountPolicy;
-import com.ticketing.domain.event.IPurchasePolicy;
-import com.ticketing.domain.event.Money;
-import com.ticketing.domain.event.NoDiscountPolicy;
-import com.ticketing.domain.event.OrPolicy;
-import com.ticketing.domain.event.PolicyResult;
-import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.user.User;
-import org.junit.jupiter.api.Test;
+package com.ticketing.domain.event;
 
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import com.ticketing.domain.member.User;
+import com.ticketing.domain.order.ActiveOrder;
 
 class PolicyFrameworkTest {
 
