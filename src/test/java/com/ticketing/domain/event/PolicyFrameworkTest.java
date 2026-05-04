@@ -13,8 +13,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.ticketing.domain.member.User;
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.user.User;
 
 class PolicyFrameworkTest {
 

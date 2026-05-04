@@ -15,7 +15,7 @@ public class PasswordEncryptionUtils {
      * @param password raw password
      * @return BCrypt hashed password
      */
-    public String encryptPassword(String password) {
+    public String hashPassword(String password) {
         return passwordEncoder.encode(password);
     }
 

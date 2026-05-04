@@ -1,4 +1,4 @@
-package com.ticketing.domain.user;
+package com.ticketing.domain.member;
 
 import java.util.Hashtable;
 import java.util.UUID;
@@ -108,7 +108,7 @@ public class Member {
         staffAppointments.clear();
     }
 
-    
+
 
 
 

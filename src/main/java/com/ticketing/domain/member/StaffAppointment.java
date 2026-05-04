@@ -1,4 +1,4 @@
-package com.ticketing.domain.user;
+package com.ticketing.domain.member;
 
 public class StaffAppointment {
     
