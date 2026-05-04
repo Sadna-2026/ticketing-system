@@ -90,4 +90,6 @@ public interface ISessionTokenService {
      * @return new guest JWT token
      */
     String logout(String token);
+
+    boolean endSession(String token);
 }

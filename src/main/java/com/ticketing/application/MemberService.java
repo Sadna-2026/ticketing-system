@@ -6,12 +6,10 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberMapper;
 import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.response.LogoutResponse;
-import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.infrastructure.Interface.IMemberRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
@@ -132,29 +130,7 @@ public class MemberService {
         return LogoutResponse.success(guestToken);
     }
 
-    public MemberExitResponse exitPlatform(String sessionToken) {
-        if (sessionToken == null || sessionToken.isBlank()) {
-            return MemberExitResponse.failure("No authenticated member session exists.");
-        }
-
-        if (!sessionTokenService.isValid(sessionToken)) {
-            return MemberExitResponse.failure("No authenticated member session exists.");
-        }
-
-        UUID memberId = sessionTokenService.extractMemberId(sessionToken);
-        SessionTokenData tokenData = sessionTokenService.extractTokenData(sessionToken);
-
-        if (memberId == null) {
-            return MemberExitResponse.failure("No authenticated member session exists.");
-        }
-
-        sessionTokenService.revokeToken(sessionToken);
-
-        logger.log(System.Logger.Level.INFO, "exited platform: " + tokenData.getUsername());
-
-        return MemberExitResponse.successResponse(tokenData.getUsername());
-    }
-
+   
     private boolean isValidRegisterRequest(RegisterRequest request) {
         return request != null
                 && request.username() != null

@@ -48,4 +48,8 @@ public interface ISessionTokenRepository {
      * @return true if active
      */
     boolean isTokenActive(UUID tokenId);
+
+    void deleteExpiredTokens();
+
+    void revokeAllByMemberId(UUID memberId, String reason);
 }

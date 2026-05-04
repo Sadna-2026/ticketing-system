@@ -69,4 +69,24 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
         SessionToken token = tokens.get(tokenId);
         return token != null && token.isActive();
     }
+
+    @Override
+    public void deleteExpiredTokens() {
+        for (SessionToken token : tokens.values()) {
+            if (token.isExpired()) {
+                tokens.remove(token.getTokenId());
+    }}}
+
+    @Override
+    public void revokeAllByMemberId(UUID memberId, String reason) {
+        if (memberId == null) {
+            return;     
+        }
+        
+        for (SessionToken token : tokens.values()) {
+                if (memberId.equals(token.getMemberId()) && token.isActive()) {
+                    token.revoke(reason);
+                }
+        }
+    }
 }
