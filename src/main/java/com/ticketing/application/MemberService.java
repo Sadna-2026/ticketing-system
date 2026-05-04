@@ -67,10 +67,12 @@ public class MemberService {
         String email = normalizeEmail(request.email());
 
         if (memberRepository.existsByUsername(username)) {
+            logger.log(System.Logger.Level.WARNING, "Failed to save new member: " + username);
             return RegisterResponse.failure("Username already in use.");
         }
 
         if (memberRepository.existsByEmail(email)) {
+            logger.log(System.Logger.Level.WARNING, "Failed to save new member: " + username);
             return RegisterResponse.failure("Email already in use.");
         }
 
