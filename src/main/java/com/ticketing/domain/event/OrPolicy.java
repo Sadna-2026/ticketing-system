@@ -1,9 +1,10 @@
 package com.ticketing.domain.event;
 
-import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.user.User;
 
 import java.util.List;
+
+import com.ticketing.domain.member.User;
+import com.ticketing.domain.order.ActiveOrder;
 
 public class OrPolicy implements IPurchasePolicy {
     private final List<IPurchasePolicy> policies;
