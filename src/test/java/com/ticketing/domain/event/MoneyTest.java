@@ -1,4 +1,4 @@
-package com.ticketing.application;
+package com.ticketing.domain.event;
 
 import java.math.BigDecimal;
 import java.util.Currency;
@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.domain.event.Money;
 
 class MoneyTest {
 
