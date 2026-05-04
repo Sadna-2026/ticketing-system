@@ -128,6 +128,7 @@ public class SessionTokenService implements ISessionTokenService {
         return extractTokenData(token).getPermissions();
     }
 
+
     @Override
     public SessionTokenData extractTokenData(String token) {
         Claims claims = parseAndValidateClaims(token);
