@@ -78,6 +78,7 @@ public class ActiveOrderService {
         log.info("Adding seat to order: orderId={}, zoneId={}, seatId={}", orderId, zoneId, seatId);
 
         ActiveOrder order = findActiveOrder(orderId);
+        validateOrderOwnership(token, order);
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
 
@@ -106,6 +107,7 @@ public class ActiveOrderService {
         validateToken(token);
 
         ActiveOrder order = findActiveOrder(orderId);
+        validateOrderOwnership(token, order);
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
 
@@ -142,6 +144,7 @@ public class ActiveOrderService {
         validateToken(token);
 
         ActiveOrder order = findActiveOrder(orderId);
+        validateOrderOwnership(token, order);
         Event event = findEvent(order.getEventId());
 
         OrderItem item = order.getItems().stream()
@@ -161,6 +164,7 @@ public class ActiveOrderService {
         validateToken(token);
 
         ActiveOrder order = findActiveOrder(orderId);
+        validateOrderOwnership(token, order);
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
 
@@ -189,6 +193,7 @@ public class ActiveOrderService {
         ActiveOrder order = activeOrderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
+        validateOrderOwnership(token, order);
         if (order.getStatus() == OrderStatus.COMPLETED) {
             throw new IllegalStateException("Cannot cancel a completed order");
         }
@@ -200,6 +205,11 @@ public class ActiveOrderService {
         order.cancel();
         activeOrderRepository.save(order);
         log.info("Order cancelled: orderId={}", orderId);
+    }
+
+    private void validateOrderOwnership(String token, ActiveOrder order){
+        if(sessionTokenService.extractSessionId(token) != order.getSessionId())
+            throw new IllegalArgumentException("Session id error");
     }
 
     private void releaseInventoryForItem(Event event, OrderItem item) {
