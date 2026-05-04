@@ -12,6 +12,7 @@ import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.OrderItem;
+import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 
@@ -103,7 +104,6 @@ public class ActiveOrderService {
     public UUID addGATicketsToOrder(String token, UUID orderId, UUID zoneId, int quantity) {
         // validate token
         validateToken(token);
-        log.info("Adding GA tickets: orderId={}, zoneId={}, quantity={}", orderId, zoneId, quantity);
 
         ActiveOrder order = findActiveOrder(orderId);
         Event event = findEvent(order.getEventId());
@@ -138,6 +138,88 @@ public class ActiveOrderService {
         return itemId;
     }
 
+    public void removeItemFromOrder(String token, UUID orderId, UUID itemId) {
+        validateToken(token);
+
+        ActiveOrder order = findActiveOrder(orderId);
+        Event event = findEvent(order.getEventId());
+
+        OrderItem item = order.getItems().stream()
+                .filter(i -> i.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Item not found: " + itemId));
+
+        releaseInventoryForItem(event, item);
+        eventRepository.save(event);
+
+        order.removeItem(itemId);
+        activeOrderRepository.save(order);
+        log.info("Item removed from order: orderId={}, itemId={}", orderId, itemId);
+    }
+
+    public void updateGAQuantity(String token, UUID orderId, UUID zoneId, int newQuantity) {
+        validateToken(token);
+
+        ActiveOrder order = findActiveOrder(orderId);
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+
+        OrderItem item = order.findItemByZoneId(zoneId)
+                .orElseThrow(() -> new IllegalArgumentException("No GA item found for zone: " + zoneId));
+
+        InventoryZone zone = event.findZone(zoneId);
+        int oldQuantity = item.getQuantity();
+        int diff = newQuantity - oldQuantity;
+
+        if (diff > 0) {
+            zone.lockGA(diff);
+        } else if (diff < 0) {
+            zone.releaseGA(-diff);
+        }
+        eventRepository.save(event);
+
+        item.updateQuantity(newQuantity);
+        activeOrderRepository.save(order);
+        log.info("GA quantity updated: orderId={}, zoneId={}", orderId, zoneId);
+    }
+
+    public void cancelOrder(String token, UUID orderId) {
+        validateToken(token);
+
+        ActiveOrder order = activeOrderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+        if (order.getStatus() == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+
+        Event event = findEvent(order.getEventId());
+        releaseAllInventory(event, order);
+        eventRepository.save(event);
+
+        order.cancel();
+        activeOrderRepository.save(order);
+        log.info("Order cancelled: orderId={}", orderId);
+    }
+
+    private void releaseInventoryForItem(Event event, OrderItem item) {
+        InventoryZone zone = event.findZone(item.getZoneId());
+        if (item.isAssignedSeat()) {
+            zone.releaseSeat(item.getSeatId());
+        } else {
+            zone.releaseGA(item.getQuantity());
+        }
+    }
+
+    private void releaseAllInventory(Event event, ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            try {
+                releaseInventoryForItem(event, item);
+            } catch (Exception e) {
+                log.error("Failed to release inventory for item: {}", item.getId(), e);
+            }
+        }
+    }
 
     private void validateToken(String token) {
         if (token == null || token.isBlank()) {

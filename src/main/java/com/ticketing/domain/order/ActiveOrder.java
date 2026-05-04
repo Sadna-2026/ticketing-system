@@ -104,5 +104,21 @@ public class ActiveOrder{
     }
 
     public List<OrderItem> getItems() { return items; }
+
+    public void removeItem(UUID itemId) {
+        validateActive();
+        boolean removed = items.removeIf(i -> i.getId().equals(itemId));
+        if (!removed) throw new IllegalArgumentException("Item not found: " + itemId);
+    }
+
+    public void cancel() {
+        if (status == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+        this.status = OrderStatus.CANCELLED;
+    }
+
+
+    
     
 }
