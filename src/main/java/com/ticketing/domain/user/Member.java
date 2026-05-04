@@ -6,10 +6,10 @@ import java.util.UUID;
 public class Member {
 
     private final UUID memberId;
-    private final String username;
-    private final Hashtable<String,StaffAppointment> staffAppointments; // key is CompanyId
-    private final String email;
-    private final String encryptedPassword;
+    private String username;
+    private Hashtable<String,StaffAppointment> staffAppointments; // key is CompanyId
+    private String email;
+    private String encryptedPassword;
 
     public Member(UUID memberId, String username, String email, String encryptedPassword) {
         if (memberId == null) {
@@ -36,6 +36,7 @@ public class Member {
 
     }
 
+    // Getters
     public UUID getId() {
         return memberId;
     }
@@ -52,6 +53,62 @@ public class Member {
         return encryptedPassword;
     }
 
+
+    // setters 
+    public void updateUsername(String newUsername) {
+        if (newUsername == null || newUsername.isBlank()) {
+            throw new IllegalArgumentException("newUsername cannot be null or blank");
+        }
+        this.username = newUsername;
+    }
+
+    public void updateEmail(String newEmail) {
+        if (newEmail == null || newEmail.isBlank()) {
+            throw new IllegalArgumentException("newEmail cannot be null or blank");
+        }
+        this.email = newEmail;
+    }
+
+    public void updateEncryptedPassword(String newEncryptedPassword) {
+        if (newEncryptedPassword == null || newEncryptedPassword.isBlank()) {
+            throw new IllegalArgumentException("newEncryptedPassword cannot be null or blank");
+        }
+        this.encryptedPassword = newEncryptedPassword;
+    }
+
+    public void addStaffAppointment(String companyId, StaffAppointment appointment) {
+        if (companyId == null || companyId.isBlank()) {
+            throw new IllegalArgumentException("companyId cannot be null or blank");
+        }
+
+        if (appointment == null) {
+            throw new IllegalArgumentException("appointment cannot be null");
+        }
+
+        staffAppointments.put(companyId, appointment);
+    }
+
+    public void removeStaffAppointment(String companyId) {
+        if (companyId == null || companyId.isBlank()) {
+            throw new IllegalArgumentException("companyId cannot be null or blank");
+        }
+
+        staffAppointments.remove(companyId);
+    }
+
+    public StaffAppointment getStaffAppointment(String companyId) {
+        if (companyId == null || companyId.isBlank()) {
+            throw new IllegalArgumentException("companyId cannot be null or blank");
+        }
+
+        return staffAppointments.get(companyId);
+    }
+
+    public void clearStaffAppointments() {
+        staffAppointments.clear();
+    }
+
+    
 
 
 
