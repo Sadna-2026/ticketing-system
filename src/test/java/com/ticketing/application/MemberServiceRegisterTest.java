@@ -15,8 +15,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.RegisterRequest;
-import com.ticketing.domain.member.RegisterResponse;
+import com.ticketing.domain.member.request.RegisterRequest;
+import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.Interface.IMemberRepository;

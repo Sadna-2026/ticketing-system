@@ -1,4 +1,4 @@
-package com.ticketing.domain.member;
+package com.ticketing.domain.member.request;
 
 public record RegisterRequest(
         String username,

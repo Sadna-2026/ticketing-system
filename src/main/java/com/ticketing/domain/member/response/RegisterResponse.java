@@ -1,7 +1,9 @@
-package com.ticketing.domain.member;
+package com.ticketing.domain.member.response;
 
 
 import java.util.UUID;
+
+import com.ticketing.domain.member.MemberDto;
 
 public record RegisterResponse(
         boolean success,

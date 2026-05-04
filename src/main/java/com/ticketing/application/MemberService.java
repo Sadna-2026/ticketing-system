@@ -8,14 +8,15 @@ import org.springframework.stereotype.Service;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberMapper;
-import com.ticketing.domain.member.RegisterRequest;
-import com.ticketing.domain.member.RegisterResponse;
+import com.ticketing.domain.member.request.RegisterRequest;
+import com.ticketing.domain.member.response.LogoutResponse;
+import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.infrastructure.Interface.IMemberRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
-
 @Service
 public class MemberService {
 
+    
     private final IMemberRepository memberRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
     private final ISessionTokenService sessionTokenService;
@@ -104,6 +105,29 @@ public class MemberService {
 
         logger.log(System.Logger.Level.INFO, "New member registered: " + username );
         return RegisterResponse.success(MemberMapper.toDto(member), memberToken);
+    }
+
+
+    public LogoutResponse logout(String sessionToken) {
+        if (sessionToken == null || sessionToken.isBlank()) {
+            return LogoutResponse.failure("No authenticated member session exists.");
+        }
+
+        if (!sessionTokenService.isValid(sessionToken)) {
+            return LogoutResponse.failure("No authenticated member session exists.");
+        }
+
+        UUID memberId = sessionTokenService.extractMemberId(sessionToken);
+
+        if (memberId == null) {
+            return LogoutResponse.failure("No authenticated member session exists.");
+        }
+
+        String guestToken = sessionTokenService.logout(sessionToken);
+
+        logger.log(System.Logger.Level.INFO, "Member logged out: " + memberId);
+
+        return LogoutResponse.success(guestToken);
     }
 
     private boolean isValidRegisterRequest(RegisterRequest request) {
