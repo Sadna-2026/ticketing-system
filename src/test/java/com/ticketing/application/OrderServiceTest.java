@@ -23,6 +23,8 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.InMemoryActiveOrderRepository;
+import com.ticketing.domain.order.InMemoryCompletedOrderRepository;
 import com.ticketing.domain.order.OrderStatus;
 
 public class OrderServiceTest {

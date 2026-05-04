@@ -16,6 +16,7 @@ public class ActiveOrder{
     private final Instant createdAt;
     private OrderStatus status;
     private final List<OrderItem> items;
+    private int version;
      
     /**
      * Creates an ActiveOrder without a memberId (guest order).
@@ -49,6 +50,7 @@ public class ActiveOrder{
         this.eventId = eventId;
         this.createdAt = createdAt;
         this.items = new ArrayList<>();
+        this.version = 0;
     }
 
     public UUID getId() { return id; }
@@ -85,5 +87,9 @@ public class ActiveOrder{
                 .filter(i -> i.getZoneId().equals(zoneId) && i.isGA())
                 .findFirst();
     }
+
+    public UUID getSessionId() { return sessionId; }
+    public int getVersion() { return version; }
+    public void incrementVersion() { this.version++; }
     
 }
