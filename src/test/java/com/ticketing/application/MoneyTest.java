@@ -1,13 +1,14 @@
 package com.ticketing.application;
 
-import org.junit.jupiter.api.Test;
-
-import com.ticketing.domain.event.Money;
-
 import java.math.BigDecimal;
 import java.util.Currency;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
+import com.ticketing.domain.event.Money;
 
 class MoneyTest {
 

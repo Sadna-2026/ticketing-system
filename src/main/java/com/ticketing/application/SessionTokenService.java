@@ -25,7 +25,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 
- @Service
+@Service
 public class SessionTokenService implements ISessionTokenService {
 
     private static final String ISSUER = "ticketing-system";
@@ -43,7 +43,7 @@ public class SessionTokenService implements ISessionTokenService {
 
     public SessionTokenService(
             @Value("${security.jwt.secret}") String jwtSecret,
-            @Value("${security.jwt.expiration-minutes:10}") long expirationMinutes,
+            @Value("${security.jwt.expiration-minutes:10}") long expirationMinutes, 
             ISessionTokenRepository sessionTokenRepository
     ) {
         if (jwtSecret == null || jwtSecret.isBlank()) {

@@ -33,7 +33,7 @@ class SessionTokenServiceTest {
         sessionTokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
     }
 
-    @Test
+    @Test//UC 1 - Guest enters the site and receives a guest token
     void GivenGuestUser_WhenGenerateGuestToken_ThenTokenIsValidAndContainsOnlySessionId() {
         String token = sessionTokenService.generateGuestToken();
 
@@ -199,117 +199,117 @@ class SessionTokenServiceTest {
 
 
     @Test
-void GivenGuestToken_WhenRevokeToken_ThenGuestTokenIsInvalid() {
-    String guestToken = sessionTokenService.generateGuestToken();
+    void GivenGuestToken_WhenRevokeToken_ThenGuestTokenIsInvalid() {
+        String guestToken = sessionTokenService.generateGuestToken();
 
-    assertTrue(sessionTokenService.isValid(guestToken));
+        assertTrue(sessionTokenService.isValid(guestToken));
 
-    sessionTokenService.revokeToken(guestToken);
+        sessionTokenService.revokeToken(guestToken);
 
-    assertFalse(sessionTokenService.isValid(guestToken));
-    assertThrows(
-            IllegalArgumentException.class,
-            () -> sessionTokenService.extractSessionId(guestToken)
-    );
-}
+        assertFalse(sessionTokenService.isValid(guestToken));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> sessionTokenService.extractSessionId(guestToken)
+        );
+    }
 
-@Test
-void GivenMemberToken_WhenRevokeToken_ThenMemberTokenIsInvalid() {
-    String guestToken = sessionTokenService.generateGuestToken();
-    UUID sessionId = sessionTokenService.extractSessionId(guestToken);
+    @Test
+    void GivenMemberToken_WhenRevokeToken_ThenMemberTokenIsInvalid() {
+        String guestToken = sessionTokenService.generateGuestToken();
+        UUID sessionId = sessionTokenService.extractSessionId(guestToken);
 
-    String memberToken = sessionTokenService.generateMemberToken(
-            sessionId,
-            UUID.randomUUID(),
-            Set.of("BUY_TICKET")
-    );
+        String memberToken = sessionTokenService.generateMemberToken(
+                sessionId,
+                UUID.randomUUID(),
+                Set.of("BUY_TICKET")
+        );
 
-    assertTrue(sessionTokenService.isValid(memberToken));
+        assertTrue(sessionTokenService.isValid(memberToken));
 
-    sessionTokenService.revokeToken(memberToken);
+        sessionTokenService.revokeToken(memberToken);
 
-    assertFalse(sessionTokenService.isValid(memberToken));
-    assertThrows(
-            IllegalArgumentException.class,
-            () -> sessionTokenService.extractMemberId(memberToken)
-    );
-}
+        assertFalse(sessionTokenService.isValid(memberToken));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> sessionTokenService.extractMemberId(memberToken)
+        );
+    }
 
-@Test
-void GivenGuestToken_WhenLogout_ThenOldGuestTokenIsInvalidAndNewGuestTokenIsValid() {
-    String oldGuestToken = sessionTokenService.generateGuestToken();
-    UUID oldSessionId = sessionTokenService.extractSessionId(oldGuestToken);
+    @Test
+    void GivenGuestToken_WhenLogout_ThenOldGuestTokenIsInvalidAndNewGuestTokenIsValid() {
+        String oldGuestToken = sessionTokenService.generateGuestToken();
+        UUID oldSessionId = sessionTokenService.extractSessionId(oldGuestToken);
 
-    String newGuestToken = sessionTokenService.logout(oldGuestToken);
-    UUID newSessionId = sessionTokenService.extractSessionId(newGuestToken);
+        String newGuestToken = sessionTokenService.logout(oldGuestToken);
+        UUID newSessionId = sessionTokenService.extractSessionId(newGuestToken);
 
-    assertFalse(sessionTokenService.isValid(oldGuestToken));
-    assertTrue(sessionTokenService.isValid(newGuestToken));
+        assertFalse(sessionTokenService.isValid(oldGuestToken));
+        assertTrue(sessionTokenService.isValid(newGuestToken));
 
-    assertNull(sessionTokenService.extractMemberId(newGuestToken));
-    assertTrue(sessionTokenService.extractPermissions(newGuestToken).isEmpty());
-    assertNotEquals(oldSessionId, newSessionId);
-}
+        assertNull(sessionTokenService.extractMemberId(newGuestToken));
+        assertTrue(sessionTokenService.extractPermissions(newGuestToken).isEmpty());
+        assertNotEquals(oldSessionId, newSessionId);
+    }
 
-@Test
-void GivenTokenWithBearerPrefix_WhenValidateAndExtract_ThenWorksCorrectly() {
-    String token = sessionTokenService.generateGuestToken();
-    UUID expectedSessionId = sessionTokenService.extractSessionId(token);
+    @Test
+    void GivenTokenWithBearerPrefix_WhenValidateAndExtract_ThenWorksCorrectly() {
+        String token = sessionTokenService.generateGuestToken();
+        UUID expectedSessionId = sessionTokenService.extractSessionId(token);
 
-    String bearerToken = "Bearer " + token;
+        String bearerToken = "Bearer " + token;
 
-    assertTrue(sessionTokenService.isValid(bearerToken));
-    assertEquals(expectedSessionId, sessionTokenService.extractSessionId(bearerToken));
-}
+        assertTrue(sessionTokenService.isValid(bearerToken));
+        assertEquals(expectedSessionId, sessionTokenService.extractSessionId(bearerToken));
+    }
 
-@Test
-void GivenMemberTokenWithBearerPrefix_WhenLogout_ThenOldTokenIsInvalidAndNewGuestTokenIsValid() {
-    String guestToken = sessionTokenService.generateGuestToken();
-    UUID sessionId = sessionTokenService.extractSessionId(guestToken);
+    @Test
+    void GivenMemberTokenWithBearerPrefix_WhenLogout_ThenOldTokenIsInvalidAndNewGuestTokenIsValid() {
+        String guestToken = sessionTokenService.generateGuestToken();
+        UUID sessionId = sessionTokenService.extractSessionId(guestToken);
 
-    String memberToken = sessionTokenService.generateMemberToken(
-            sessionId,
-            UUID.randomUUID(),
-            Set.of("BUY_TICKET")
-    );
+        String memberToken = sessionTokenService.generateMemberToken(
+                sessionId,
+                UUID.randomUUID(),
+                Set.of("BUY_TICKET")
+        );
 
-    String bearerMemberToken = "Bearer " + memberToken;
+        String bearerMemberToken = "Bearer " + memberToken;
 
-    String newGuestToken = sessionTokenService.logout(bearerMemberToken);
+        String newGuestToken = sessionTokenService.logout(bearerMemberToken);
 
-    assertFalse(sessionTokenService.isValid(memberToken));
-    assertTrue(sessionTokenService.isValid(newGuestToken));
-    assertNull(sessionTokenService.extractMemberId(newGuestToken));
-}
+        assertFalse(sessionTokenService.isValid(memberToken));
+        assertTrue(sessionTokenService.isValid(newGuestToken));
+        assertNull(sessionTokenService.extractMemberId(newGuestToken));
+     }
 
-@Test
-void GivenMemberTokenWithNullPermissions_WhenExtractPermissions_ThenReturnEmptySet() {
-    String memberToken = sessionTokenService.generateMemberToken(
-            UUID.randomUUID(),
-            UUID.randomUUID(),
-            null
-    );
+    @Test
+     void GivenMemberTokenWithNullPermissions_WhenExtractPermissions_ThenReturnEmptySet() {
+        String memberToken = sessionTokenService.generateMemberToken(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null
+        );
 
-    assertTrue(sessionTokenService.isValid(memberToken));
-    assertTrue(sessionTokenService.extractPermissions(memberToken).isEmpty());
-}
+        assertTrue(sessionTokenService.isValid(memberToken));
+        assertTrue(sessionTokenService.extractPermissions(memberToken).isEmpty());
+        }
 
-@Test
-void GivenGuestTokenUpgradedToMember_WhenUsingOldGuestToken_ThenThrowException() {
-    String guestToken = sessionTokenService.generateGuestToken();
-    UUID sessionId = sessionTokenService.extractSessionId(guestToken);
+    @Test
+    void GivenGuestTokenUpgradedToMember_WhenUsingOldGuestToken_ThenThrowException() {
+        String guestToken = sessionTokenService.generateGuestToken();
+        UUID sessionId = sessionTokenService.extractSessionId(guestToken);
 
-    sessionTokenService.generateMemberToken(
-            sessionId,
-            UUID.randomUUID(),
-            Set.of("BUY_TICKET")
-    );
+        sessionTokenService.generateMemberToken(
+                sessionId,
+                UUID.randomUUID(),
+                Set.of("BUY_TICKET")
+        );
 
-    assertFalse(sessionTokenService.isValid(guestToken));
+        assertFalse(sessionTokenService.isValid(guestToken));
 
-    assertThrows(
-            IllegalArgumentException.class,
-            () -> sessionTokenService.extractTokenData(guestToken)
-    );
-}
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> sessionTokenService.extractTokenData(guestToken)
+        );
+     }
 }
