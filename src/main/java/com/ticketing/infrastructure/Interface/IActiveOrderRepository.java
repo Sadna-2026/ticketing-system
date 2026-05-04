@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.domain.order.ActiveOrder;
 
 public interface IActiveOrderRepository {
@@ -14,4 +15,6 @@ public interface IActiveOrderRepository {
     Optional<ActiveOrder> findById(UUID orderId);
 
     List<ActiveOrder> findAllActive();
+
+    ActiveOrderDto toActiveOrderDto(ActiveOrder order);
 }

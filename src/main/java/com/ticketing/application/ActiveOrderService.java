@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
@@ -159,6 +160,14 @@ public class ActiveOrderService {
         activeOrderRepository.save(order);
         log.info("Item removed from order: orderId={}, itemId={}", orderId, itemId);
     }
+
+    public ActiveOrderDto getActiveOrder(String token, UUID orderId) {
+        ActiveOrder order = activeOrderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+        validateOrderOwnership(token, order);
+        return activeOrderRepository.toActiveOrderDto(order);
+    }
+
 
     public void updateGAQuantity(String token, UUID orderId, UUID zoneId, int newQuantity) {
         validateToken(token);

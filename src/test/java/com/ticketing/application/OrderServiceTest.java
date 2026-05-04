@@ -281,4 +281,19 @@ public class OrderServiceTest {
             executor.shutdownNow(); 
         }
     }
+
+    @Test
+    void GivenActiveOrder_WhenGetActiveOrder_ThenReturnsDtoWithCorrectData() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
+
+        var dto = orderService.getActiveOrder(guestToken, orderId);
+
+        assertEquals(orderId, dto.getId());
+        assertEquals(sessionRepo.extractSessionId(guestToken), dto.getSessionId());
+        assertEquals(eventId, dto.getEventId());
+        assertEquals("ACTIVE", dto.getStatus());
+        assertEquals(1, dto.getItems().size());
+        assertEquals(new BigDecimal("150.00"), dto.getTotalPrice());
+    }
 }

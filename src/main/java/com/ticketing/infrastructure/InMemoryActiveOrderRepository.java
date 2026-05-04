@@ -1,11 +1,14 @@
 package com.ticketing.infrastructure;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import com.ticketing.application.dto.ActiveOrderDto;
+import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
@@ -59,6 +62,11 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
                 .map(e -> e.entity)
                 .filter(ActiveOrder::isActive)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public ActiveOrderDto toActiveOrderDto(ActiveOrder order) {
+        return new ActiveOrderDto(order.getId(), order.getSessionId(), order.getMemberId(), order.getEventId(), order.getCreatedAt(), order.getStatus().name(), order.getItemsDto(), order.getTotalPrice());
     }
 
 }

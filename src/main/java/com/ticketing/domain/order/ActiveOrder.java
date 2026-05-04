@@ -1,11 +1,15 @@
 package com.ticketing.domain.order;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
+import com.ticketing.application.dto.OrderItemDto;
 
 public class ActiveOrder{
 
@@ -29,6 +33,8 @@ public class ActiveOrder{
     public ActiveOrder(UUID id, UUID sessionId, UUID eventId, Instant createdAt) {
         this(id, sessionId, null, eventId, createdAt);
     }
+
+    public UUID getMemberId() { return this.memberId; }
 
     /**
      * Creates an ActiveOrder. memberId may be null for guest orders.
@@ -64,6 +70,20 @@ public class ActiveOrder{
     public boolean isExpiredAt(Instant now, Duration lockDuration) {
         return now.isAfter(createdAt.plus(lockDuration));
     }
+
+    public BigDecimal getTotalPrice() {
+        return items.stream()
+                .map(OrderItem::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public Instant getCreatedAt() { return this.createdAt; }
+
+    public List<OrderItemDto> getItemsDto() {
+    return items.stream()
+            .map(OrderItem::getOrderItemDto)
+            .toList();
+}
 
     /**
      * Adds an item to the order. Only on ACTIVE orders.
