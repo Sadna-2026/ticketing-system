@@ -1,0 +1,94 @@
+package com.ticketing.infrastructure;
+
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.stereotype.Repository;
+
+import com.ticketing.domain.member.Member;
+import com.ticketing.infrastructure.Interface.IMemberRepository;
+
+@Repository
+public class InMemoryMemberRepository implements IMemberRepository {
+
+    private final ConcurrentHashMap<UUID, Member> membersById = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, UUID> idsByUsername = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, UUID> idsByEmail = new ConcurrentHashMap<>();
+
+    @Override
+    public synchronized boolean saveIfUsernameAndEmailAvailable(Member member) {
+        if (member == null) {
+            throw new IllegalArgumentException("member cannot be null");
+        }
+
+        String username = normalizeUsername(member.getUsername());
+        String email = normalizeEmail(member.getEmail());
+
+        if (idsByUsername.containsKey(username)) {
+            return false;
+        }
+
+        if (idsByEmail.containsKey(email)) {
+            return false;
+        }
+
+        membersById.put(member.getId(), member);
+        idsByUsername.put(username, member.getId());
+        idsByEmail.put(email, member.getId());
+
+        return true;
+    }
+
+    @Override
+    public Optional<Member> findById(UUID memberId) {
+        if (memberId == null) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(membersById.get(memberId));
+    }
+
+    @Override
+    public Optional<Member> findByUsername(String username) {
+        if (username == null) {
+            return Optional.empty();
+        }
+
+        UUID memberId = idsByUsername.get(normalizeUsername(username));
+        return memberId == null ? Optional.empty() : findById(memberId);
+    }
+
+    @Override
+    public Optional<Member> findByEmail(String email) {
+        if (email == null) {
+            return Optional.empty();
+        }
+
+        UUID memberId = idsByEmail.get(normalizeEmail(email));
+        return memberId == null ? Optional.empty() : findById(memberId);
+    }
+
+    @Override
+    public boolean existsByUsername(String username) {
+        return username != null && idsByUsername.containsKey(normalizeUsername(username));
+    }
+
+    @Override
+    public boolean existsByEmail(String email) {
+        return email != null && idsByEmail.containsKey(normalizeEmail(email));
+    }
+
+    @Override
+    public long count() {
+        return membersById.size();
+    }
+
+    private String normalizeUsername(String username) {
+        return username.trim();
+    }
+
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase();
+    }
+}
