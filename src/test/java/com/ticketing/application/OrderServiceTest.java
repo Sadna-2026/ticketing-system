@@ -296,4 +296,19 @@ public class OrderServiceTest {
         assertEquals(1, dto.getItems().size());
         assertEquals(new BigDecimal("150.00"), dto.getTotalPrice());
     }
+
+    @Test
+    void GivenGAZoneWithLimitedInventory_WhenAddBeyondAvailable_ThenRejectsAndInventoryUnchanged() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+
+        // GA zone has 100 tickets available — try to lock 101
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 101));
+
+        // Verify inventory unchanged
+        Event event = eventRepo.findById(eventId).get();
+        assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
+        assertEquals(0, event.findZone(gaZoneId).getLockedCount());
+    }
+
 }
