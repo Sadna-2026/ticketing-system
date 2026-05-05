@@ -35,3 +35,24 @@ Modifications made:
 Initial gaps in understanding (if any): 
 
 Final understanding (brief explanation in your own words): Better understanding of decided repository structure.
+
+## Feature / Component: Issue #9 (INF-8 — ManagerPermission enum + role-based check in domain)
+
+Purpose of LLM use: Assisted in implementing role-based permission checks within the Company domain entity and creating a comprehensive test suite to verify the access control logic.
+
+Summary of prompt(s):
+1. "do #9, start by opening a branch with the issue"
+2. "proceed with your plan"
+
+Output received (short description):
+- Implementation of permission-checked methods in `Company.java` (`editPolicy`, `defineMap`, `managePersonnel`, `viewReports`).
+- Created `CompanyPermissionTest.java` to verify RBAC logic for Owners, Managers, and Non-staff.
+
+Files / components affected:
+- src/main/java/com/ticketing/domain/company/Company.java
+- src/test/java/com/ticketing/domain/company/CompanyPermissionTest.java
+
+Modifications made:
+- Added private `checkPermission` helper to `Company` entity.
+- Implemented `editPolicy`, `defineMap`, `managePersonnel`, and `viewReports` with `ManagerPermission` checks.
+- Verified that Owners have implicit permissions while Managers require explicit sets.
