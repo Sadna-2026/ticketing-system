@@ -98,6 +98,21 @@ Initial gaps in understanding (if any):
 
 Final understanding (brief explanation in your own words): Role-based access control should be enforced directly within domain entities.
 
+## Feature / Component: INF-13 — Race-condition test suite
+
+Purpose of LLM use: Assisted in implementing a comprehensive concurrency test suite and hardening the domain model against race conditions.
+
+Summary of prompt(s):
+1. Implementation of a global race-condition test suite using `CountDownLatch` and `ExecutorService` to verify thread-safety across core workflows.
+
+Output received (short description):
+- Implemented `GlobalRaceConditionTest` with high-intensity tests for registration, company creation, and role management.
+- Synchronized state-modifying methods in the `Member` aggregate to prevent data corruption under concurrent load.
+
+Files / components affected:
+- src/test/java/com/ticketing/concurrency/GlobalRaceConditionTest.java
+- src/main/java/com/ticketing/domain/member/Member.java
+
 ## Feature / Component: Issue #43 (UC-G4.6 — Cancel/delete existing event) - Edge case + style consult
 
 Purpose of LLM use: After implementing Event.cancel() and EventService.cancelEvent(), asked the LLM to sanity-check the auth choice and confirm the test naming/structure matches the rest of the codebase.

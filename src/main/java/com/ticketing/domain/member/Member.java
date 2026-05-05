@@ -81,7 +81,7 @@ public class Member {
         this.encryptedPassword = newEncryptedPassword;
     }
 
-    public void addStaffAppointment(String companyId, StaffAppointment appointment) {
+    public synchronized void addStaffAppointment(String companyId, StaffAppointment appointment) {
         if (companyId == null || companyId.isBlank()) {
             throw new IllegalArgumentException("companyId cannot be null or blank");
         }
@@ -93,7 +93,7 @@ public class Member {
         staffAppointments.put(companyId, appointment);
     }
 
-    public void removeStaffAppointment(String companyId) {
+    public synchronized void removeStaffAppointment(String companyId) {
         if (companyId == null || companyId.isBlank()) {
             throw new IllegalArgumentException("companyId cannot be null or blank");
         }
@@ -109,7 +109,7 @@ public class Member {
         return staffAppointments.get(companyId);
     }
 
-    public void clearStaffAppointments() {
+    public synchronized void clearStaffAppointments() {
         staffAppointments.clear();
     }
 
@@ -119,10 +119,12 @@ public class Member {
     }
 
     public List<PendingRoleOffer> getPendingOffers() {
-        return Collections.unmodifiableList(pendingOffers);
+        synchronized(this) {
+            return Collections.unmodifiableList(new ArrayList<>(pendingOffers));
+        }
     }
 
-    public void addPendingOffer(PendingRoleOffer offer) {
+    public synchronized void addPendingOffer(PendingRoleOffer offer) {
         if (offer == null) {
             throw new IllegalArgumentException("offer cannot be null");
         }
