@@ -50,7 +50,7 @@ public class OrderItem {
         this.pricePerTicket = pricePerTicket;
     }
 
-    public OrderItemDto getOrderItemDto(OrderItem item){
+    public OrderItemDto getOrderItemDto(){
         return new OrderItemDto(id, zoneId, seatId, quantity, pricePerTicket, pricePerTicket, isAssignedSeat());
     }
 

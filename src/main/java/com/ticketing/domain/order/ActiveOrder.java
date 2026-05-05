@@ -80,10 +80,11 @@ public class ActiveOrder{
     public Instant getCreatedAt() { return this.createdAt; }
 
     public List<OrderItemDto> getItemsDto() {
-    return items.stream()
-            .map(OrderItem::getOrderItemDto)
-            .toList();
-}
+        List<OrderItemDto> rDtos = new ArrayList<>();
+        for (OrderItem item : items)
+            rDtos.add(item.getOrderItemDto());
+        return rDtos;
+    }
 
     /**
      * Adds an item to the order. Only on ACTIVE orders.

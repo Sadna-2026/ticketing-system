@@ -61,7 +61,7 @@ public class ActiveOrderService {
         if (!event.isPublished()) {
             throw new IllegalStateException("Event is not available for purchase");
         }
-
+        System.err.println("SessionID: " + sessionId);
         ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
         activeOrderRepository.save(order);
 
@@ -216,9 +216,14 @@ public class ActiveOrderService {
         log.info("Order cancelled: orderId={}", orderId);
     }
 
-    private void validateOrderOwnership(String token, ActiveOrder order){
-        if(sessionTokenService.extractSessionId(token) != order.getSessionId())
-            throw new IllegalArgumentException("Session id error");
+    private void validateOrderOwnership(String token, ActiveOrder order) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Authentication token is required to access an order");
+        }
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+        if (!order.getSessionId().equals(sessionId)) {
+            throw new IllegalStateException("Order does not belong to this session");
+        }
     }
 
     private void releaseInventoryForItem(Event event, OrderItem item) {
