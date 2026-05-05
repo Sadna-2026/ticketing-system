@@ -98,6 +98,30 @@ Initial gaps in understanding (if any):
 
 Final understanding (brief explanation in your own words): Role-based access control should be enforced directly within domain entities.
 
+## Feature / Component: INF-13 — Race-condition test suite
+
+Purpose of LLM use: Assisted in debugging synchronization issues in the Member aggregate and provided guidance on using CountDownLatch for precise concurrency testing.
+
+Summary of prompt(s):
+1. "How can I ensure all threads in my ExecutorService start at the exact same moment to maximize contention?"
+
+Output received (short description):
+- Recommended using `CountDownLatch` to synchronize the start of all test threads.
+
+Files / components affected:
+- src/test/java/com/ticketing/concurrency/GlobalRaceConditionTest.java
+- src/main/java/com/ticketing/domain/member/Member.java
+
+### Modifications made:
+- Refined the synchronization logic in `Member.java` based on AI suggestions to prevent `ConcurrentModificationException`.
+- Integrated `CountDownLatch` into the test suite to ensure robust race-condition detection.
+
+### Initial gaps in understanding (if any):
+- Complexity of ensuring simultaneous thread execution in Java's memory model.
+
+### Final understanding:
+- Using low-level synchronization primitives like `CountDownLatch` is essential for creating reliable race-condition tests, and even thread-safe collections (like `Hashtable`) don't protect the entire aggregate without proper synchronization of composite operations.
+
 ## Feature / Component: Issue #43 (UC-G4.6 — Cancel/delete existing event) - Edge case + style consult
 
 Purpose of LLM use: After implementing Event.cancel() and EventService.cancelEvent(), asked the LLM to sanity-check the auth choice and confirm the test naming/structure matches the rest of the codebase.
@@ -125,7 +149,8 @@ Modifications made:
 
 Initial gaps in understanding (if any):
 
-Final understanding (brief explanation in your own words):
+Final understanding (brief explanation in your own words): Cancellation should be permitted even for suspended companies to allow for graceful cleanup, but guards should distinguish between structural and editorial changes.
+
 
 ## Feature / Component: Issue #42 (UC-G4.2 — Edit core event details) - CR fixes
 Purpose of LLM use: Two CR fixes — perf query + clarifying comment on the two domain guards.
@@ -145,7 +170,7 @@ Modifications made:
 - O(1)-keyed query replaces O(N) scan in hasActiveReservations.
 - One-block comment makes the structural-vs-editorial split explicit; no rename.
 Initial gaps in understanding (if any):
-Final understanding (brief explanation in your own words):
+Final understanding (brief explanation in your own words): High-performance lookups should be prioritized for frequently checked invariants (like active reservations) by adding targeted repository queries.
 
 ## Feature / Component: Issue #45 (UC-C.1 — Manage event layout & inventory) - Concurrency strategy
 Purpose of LLM use: Quick consult on the locking strategy for inventory mutations and the V1 §6.a race-test shape.
