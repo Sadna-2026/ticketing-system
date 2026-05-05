@@ -8,6 +8,10 @@ import java.util.UUID;
  * A frozen record of a completed purchase. Snapshot fields (eventName, amount,
  * purchasedAt) are captured at checkout time and never reflect later changes
  * to the underlying Event.
+ *
+ * NOTE for the checkout-flow caller (UC-II.12): pass {@code ISystemClock.now()}
+ * for {@code purchasedAt} rather than {@link java.time.Instant#now()} directly,
+ * so tests can use TestClock and pin timestamps deterministically.
  */
 public record CompletedPurchase(
         UUID purchaseId,
