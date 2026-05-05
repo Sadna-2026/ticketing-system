@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.domain.member.Member;
-import com.ticketing.infrastructure.Interface.IMemberRepository;
+import com.ticketing.domain.member.IMemberRepository;
 
 @Repository
 public class InMemoryMemberRepository implements IMemberRepository {
@@ -82,6 +82,16 @@ public class InMemoryMemberRepository implements IMemberRepository {
     @Override
     public long count() {
         return membersById.size();
+    }
+
+    @Override
+    public void save(Member member) {
+        if (member == null) {
+            throw new IllegalArgumentException("member cannot be null");
+        }
+        membersById.put(member.getId(), member);
+        idsByUsername.put(normalizeUsername(member.getUsername()), member.getId());
+        idsByEmail.put(normalizeEmail(member.getEmail()), member.getId());
     }
 
     private String normalizeUsername(String username) {

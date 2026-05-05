@@ -71,7 +71,7 @@ public class CompanyServiceTest {
 
         // Verify state in MemberRepository (updated via event listener)
         Member updatedMember = memberRepository.findById(founderId).orElseThrow();
-        StaffAppointment appointment = updatedMember.getStaffAppointments().get(companyName);
+        StaffAppointment appointment = updatedMember.getStaffAppointment(companyName);
         assertNotNull(appointment, "Member should have an appointment for the new company");
         assertEquals(StaffAppointment.StaffRole.OWNER, appointment.getRole());
     }

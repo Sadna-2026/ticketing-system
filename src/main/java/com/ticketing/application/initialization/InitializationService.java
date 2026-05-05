@@ -7,7 +7,6 @@ import com.ticketing.application.CompanyService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
 import com.ticketing.domain.company.ICompanyRepository;
-import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
 

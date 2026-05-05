@@ -15,5 +15,9 @@ public interface IMemberRepository {
     boolean existsByUsername(String username);
     
     boolean existsByEmail(String email);
+
+    boolean saveIfUsernameAndEmailAvailable(Member member);
+
+    long count();
 }
 

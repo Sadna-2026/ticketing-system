@@ -8,9 +8,9 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.member.IMemberRepository;
 
 /**
  * Handles CompanyOpenedEvent by assigning the founder the Owner role.
