@@ -69,14 +69,16 @@ Final understanding (brief explanation in your own words): Role-based access con
 Purpose of LLM use: Assisted in implementing the "Offer role appointment" feature using Test-Driven Development (TDD).
 
 Summary of prompt(s):
-1. Implementation of UC-C.4 (Offer role appointment) using a Test-Driven Development approach to ensure domain-level permission checks.
+1. User: "The acceptance criteria for UC-C.4 mentions 'notification sent'. Is your event-driven implementation sufficient or do we need an explicit handler for V1?"
+2. Model: "The event is published, but to fulfill the criteria, I should implement a `RoleAppointmentOfferedEventHandler` that bridges the event to the `INotificationService`."
+3. User: "Agreed. Implement the handler, register it in `InitializationService`, and ensure the `INotificationService` is properly injected."
 
 Output received (short description):
-- Implemented the `Company.offerRole` domain method as a protected factory for `RoleAppointmentOffer` objects, ensuring that `PERSONNEL_MGMT` permissions are verified via the `checkPermission` helper before an offer can be instantiated.
+- Implemented the `RoleAppointmentOfferedEventHandler` to decouple the domain offer logic from the notification infrastructure. The handler ensures that any `RoleAppointmentOfferedEvent` published by the `CompanyService` results in a call to `INotificationService.notify`, fulfilling the "notification sent" acceptance criterion.
 
 Files / components affected:
-- src/main/java/com/ticketing/domain/company/Company.java
-- src/main/java/com/ticketing/domain/member/RoleAppointmentOffer.java
+- src/main/java/com/ticketing/application/listener/RoleAppointmentOfferedEventHandler.java
+- src/main/java/com/ticketing/application/initialization/InitializationService.java
 
 Modifications made:
 - Added `offerRole` to the `Company` root entity, which enforces domain invariants by checking if the target member is already an owner and validating the appointer's credentials, preventing unauthorized state creation at the domain entry point.
