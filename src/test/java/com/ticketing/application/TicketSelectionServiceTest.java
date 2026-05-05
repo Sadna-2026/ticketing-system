@@ -196,4 +196,29 @@ public class TicketSelectionServiceTest {
     public void GivenNullRequest_WhenValidateSelection_ThenThrowIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class, () -> service.validateSelection(null));
     }
+
+    @Test
+    public void GivenTwoGAPicksSameZoneExceedingTotal_WhenValidateSelection_ThenThrowIllegalStateException() {
+        // Floor zone has only 100 GA tickets; lock 95 so just 5 remain
+        InventoryZone floor = eventRepo.findById(eventId).orElseThrow().findZone(gaZoneId);
+        floor.lockGA(95);
+        eventRepo.save(eventRepo.findById(eventId).orElseThrow());
+
+        // two picks of 4 each = 8 total, exceeds 5 available
+        SelectionRequest req = new SelectionRequest(eventId,
+                List.of(),
+                List.of(new SelectionRequest.GAPick(gaZoneId, 4),
+                        new SelectionRequest.GAPick(gaZoneId, 4)));
+
+        assertThrows(IllegalStateException.class, () -> service.validateSelection(req));
+    }
+
+    @Test
+    public void GivenDuplicateSeatId_WhenBuildRequest_ThenThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new SelectionRequest(eventId,
+                        List.of(new SelectionRequest.SeatPick(assignedZoneId, seatA1),
+                                new SelectionRequest.SeatPick(assignedZoneId, seatA1)),
+                        List.of()));
+    }
 }

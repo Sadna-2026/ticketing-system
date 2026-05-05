@@ -59,16 +59,24 @@ public class TicketSelectionService {
             }
         }
 
+        // Aggregate GA picks per zone first — multiple picks targeting the same zone
+        // must be summed before the supply check, otherwise two picks of 4 each could
+        // both pass when only 5 are available.
+        java.util.Map<java.util.UUID, Integer> totalsByZone = new java.util.HashMap<>();
         for (SelectionRequest.GAPick pick : request.gaQuantities()) {
-            InventoryZone zone = findZone(event, pick.zoneId());
+            totalsByZone.merge(pick.zoneId(), pick.quantity(), Integer::sum);
+        }
+        for (var entry : totalsByZone.entrySet()) {
+            InventoryZone zone = findZone(event, entry.getKey());
+            int requested = entry.getValue();
             if (!zone.isGA()) {
                 throw new IllegalArgumentException(
                         "Zone " + zone.getName() + " is assigned-seating — pick specific seats, not a quantity");
             }
-            if (zone.getAvailableCount() < pick.quantity()) {
+            if (zone.getAvailableCount() < requested) {
                 throw new IllegalStateException(
                         "Not enough tickets in zone " + zone.getName()
-                        + " (requested " + pick.quantity() + ", available " + zone.getAvailableCount() + ")");
+                        + " (requested " + requested + ", available " + zone.getAvailableCount() + ")");
             }
         }
 

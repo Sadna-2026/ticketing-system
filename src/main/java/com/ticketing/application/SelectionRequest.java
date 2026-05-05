@@ -20,6 +20,15 @@ public record SelectionRequest(
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
         seats        = seats        == null ? List.of() : List.copyOf(seats);
         gaQuantities = gaQuantities == null ? List.of() : List.copyOf(gaQuantities);
+
+        // Reject duplicate seat ids — picking the same seat twice can never succeed
+        // and would only surface as a confusing error at the locking stage.
+        java.util.Set<UUID> seenSeatIds = new java.util.HashSet<>();
+        for (SeatPick p : seats) {
+            if (!seenSeatIds.add(p.seatId())) {
+                throw new IllegalArgumentException("Duplicate seat in selection: " + p.seatId());
+            }
+        }
     }
 
     public boolean isEmpty() {
