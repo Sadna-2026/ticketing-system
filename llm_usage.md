@@ -146,3 +146,22 @@ Modifications made:
 - One-block comment makes the structural-vs-editorial split explicit; no rename.
 Initial gaps in understanding (if any):
 Final understanding (brief explanation in your own words):
+
+## Feature / Component: Issue #45 (UC-C.1 — Manage event layout & inventory) - Concurrency strategy
+Purpose of LLM use: Quick consult on the locking strategy for inventory mutations and the V1 §6.a race-test shape.
+Summary of prompt(s):
+1. "Service-level synchronized vs per-event lock vs CAS — what's V1-correct given InMemoryEventRepository's CAS doesn't fire under in-memory aliasing?"
+2. "Race test: two threads adding seats vs two threads removing the same seat — which gives a sharper signal?"
+Output received (short description):
+- Service-level synchronized is enough for V1; CAS is unreliable under aliasing.
+- Both race tests are useful — concurrent-add proves no lost updates, concurrent-same-removal proves single-success semantics.
+Files / components affected:
+- src/main/java/com/ticketing/domain/event/InventoryZone.java (removeSeat, increase/decreaseCapacity, guarded setPricePerTicket)
+- src/main/java/com/ticketing/application/EventService.java (5 synchronized inventory methods + authorizeInventory + loadEventForInventoryEdit)
+- src/test/java/com/ticketing/application/EventServiceInventoryTest.java (new — 13 tests incl. 2 race tests)
+Modifications made:
+- New domain ops on InventoryZone with state-machine guards.
+- Permission is INVENTORY_MGMT OR MAP_DEFINITION (not both).
+- Race tests use ExecutorService + CountDownLatch per V1 §6.a.
+Initial gaps in understanding (if any):
+Final understanding (brief explanation in your own words):

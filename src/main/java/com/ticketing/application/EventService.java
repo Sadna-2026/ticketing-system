@@ -171,6 +171,83 @@ public class EventService {
         return !activeOrderRepository.findActiveByEventId(eventId).isEmpty();
     }
 
+    // --- UC-C.1: layout & inventory ---
+    // Permission: INVENTORY_MGMT OR MAP_DEFINITION (per spec — not both, unlike createEvent).
+    // synchronized on the service to keep concurrent inventory mutations on any
+    // event sequenced. Coarse-grained but correct for V1.
+
+    public synchronized void addSeatsToZone(String token, UUID eventId, UUID zoneId,
+                                            java.util.List<CreateEventRequest.SeatSpec> seats) {
+        if (seats == null || seats.isEmpty()) {
+            throw new IllegalArgumentException("seats list is required");
+        }
+        Event event = loadEventForInventoryEdit(token, eventId);
+        InventoryZone zone = event.findZone(zoneId);
+        for (CreateEventRequest.SeatSpec spec : seats) {
+            zone.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.seatNumber()));
+        }
+        eventRepository.save(event);
+        log.info("Inventory: added {} seats to zone={} event={}", seats.size(), zoneId, eventId);
+    }
+
+    public synchronized void removeSeats(String token, UUID eventId, UUID zoneId,
+                                         java.util.List<UUID> seatIds) {
+        if (seatIds == null || seatIds.isEmpty()) {
+            throw new IllegalArgumentException("seatIds list is required");
+        }
+        Event event = loadEventForInventoryEdit(token, eventId);
+        InventoryZone zone = event.findZone(zoneId);
+        for (UUID seatId : seatIds) {
+            zone.removeSeat(seatId);
+        }
+        eventRepository.save(event);
+        log.info("Inventory: removed {} seats from zone={} event={}", seatIds.size(), zoneId, eventId);
+    }
+
+    public synchronized void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
+        Event event = loadEventForInventoryEdit(token, eventId);
+        event.findZone(zoneId).increaseCapacity(delta);
+        eventRepository.save(event);
+        log.info("Inventory: GA capacity +{} on zone={} event={}", delta, zoneId, eventId);
+    }
+
+    public synchronized void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
+        Event event = loadEventForInventoryEdit(token, eventId);
+        event.findZone(zoneId).decreaseCapacity(delta);
+        eventRepository.save(event);
+        log.info("Inventory: GA capacity -{} on zone={} event={}", delta, zoneId, eventId);
+    }
+
+    public synchronized void setZonePrice(String token, UUID eventId, UUID zoneId,
+                                          java.math.BigDecimal newPrice) {
+        Event event = loadEventForInventoryEdit(token, eventId);
+        event.findZone(zoneId).setPricePerTicket(newPrice);
+        eventRepository.save(event);
+        log.info("Inventory: price={} on zone={} event={}", newPrice, zoneId, eventId);
+    }
+
+    private Event loadEventForInventoryEdit(String token, UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        UUID memberId = authenticateMember(token);
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizeInventory(appt);
+        return event;
+    }
+
+    private void authorizeInventory(StaffAppointment appt) {
+        boolean allowed = appt.isOwner()
+                || (appt.isManager()
+                    && (appt.hasPermission(ManagerPermission.INVENTORY_MGMT)
+                        || appt.hasPermission(ManagerPermission.MAP_DEFINITION)));
+        if (!allowed) {
+            throw new SecurityException(
+                    "Inventory edits require INVENTORY_MGMT or MAP_DEFINITION permission");
+        }
+    }
+
     private UUID authenticateMember(String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Authentication token is required");
