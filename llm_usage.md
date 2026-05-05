@@ -208,3 +208,28 @@ Modifications made:
 - Snapshot semantics + immutable lists baked into the DTO.
 Initial gaps in understanding (if any):
 Final understanding (brief explanation in your own words):
+ 
+## Feature / Component: Issue #52 (UC-C.8 — Close production company) - Architectural decoupling
+ 
+Purpose of LLM use: Consulted on whether to manage staff revocation directly in CompanyService or via domain events to stay consistent with the project's class diagram.
+ 
+Summary of prompt(s):
+1. "Does everything in this pr adhere consistently with the class diagram?"
+ 
+Output received (short description):
+- Identified that `CompanyService` should not directly depend on `IMemberRepository` according to the diagram.
+- Recommended moving staff revocation to a dedicated `MemberCompanyClosedEventHandler` to maintain architectural decoupling.
+ 
+Files / components affected:
+- src/main/java/com/ticketing/application/CompanyService.java (removed IMemberRepository dependency)
+- src/main/java/com/ticketing/application/listener/MemberCompanyClosedEventHandler.java (new)
+- src/main/java/com/ticketing/application/initialization/InitializationService.java (registered new handler)
+- src/test/java/com/ticketing/application/CompanyServiceCloseTest.java (updated to verify decoupled logic)
+ 
+Modifications made:
+- Shifted staff revocation logic from `CompanyService` to an event-driven handler.
+- Standardized imports throughout all modified files to avoid fully qualified names.
+ 
+Initial gaps in understanding (if any):
+ 
+Final understanding (brief explanation in your own words): Cross-aggregate operations should be handled via domain events and listeners rather than direct service-to-repository dependencies to preserve architectural decoupling and follow the class diagram.
