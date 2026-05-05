@@ -72,6 +72,9 @@ public class AdminService {
     }
 
     private boolean isAdmin(String token) {
+        if (!sessionTokenService.isValid(token)) {
+            return false;
+        }
         Set<String> perms = sessionTokenService.extractPermissions(token);
         return perms != null && perms.contains(ADMIN_PERMISSION);
     }

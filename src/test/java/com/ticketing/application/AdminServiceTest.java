@@ -77,6 +77,12 @@ public class AdminServiceTest {
         target.addStaffAppointment("Comp1", new StaffAppointment("Comp1", UUID.randomUUID(), StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
         target.addStaffAppointment("Comp2", new StaffAppointment("Comp2", UUID.randomUUID(), StaffAppointment.StaffRole.MANAGER, Collections.emptySet()));
 
+        // Setup an appointee appointed by the target to verify non-cascading behavior
+        UUID appointeeId = UUID.randomUUID();
+        Member appointee = new Member(appointeeId, "appointee", "appointee@example.com", "pass");
+        appointee.addStaffAppointment("Comp1", new StaffAppointment("Comp1", targetId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet()));
+        memberRepository.saveIfUsernameAndEmailAvailable(appointee);
+
         // Act
         adminService.removeMember(adminToken, targetId);
 
@@ -84,6 +90,9 @@ public class AdminServiceTest {
         assertTrue(memberRepository.findById(targetId).isEmpty());
         // Assert sessions are terminated
         verify(sessionTokenService).revokeMemberSessions(targetId);
+        // Assert appointee's role remains unchanged (non-cascading)
+        assertTrue(memberRepository.findById(appointeeId).isPresent());
+        assertTrue(memberRepository.findById(appointeeId).get().hasStaffAppointment("Comp1", StaffAppointment.StaffRole.MANAGER));
     }
 
     @Test
@@ -113,10 +122,5 @@ public class AdminServiceTest {
         verify(sessionTokenService, never()).revokeMemberSessions(targetId);
     }
 
-    @Test
-    public void testSoleAdminProtection() {
-        // Since we stubbed this to return false for now, we can verify that the method is prepared.
-        // We will just verify it doesn't throw the SoleAdmin protection right now or if we stubbed it manually.
-        // The implementation plan stubs it to false, so this test is just a placeholder.
-    }
+
 }
