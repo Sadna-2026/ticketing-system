@@ -117,10 +117,10 @@ public class CompanyLifecycleServiceTest {
         Event e2 = seedEvent(UUID.randomUUID());
 
         // seed two completed purchases tied to those events
-        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), COMPANY,
-                UUID.randomUUID(), "txn-1", new BigDecimal("50.00")));
-        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e2.getId(), COMPANY,
-                UUID.randomUUID(), "txn-2", new BigDecimal("75.00")));
+        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), "Concert 1",
+                COMPANY, UUID.randomUUID(), "txn-1", new BigDecimal("50.00"), java.time.Instant.now()));
+        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e2.getId(), "Concert 2",
+                COMPANY, UUID.randomUUID(), "txn-2", new BigDecimal("75.00"), java.time.Instant.now()));
 
         when(paymentGateway.refund(anyString(), anyDouble()))
                 .thenReturn(RefundResult.successful("ref-x"));
@@ -171,8 +171,8 @@ public class CompanyLifecycleServiceTest {
     @Test
     public void GivenPaymentGatewayFails_WhenPermanentClose_ThenStatusBecomesPendingClosure() {
         Event e1 = seedEvent(UUID.randomUUID());
-        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), COMPANY,
-                UUID.randomUUID(), "txn-fail", new BigDecimal("99.00")));
+        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), "Concert",
+                COMPANY, UUID.randomUUID(), "txn-fail", new BigDecimal("99.00"), java.time.Instant.now()));
 
         when(paymentGateway.refund(anyString(), anyDouble()))
                 .thenReturn(RefundResult.failed("gateway down"));
@@ -188,8 +188,8 @@ public class CompanyLifecycleServiceTest {
     @Test
     public void GivenPendingClosureWithSuccessfulRetry_WhenRetry_ThenStatusBecomesClosed() {
         seedEvent(UUID.randomUUID());
-        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), COMPANY,
-                UUID.randomUUID(), "txn-retry", new BigDecimal("12.00")));
+        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Retry Concert",
+                COMPANY, UUID.randomUUID(), "txn-retry", new BigDecimal("12.00"), java.time.Instant.now()));
         when(paymentGateway.refund(anyString(), anyDouble()))
                 .thenReturn(RefundResult.failed("first try fails"));
         service.permanentCloseByFounder(FOUNDER_TOKEN, COMPANY);
@@ -211,8 +211,8 @@ public class CompanyLifecycleServiceTest {
     public void GivenPendingClosureAfterServiceRestart_WhenRetry_ThenRehydratesFromRepoAndCloses() {
         // 1) seed an event + a completed purchase so there's data to refund
         Event e = seedEvent(UUID.randomUUID());
-        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e.getId(), COMPANY,
-                UUID.randomUUID(), "txn-rehydrate", new BigDecimal("42.00")));
+        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e.getId(), "Rehydrate Concert",
+                COMPANY, UUID.randomUUID(), "txn-rehydrate", new BigDecimal("42.00"), java.time.Instant.now()));
 
         // 2) drive into PENDING_CLOSURE via a failing gateway
         when(paymentGateway.refund(anyString(), anyDouble()))
