@@ -103,26 +103,24 @@ Final understanding (brief explanation in your own words): Role-based access con
 Purpose of LLM use: Assisted in debugging synchronization issues in the Member aggregate and provided guidance on using CountDownLatch for precise concurrency testing.
 
 Summary of prompt(s):
-1. Implementation of a global race-condition test suite using `CountDownLatch` and `ExecutorService` to verify thread-safety across core workflows.
+1. "How can I ensure all threads in my ExecutorService start at the exact same moment to maximize contention?"
 
 Output received (short description):
-- Implemented `GlobalRaceConditionTest` with high-intensity tests for registration, company creation, and role management.
-- Synchronized state-modifying methods in the `Member` aggregate to prevent data corruption under concurrent load.
+- Recommended using `CountDownLatch` to synchronize the start of all test threads.
 
 Files / components affected:
 - src/test/java/com/ticketing/concurrency/GlobalRaceConditionTest.java
 - src/main/java/com/ticketing/domain/member/Member.java
 
 ### Modifications made:
-- Implemented `GlobalRaceConditionTest` with 4 stress tests (20-50 threads each) synchronized via `CountDownLatch`.
-- Added `synchronized` keyword to state-modifying methods in `Member.java`.
-- Updated `getPendingOffers()` to return a defensive copy within a synchronized block to prevent concurrent access issues.
+- Refined the synchronization logic in `Member.java` based on AI suggestions to prevent `ConcurrentModificationException`.
+- Integrated `CountDownLatch` into the test suite to ensure robust race-condition detection.
 
 ### Initial gaps in understanding (if any):
-- Initial assumption that `Hashtable` usage in `Member` provided sufficient thread-safety for the entire aggregate.
+- Complexity of ensuring simultaneous thread execution in Java's memory model.
 
 ### Final understanding:
-- While individual collections might be thread-safe (like `Hashtable`), mutations to the aggregate's overall state or composite collections (like `ArrayList`) require explicit synchronization to maintain domain invariants under high concurrency.
+- Using low-level synchronization primitives like `CountDownLatch` is essential for creating reliable race-condition tests, and even thread-safe collections (like `Hashtable`) don't protect the entire aggregate without proper synchronization of composite operations.
 
 ## Feature / Component: Issue #43 (UC-G4.6 — Cancel/delete existing event) - Edge case + style consult
 
