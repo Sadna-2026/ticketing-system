@@ -24,6 +24,12 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
+import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 
 /**
  * Concurrency tests for CompanyService
@@ -52,9 +58,16 @@ public class CompanyServiceConcurrencyTest {
 
         notificationService = mock(INotificationService.class);
 
+        IEventRepository eventRepository = new InMemoryEventRepository();
+        ICompletedPurchaseRepository purchaseRepository = new InMemoryCompletedPurchaseRepository();
+        IPaymentGateway paymentGateway = new StubPaymentGateway();
+
         InitializationService initService = new InitializationService(
             companyRepository,
             memberRepository,
+            eventRepository,
+            purchaseRepository,
+            paymentGateway,
             eventPublisher,
             sessionTokenService,
             notificationService

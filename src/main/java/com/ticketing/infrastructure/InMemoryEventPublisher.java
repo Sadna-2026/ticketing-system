@@ -3,7 +3,6 @@ package com.ticketing.infrastructure;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
@@ -15,11 +14,9 @@ import com.ticketing.domain.event.IEventPublisher;
  */
 public class InMemoryEventPublisher implements IEventPublisher {
     private final ConcurrentHashMap<String, List<IEventListener>> listeners = new ConcurrentHashMap<>();
-    private final List<IEvent> publishedEvents = new CopyOnWriteArrayList<>();
 
     @Override
     public void publish(IEvent event) {
-        publishedEvents.add(event);
         String eventType = event.getEventType();
         List<IEventListener> eventListeners = listeners.get(eventType);
         
@@ -34,10 +31,6 @@ public class InMemoryEventPublisher implements IEventPublisher {
                 }
             }
         }
-    }
-
-    public List<IEvent> getPublishedEvents() {
-        return new ArrayList<>(publishedEvents);
     }
 
     @Override

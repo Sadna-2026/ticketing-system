@@ -27,6 +27,12 @@ import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEv
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
+import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -74,9 +80,16 @@ public class CompanyServiceIntegrationTest {
         notificationService = mock(INotificationService.class);
 
         // Setup initialization
+        IEventRepository eventRepository = new InMemoryEventRepository();
+        ICompletedPurchaseRepository purchaseRepository = new InMemoryCompletedPurchaseRepository();
+        IPaymentGateway paymentGateway = new StubPaymentGateway();
+
         initializationService = new InitializationService(
             companyRepository,
             memberRepository,
+            eventRepository,
+            purchaseRepository,
+            paymentGateway,
             eventPublisher,
             sessionTokenService,
             notificationService

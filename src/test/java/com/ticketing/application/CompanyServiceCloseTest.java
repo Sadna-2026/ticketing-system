@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.util.UUID;
-import java.util.Optional;
 import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -18,17 +17,23 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
-import com.ticketing.infrastructure.InMemoryEventPublisher;
+import com.ticketing.infrastructure.TestEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.application.INotificationService;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
+import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 
 public class CompanyServiceCloseTest {
 
     private ICompanyRepository companyRepository;
     private IMemberRepository memberRepository;
-    private InMemoryEventPublisher eventPublisher;
+    private TestEventPublisher eventPublisher;
     private ISessionTokenService sessionTokenServiceMock;
     private INotificationService notificationServiceMock;
     private CompanyService companyService;
@@ -37,12 +42,17 @@ public class CompanyServiceCloseTest {
     public void setUp() {
         companyRepository = new InMemoryCompanyRepository();
         memberRepository = new InMemoryMemberRepository();
-        eventPublisher = new InMemoryEventPublisher();
+        IEventRepository eventRepository = new InMemoryEventRepository();
+        ICompletedPurchaseRepository purchaseRepository = new InMemoryCompletedPurchaseRepository();
+        IPaymentGateway paymentGateway = new StubPaymentGateway();
+        eventPublisher = new TestEventPublisher();
         sessionTokenServiceMock = mock(ISessionTokenService.class);
         notificationServiceMock = mock(INotificationService.class);
 
         InitializationService initService = new InitializationService(
-            companyRepository, memberRepository, eventPublisher, sessionTokenServiceMock, notificationServiceMock
+            companyRepository, memberRepository, eventRepository, 
+            purchaseRepository, paymentGateway, eventPublisher, 
+            sessionTokenServiceMock, notificationServiceMock
         );
         companyService = initService.initialize();
     }
@@ -57,13 +67,17 @@ public class CompanyServiceCloseTest {
         Company company = new Company(companyName, "Desc", ownerId);
         companyRepository.save(company);
         
+        Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
+        owner.addStaffAppointment(companyName, new StaffAppointment(companyName, ownerId, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+        memberRepository.save(owner);
+        
         when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
         when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(ownerId);
 
         companyService.closeProductionCompany(token, companyName, false);
 
         Company closedCompany = companyRepository.findByName(companyName).orElseThrow();
-        assertEquals(CompanyStatus.CLOSED, closedCompany.getStatus());
+        assertEquals(CompanyStatus.SUSPENDED, closedCompany.getStatus());
         assertTrue(eventPublisher.getPublishedEvents().stream()
             .anyMatch(e -> e.getEventType().equals("CompanyClosed")));
     }
@@ -118,10 +132,17 @@ public class CompanyServiceCloseTest {
         Company company = new Company(companyName, "Desc", ownerId);
         companyRepository.save(company);
         
+        Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
+        owner.addStaffAppointment(companyName, new StaffAppointment(companyName, ownerId, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+        memberRepository.save(owner);
+        
+        Member other = new Member(otherId, "other", "other@test.com", "pass");
+        memberRepository.save(other);
+
         when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
         when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(otherId);
 
-        assertThrows(IllegalStateException.class, () -> {
+        assertThrows(SecurityException.class, () -> {
             companyService.closeProductionCompany(token, companyName, false);
         });
     }

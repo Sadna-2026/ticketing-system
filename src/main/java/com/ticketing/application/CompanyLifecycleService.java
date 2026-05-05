@@ -81,7 +81,7 @@ public class CompanyLifecycleService {
         UUID memberId = requireMember(token);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
-        runClose(company, false);
+        runClose(company, true);
     }
 
     public synchronized void permanentCloseByAdmin(String token, String companyName) {

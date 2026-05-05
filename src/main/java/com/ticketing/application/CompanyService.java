@@ -22,16 +22,19 @@ public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
 
     private final ICompanyRepository companyRepository;
+    private final CompanyLifecycleService lifecycleService;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
     private final Object lock = new Object();
 
     public CompanyService(
             ICompanyRepository companyRepository, 
+            CompanyLifecycleService lifecycleService,
             IEventPublisher eventPublisher, 
             ISessionTokenService sessionTokenService
     ) {
         this.companyRepository = companyRepository;
+        this.lifecycleService = lifecycleService;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
     }
@@ -73,33 +76,16 @@ public class CompanyService {
     }
 
     public void closeProductionCompany(String token, String companyName, boolean permanent) {
-        UUID ownerId = validateToken(token);
-        
-        synchronized (lock) {
-            Company company = companyRepository.findByName(companyName)
-                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
-
-            if (!company.getFounderId().equals(ownerId)) {
-                throw new IllegalStateException("Only the owner can close the company.");
-            }
-
-            if (permanent) {
-                log.info("Permanent closure requested for company: {}", companyName);
-                company.markPendingClosure();
-                // Staff revocation will be handled by MemberCompanyClosedEventHandler
-                company.completeClosure();
-            } else {
-                log.info("Temporary closure requested for company: {}", companyName);
-                company.close();
-            }
-
-            companyRepository.save(company);
-            
-            // Publish event for event cancellation, etc.
-            eventPublisher.publish(new CompanyClosedEvent(companyName, permanent));
-            
-            log.info("Company closed: name={}, permanent={}", companyName, permanent);
+        if (permanent) {
+            lifecycleService.permanentCloseByFounder(token, companyName);
+        } else {
+            lifecycleService.suspendCompany(token, companyName);
         }
+        
+        // Publish event for external listeners (CompanyLifecycleService handles its own internal logic)
+        eventPublisher.publish(new CompanyClosedEvent(companyName, permanent));
+        
+        log.info("Company lifecycle operation completed: name={}, permanent={}", companyName, permanent);
     }
 
     public void offerRoleAppointment(

@@ -12,6 +12,10 @@ import com.ticketing.application.listener.RoleAppointmentOfferRequestedHandler;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.application.CompanyLifecycleService;
 
 /**
  * Initializes and wires up application services with their dependencies.
@@ -22,6 +26,9 @@ public class InitializationService {
 
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
+    private final IEventRepository eventRepository;
+    private final ICompletedPurchaseRepository completedPurchaseRepository;
+    private final IPaymentGateway paymentGateway;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
     private final INotificationService notificationService;
@@ -29,16 +36,23 @@ public class InitializationService {
     public InitializationService(
             ICompanyRepository companyRepository,
             IMemberRepository memberRepository,
+            IEventRepository eventRepository,
+            ICompletedPurchaseRepository completedPurchaseRepository,
+            IPaymentGateway paymentGateway,
             IEventPublisher eventPublisher,
             ISessionTokenService sessionTokenService,
             INotificationService notificationService
     ) {
-        if (companyRepository == null || memberRepository == null || 
+        if (companyRepository == null || memberRepository == null || eventRepository == null ||
+            completedPurchaseRepository == null || paymentGateway == null ||
             eventPublisher == null || sessionTokenService == null || notificationService == null) {
             throw new IllegalArgumentException("All dependencies must be provided");
         }
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
+        this.eventRepository = eventRepository;
+        this.completedPurchaseRepository = completedPurchaseRepository;
+        this.paymentGateway = paymentGateway;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
         this.notificationService = notificationService;
@@ -50,7 +64,11 @@ public class InitializationService {
      */
     public CompanyService initializeCompanyService() {
         log.info("Initializing CompanyService");
-        return new CompanyService(companyRepository, eventPublisher, sessionTokenService);
+        CompanyLifecycleService lifecycleService = new CompanyLifecycleService(
+            companyRepository, eventRepository, memberRepository, 
+            completedPurchaseRepository, paymentGateway, sessionTokenService
+        );
+        return new CompanyService(companyRepository, lifecycleService, eventPublisher, sessionTokenService);
     }
 
     /**

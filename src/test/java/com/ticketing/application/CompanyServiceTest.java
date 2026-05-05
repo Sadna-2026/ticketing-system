@@ -14,11 +14,18 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
+import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 
 public class CompanyServiceTest {
 
     private ICompanyRepository companyRepository;
     private IMemberRepository memberRepository;
+    private CompanyLifecycleService lifecycleService;
     private InMemoryEventPublisher eventPublisher;
     private ISessionTokenService sessionTokenServiceMock;
     private CompanyService companyService;
@@ -27,10 +34,18 @@ public class CompanyServiceTest {
     public void setUp() {
         companyRepository = new InMemoryCompanyRepository();
         memberRepository = new InMemoryMemberRepository();
+        IEventRepository eventRepository = new InMemoryEventRepository();
+        ICompletedPurchaseRepository purchaseRepository = new InMemoryCompletedPurchaseRepository();
+        IPaymentGateway paymentGateway = new StubPaymentGateway();
         eventPublisher = new InMemoryEventPublisher();
         sessionTokenServiceMock = mock(ISessionTokenService.class);
 
-        companyService = new CompanyService(companyRepository, eventPublisher, sessionTokenServiceMock);
+        lifecycleService = new CompanyLifecycleService(
+            companyRepository, eventRepository, memberRepository, 
+            purchaseRepository, paymentGateway, sessionTokenServiceMock
+        );
+
+        companyService = new CompanyService(companyRepository, lifecycleService, eventPublisher, sessionTokenServiceMock);
     }
 
     @Test

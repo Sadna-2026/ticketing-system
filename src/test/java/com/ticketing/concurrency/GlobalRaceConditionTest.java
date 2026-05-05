@@ -28,6 +28,12 @@ import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
+import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 
 public class GlobalRaceConditionTest {
 
@@ -50,8 +56,12 @@ public class GlobalRaceConditionTest {
         notificationService = mock(INotificationService.class);
         passwordUtils = new PasswordEncryptionUtils();
 
+        IEventRepository eventRepo = new InMemoryEventRepository();
+        ICompletedPurchaseRepository purchaseRepo = new InMemoryCompletedPurchaseRepository();
+        IPaymentGateway paymentGateway = new StubPaymentGateway();
         InitializationService initService = new InitializationService(
-            companyRepo, memberRepo, eventPublisher, tokenService, notificationService
+            companyRepo, memberRepo, eventRepo, purchaseRepo, paymentGateway, 
+            eventPublisher, tokenService, notificationService
         );
         companyService = initService.initialize();
         memberService = new MemberService(memberRepo, passwordUtils, tokenService);
