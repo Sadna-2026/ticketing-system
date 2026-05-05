@@ -41,8 +41,9 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
 
             // Create and add the offer to the target member
             PendingRoleOffer offer = new PendingRoleOffer(
-                reqEvent.getCompanyName(), 
-                reqEvent.getRole(), 
+                reqEvent.getAppointerId(),
+                reqEvent.getCompanyName(),
+                reqEvent.getRole(),
                 reqEvent.getPermissions()
             );
             target.addPendingOffer(offer);

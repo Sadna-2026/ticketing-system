@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Collections;
+import java.util.Optional;
 
 public class Member {
 
@@ -122,6 +123,25 @@ public class Member {
         synchronized(this) {
             return Collections.unmodifiableList(new ArrayList<>(pendingOffers));
         }
+    }
+
+    public Optional<PendingRoleOffer> findPendingOffer(UUID offerId) {
+        if (offerId == null) {
+            throw new IllegalArgumentException("offerId cannot be null");
+        }
+
+        synchronized(this) {
+            return pendingOffers.stream()
+                    .filter(offer -> offer.getOfferId().equals(offerId))
+                    .findFirst();
+        }
+    }
+
+    public synchronized void removePendingOffer(UUID offerId) {
+        if (offerId == null) {
+            throw new IllegalArgumentException("offerId cannot be null");
+        }
+        pendingOffers.removeIf(offer -> offer.getOfferId().equals(offerId));
     }
 
     public synchronized void addPendingOffer(PendingRoleOffer offer) {

@@ -9,10 +9,12 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
+import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
+import com.ticketing.domain.member.communication.RoleAppointmentOfferResponseEvent;
 
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
@@ -88,6 +90,25 @@ public class CompanyService {
 
         log.info("Role appointment requested: company={}, appointer={}, target={}, role={}", 
             companyName, appointerId, targetMemberId, role);
+    }
+
+    public void respondToRoleAppointment(
+            String token,
+            UUID appointmentOfferId,
+            boolean accepted
+    ) {
+        UUID responderId = validateToken(token);
+
+        // Let the handler take care of member related stuff, just publish the response event
+        RoleAppointmentOfferResponseEvent event = new RoleAppointmentOfferResponseEvent(
+            appointmentOfferId,
+            responderId,
+            accepted
+        );
+        eventPublisher.publish(event);
+
+        log.info("Role appointment response handled: responder={}, offer={}, accepted={}",
+            responderId, appointmentOfferId, accepted);
     }
 
     private UUID validateToken(String token) {
