@@ -165,3 +165,21 @@ Modifications made:
 - Race tests use ExecutorService + CountDownLatch per V1 §6.a.
 Initial gaps in understanding (if any):
 Final understanding (brief explanation in your own words):
+
+## Feature / Component: Issue #28 (UC-II.6 — View venue map and inventory) - DTO + visibility consult
+Purpose of LLM use: Quick consult on which event statuses to expose and how to shape the live-availability DTO.
+Summary of prompt(s):
+1. "Cancelled events — return DTO with status=CANCELLED, or hide entirely?"
+2. "ZoneInfo with GA-only and Assigned-only fields — single record with nullable fields, or polymorphic?"
+Output received (short description):
+- Hide cancelled (matches CompanyQueryService pattern); only PUBLISHED + SOLD_OUT browsable.
+- Single record with nullable GA counters / nullable seats list — simpler for V1 than a sealed hierarchy.
+Files / components affected:
+- src/main/java/com/ticketing/application/EventMapDTO.java (new — nested ZoneInfo + SeatInfo records, defensive copies)
+- src/main/java/com/ticketing/application/EventQueryService.java (new — token-less)
+- src/test/java/com/ticketing/application/EventQueryServiceTest.java (new — 9 tests)
+Modifications made:
+- Token-less getEventMap returning Optional.empty for unknown / DRAFT / CANCELLED.
+- Snapshot semantics + immutable lists baked into the DTO.
+Initial gaps in understanding (if any):
+Final understanding (brief explanation in your own words):
