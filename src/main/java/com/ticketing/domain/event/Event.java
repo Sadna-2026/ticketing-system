@@ -135,6 +135,11 @@ public class Event{
         this.artist = artist;
     }
 
+    public void setRegion(String region) {
+        rejectIfCancelled();
+        this.region = region;
+    }
+
     public void setSchedule(EventSchedule schedule) {
         rejectIfCancelled();
         if (schedule == null) {
