@@ -325,4 +325,46 @@ public class OrderServiceTest {
                 () -> orderService.addSeatToOrder(token2, orderId2, assignedZoneId, seatId));
     }
 
+    @Test
+    void GivenOrderOwnedBySessionA_WhenSessionBTriesToModify_ThenRejects() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
+
+        // Different session tries to modify
+        String otherToken = sessionRepo.generateGuestToken();
+
+        // Cannot add tickets
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(otherToken, orderId, gaZoneId, 1));
+
+        // Cannot remove items
+        ActiveOrder order = activeOrderRepo.findById(orderId).orElseThrow();
+        UUID itemId = order.getItems().get(0).getId();
+        assertThrows(IllegalStateException.class,
+                () -> orderService.removeItemFromOrder(otherToken, orderId, itemId));
+
+        // Cannot cancel
+        assertThrows(IllegalStateException.class,
+                () -> orderService.cancelOrder(otherToken, orderId));
+
+        // Cannot view
+        assertThrows(IllegalStateException.class,
+                () -> orderService.getActiveOrder(otherToken, orderId));
+
+        // Original order is still intact
+        ActiveOrder intact = activeOrderRepo.findById(orderId).orElseThrow();
+        assertTrue(intact.isActive());
+        assertEquals(3, intact.getTotalTicketCount());
+    }
+
+    @Test
+    void GivenNoToken_WhenTryToAccessOrder_ThenRejectsWithAuthError() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.getActiveOrder(null, orderId));
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.removeItemFromOrder("", orderId, UUID.randomUUID()));
+    }
+
 }
