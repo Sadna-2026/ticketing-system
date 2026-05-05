@@ -62,4 +62,4 @@ Modifications made:
 
 Initial gaps in understanding (if any): 
 
-Final understanding (brief explanation in your own words): Role-based access control should be enforced directly within domain entities to ensure business rules remain consistent regardless of which application service calls them.
+Final understanding (brief explanation in your own words): Role-based access control should be enforced directly within domain entities.
