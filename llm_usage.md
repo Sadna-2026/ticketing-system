@@ -34,4 +34,4 @@ Modifications made:
 
 Initial gaps in understanding (if any): 
 
-Final understanding (brief explanation in your own words):
+Final understanding (brief explanation in your own words): Better understanding of decided repository structure.
