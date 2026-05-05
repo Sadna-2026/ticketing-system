@@ -1,6 +1,5 @@
 package com.ticketing.application;
 
-import java.util.Collections;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -11,8 +10,6 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEventPublisher;
-import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.StaffAppointment;
 
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
@@ -20,6 +17,7 @@ public class CompanyService {
     private final ICompanyRepository companyRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
+    private final Object lock = new Object();
 
     public CompanyService(ICompanyRepository companyRepository, IEventPublisher eventPublisher, ISessionTokenService sessionTokenService) {
         this.companyRepository = companyRepository;
@@ -39,25 +37,28 @@ public class CompanyService {
      */
     public String openProductionCompany(String token, String name, String description) {
         UUID founderId = validateToken(token);
-        log.info("Creating company: founderId={}, name={}", founderId, name);
         
-        if (founderId == null) {
-            throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
+        synchronized (lock) {
+            log.info("Creating company: founderId={}, name={}", founderId, name);
+            
+            if (founderId == null) {
+                throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
+            }
+
+            if (companyRepository.existsByName(name)) {
+                throw new IllegalArgumentException("A production company with this name already exists.");
+            }
+
+            Company company = new Company(name, description, founderId);
+            companyRepository.save(company);
+
+            // Publish event for listeners to handle member updates
+            CompanyOpenedEvent event = new CompanyOpenedEvent(company.getName(), founderId);
+            eventPublisher.publish(event);
+
+            log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
+            return company.getName();
         }
-
-        if (companyRepository.existsByName(name)) {
-            throw new IllegalArgumentException("A production company with this name already exists.");
-        }
-
-        Company company = new Company(name, description, founderId);
-        companyRepository.save(company);
-
-        // Publish event for listeners to handle member updates
-        CompanyOpenedEvent event = new CompanyOpenedEvent(company.getName(), founderId);
-        eventPublisher.publish(event);
-
-        log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
-        return company.getName();
     }
 
     private UUID validateToken(String token) {
