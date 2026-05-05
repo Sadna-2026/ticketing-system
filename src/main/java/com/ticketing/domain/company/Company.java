@@ -39,8 +39,45 @@ public class Company {
         this.name = name;
     }
 
-    public void setDescription(String description) { 
+    public void setDescription(String description) {
         this.description = description;
+    }
+
+    // --- Lifecycle ---
+
+    public void suspend() {
+        if (status != CompanyStatus.ACTIVE) {
+            throw new IllegalStateException("Can only suspend an ACTIVE company. Current: " + status);
+        }
+        this.status = CompanyStatus.SUSPENDED;
+    }
+
+    public void reopen() {
+        if (status != CompanyStatus.SUSPENDED) {
+            throw new IllegalStateException("Can only reopen a SUSPENDED company. Current: " + status);
+        }
+        this.status = CompanyStatus.ACTIVE;
+    }
+
+    public void close() {
+        if (status == CompanyStatus.CLOSED) {
+            throw new IllegalStateException("Company is already closed");
+        }
+        this.status = CompanyStatus.CLOSED;
+    }
+
+    public void markPendingClosure() {
+        if (status == CompanyStatus.CLOSED || status == CompanyStatus.PENDING_CLOSURE) {
+            throw new IllegalStateException("Cannot mark pending closure from status: " + status);
+        }
+        this.status = CompanyStatus.PENDING_CLOSURE;
+    }
+
+    public void completeClosure() {
+        if (status != CompanyStatus.PENDING_CLOSURE) {
+            throw new IllegalStateException("completeClosure requires PENDING_CLOSURE. Current: " + status);
+        }
+        this.status = CompanyStatus.CLOSED;
     }
 
     @Override
