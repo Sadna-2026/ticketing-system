@@ -9,7 +9,8 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
-import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.event.CompanyOpenedEvent;
+import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 
@@ -17,19 +18,19 @@ public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
 
     private final ICompanyRepository companyRepository;
-    private final IMemberRepository memberRepository;
-    //private final IDomainEventPublisher eventPublisher;
+    private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
 
-    public CompanyService(ICompanyRepository companyRepository, IMemberRepository memberRepository, ISessionTokenService sessionTokenService) {
+    public CompanyService(ICompanyRepository companyRepository, IEventPublisher eventPublisher, ISessionTokenService sessionTokenService) {
         this.companyRepository = companyRepository;
-        this.memberRepository = memberRepository;
+        this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
     }
 
     /**
      * Creates a new production company. The creating member becomes the Founder
      * and initial Owner (via a Founder StaffAppointment in the Member aggregate).
+     * Publishes a CompanyOpenedEvent for listeners (e.g., MemberService) to handle.
      *
      * @param token token of the member creating the company
      * @param name the company name
@@ -48,21 +49,12 @@ public class CompanyService {
             throw new IllegalArgumentException("A production company with this name already exists.");
         }
 
-        Member founder = memberRepository.findById(founderId)
-            .orElseThrow(() -> new IllegalArgumentException("Member not found"));
-
         Company company = new Company(name, description, founderId);
         companyRepository.save(company);
 
-        // Assign Owner appointment to the member
-        StaffAppointment ownerAppointment = new StaffAppointment(
-            company.getName(),
-            founderId,
-            StaffAppointment.StaffRole.OWNER,
-            Collections.emptySet()
-        );
-        founder.addStaffAppointment(company.getName(), ownerAppointment);
-        memberRepository.save(founder);
+        // Publish event for listeners to handle member updates
+        CompanyOpenedEvent event = new CompanyOpenedEvent(company.getName(), founderId);
+        eventPublisher.publish(event);
 
         log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
         return company.getName();
