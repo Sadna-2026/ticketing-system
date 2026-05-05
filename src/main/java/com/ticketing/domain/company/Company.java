@@ -52,46 +52,10 @@ public class Company {
     // --- Domain Logic with Permission Checks ---
 
     /**
-     * Example method: Edits the company policy.
-     * Requires POLICY_MODIFICATION permission.
-     */
-    public void editPolicy(Member member) {
-        checkPermission(member, ManagerPermission.POLICY_MODIFICATION);
-        // Policy modification logic would go here
-    }
-
-    /**
-     * Example method: Defines the venue map.
-     * Requires MAP_DEFINITION permission.
-     */
-    public void defineMap(Member member) {
-        checkPermission(member, ManagerPermission.MAP_DEFINITION);
-        // Map definition logic would go here
-    }
-
-    /**
-     * Example method: Manages company personnel.
-     * Requires PERSONNEL_MGMT permission.
-     */
-    public void managePersonnel(Member member) {
-        checkPermission(member, ManagerPermission.PERSONNEL_MGMT);
-        // Personnel management logic would go here
-    }
-
-    /**
-     * Example method: Views company reports.
-     * Requires VIEW_REPORTS permission.
-     */
-    public void viewReports(Member member) {
-        checkPermission(member, ManagerPermission.VIEW_REPORTS);
-        // Report viewing logic would go here
-    }
-
-    /**
      * Internal helper to check domain-level permissions.
      * Role-based permission should be checked within the domain as per project standards.
      */
-    private void checkPermission(Member member, ManagerPermission permission) {
+    public void checkPermission(Member member, ManagerPermission permission) {
         if (member == null) {
             throw new IllegalArgumentException("Member is required for permission check");
         }

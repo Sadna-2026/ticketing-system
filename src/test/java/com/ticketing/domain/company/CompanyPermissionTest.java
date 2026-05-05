@@ -42,10 +42,10 @@ public class CompanyPermissionTest {
         owner.addStaffAppointment(companyName, appointment);
 
         // Should NOT throw exception for any permission
-        assertDoesNotThrow(() -> company.editPolicy(owner));
-        assertDoesNotThrow(() -> company.defineMap(owner));
-        assertDoesNotThrow(() -> company.managePersonnel(owner));
-        assertDoesNotThrow(() -> company.viewReports(owner));
+        assertDoesNotThrow(() -> company.checkPermission(owner, ManagerPermission.POLICY_MODIFICATION));
+        assertDoesNotThrow(() -> company.checkPermission(owner, ManagerPermission.MAP_DEFINITION));
+        assertDoesNotThrow(() -> company.checkPermission(owner, ManagerPermission.PERSONNEL_MGMT));
+        assertDoesNotThrow(() -> company.checkPermission(owner, ManagerPermission.VIEW_REPORTS));
     }
 
     @Test
@@ -66,11 +66,11 @@ public class CompanyPermissionTest {
         manager.addStaffAppointment(companyName, appointment);
 
         // Should succeed for POLICY_MODIFICATION
-        assertDoesNotThrow(() -> company.editPolicy(manager));
+        assertDoesNotThrow(() -> company.checkPermission(manager, ManagerPermission.POLICY_MODIFICATION));
         
         // Should throw for others
-        assertThrows(PermissionDeniedException.class, () -> company.defineMap(manager));
-        assertThrows(PermissionDeniedException.class, () -> company.managePersonnel(manager));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(manager, ManagerPermission.MAP_DEFINITION));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(manager, ManagerPermission.PERSONNEL_MGMT));
     }
 
     @Test
@@ -88,9 +88,9 @@ public class CompanyPermissionTest {
         manager.addStaffAppointment(companyName, appointment);
 
         // Should throw for all actions
-        assertThrows(PermissionDeniedException.class, () -> company.editPolicy(manager));
-        assertThrows(PermissionDeniedException.class, () -> company.defineMap(manager));
-        assertThrows(PermissionDeniedException.class, () -> company.viewReports(manager));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(manager, ManagerPermission.POLICY_MODIFICATION));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(manager, ManagerPermission.MAP_DEFINITION));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(manager, ManagerPermission.VIEW_REPORTS));
     }
 
     @Test
@@ -101,8 +101,8 @@ public class CompanyPermissionTest {
         // No appointment for this company
 
         // Should throw for all actions
-        assertThrows(PermissionDeniedException.class, () -> company.editPolicy(guest));
-        assertThrows(PermissionDeniedException.class, () -> company.defineMap(guest));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(guest, ManagerPermission.POLICY_MODIFICATION));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(guest, ManagerPermission.MAP_DEFINITION));
     }
 
     @Test
@@ -120,6 +120,6 @@ public class CompanyPermissionTest {
         manager.addStaffAppointment("OtherCompany", appointment);
 
         // Should throw for this company
-        assertThrows(PermissionDeniedException.class, () -> company.editPolicy(manager));
+        assertThrows(PermissionDeniedException.class, () -> company.checkPermission(manager, ManagerPermission.POLICY_MODIFICATION));
     }
 }
