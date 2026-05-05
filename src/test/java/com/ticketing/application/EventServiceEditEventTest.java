@@ -53,7 +53,8 @@ public class EventServiceEditEventTest {
         memberRepo = new InMemoryMemberRepository();
         orderRepo = mock(IActiveOrderRepository.class);
         tokens = mock(ISessionTokenService.class);
-        when(orderRepo.findAllActive()).thenReturn(List.of()); // no active orders by default
+        when(orderRepo.findActiveByEventId(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of()); // no active orders by default
         eventService = new EventService(eventRepo, companyRepo, memberRepo, orderRepo, tokens);
 
         memberId = UUID.randomUUID();
@@ -136,7 +137,7 @@ public class EventServiceEditEventTest {
         // simulate: there's one active order pointing at our event
         ActiveOrder pendingOrder = new ActiveOrder(
                 UUID.randomUUID(), UUID.randomUUID(), eventId, Instant.now());
-        when(orderRepo.findAllActive()).thenReturn(List.of(pendingOrder));
+        when(orderRepo.findActiveByEventId(eventId)).thenReturn(List.of(pendingOrder));
 
         EditEventRequest req = new EditEventRequest(eventId, "Whatever", null, null, null);
         assertThrows(IllegalStateException.class,

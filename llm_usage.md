@@ -126,3 +126,23 @@ Modifications made:
 Initial gaps in understanding (if any):
 
 Final understanding (brief explanation in your own words):
+
+## Feature / Component: Issue #42 (UC-G4.2 — Edit core event details) - CR fixes
+Purpose of LLM use: Two CR fixes — perf query + clarifying comment on the two domain guards.
+Summary of prompt(s):
+1. "Reviewer wants findByEventId on IActiveOrderRepository instead of scanning findAllActive — apply."
+2. "Reviewer flagged that addZone uses a DRAFT-only guard while setName uses a not-CANCELLED guard. Are these supposed to differ?"
+Output received (short description):
+- Added findActiveByEventId(UUID) to the order repo and used it in EventService.
+- Confirmed the two guards differ on purpose (structural vs editorial mutations) and added a short comment near them.
+Files / components affected:
+- src/main/java/com/ticketing/infrastructure/Interface/IActiveOrderRepository.java
+- src/main/java/com/ticketing/infrastructure/InMemoryActiveOrderRepository.java
+- src/main/java/com/ticketing/application/EventService.java (use new query, drop unused import)
+- src/main/java/com/ticketing/domain/event/Event.java (comment near the two guards)
+- src/test/java/com/ticketing/application/EventServiceEditEventTest.java (mock new query)
+Modifications made:
+- O(1)-keyed query replaces O(N) scan in hasActiveReservations.
+- One-block comment makes the structural-vs-editorial split explicit; no rename.
+Initial gaps in understanding (if any):
+Final understanding (brief explanation in your own words):

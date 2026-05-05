@@ -20,7 +20,6 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 public class EventService {
@@ -169,10 +168,7 @@ public class EventService {
     }
 
     private boolean hasActiveReservations(UUID eventId) {
-        for (ActiveOrder o : activeOrderRepository.findAllActive()) {
-            if (eventId.equals(o.getEventId())) return true;
-        }
-        return false;
+        return !activeOrderRepository.findActiveByEventId(eventId).isEmpty();
     }
 
     private UUID authenticateMember(String token) {

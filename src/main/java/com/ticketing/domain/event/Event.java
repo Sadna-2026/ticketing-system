@@ -95,6 +95,11 @@ public class Event{
         zones.add(zone);
     }
 
+    // Two distinct guards by design:
+    //   validateModifiable() — DRAFT-only — gates STRUCTURAL changes (zones, venue map)
+    //   rejectIfCancelled()  — not-CANCELLED — gates EDITORIAL changes (name, schedule, etc.)
+    // After publish, the venue layout is locked but core details remain editable
+    // (subject to the active-reservations check in EventService.editEvent).
     private void validateModifiable() {
         if (status != EventStatus.DRAFT) {
             throw new IllegalStateException("Cannot modify event in status: " + status);
