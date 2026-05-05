@@ -33,6 +33,7 @@ import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.domain.member.Member;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.infrastructure.InMemoryActiveOrderRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
@@ -309,6 +310,19 @@ public class OrderServiceTest {
         Event event = eventRepo.findById(eventId).get();
         assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
         assertEquals(0, event.findZone(gaZoneId).getLockedCount());
+    }
+
+    @Test
+    void GivenAlreadyLockedSeat_WhenAnotherOrderTriesToLock_ThenRejects() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
+
+        // Second session tries to lock the same seat
+        String token2 = sessionRepo.generateGuestToken();
+        UUID orderId2 = orderService.createOrder(token2, eventId);
+
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addSeatToOrder(token2, orderId2, assignedZoneId, seatId));
     }
 
 }
