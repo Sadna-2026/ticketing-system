@@ -21,7 +21,9 @@ public class Event{
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
     private VenueMap venueMap;
-    // TODO(v2): add purchase/discount policies
+    // V1 (UC-C.2 partial): every Event gets default policies; full edit API is V2.
+    private IPurchasePolicy purchasePolicy;
+    private IDiscountPolicy discountPolicy;
     private int version;
 
     public Event(UUID id, String companyName, String name, String description,
@@ -41,8 +43,8 @@ public class Event{
         this.status = EventStatus.DRAFT;
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
-        //this.eventPurchasePolicy = eventPurchasePolicy;
-        //this.eventDiscountPolicy = eventDiscountPolicy;
+        this.purchasePolicy = new AlwaysAllowPolicy();
+        this.discountPolicy = new NoDiscountPolicy(java.util.Currency.getInstance("USD"));
         this.version = 0;
     }
 
@@ -84,6 +86,8 @@ public class Event{
     public EventSchedule getSchedule() { return schedule; }
     public EventStatus getStatus() { return status; }
     public List<InventoryZone> getZones() { return java.util.Collections.unmodifiableList(zones); }
+    public IPurchasePolicy getPurchasePolicy() { return purchasePolicy; }
+    public IDiscountPolicy getDiscountPolicy() { return discountPolicy; }
     /** Repository-internal: called by InMemoryEventRepository.save() as part of the
      *  optimistic-lock flow. Service code should not call this directly. */
     public void incrementVersion() { this.version++; }
