@@ -10,4 +10,8 @@ public record CompanyPublicDTO(
         String name,
         String description,
         List<EventSummaryDTO> events
-) {}
+) {
+    public CompanyPublicDTO {
+        events = events == null ? List.of() : List.copyOf(events);
+    }
+}

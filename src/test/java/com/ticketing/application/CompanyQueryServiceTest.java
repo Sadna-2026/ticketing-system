@@ -9,7 +9,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -106,21 +106,47 @@ public class CompanyQueryServiceTest {
     }
 
     @Test
-    public void GivenActiveCompany_WhenGetCompanyInfo_ThenDtoExposesNoPrivateStaffData() throws Exception {
+    public void GivenActiveCompany_WhenGetCompanyInfo_ThenDtoFieldsHoldNoDomainTypes() {
         UUID founderId = UUID.randomUUID();
         companyRepo.save(new Company(COMPANY, "desc", founderId));
 
+        service.getCompanyInfo(COMPANY).orElseThrow();
+
+        // Type-based check — would catch a future regression where someone adds
+        // e.g. `Company company` or `List<StaffAppointment>` to the DTO.
+        for (Field f : CompanyPublicDTO.class.getDeclaredFields()) {
+            String typeName = f.getType().getName();
+            assertFalse(typeName.startsWith("com.ticketing.domain.company"),
+                    "DTO field of domain type leaks Company internals: " + f);
+            assertFalse(typeName.startsWith("com.ticketing.domain.member"),
+                    "DTO field of domain type leaks Member internals: " + f);
+        }
+    }
+
+    @Test
+    public void GivenDtoReturned_WhenSourceCompanyMutated_ThenDtoUnchanged() {
+        Company c = new Company(COMPANY, "original description", UUID.randomUUID());
+        companyRepo.save(c);
+
         CompanyPublicDTO dto = service.getCompanyInfo(COMPANY).orElseThrow();
 
-        // sanity: the DTO has only the public fields — no founderId, no status, no appointments
-        Field[] fields = CompanyPublicDTO.class.getDeclaredFields();
-        for (Field f : fields) {
-            String n = f.getName().toLowerCase();
-            assertFalse(n.contains("founder"), "DTO must not expose founder data: " + f.getName());
-            assertFalse(n.contains("status"), "DTO must not expose status: " + f.getName());
-            assertFalse(n.contains("appointment"), "DTO must not expose appointments: " + f.getName());
-        }
-        assertNotNull(dto);
+        // mutate source after the DTO is in the caller's hands
+        c.setDescription("LEAKED");
+
+        assertEquals("original description", dto.description(),
+                "DTO must be a snapshot — not a live view of the Company");
+    }
+
+    @Test
+    public void GivenDtoReturned_WhenCallerMutatesEventsList_ThenThrows() {
+        companyRepo.save(new Company(COMPANY, "x", UUID.randomUUID()));
+        Event e = eventOf(COMPANY, "Live");
+        publish(e);
+        eventRepo.save(e);
+
+        CompanyPublicDTO dto = service.getCompanyInfo(COMPANY).orElseThrow();
+
+        assertThrows(UnsupportedOperationException.class, () -> dto.events().clear());
     }
 
     // helpers
