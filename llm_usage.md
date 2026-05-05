@@ -70,3 +70,30 @@ Modifications made:
 Initial gaps in understanding (if any):
 
 Final understanding (brief explanation in your own words): understood zoneMap edge cases better and naming/documenting conventions.
+## Feature / Component: Issue #9 (INF-8 — ManagerPermission enum + role-based check in domain)
+
+Purpose of LLM use: Assisted in implementing role-based permission checks within the Company domain entity and creating a comprehensive test suite to verify the access control logic.
+
+Summary of prompt(s):
+1. "How should we implement the permission enum for INF-8?"
+2. "Help me implement the checkPermission logic in Company.java, but keep it strictly in the domain layer."
+3. "Can we add some methods like editPolicy and viewReports that use this logic?"
+4. "Let's create a test suite that covers owner implicit permissions and manager explicit ones."
+
+Output received (short description):
+- Guidance on enum structure and domain-level exception handling.
+- Collaborative implementation of permission checks in `Company.java`.
+- Iterative creation of `CompanyPermissionTest.java` to verify all role behaviors.
+
+Files / components affected:
+- src/main/java/com/ticketing/domain/company/Company.java
+- src/test/java/com/ticketing/domain/company/CompanyPermissionTest.java
+
+Modifications made:
+- Iteratively added `checkPermission` logic to `Company`.
+- Wired various domain methods with permission-based safeguards.
+- Built a test suite to ensure robust RBAC across different staff roles.
+
+Initial gaps in understanding (if any): 
+
+Final understanding (brief explanation in your own words): Role-based access control should be enforced directly within domain entities.
