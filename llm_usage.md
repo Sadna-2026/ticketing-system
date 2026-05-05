@@ -69,7 +69,7 @@ Final understanding (brief explanation in your own words): Role-based access con
 Purpose of LLM use: Assisted in implementing the "Offer role appointment" feature using Test-Driven Development (TDD).
 
 Summary of prompt(s):
-1. "lets do it, make sure to use TDD"
+1. Implementation of UC-C.4 (Offer role appointment) using a Test-Driven Development approach to ensure domain-level permission checks.
 
 Output received (short description):
 - Implemented the `Company.offerRole` domain method as a protected factory for `RoleAppointmentOffer` objects, ensuring that `PERSONNEL_MGMT` permissions are verified via the `checkPermission` helper before an offer can be instantiated.
