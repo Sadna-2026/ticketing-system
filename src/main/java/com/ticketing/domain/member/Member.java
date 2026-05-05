@@ -2,6 +2,9 @@ package com.ticketing.domain.member;
 
 import java.util.Hashtable;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Collections;
 
 public class Member {
 
@@ -10,6 +13,7 @@ public class Member {
     private Hashtable<String,StaffAppointment> staffAppointments; // key is CompanyId
     private String email;
     private String encryptedPassword;
+    private List<PendingRoleOffer> pendingOffers;
 
     public Member(UUID memberId, String username, String email, String encryptedPassword) {
         if (memberId == null) {
@@ -33,6 +37,7 @@ public class Member {
         this.email = email;
         this.encryptedPassword = encryptedPassword;
         this.staffAppointments  = new Hashtable<>();
+        this.pendingOffers = new ArrayList<>();
 
     }
 
@@ -111,5 +116,16 @@ public class Member {
     public boolean hasStaffAppointment(String companyId, StaffAppointment.StaffRole role) {
         StaffAppointment appointment = getStaffAppointment(companyId);
         return appointment != null && appointment.getRole() == role;
+    }
+
+    public List<PendingRoleOffer> getPendingOffers() {
+        return Collections.unmodifiableList(pendingOffers);
+    }
+
+    public void addPendingOffer(PendingRoleOffer offer) {
+        if (offer == null) {
+            throw new IllegalArgumentException("offer cannot be null");
+        }
+        pendingOffers.add(offer);
     }
 }

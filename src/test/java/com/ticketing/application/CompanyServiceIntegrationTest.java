@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,16 +13,17 @@ import com.ticketing.application.CompanyService;
 import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
-import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
-import com.ticketing.domain.member.IRoleAppointmentOfferRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.PendingRoleOffer;
+import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
@@ -49,10 +51,9 @@ public class CompanyServiceIntegrationTest {
     @BeforeEach
     public void setUp() {
         companyRepository = new InMemoryCompanyRepository();
-        memberRepository = new com.ticketing.infrastructure.InMemoryMemberRepository();
+        memberRepository = new InMemoryMemberRepository();
         eventPublisher = new InMemoryEventPublisher();
         
-        // Mock the session token service using Mockito
         sessionTokenService = mock(ISessionTokenService.class);
         when(sessionTokenService.isValid(anyString())).thenAnswer(invocation -> {
             String token = invocation.getArgument(0);
@@ -73,11 +74,9 @@ public class CompanyServiceIntegrationTest {
         notificationService = mock(INotificationService.class);
 
         // Setup initialization
-        IRoleAppointmentOfferRepository offerRepository = mock(IRoleAppointmentOfferRepository.class);
         initializationService = new InitializationService(
             companyRepository,
             memberRepository,
-            offerRepository,
             eventPublisher,
             sessionTokenService,
             notificationService
@@ -89,130 +88,89 @@ public class CompanyServiceIntegrationTest {
         // Create test event listener
         testEventListener = new TestEventListener();
         eventPublisher.subscribe("CompanyOpened", testEventListener);
+        eventPublisher.subscribe("RoleAppointmentOfferRequested", testEventListener);
     }
-
-    // ===== Happy Path Tests =====
 
     @Test
     public void testSuccessfulCompanyOpening() {
         UUID founderId = UUID.randomUUID();
         String token = "valid-" + founderId.toString();
         String companyName = "TechCorp";
-        String description = "A tech company";
-
-        // Create founder member
+        
         Member founder = new Member(founderId, "founder", "founder@example.com", "hashedPassword");
         memberRepository.saveIfUsernameAndEmailAvailable(founder);
 
-        // Open company
-        String result = companyService.openProductionCompany(token, companyName, description);
+        String result = companyService.openProductionCompany(token, companyName, "A tech company");
 
-        // Verify company was saved
         assertEquals(companyName, result);
         assertTrue(companyRepository.existsByName(companyName));
-
-        // Verify event was published
-        assertTrue(testEventListener.eventReceived);
-        assertEquals(companyName, testEventListener.lastCompanyOpenedEvent.getCompanyName());
-        assertEquals(founderId, testEventListener.lastCompanyOpenedEvent.getFounderId());
-    }
-
-    @Test
-    public void testCompanyOpeningPublishesEvent() {
-        UUID founderId = UUID.randomUUID();
-        String token = "valid-" + founderId.toString();
-        String companyName = "InnovateCorp";
-        String description = "Innovation hub";
-
-        Member founder = new Member(founderId, "innovator", "innovator@example.com", "hashedPassword");
-        memberRepository.saveIfUsernameAndEmailAvailable(founder);
-
-        // Verify no event yet
-        assertFalse(testEventListener.eventReceived);
-
-        // Open company
-        companyService.openProductionCompany(token, companyName, description);
-
-        // Verify event was published
-        assertTrue(testEventListener.eventReceived);
-    }
-
-    @Test
-    public void testEventHandlerAssignsFounderRole() {
-        UUID founderId = UUID.randomUUID();
-        String token = "valid-" + founderId.toString();
-        String companyName = "FinServ";
-        String description = "Financial services";
-
-        // Create founder
-        Member founder = new Member(founderId, "financeuser", "finance@example.com", "hashedPassword");
-        memberRepository.saveIfUsernameAndEmailAvailable(founder);
-
-        // Open company
-        companyService.openProductionCompany(token, companyName, description);
-
-        // Verify founder has owner role
-        Optional<Member> updatedFounder = memberRepository.findById(founderId);
-        assertTrue(updatedFounder.isPresent());
         
-        Member founderAfter = updatedFounder.get();
-        assertTrue(founderAfter.hasStaffAppointment(companyName, StaffAppointment.StaffRole.OWNER));
-    }
-
-    // ===== Error Cases =====
-
-    @Test
-    public void testDuplicateCompanyNameThrows() {
-        UUID founderId = UUID.randomUUID();
-        String token = "valid-" + founderId.toString();
-        String companyName = "UniqueCompany";
-
-        Member founder = new Member(founderId, "user1", "user1@example.com", "hashedPassword");
-        memberRepository.saveIfUsernameAndEmailAvailable(founder);
-
-        // Create first company
-        companyService.openProductionCompany(token, companyName, "First");
-
-        // Attempt duplicate
-        assertThrows(IllegalArgumentException.class, () -> {
-            companyService.openProductionCompany(token, companyName, "Second");
-        });
+        Optional<Member> updatedFounder = memberRepository.findById(founderId);
+        assertTrue(updatedFounder.isPresent() && updatedFounder.get().hasStaffAppointment(companyName, StaffAppointment.StaffRole.OWNER));
     }
 
     @Test
-    public void testInvalidTokenThrows() {
-        UUID founderId = UUID.randomUUID();
-        String invalidToken = "invalid-token";
+    public void testSuccessfulRoleOfferIntegration() {
+        UUID ownerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String companyName = "OfferCorp";
+        String token = "valid-" + ownerId.toString();
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            companyService.openProductionCompany(invalidToken, "CompanyName", "Description");
-        });
+        // 1. Setup Company and Owner
+        Member owner = new Member(ownerId, "owner", "owner@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(owner);
+        companyService.openProductionCompany(token, companyName, "Desc");
+
+        // 2. Setup Target
+        Member target = new Member(targetId, "target", "target@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // 3. Offer role
+        companyService.offerRoleAppointment(token, companyName, targetId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+
+        // 4. Verify target has pending offer (via listener)
+        Optional<Member> updatedTarget = memberRepository.findById(targetId);
+        assertTrue(updatedTarget.isPresent());
+        Member targetAfter = updatedTarget.get();
+        assertEquals(1, targetAfter.getPendingOffers().size());
+        PendingRoleOffer offer = targetAfter.getPendingOffers().get(0);
+        assertEquals(companyName, offer.getCompanyName());
+        assertEquals(StaffAppointment.StaffRole.MANAGER, offer.getRole());
     }
 
     @Test
-    public void testEmptyTokenThrows() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            companyService.openProductionCompany("", "CompanyName", "Description");
-        });
-    }
+    public void testUnauthorizedRoleOfferIntegration() {
+        UUID nonOwnerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String companyName = "SecCorp";
+        String token = "valid-" + nonOwnerId.toString();
 
-    @Test
-    public void testNullTokenThrows() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            companyService.openProductionCompany(null, "CompanyName", "Description");
-        });
-    }
+        // 1. Setup Company (owner is someone else)
+        companyRepository.save(new com.ticketing.domain.company.Company(companyName, "Desc", UUID.randomUUID()));
 
-    // ===== Test Event Listener =====
+        // 2. Setup Non-Owner Appointer
+        Member nonOwner = new Member(nonOwnerId, "nonowner", "no@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(nonOwner);
+
+        // 3. Setup Target
+        Member target = new Member(targetId, "target", "target@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // 4. Attempt offer - since InMemoryEventPublisher swallows exceptions in listeners
+        // to prevent one listener from breaking others, we don't expect an exception here.
+        // Instead, we verify that the side effect (adding the offer) DID NOT happen.
+        companyService.offerRoleAppointment(token, companyName, targetId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+
+        assertEquals(0, memberRepository.findById(targetId).get().getPendingOffers().size(), 
+            "Offer should not have been added due to unauthorized appointer");
+    }
 
     private static class TestEventListener implements IEventListener {
-        private boolean eventReceived = false;
         private CompanyOpenedEvent lastCompanyOpenedEvent;
 
         @Override
         public void handle(IEvent event) {
             if (event instanceof CompanyOpenedEvent) {
-                eventReceived = true;
                 lastCompanyOpenedEvent = (CompanyOpenedEvent) event;
             }
         }

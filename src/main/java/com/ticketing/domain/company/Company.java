@@ -3,13 +3,6 @@ package com.ticketing.domain.company;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.ticketing.domain.event.IPurchasePolicy;
-import com.ticketing.domain.member.ManagerPermission;
-import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.PermissionDeniedException;
-import com.ticketing.domain.member.RoleAppointmentOffer;
-import com.ticketing.domain.member.StaffAppointment;
-
 public class Company {
     private String name; // also the unique identifier for the company
     private String description;
@@ -50,40 +43,6 @@ public class Company {
         this.description = description;
     }
 
-    // --- Domain Logic with Permission Checks ---
-
-    /**
-     * Internal helper to check domain-level permissions.
-     * Role-based permission should be checked within the domain as per project standards.
-     */
-    public void checkPermission(Member member, ManagerPermission permission) {
-        if (member == null) {
-            throw new IllegalArgumentException("Member is required for permission check");
-        }
-
-        StaffAppointment appointment = member.getStaffAppointment(this.name);
-        
-        if (appointment == null || !appointment.hasPermission(permission)) {
-            throw new PermissionDeniedException(
-                "Member " + member.getId() + " does not have permission " + permission + " for company " + this.name
-            );
-        }
-    }
-
-    /**
-     * Offers a role appointment to another member.
-     * Requires PERSONNEL_MGMT permission.
-     */
-    public RoleAppointmentOffer offerRole(Member appointer, Member target, StaffAppointment.StaffRole role, java.util.Set<ManagerPermission> permissions) {
-        checkPermission(appointer, ManagerPermission.PERSONNEL_MGMT);
-
-        if (target.hasStaffAppointment(this.name, StaffAppointment.StaffRole.OWNER)) {
-            throw new IllegalArgumentException("Cannot offer a role to an existing owner");
-        }
-
-        return new RoleAppointmentOffer(this.name, target.getId(), role, permissions);
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -92,4 +51,8 @@ public class Company {
         return Objects.equals(name, other.name); // Equality based on unique name
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hash(name);
+    }
 }

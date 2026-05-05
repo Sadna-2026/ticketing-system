@@ -7,17 +7,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEventPublisher;
-import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.IMemberRepository;
-import com.ticketing.domain.member.IRoleAppointmentOfferRepository;
-import com.ticketing.domain.member.RoleAppointmentOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
-import com.ticketing.domain.member.communication.RoleAppointmentOfferedEvent;
+import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
@@ -25,22 +20,16 @@ public class CompanyService {
     private final ICompanyRepository companyRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
-    private final IMemberRepository memberRepository;
-    private final IRoleAppointmentOfferRepository offerRepository;
     private final Object lock = new Object();
 
     public CompanyService(
             ICompanyRepository companyRepository, 
             IEventPublisher eventPublisher, 
-            ISessionTokenService sessionTokenService,
-            IMemberRepository memberRepository,
-            IRoleAppointmentOfferRepository offerRepository
+            ISessionTokenService sessionTokenService
     ) {
         this.companyRepository = companyRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
-        this.memberRepository = memberRepository;
-        this.offerRepository = offerRepository;
     }
 
     /**
@@ -67,7 +56,7 @@ public class CompanyService {
                 throw new IllegalArgumentException("A production company with this name already exists.");
             }
 
-            Company company = new Company(name, description, founderId);
+            com.ticketing.domain.company.Company company = new com.ticketing.domain.company.Company(name, description, founderId);
             companyRepository.save(company);
 
             // Publish event for listeners to handle member updates
@@ -88,22 +77,16 @@ public class CompanyService {
     ) {
         UUID appointerId = validateToken(token);
         
-        Member appointer = memberRepository.findById(appointerId)
-            .orElseThrow(() -> new IllegalArgumentException("Appointer not found"));
-        Member target = memberRepository.findById(targetMemberId)
-            .orElseThrow(() -> new IllegalArgumentException("Target member not found"));
-        Company company = companyRepository.findByName(companyName)
-            .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+        if (!companyRepository.existsByName(companyName)) {
+            throw new IllegalArgumentException("Company not found");
+        }
 
-        RoleAppointmentOffer offer = company.offerRole(appointer, target, role, permissions);
-        offerRepository.save(offer);
-
-        // Publish event for notification
-        RoleAppointmentOfferedEvent event = 
-            new RoleAppointmentOfferedEvent(offer.getOfferId(), companyName, targetMemberId);
+        // Publish event for MemberService to handle authorization and offer creation
+        RoleAppointmentOfferRequestedEvent event = 
+            new RoleAppointmentOfferRequestedEvent(appointerId, targetMemberId, companyName, role, permissions);
         eventPublisher.publish(event);
 
-        log.info("Role appointment offered: company={}, appointer={}, target={}, role={}", 
+        log.info("Role appointment requested: company={}, appointer={}, target={}, role={}", 
             companyName, appointerId, targetMemberId, role);
     }
 
