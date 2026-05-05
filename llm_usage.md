@@ -97,3 +97,32 @@ Modifications made:
 Initial gaps in understanding (if any): 
 
 Final understanding (brief explanation in your own words): Role-based access control should be enforced directly within domain entities.
+
+## Feature / Component: Issue #43 (UC-G4.6 — Cancel/delete existing event) - Edge case + style consult
+
+Purpose of LLM use: After implementing Event.cancel() and EventService.cancelEvent(), asked the LLM to sanity-check the auth choice and confirm the test naming/structure matches the rest of the codebase.
+
+Summary of prompt(s):
+1. "For cancelEvent, should I require the company to be ACTIVE like createEvent does, or allow cancel as a cleanup operation even when the company is suspended?"
+2. "Quick read of my permission check — appointment.hasPermission(EVENT_LIFECYCLE) works for both Owner and Manager because hasPermission short-circuits to true for Owner, right?"
+3. "The 'Guests cannot create events' message in authenticateMember is now misleading for cancelEvent. Should I genericize it?"
+
+Output received (short description):
+- Recommended NOT requiring company to be ACTIVE for cancel — argued cancel is a cleanup operation and UC-C7's permanent-close will need to cancel events while the company is in a transient state.
+- Confirmed StaffAppointment.hasPermission already short-circuits to true for Owners (saw it in the source), so the single-line permission check is correct.
+- Suggested genericizing the authenticateMember message to "Guests cannot perform this action" since it's shared across the service's methods.
+
+Files / components affected:
+- src/main/java/com/ticketing/domain/event/Event.java (added cancel() with already-cancelled guard)
+- src/main/java/com/ticketing/application/EventService.java (added cancelEvent(); generalized guest-token error message)
+- src/test/java/com/ticketing/application/EventServiceCancelEventTest.java (new — 9 acceptance + boundary tests)
+
+Modifications made:
+- Added Event.cancel() that throws IllegalStateException if the event is already cancelled.
+- Added EventService.cancelEvent(token, eventId) using an inline permission check (instead of the extracted authorize() helper used by createEvent — the cancel rule is a single permission so an inline check reads cleaner).
+- Generalized the "Guests cannot create events" message to "Guests cannot perform this action" since authenticateMember is shared.
+- Added a TODO inside cancelEvent for the refund-completed-purchases pathway, deferred until the completed-purchase repository is wired up.
+
+Initial gaps in understanding (if any):
+
+Final understanding (brief explanation in your own words):
