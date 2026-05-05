@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 public class Event{
 
     private final UUID id;
-    private final String companyId;
+    private final String companyName;
     private String name;
     private String description;
     private String artist;
@@ -24,16 +24,16 @@ public class Event{
     // TODO(v2): add purchase/discount policies
     private int version;
 
-    public Event(UUID id, String companyId, String name, String description,
+    public Event(UUID id, String companyName, String name, String description,
                  EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
         if (id == null) throw new IllegalArgumentException("Event ID is required");
-        if (companyId == null || companyId.isBlank()) throw new IllegalArgumentException("Company ID is required");
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("Company name is required");
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Event name is required");
         if (schedule == null) throw new IllegalArgumentException("Event schedule is required");
         if (lockTimerDuration == null) throw new IllegalArgumentException("Lock timer duration is required");
 
         this.id = id;
-        this.companyId = companyId;
+        this.companyName = companyName;
         this.name = name;
         this.description = description;
         this.category = category;
@@ -75,7 +75,7 @@ public class Event{
     public UUID getId() {
         return id;
     }
-    public String getCompanyId() { return companyId; }
+    public String getCompanyName() { return companyName; }
     public String getName() { return name; }
     public String getDescription() { return description; }
     public String getArtist() { return artist; }
@@ -84,6 +84,8 @@ public class Event{
     public EventSchedule getSchedule() { return schedule; }
     public EventStatus getStatus() { return status; }
     public List<InventoryZone> getZones() { return java.util.Collections.unmodifiableList(zones); }
+    /** Repository-internal: called by InMemoryEventRepository.save() as part of the
+     *  optimistic-lock flow. Service code should not call this directly. */
     public void incrementVersion() { this.version++; }
     public int getVersion() { return this.version; }
 

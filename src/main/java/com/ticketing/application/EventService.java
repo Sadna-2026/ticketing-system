@@ -96,9 +96,9 @@ public class EventService {
 
         // company is looked up but we don't require it to be active — cancellation
         // can happen as cleanup even on a suspended company.
-        Company company = companyRepository.findByName(event.getCompanyId())
+        Company company = companyRepository.findByName(event.getCompanyName())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Company not found: " + event.getCompanyId()));
+                        "Company not found: " + event.getCompanyName()));
 
         StaffAppointment appt = loadAppointment(memberId, company.getName());
         if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {

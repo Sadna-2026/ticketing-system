@@ -84,7 +84,7 @@ public class EventServiceCreateEventTest {
         assertNotNull(eventId);
         Event saved = eventRepository.findById(eventId).orElseThrow();
         assertEquals("Spring Concert", saved.getName());
-        assertEquals(COMPANY_NAME, saved.getCompanyId());
+        assertEquals(COMPANY_NAME, saved.getCompanyName());
         assertEquals(EventStatus.DRAFT, saved.getStatus());
         assertEquals(2, saved.getZones().size());
         VenueMap vm = saved.getVenueMap();
