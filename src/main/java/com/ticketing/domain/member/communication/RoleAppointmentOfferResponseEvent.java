@@ -4,23 +4,23 @@ import java.util.UUID;
 
 import com.ticketing.domain.event.IEvent;
 
-public class RoleAppointmentOfferedEvent implements IEvent {
+public class RoleAppointmentOfferResponseEvent implements IEvent {
     private final UUID offerId;
-    private final String companyName;
     private final UUID targetMemberId;
+    private final boolean accepted;
 
-    public RoleAppointmentOfferedEvent(UUID offerId, String companyName, UUID targetMemberId) {
+    public RoleAppointmentOfferResponseEvent(UUID offerId, UUID targetMemberId, boolean accepted) {
         this.offerId = offerId;
-        this.companyName = companyName;
         this.targetMemberId = targetMemberId;
+        this.accepted = accepted;
     }
 
     @Override
     public String getEventType() {
-        return "RoleAppointmentOffered";
+        return "RoleAppointmentOfferResponse";
     }
 
     public UUID getOfferId() { return offerId; }
-    public String getCompanyName() { return companyName; }
     public UUID getTargetMemberId() { return targetMemberId; }
+    public boolean isAccepted() { return accepted; }
 }
