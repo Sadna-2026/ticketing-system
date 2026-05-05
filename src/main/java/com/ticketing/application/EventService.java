@@ -20,6 +20,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 public class EventService {
 
@@ -28,15 +29,18 @@ public class EventService {
     private final IEventRepository eventRepository;
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
+    private final IActiveOrderRepository activeOrderRepository;
     private final ISessionTokenService sessionTokenService;
 
     public EventService(IEventRepository eventRepository,
                         ICompanyRepository companyRepository,
                         IMemberRepository memberRepository,
+                        IActiveOrderRepository activeOrderRepository,
                         ISessionTokenService sessionTokenService) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
+        this.activeOrderRepository = activeOrderRepository;
         this.sessionTokenService = sessionTokenService;
     }
 
@@ -109,6 +113,62 @@ public class EventService {
         event.cancel();
         eventRepository.save(event);
         // TODO: refund completed purchases once that pipeline lands
+    }
+
+    /**
+     * Edits core event details (name, description, artist, schedule). Same auth
+     * as createEvent (Owner OR Manager with MAP_DEFINITION + INVENTORY_MGMT).
+     * Rejected if the event has any active reservations.
+     */
+    public EventDetailsDTO editEvent(String token, EditEventRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(request.eventId())
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
+
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorize(appt);
+
+        if (hasActiveReservations(event.getId())) {
+            throw new IllegalStateException("Cannot edit event with active reservations");
+        }
+
+        if (!request.hasAnyChange()) {
+            // nothing to do — return the current snapshot, no log spam
+            return EventDetailsDTO.from(event);
+        }
+
+        // apply each provided field; null = leave alone
+        if (request.name() != null) {
+            log.info("editEvent: eventId={} name '{}' -> '{}'", event.getId(), event.getName(), request.name());
+            event.setName(request.name());
+        }
+        if (request.description() != null) {
+            log.info("editEvent: eventId={} description updated", event.getId());
+            event.setDescription(request.description());
+        }
+        if (request.artist() != null) {
+            log.info("editEvent: eventId={} artist '{}' -> '{}'", event.getId(), event.getArtist(), request.artist());
+            event.setArtist(request.artist());
+        }
+        if (request.schedule() != null) {
+            log.info("editEvent: eventId={} schedule updated to start={}",
+                    event.getId(), request.schedule().getStartTime());
+            event.setSchedule(request.schedule());
+        }
+
+        eventRepository.save(event);
+        log.info("Event edited: eventId={}, companyName={}, by={}",
+                event.getId(), company.getName(), memberId);
+        return EventDetailsDTO.from(event);
+    }
+
+    private boolean hasActiveReservations(UUID eventId) {
+        return !activeOrderRepository.findActiveByEventId(eventId).isEmpty();
     }
 
     private UUID authenticateMember(String token) {

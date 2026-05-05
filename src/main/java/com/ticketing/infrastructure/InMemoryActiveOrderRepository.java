@@ -61,4 +61,13 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<ActiveOrder> findActiveByEventId(UUID eventId) {
+        if (eventId == null) return List.of();
+        return store.values().stream()
+                .map(e -> e.entity)
+                .filter(o -> o.isActive() && eventId.equals(o.getEventId()))
+                .collect(Collectors.toList());
+    }
+
 }

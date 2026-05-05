@@ -95,6 +95,11 @@ public class Event{
         zones.add(zone);
     }
 
+    // Two distinct guards by design:
+    //   validateModifiable() — DRAFT-only — gates STRUCTURAL changes (zones, venue map)
+    //   rejectIfCancelled()  — not-CANCELLED — gates EDITORIAL changes (name, schedule, etc.)
+    // After publish, the venue layout is locked but core details remain editable
+    // (subject to the active-reservations check in EventService.editEvent).
     private void validateModifiable() {
         if (status != EventStatus.DRAFT) {
             throw new IllegalStateException("Cannot modify event in status: " + status);
@@ -108,6 +113,40 @@ public class Event{
             throw new IllegalStateException("Event is already cancelled");
         }
         this.status = EventStatus.CANCELLED;
+    }
+
+    // --- core-detail setters (used by EventService.editEvent) ---
+
+    public void setName(String name) {
+        rejectIfCancelled();
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Event name cannot be blank");
+        }
+        this.name = name;
+    }
+
+    public void setDescription(String description) {
+        rejectIfCancelled();
+        this.description = description;
+    }
+
+    public void setArtist(String artist) {
+        rejectIfCancelled();
+        this.artist = artist;
+    }
+
+    public void setSchedule(EventSchedule schedule) {
+        rejectIfCancelled();
+        if (schedule == null) {
+            throw new IllegalArgumentException("Schedule is required");
+        }
+        this.schedule = schedule;
+    }
+
+    private void rejectIfCancelled() {
+        if (status == EventStatus.CANCELLED) {
+            throw new IllegalStateException("Cannot edit a cancelled event");
+        }
     }
 
     public void publish() {

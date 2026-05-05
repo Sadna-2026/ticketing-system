@@ -29,6 +29,7 @@ import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 public class EventServiceCancelEventTest {
 
@@ -51,7 +52,8 @@ public class EventServiceCancelEventTest {
         companyRepo = new InMemoryCompanyRepository();
         memberRepo = new InMemoryMemberRepository();
         tokens = mock(ISessionTokenService.class);
-        eventService = new EventService(eventRepo, companyRepo, memberRepo, tokens);
+        eventService = new EventService(eventRepo, companyRepo, memberRepo,
+                mock(IActiveOrderRepository.class), tokens);
 
         memberId = UUID.randomUUID();
         member = new Member(memberId, "owner1", "owner1@example.com", "pw");
