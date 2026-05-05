@@ -41,6 +41,13 @@ public class EventQueryService {
             log.info("Event map request denied: id={}, reason=status={}", eventId, event.getStatus());
             return Optional.empty();
         }
+        if (event.getVenueMap() == null) {
+            // publish() doesn't currently require a venueMap, so we can hit this on a
+            // misconfigured event. Returning empty is safer than handing the caller a
+            // DTO with no section data they can't tell from "intentionally empty".
+            log.warn("Event map request denied: id={}, reason=no venueMap attached", eventId);
+            return Optional.empty();
+        }
 
         List<EventMapDTO.ZoneInfo> zoneDtos = new ArrayList<>();
         for (InventoryZone zone : event.getZones()) {
@@ -52,7 +59,7 @@ public class EventQueryService {
                 event.getName(),
                 event.getCompanyName(),
                 event.getStatus(),
-                event.getVenueMap() == null ? java.util.Map.of() : event.getVenueMap().getSectionToZone(),
+                event.getVenueMap().getSectionToZone(),
                 zoneDtos
         ));
     }
@@ -65,17 +72,17 @@ public class EventQueryService {
         if (z.isGA()) {
             return new EventMapDTO.ZoneInfo(
                     z.getId(), z.getName(), z.getType(), z.getPricePerTicket(),
-                    z.getMaxCapacity(), z.getAvailableCount(), z.getLockedCount(), z.getSoldCount(),
+                    z.getMaxCapacity(), z.getAvailableCount(), z.getSoldCount(),
                     List.of());
         }
-        // assigned: include per-seat status
+        // assigned: per-seat availability only (LOCKED + SOLD collapse to "not available")
         List<EventMapDTO.SeatInfo> seats = new ArrayList<>();
         for (Seat s : z.getSeats()) {
-            seats.add(new EventMapDTO.SeatInfo(s.getId(), s.getRow(), s.getSeatNumber(), s.getStatus()));
+            seats.add(new EventMapDTO.SeatInfo(s.getId(), s.getRow(), s.getSeatNumber(), s.isAvailable()));
         }
         return new EventMapDTO.ZoneInfo(
                 z.getId(), z.getName(), z.getType(), z.getPricePerTicket(),
-                null, null, null, null,
+                null, null, null,
                 seats);
     }
 }

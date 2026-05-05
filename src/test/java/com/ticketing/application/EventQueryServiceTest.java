@@ -22,7 +22,6 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.Seat;
-import com.ticketing.domain.event.SeatStatus;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 
@@ -80,14 +79,13 @@ public class EventQueryServiceTest {
 
         EventMapDTO.ZoneInfo gaInfo = findZone(dto, gaZoneId);
         assertEquals(80, gaInfo.availableCount());
-        assertEquals(15, gaInfo.lockedCount());
         assertEquals(5, gaInfo.soldCount());
+        // lockedCount is intentionally not exposed in the public DTO
 
         EventMapDTO.ZoneInfo vipInfo = findZone(dto, vipZoneId);
         assertEquals(3, vipInfo.seats().size());
-        long lockedSeats = vipInfo.seats().stream()
-                .filter(s -> s.status() == SeatStatus.LOCKED).count();
-        assertEquals(1, lockedSeats);
+        long unavailable = vipInfo.seats().stream().filter(s -> !s.available()).count();
+        assertEquals(1, unavailable, "the locked seat shows as unavailable");
     }
 
     @Test
@@ -128,6 +126,7 @@ public class EventQueryServiceTest {
         UUID eventId = UUID.randomUUID();
         Event e = newEvent(eventId, "Hot Show");
         UUID gaZoneId = addGAZone(e, "Floor", new BigDecimal("30.00"), 5);
+        attachVenueMap(e, Map.of("S", gaZoneId));
         e.publish();
         InventoryZone ga = e.findZone(gaZoneId);
         ga.lockGA(5);
@@ -140,10 +139,23 @@ public class EventQueryServiceTest {
     }
 
     @Test
+    public void GivenPublishedEventWithoutVenueMap_WhenGetEventMap_ThenReturnsEmpty() {
+        UUID eventId = UUID.randomUUID();
+        Event e = newEvent(eventId, "Misconfigured");
+        addGAZone(e, "Floor", new BigDecimal("10.00"), 10);
+        e.publish(); // publish() does NOT require a venueMap
+        eventRepo.save(e);
+
+        assertTrue(service.getEventMap(eventId).isEmpty(),
+                "events without a venue map cannot render and shouldn't be browsable");
+    }
+
+    @Test
     public void GivenDtoReturned_WhenSourceMutated_ThenDtoUnchanged() {
         UUID eventId = UUID.randomUUID();
         Event e = newEvent(eventId, "Live");
-        addGAZone(e, "Floor", new BigDecimal("10.00"), 10);
+        UUID gaZoneId = addGAZone(e, "Floor", new BigDecimal("10.00"), 10);
+        attachVenueMap(e, Map.of("S", gaZoneId));
         e.publish();
         eventRepo.save(e);
 
@@ -161,7 +173,8 @@ public class EventQueryServiceTest {
     public void GivenDtoReturned_WhenCallerMutatesZonesList_ThenThrows() {
         UUID eventId = UUID.randomUUID();
         Event e = newEvent(eventId, "Live");
-        addGAZone(e, "Floor", new BigDecimal("10.00"), 10);
+        UUID gaZoneId = addGAZone(e, "Floor", new BigDecimal("10.00"), 10);
+        attachVenueMap(e, Map.of("S", gaZoneId));
         e.publish();
         eventRepo.save(e);
 

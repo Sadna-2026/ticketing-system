@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.domain.event.EventStatus;
-import com.ticketing.domain.event.SeatStatus;
 import com.ticketing.domain.event.ZoneType;
 
 /**
@@ -31,10 +30,10 @@ public record EventMapDTO(
             String name,
             ZoneType type,
             BigDecimal pricePerTicket,
-            // GA-only counters (null for assigned)
+            // GA-only counters (null for assigned). lockedCount is intentionally
+            // omitted — guests shouldn't see how many tickets are mid-purchase.
             Integer maxCapacity,
             Integer availableCount,
-            Integer lockedCount,
             Integer soldCount,
             // Assigned-only seat list (empty for GA)
             List<SeatInfo> seats
@@ -44,5 +43,9 @@ public record EventMapDTO(
         }
     }
 
-    public record SeatInfo(UUID id, String row, String seatNumber, SeatStatus status) {}
+    /**
+     * {@code available} collapses LOCKED + SOLD into a single "not available" signal —
+     * the buyer doesn't need to distinguish "someone else is buying it" from "already gone".
+     */
+    public record SeatInfo(UUID id, String row, String seatNumber, boolean available) {}
 }
