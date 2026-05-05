@@ -80,7 +80,7 @@ public class EventSearchService {
 
     private static boolean matchesRegion(Event e, String region) {
         if (region == null) return true;
-        return region.equals(e.getRegion());
+        return region.equalsIgnoreCase(e.getRegion());
     }
 
     private static boolean matchesCategory(Event e, com.ticketing.domain.event.EventCategory category) {

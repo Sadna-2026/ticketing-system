@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -184,6 +185,30 @@ public class EventSearchServiceTest {
 
         List<EventSummaryDTO> hits = service.searchEvents(null);
         assertEquals(1, hits.size());
+    }
+
+    @Test
+    public void GivenRegionFilterWithDifferentCase_WhenSearch_ThenStillMatches() {
+        publish(COMPANY_A, "Show", "X", EventCategory.CONCERT, "Tel Aviv", new BigDecimal("50"), 30);
+
+        List<EventSummaryDTO> hits = service.searchEvents(
+                new SearchEventsRequest(null, "tel aviv", null, null, null, null, null, null));
+        assertEquals(1, hits.size());
+    }
+
+    @Test
+    public void GivenInvertedPriceRange_WhenBuildRequest_ThenThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new SearchEventsRequest(null, null, null, null,
+                        new BigDecimal("100"), new BigDecimal("50"), null, null));
+    }
+
+    @Test
+    public void GivenInvertedDateRange_WhenBuildRequest_ThenThrowIllegalArgumentException() {
+        Instant later = Instant.now().plus(60, ChronoUnit.DAYS);
+        Instant earlier = Instant.now().plus(10, ChronoUnit.DAYS);
+        assertThrows(IllegalArgumentException.class,
+                () -> new SearchEventsRequest(null, null, null, null, null, null, later, earlier));
     }
 
     // helpers

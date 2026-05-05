@@ -12,7 +12,7 @@ import com.ticketing.domain.event.EventCategory;
  */
 public record SearchEventsRequest(
         String text,           // case-insensitive substring against name / artist / description
-        String region,         // exact match on Event.region
+        String region,         // case-insensitive exact match on Event.region
         EventCategory category,
         String companyName,    // scope to a single company's catalog
         BigDecimal minPrice,
@@ -20,6 +20,17 @@ public record SearchEventsRequest(
         Instant fromDate,      // schedule.startTime >= fromDate
         Instant toDate         // schedule.startTime <= toDate
 ) {
+    public SearchEventsRequest {
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new IllegalArgumentException(
+                    "minPrice (" + minPrice + ") cannot be greater than maxPrice (" + maxPrice + ")");
+        }
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw new IllegalArgumentException(
+                    "fromDate (" + fromDate + ") cannot be after toDate (" + toDate + ")");
+        }
+    }
+
     public static SearchEventsRequest empty() {
         return new SearchEventsRequest(null, null, null, null, null, null, null, null);
     }
