@@ -14,4 +14,6 @@ public interface IActiveOrderRepository {
     Optional<ActiveOrder> findById(UUID orderId);
 
     List<ActiveOrder> findAllActive();
+
+    List<ActiveOrder> findActiveByEventId(UUID eventId);
 }

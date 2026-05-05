@@ -7,6 +7,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.ticketing.infrastructure.Interface.IDiscountPolicy;
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
+
 public class Event{
 
     private final UUID id;
@@ -26,8 +29,6 @@ public class Event{
     private final IDiscountPolicy eventDiscountPolicy;
     private int version;
 
-    public Event(UUID id, String companyName, String name, String description,
-                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
     /**
      * Creates a new Event with required policies.
      * Policies must be provided at creation time and cannot be changed afterward in V1.
@@ -42,7 +43,7 @@ public class Event{
      * @param eventPurchasePolicy the event's purchase policy (required, per V1)
      * @param eventDiscountPolicy the event's discount policy (required, per V1)
      */
-    public Event(UUID id, UUID companyId, String name, String description,
+    public Event(UUID id, String companyName, String name, String description,
                  EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration,
                  IPurchasePolicy eventPurchasePolicy, IDiscountPolicy eventDiscountPolicy) {
         if (id == null) throw new IllegalArgumentException("Event ID is required");
@@ -190,10 +191,6 @@ public class Event{
 
     public IDiscountPolicy getEventDiscountPolicy() {
         return eventDiscountPolicy;
-    }
-
-    public String getName() {
-        return name;
     }
 
     public void setVenueMap(VenueMap venueMap) {

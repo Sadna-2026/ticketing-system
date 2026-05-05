@@ -15,14 +15,14 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.IEventRepository;
-import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.infrastructure.Interface.IEventRepository;
+import com.ticketing.infrastructure.Interface.IPaymentGateway;
 
 /**
  * Suspend / reopen / permanent-close operations for production companies.

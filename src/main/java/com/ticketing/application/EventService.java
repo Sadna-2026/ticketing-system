@@ -12,7 +12,6 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.VenueMap;
@@ -21,6 +20,7 @@ import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 public class EventService {
 
@@ -76,7 +76,9 @@ public class EventService {
                 request.description(),
                 request.category(),
                 request.schedule(),
-                request.lockTimerDuration());
+                request.lockTimerDuration(),
+                null,
+                null);
 
         Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
         for (CreateEventRequest.ZoneSpec spec : request.zones()) {

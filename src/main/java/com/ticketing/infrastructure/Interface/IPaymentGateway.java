@@ -8,6 +8,6 @@ import com.ticketing.domain.gateway.RefundResult;
 
 public interface IPaymentGateway {
     PaymentResult charge(BigDecimal finalAmount, PaymentDetails details);
-    RefundResult refund(String transactionId);
+    RefundResult refund(String transactionId, double amount);
 }
 

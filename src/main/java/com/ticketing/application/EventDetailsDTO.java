@@ -9,7 +9,6 @@ import com.ticketing.domain.event.EventStatus;
 
 public record EventDetailsDTO(
         UUID id,
-        String companyName,
         String name,
         String description,
         String artist,
@@ -20,7 +19,6 @@ public record EventDetailsDTO(
     public static EventDetailsDTO from(Event e) {
         return new EventDetailsDTO(
                 e.getId(),
-                e.getCompanyName(),
                 e.getName(),
                 e.getDescription(),
                 e.getArtist(),
