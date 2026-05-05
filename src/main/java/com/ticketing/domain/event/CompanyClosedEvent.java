@@ -1,7 +1,5 @@
 package com.ticketing.domain.event;
 
-import java.util.UUID;
-
 /**
  * Event published when a production company is closed (temporarily or permanently).
  */

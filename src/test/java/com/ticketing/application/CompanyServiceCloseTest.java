@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import java.util.UUID;
 import java.util.Optional;
+import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,12 +21,16 @@ import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 
+import com.ticketing.application.initialization.InitializationService;
+import com.ticketing.application.INotificationService;
+
 public class CompanyServiceCloseTest {
 
     private ICompanyRepository companyRepository;
     private IMemberRepository memberRepository;
     private InMemoryEventPublisher eventPublisher;
     private ISessionTokenService sessionTokenServiceMock;
+    private INotificationService notificationServiceMock;
     private CompanyService companyService;
 
     @BeforeEach
@@ -34,8 +39,12 @@ public class CompanyServiceCloseTest {
         memberRepository = new InMemoryMemberRepository();
         eventPublisher = new InMemoryEventPublisher();
         sessionTokenServiceMock = mock(ISessionTokenService.class);
+        notificationServiceMock = mock(INotificationService.class);
 
-        companyService = new CompanyService(companyRepository, memberRepository, eventPublisher, sessionTokenServiceMock);
+        InitializationService initService = new InitializationService(
+            companyRepository, memberRepository, eventPublisher, sessionTokenServiceMock, notificationServiceMock
+        );
+        companyService = initService.initialize();
     }
 
     @Test
@@ -72,11 +81,11 @@ public class CompanyServiceCloseTest {
         
         // Setup owner and staff members
         Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
-        owner.addStaffAppointment(companyName, new StaffAppointment(companyName, ownerId, StaffAppointment.StaffRole.OWNER, java.util.Collections.emptySet()));
+        owner.addStaffAppointment(companyName, new StaffAppointment(companyName, ownerId, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
         memberRepository.save(owner);
 
         Member staff = new Member(staffId, "staff", "s@test.com", "pass");
-        staff.addStaffAppointment(companyName, new StaffAppointment(companyName, staffId, StaffAppointment.StaffRole.MANAGER, java.util.Collections.emptySet()));
+        staff.addStaffAppointment(companyName, new StaffAppointment(companyName, staffId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet()));
         memberRepository.save(staff);
 
         when(sessionTokenServiceMock.isValid(token)).thenReturn(true);

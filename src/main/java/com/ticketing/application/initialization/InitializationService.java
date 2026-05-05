@@ -7,6 +7,7 @@ import com.ticketing.application.CompanyService;
 import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
+import com.ticketing.application.listener.MemberCompanyClosedEventHandler;
 import com.ticketing.application.listener.RoleAppointmentOfferRequestedHandler;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventPublisher;
@@ -49,7 +50,7 @@ public class InitializationService {
      */
     public CompanyService initializeCompanyService() {
         log.info("Initializing CompanyService");
-        return new CompanyService(companyRepository, memberRepository, eventPublisher, sessionTokenService);
+        return new CompanyService(companyRepository, eventPublisher, sessionTokenService);
     }
 
     /**
@@ -65,6 +66,10 @@ public class InitializationService {
         // Register the handler for RoleAppointmentOfferRequested
         RoleAppointmentOfferRequestedHandler offerHandler = new RoleAppointmentOfferRequestedHandler(memberRepository);
         eventPublisher.subscribe("RoleAppointmentOfferRequested", offerHandler);
+
+        // Register the handler for CompanyClosedEvent
+        MemberCompanyClosedEventHandler companyClosedHandler = new MemberCompanyClosedEventHandler(memberRepository);
+        eventPublisher.subscribe("CompanyClosed", companyClosedHandler);
         
         log.info("Event listeners registered");
     }

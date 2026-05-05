@@ -2,6 +2,7 @@ package com.ticketing.application;
 
 import java.util.UUID;
 import java.util.Set;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +14,6 @@ import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
-import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.CompanyClosedEvent;
@@ -22,19 +22,16 @@ public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
 
     private final ICompanyRepository companyRepository;
-    private final IMemberRepository memberRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
     private final Object lock = new Object();
 
     public CompanyService(
             ICompanyRepository companyRepository, 
-            IMemberRepository memberRepository,
             IEventPublisher eventPublisher, 
             ISessionTokenService sessionTokenService
     ) {
         this.companyRepository = companyRepository;
-        this.memberRepository = memberRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
     }
@@ -63,7 +60,7 @@ public class CompanyService {
                 throw new IllegalArgumentException("A production company with this name already exists.");
             }
 
-            com.ticketing.domain.company.Company company = new com.ticketing.domain.company.Company(name, description, founderId);
+            Company company = new Company(name, description, founderId);
             companyRepository.save(company);
 
             // Publish event for listeners to handle member updates
@@ -89,14 +86,7 @@ public class CompanyService {
             if (permanent) {
                 log.info("Permanent closure requested for company: {}", companyName);
                 company.markPendingClosure();
-                
-                // Revoke all staff appointments
-                java.util.List<Member> staff = memberRepository.findByCompanyAppointment(companyName);
-                for (Member m : staff) {
-                    m.removeStaffAppointment(companyName);
-                    memberRepository.save(m);
-                }
-                
+                // Staff revocation will be handled by MemberCompanyClosedEventHandler
                 company.completeClosure();
             } else {
                 log.info("Temporary closure requested for company: {}", companyName);
