@@ -45,8 +45,11 @@ public class CompanyHistoryService {
         Member m = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("Member not found: " + memberId));
         StaffAppointment appt = m.getStaffAppointment(company.getName());
-        if (appt == null || !appt.hasPermission(ManagerPermission.VIEW_REPORTS)) {
-            throw new SecurityException("Viewing purchase history requires VIEW_REPORTS permission");
+        boolean allowed = appt != null
+                && (appt.isOwner() || appt.hasPermission(ManagerPermission.VIEW_REPORTS));
+        if (!allowed) {
+            throw new SecurityException(
+                    "Viewing purchase history requires Owner role or VIEW_REPORTS permission");
         }
 
         log.info("Purchase history requested: company={}, by={}", company.getName(), memberId);
