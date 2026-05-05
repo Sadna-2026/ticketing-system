@@ -85,6 +85,32 @@ public class EventService {
         return event.getId();
     }
 
+    public void cancelEvent(String token, UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId is required");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("No event with id " + eventId));
+
+        // company is looked up but we don't require it to be active — cancellation
+        // can happen as cleanup even on a suspended company.
+        Company company = companyRepository.findByName(event.getCompanyId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Company not found: " + event.getCompanyId()));
+
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {
+            throw new SecurityException("Insufficient permissions to cancel events");
+        }
+
+        log.info("Cancelling event: eventId={}, companyName={}", eventId, company.getName());
+        event.cancel();
+        eventRepository.save(event);
+        // TODO: refund completed purchases once that pipeline lands
+    }
+
     private UUID authenticateMember(String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Authentication token is required");
@@ -94,7 +120,7 @@ public class EventService {
         }
         UUID memberId = sessionTokenService.extractMemberId(token);
         if (memberId == null) {
-            throw new SecurityException("Guests cannot create events");
+            throw new SecurityException("Guests cannot perform this action");
         }
         return memberId;
     }

@@ -101,6 +101,13 @@ public class Event{
     
     public boolean isCancelled() { return status == EventStatus.CANCELLED; }
 
+    public void cancel() {
+        if (status == EventStatus.CANCELLED) {
+            throw new IllegalStateException("Event is already cancelled");
+        }
+        this.status = EventStatus.CANCELLED;
+    }
+
     public void publish() {
         if (status != EventStatus.DRAFT) {
             throw new IllegalStateException("Can only publish a DRAFT event");
