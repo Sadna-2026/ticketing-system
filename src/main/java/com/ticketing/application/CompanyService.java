@@ -13,21 +13,28 @@ import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
+import com.ticketing.domain.company.Company;
+import com.ticketing.domain.event.CompanyClosedEvent;
 
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
 
     private final ICompanyRepository companyRepository;
+    private final IMemberRepository memberRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
     private final Object lock = new Object();
 
     public CompanyService(
             ICompanyRepository companyRepository, 
+            IMemberRepository memberRepository,
             IEventPublisher eventPublisher, 
             ISessionTokenService sessionTokenService
     ) {
         this.companyRepository = companyRepository;
+        this.memberRepository = memberRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
     }
@@ -65,6 +72,43 @@ public class CompanyService {
 
             log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
             return company.getName();
+        }
+    }
+
+    public void closeProductionCompany(String token, String companyName, boolean permanent) {
+        UUID ownerId = validateToken(token);
+        
+        synchronized (lock) {
+            Company company = companyRepository.findByName(companyName)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
+
+            if (!company.getFounderId().equals(ownerId)) {
+                throw new IllegalStateException("Only the owner can close the company.");
+            }
+
+            if (permanent) {
+                log.info("Permanent closure requested for company: {}", companyName);
+                company.markPendingClosure();
+                
+                // Revoke all staff appointments
+                java.util.List<Member> staff = memberRepository.findByCompanyAppointment(companyName);
+                for (Member m : staff) {
+                    m.removeStaffAppointment(companyName);
+                    memberRepository.save(m);
+                }
+                
+                company.completeClosure();
+            } else {
+                log.info("Temporary closure requested for company: {}", companyName);
+                company.close();
+            }
+
+            companyRepository.save(company);
+            
+            // Publish event for event cancellation, etc.
+            eventPublisher.publish(new CompanyClosedEvent(companyName, permanent));
+            
+            log.info("Company closed: name={}, permanent={}", companyName, permanent);
         }
     }
 

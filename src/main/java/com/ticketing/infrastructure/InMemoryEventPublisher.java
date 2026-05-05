@@ -14,9 +14,11 @@ import com.ticketing.domain.event.IEventPublisher;
  */
 public class InMemoryEventPublisher implements IEventPublisher {
     private final ConcurrentHashMap<String, List<IEventListener>> listeners = new ConcurrentHashMap<>();
+    private final List<IEvent> publishedEvents = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     @Override
     public void publish(IEvent event) {
+        publishedEvents.add(event);
         String eventType = event.getEventType();
         List<IEventListener> eventListeners = listeners.get(eventType);
         
@@ -31,6 +33,10 @@ public class InMemoryEventPublisher implements IEventPublisher {
                 }
             }
         }
+    }
+
+    public List<IEvent> getPublishedEvents() {
+        return new ArrayList<>(publishedEvents);
     }
 
     @Override

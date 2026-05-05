@@ -30,7 +30,7 @@ public class CompanyServiceTest {
         eventPublisher = new InMemoryEventPublisher();
         sessionTokenServiceMock = mock(ISessionTokenService.class);
 
-        companyService = new CompanyService(companyRepository, eventPublisher, sessionTokenServiceMock);
+        companyService = new CompanyService(companyRepository, memberRepository, eventPublisher, sessionTokenServiceMock);
     }
 
     @Test
