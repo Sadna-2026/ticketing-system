@@ -12,4 +12,6 @@ public interface IEventRepository {
 
     List<Event> findByCompanyName(String companyName);
 
+    List<Event> findAll();
+
 }

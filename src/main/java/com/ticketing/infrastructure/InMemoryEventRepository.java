@@ -55,6 +55,15 @@ public class InMemoryEventRepository implements IEventRepository {
         return hits;
     }
 
+    @Override
+    public List<Event> findAll() {
+        List<Event> all = new ArrayList<>(store.size());
+        for (VersionedEntry<Event> entry : store.values()) {
+            all.add(entry.entity);
+        }
+        return all;
+    }
+
     private static class VersionedEntry<T> {
         final T entity;
         final int version;
