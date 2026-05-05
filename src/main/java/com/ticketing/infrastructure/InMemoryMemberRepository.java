@@ -1,5 +1,7 @@
 package com.ticketing.infrastructure;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -82,6 +84,18 @@ public class InMemoryMemberRepository implements IMemberRepository {
     @Override
     public long count() {
         return membersById.size();
+    }
+
+    @Override
+    public List<Member> findByCompanyAppointment(String companyName) {
+        if (companyName == null) return List.of();
+        List<Member> hits = new ArrayList<>();
+        for (Member m : membersById.values()) {
+            if (m.getStaffAppointment(companyName) != null) {
+                hits.add(m);
+            }
+        }
+        return hits;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.ticketing.infrastructure;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,6 +41,18 @@ public class InMemoryEventRepository implements IEventRepository {
     public Optional<Event> findById(UUID id) {
         VersionedEntry<Event> entry = store.get(id);
         return entry != null ? Optional.of(entry.entity) : Optional.empty();
+    }
+
+    @Override
+    public List<Event> findByCompanyName(String companyName) {
+        if (companyName == null) return List.of();
+        List<Event> hits = new ArrayList<>();
+        for (VersionedEntry<Event> entry : store.values()) {
+            if (companyName.equals(entry.entity.getCompanyName())) {
+                hits.add(entry.entity);
+            }
+        }
+        return hits;
     }
 
     private static class VersionedEntry<T> {
