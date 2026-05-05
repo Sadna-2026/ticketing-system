@@ -32,6 +32,14 @@ public class EventService {
     private final IActiveOrderRepository activeOrderRepository;
     private final ISessionTokenService sessionTokenService;
 
+    // Per-event lock so inventory edits on Event A don't block Event B.
+    private final java.util.concurrent.ConcurrentHashMap<UUID, Object> eventLocks =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private Object lockFor(UUID eventId) {
+        return eventLocks.computeIfAbsent(eventId, k -> new Object());
+    }
+
     public EventService(IEventRepository eventRepository,
                         ICompanyRepository companyRepository,
                         IMemberRepository memberRepository,
@@ -173,64 +181,84 @@ public class EventService {
 
     // --- UC-C.1: layout & inventory ---
     // Permission: INVENTORY_MGMT OR MAP_DEFINITION (per spec — not both, unlike createEvent).
-    // synchronized on the service to keep concurrent inventory mutations on any
-    // event sequenced. Coarse-grained but correct for V1.
+    // Each method serialises only on its target event id, so unrelated events
+    // can be edited in parallel.
 
-    public synchronized void addSeatsToZone(String token, UUID eventId, UUID zoneId,
-                                            java.util.List<CreateEventRequest.SeatSpec> seats) {
+    public void addSeatsToZone(String token, UUID eventId, UUID zoneId,
+                               java.util.List<CreateEventRequest.SeatSpec> seats) {
         if (seats == null || seats.isEmpty()) {
             throw new IllegalArgumentException("seats list is required");
         }
-        Event event = loadEventForInventoryEdit(token, eventId);
-        InventoryZone zone = event.findZone(zoneId);
-        for (CreateEventRequest.SeatSpec spec : seats) {
-            zone.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.seatNumber()));
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            InventoryZone zone = event.findZone(zoneId);
+            for (CreateEventRequest.SeatSpec spec : seats) {
+                zone.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.seatNumber()));
+            }
+            eventRepository.save(event);
+            log.info("Inventory: added {} seats to zone={} event={}", seats.size(), zoneId, eventId);
         }
-        eventRepository.save(event);
-        log.info("Inventory: added {} seats to zone={} event={}", seats.size(), zoneId, eventId);
     }
 
-    public synchronized void removeSeats(String token, UUID eventId, UUID zoneId,
-                                         java.util.List<UUID> seatIds) {
+    public void removeSeats(String token, UUID eventId, UUID zoneId,
+                            java.util.List<UUID> seatIds) {
         if (seatIds == null || seatIds.isEmpty()) {
             throw new IllegalArgumentException("seatIds list is required");
         }
-        Event event = loadEventForInventoryEdit(token, eventId);
-        InventoryZone zone = event.findZone(zoneId);
-        for (UUID seatId : seatIds) {
-            zone.removeSeat(seatId);
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            InventoryZone zone = event.findZone(zoneId);
+            for (UUID seatId : seatIds) {
+                zone.removeSeat(seatId);
+            }
+            eventRepository.save(event);
+            log.info("Inventory: removed {} seats from zone={} event={}", seatIds.size(), zoneId, eventId);
         }
-        eventRepository.save(event);
-        log.info("Inventory: removed {} seats from zone={} event={}", seatIds.size(), zoneId, eventId);
     }
 
-    public synchronized void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
-        Event event = loadEventForInventoryEdit(token, eventId);
-        event.findZone(zoneId).increaseCapacity(delta);
-        eventRepository.save(event);
-        log.info("Inventory: GA capacity +{} on zone={} event={}", delta, zoneId, eventId);
+    public void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            event.findZone(zoneId).increaseCapacity(delta);
+            eventRepository.save(event);
+            log.info("Inventory: GA capacity +{} on zone={} event={}", delta, zoneId, eventId);
+        }
     }
 
-    public synchronized void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
-        Event event = loadEventForInventoryEdit(token, eventId);
-        event.findZone(zoneId).decreaseCapacity(delta);
-        eventRepository.save(event);
-        log.info("Inventory: GA capacity -{} on zone={} event={}", delta, zoneId, eventId);
+    public void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            event.findZone(zoneId).decreaseCapacity(delta);
+            eventRepository.save(event);
+            log.info("Inventory: GA capacity -{} on zone={} event={}", delta, zoneId, eventId);
+        }
     }
 
-    public synchronized void setZonePrice(String token, UUID eventId, UUID zoneId,
-                                          java.math.BigDecimal newPrice) {
-        Event event = loadEventForInventoryEdit(token, eventId);
-        event.findZone(zoneId).setPricePerTicket(newPrice);
-        eventRepository.save(event);
-        log.info("Inventory: price={} on zone={} event={}", newPrice, zoneId, eventId);
+    public void setZonePrice(String token, UUID eventId, UUID zoneId,
+                             java.math.BigDecimal newPrice) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            event.findZone(zoneId).setPricePerTicket(newPrice);
+            eventRepository.save(event);
+            log.info("Inventory: price={} on zone={} event={}", newPrice, zoneId, eventId);
+        }
     }
 
     private Event loadEventForInventoryEdit(String token, UUID eventId) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        if (event.isCancelled()) {
+            throw new IllegalStateException("Cannot edit inventory on a cancelled event");
+        }
+        if (event.getStatus() == com.ticketing.domain.event.EventStatus.SOLD_OUT) {
+            throw new IllegalStateException("Cannot edit inventory on a sold-out event");
+        }
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
         authorizeInventory(appt);

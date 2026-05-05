@@ -313,6 +313,60 @@ public class EventServiceInventoryTest {
                 .findZone(assignedZoneId).getSeats().size());
     }
 
+    @Test
+    public void GivenCancelledEvent_WhenAddSeats_ThenThrowIllegalStateException() {
+        appoint(StaffAppointment.StaffRole.OWNER, Set.of());
+        Event e = eventRepo.findById(eventId).orElseThrow();
+        e.cancel();
+        eventRepo.save(e);
+
+        assertThrows(IllegalStateException.class,
+                () -> eventService.addSeatsToZone(TOKEN, eventId, assignedZoneId,
+                        List.of(new CreateEventRequest.SeatSpec("X", "1"))));
+    }
+
+    @Test
+    public void GivenTwoDifferentEvents_WhenEditedInParallel_ThenBothComplete() throws Exception {
+        appoint(StaffAppointment.StaffRole.OWNER, Set.of());
+
+        // seed a second event under the same company
+        UUID otherEventId = UUID.randomUUID();
+        UUID otherZoneId = UUID.randomUUID();
+        Instant start = Instant.now().plus(45, ChronoUnit.DAYS);
+        Event other = new Event(otherEventId, COMPANY, "Concert 2", "desc", EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS)),
+                new LockTimerDuration(Duration.ofMinutes(15)));
+        InventoryZone vip2 = InventoryZone.createAssigned(otherZoneId, "VIP", new BigDecimal("100.00"));
+        other.addZone(vip2);
+        eventRepo.save(other);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start_ = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+
+        pool.submit(() -> {
+            try { start_.await();
+                eventService.addSeatsToZone(TOKEN, eventId, assignedZoneId,
+                        List.of(new CreateEventRequest.SeatSpec("E1", "1")));
+            } catch (Exception ignore) {} finally { done.countDown(); }
+        });
+        pool.submit(() -> {
+            try { start_.await();
+                eventService.addSeatsToZone(TOKEN, otherEventId, otherZoneId,
+                        List.of(new CreateEventRequest.SeatSpec("E2", "1")));
+            } catch (Exception ignore) {} finally { done.countDown(); }
+        });
+
+        start_.countDown();
+        assertTrue(done.await(5, TimeUnit.SECONDS));
+        pool.shutdown();
+
+        assertEquals(5, eventRepo.findById(eventId).orElseThrow()
+                .findZone(assignedZoneId).getSeats().size());
+        assertEquals(1, eventRepo.findById(otherEventId).orElseThrow()
+                .findZone(otherZoneId).getSeats().size());
+    }
+
     // helpers
 
     private void appoint(StaffAppointment.StaffRole role, Set<ManagerPermission> perms) {
