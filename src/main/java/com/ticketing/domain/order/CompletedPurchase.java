@@ -1,19 +1,30 @@
 package com.ticketing.domain.order;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * A frozen record of a completed purchase. Snapshot fields (eventName, amount,
+ * purchasedAt) are captured at checkout time and never reflect later changes
+ * to the underlying Event.
+ */
 public record CompletedPurchase(
         UUID purchaseId,
         UUID eventId,
+        String eventName,
         String companyName,
         UUID memberId,
         String transactionId,
-        BigDecimal amount
+        BigDecimal amount,
+        Instant purchasedAt
 ) {
     public CompletedPurchase {
         if (purchaseId == null) throw new IllegalArgumentException("purchaseId is required");
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventName == null || eventName.isBlank()) {
+            throw new IllegalArgumentException("eventName is required");
+        }
         if (companyName == null || companyName.isBlank()) {
             throw new IllegalArgumentException("companyName is required");
         }
@@ -22,6 +33,9 @@ public record CompletedPurchase(
         }
         if (amount == null || amount.signum() < 0) {
             throw new IllegalArgumentException("amount must be non-negative");
+        }
+        if (purchasedAt == null) {
+            throw new IllegalArgumentException("purchasedAt is required");
         }
     }
 }
