@@ -63,3 +63,30 @@ Modifications made:
 Initial gaps in understanding (if any): 
 
 Final understanding (brief explanation in your own words): Role-based access control should be enforced directly within domain entities.
+
+## Feature / Component: Issue #48 (UC-C.4 — Offer role appointment)
+
+Purpose of LLM use: Assisted in implementing the "Offer role appointment" feature using Test-Driven Development (TDD).
+
+Summary of prompt(s):
+1. "lets do it, make sure to use TDD"
+
+Output received (short description):
+- Implementation of `RoleAppointmentOffer` entity.
+- Implementation of `Company.offerRole` with permission checks.
+- Implementation of `CompanyService.offerRoleAppointment` orchestration.
+- Created unit and integration tests verifying the end-to-end flow.
+
+Files / components affected:
+- src/main/java/com/ticketing/domain/member/RoleAppointmentOffer.java
+- src/main/java/com/ticketing/domain/company/Company.java
+- src/main/java/com/ticketing/application/CompanyService.java
+- src/main/java/com/ticketing/application/initialization/InitializationService.java
+- src/main/java/com/ticketing/domain/member/communication/RoleAppointmentOfferedEvent.java
+- src/main/java/com/ticketing/infrastructure/InMemoryRoleAppointmentOfferRepository.java
+
+Modifications made:
+- Developed the feature following TDD: wrote failing domain and application tests before implementing the logic.
+- Updated `CompanyService` constructor and `InitializationService` to handle new repository dependencies.
+- Fixed regressions in existing concurrency and integration tests caused by constructor changes.
+- Implemented `RoleAppointmentOfferedEvent` to enable future notification triggers.

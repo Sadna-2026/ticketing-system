@@ -66,9 +66,11 @@ public class CompanyServiceIntegrationTest {
         });
 
         // Setup initialization
+        com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository = mock(com.ticketing.domain.member.IRoleAppointmentOfferRepository.class);
         initializationService = new InitializationService(
             companyRepository,
             memberRepository,
+            offerRepository,
             eventPublisher,
             sessionTokenService
         );

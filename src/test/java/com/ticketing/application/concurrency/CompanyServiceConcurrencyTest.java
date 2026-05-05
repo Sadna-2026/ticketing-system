@@ -62,9 +62,11 @@ public class CompanyServiceConcurrencyTest {
             return null;
         });
 
+        com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository = mock(com.ticketing.domain.member.IRoleAppointmentOfferRepository.class);
         InitializationService initService = new InitializationService(
             companyRepository,
             memberRepository,
+            offerRepository,
             eventPublisher,
             sessionTokenService
         );

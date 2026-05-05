@@ -17,6 +17,7 @@ import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.IRoleAppointmentOfferRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
@@ -29,12 +30,14 @@ public class CompanyServiceTest {
     private IMemberRepository memberRepository;
     private InMemoryEventPublisher eventPublisher;
     private ISessionTokenService sessionTokenServiceMock;
+    private IRoleAppointmentOfferRepository offerRepository;
     private CompanyService companyService;
 
     @BeforeEach
     public void setUp() {
         companyRepository = new InMemoryCompanyRepository();
         memberRepository = new InMemoryMemberRepository();
+        offerRepository = mock(IRoleAppointmentOfferRepository.class);
         eventPublisher = new InMemoryEventPublisher();
         sessionTokenServiceMock = mock(ISessionTokenService.class);
 
@@ -42,7 +45,7 @@ public class CompanyServiceTest {
         MemberCompanyOpenedEventHandler handler = new MemberCompanyOpenedEventHandler(memberRepository);
         eventPublisher.subscribe("CompanyOpened", handler);
 
-        companyService = new CompanyService(companyRepository, eventPublisher, sessionTokenServiceMock);
+        companyService = new CompanyService(companyRepository, eventPublisher, sessionTokenServiceMock, memberRepository, offerRepository);
     }
 
     @Test

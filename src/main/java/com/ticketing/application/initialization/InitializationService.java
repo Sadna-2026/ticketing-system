@@ -19,21 +19,24 @@ public class InitializationService {
 
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
+    private final com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
 
     public InitializationService(
             ICompanyRepository companyRepository,
             IMemberRepository memberRepository,
+            com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository,
             IEventPublisher eventPublisher,
             ISessionTokenService sessionTokenService
     ) {
         if (companyRepository == null || memberRepository == null || 
-            eventPublisher == null || sessionTokenService == null) {
+            offerRepository == null || eventPublisher == null || sessionTokenService == null) {
             throw new IllegalArgumentException("All dependencies must be provided");
         }
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
+        this.offerRepository = offerRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
     }
@@ -44,7 +47,7 @@ public class InitializationService {
      */
     public CompanyService initializeCompanyService() {
         log.info("Initializing CompanyService");
-        return new CompanyService(companyRepository, eventPublisher, sessionTokenService);
+        return new CompanyService(companyRepository, eventPublisher, sessionTokenService, memberRepository, offerRepository);
     }
 
     /**

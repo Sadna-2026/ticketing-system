@@ -17,12 +17,22 @@ public class CompanyService {
     private final ICompanyRepository companyRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
+    private final com.ticketing.domain.member.IMemberRepository memberRepository;
+    private final com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository;
     private final Object lock = new Object();
 
-    public CompanyService(ICompanyRepository companyRepository, IEventPublisher eventPublisher, ISessionTokenService sessionTokenService) {
+    public CompanyService(
+            ICompanyRepository companyRepository, 
+            IEventPublisher eventPublisher, 
+            ISessionTokenService sessionTokenService,
+            com.ticketing.domain.member.IMemberRepository memberRepository,
+            com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository
+    ) {
         this.companyRepository = companyRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
+        this.memberRepository = memberRepository;
+        this.offerRepository = offerRepository;
     }
 
     /**
@@ -59,6 +69,34 @@ public class CompanyService {
             log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
             return company.getName();
         }
+    }
+
+    public void offerRoleAppointment(
+            String token, 
+            String companyName, 
+            UUID targetMemberId, 
+            com.ticketing.domain.member.StaffAppointment.StaffRole role, 
+            java.util.Set<com.ticketing.domain.member.ManagerPermission> permissions
+    ) {
+        UUID appointerId = validateToken(token);
+        
+        com.ticketing.domain.member.Member appointer = memberRepository.findById(appointerId)
+            .orElseThrow(() -> new IllegalArgumentException("Appointer not found"));
+        com.ticketing.domain.member.Member target = memberRepository.findById(targetMemberId)
+            .orElseThrow(() -> new IllegalArgumentException("Target member not found"));
+        Company company = companyRepository.findByName(companyName)
+            .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+
+        com.ticketing.domain.member.RoleAppointmentOffer offer = company.offerRole(appointer, target, role, permissions);
+        offerRepository.save(offer);
+
+        // Publish event for notification
+        com.ticketing.domain.member.communication.RoleAppointmentOfferedEvent event = 
+            new com.ticketing.domain.member.communication.RoleAppointmentOfferedEvent(offer.getOfferId(), companyName, targetMemberId);
+        eventPublisher.publish(event);
+
+        log.info("Role appointment offered: company={}, appointer={}, target={}, role={}", 
+            companyName, appointerId, targetMemberId, role);
     }
 
     private UUID validateToken(String token) {
