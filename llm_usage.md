@@ -100,7 +100,7 @@ Final understanding (brief explanation in your own words): Role-based access con
 
 ## Feature / Component: INF-13 — Race-condition test suite
 
-Purpose of LLM use: Assisted in implementing a comprehensive concurrency test suite and hardening the domain model against race conditions.
+Purpose of LLM use: Assisted in debugging synchronization issues in the Member aggregate and provided guidance on using CountDownLatch for precise concurrency testing.
 
 Summary of prompt(s):
 1. Implementation of a global race-condition test suite using `CountDownLatch` and `ExecutorService` to verify thread-safety across core workflows.
@@ -112,6 +112,17 @@ Output received (short description):
 Files / components affected:
 - src/test/java/com/ticketing/concurrency/GlobalRaceConditionTest.java
 - src/main/java/com/ticketing/domain/member/Member.java
+
+### Modifications made:
+- Implemented `GlobalRaceConditionTest` with 4 stress tests (20-50 threads each) synchronized via `CountDownLatch`.
+- Added `synchronized` keyword to state-modifying methods in `Member.java`.
+- Updated `getPendingOffers()` to return a defensive copy within a synchronized block to prevent concurrent access issues.
+
+### Initial gaps in understanding (if any):
+- Initial assumption that `Hashtable` usage in `Member` provided sufficient thread-safety for the entire aggregate.
+
+### Final understanding:
+- While individual collections might be thread-safe (like `Hashtable`), mutations to the aggregate's overall state or composite collections (like `ArrayList`) require explicit synchronization to maintain domain invariants under high concurrency.
 
 ## Feature / Component: Issue #43 (UC-G4.6 — Cancel/delete existing event) - Edge case + style consult
 
@@ -140,7 +151,8 @@ Modifications made:
 
 Initial gaps in understanding (if any):
 
-Final understanding (brief explanation in your own words):
+Final understanding (brief explanation in your own words): Cancellation should be permitted even for suspended companies to allow for graceful cleanup, but guards should distinguish between structural and editorial changes.
+
 
 ## Feature / Component: Issue #42 (UC-G4.2 — Edit core event details) - CR fixes
 Purpose of LLM use: Two CR fixes — perf query + clarifying comment on the two domain guards.
@@ -160,7 +172,7 @@ Modifications made:
 - O(1)-keyed query replaces O(N) scan in hasActiveReservations.
 - One-block comment makes the structural-vs-editorial split explicit; no rename.
 Initial gaps in understanding (if any):
-Final understanding (brief explanation in your own words):
+Final understanding (brief explanation in your own words): High-performance lookups should be prioritized for frequently checked invariants (like active reservations) by adding targeted repository queries.
 
 ## Feature / Component: Issue #45 (UC-C.1 — Manage event layout & inventory) - Concurrency strategy
 Purpose of LLM use: Quick consult on the locking strategy for inventory mutations and the V1 §6.a race-test shape.
