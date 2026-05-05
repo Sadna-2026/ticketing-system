@@ -4,11 +4,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.CompanyService;
+import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
+import com.ticketing.application.listener.RoleAppointmentOfferedEventHandler;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.IRoleAppointmentOfferRepository;
 
 /**
  * Initializes and wires up application services with their dependencies.
@@ -19,19 +22,21 @@ public class InitializationService {
 
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
-    private final com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository;
+    private final IRoleAppointmentOfferRepository offerRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
+    private final INotificationService notificationService;
 
     public InitializationService(
             ICompanyRepository companyRepository,
             IMemberRepository memberRepository,
-            com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository,
+            IRoleAppointmentOfferRepository offerRepository,
             IEventPublisher eventPublisher,
-            ISessionTokenService sessionTokenService
+            ISessionTokenService sessionTokenService,
+            INotificationService notificationService
     ) {
         if (companyRepository == null || memberRepository == null || 
-            offerRepository == null || eventPublisher == null || sessionTokenService == null) {
+            offerRepository == null || eventPublisher == null || sessionTokenService == null || notificationService == null) {
             throw new IllegalArgumentException("All dependencies must be provided");
         }
         this.companyRepository = companyRepository;
@@ -39,6 +44,7 @@ public class InitializationService {
         this.offerRepository = offerRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -59,6 +65,10 @@ public class InitializationService {
         // Create and register the handler for CompanyOpenedEvent
         MemberCompanyOpenedEventHandler companyOpenedHandler = new MemberCompanyOpenedEventHandler(memberRepository);
         eventPublisher.subscribe("CompanyOpened", companyOpenedHandler);
+
+        // Register the handler for RoleAppointmentOfferedEvent
+        RoleAppointmentOfferedEventHandler offerHandler = new RoleAppointmentOfferedEventHandler(notificationService);
+        eventPublisher.subscribe("RoleAppointmentOffered", offerHandler);
         
         log.info("Event listeners registered");
     }

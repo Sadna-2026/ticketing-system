@@ -21,6 +21,8 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.RoleAppointmentOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferedEvent;
+import com.ticketing.domain.member.StaffAppointment.StaffRole;
+import com.ticketing.domain.member.ManagerPermission;
 
 public class CompanyServiceOfferTest {
 

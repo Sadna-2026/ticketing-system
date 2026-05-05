@@ -31,6 +31,7 @@ public class CompanyServiceTest {
     private InMemoryEventPublisher eventPublisher;
     private ISessionTokenService sessionTokenServiceMock;
     private IRoleAppointmentOfferRepository offerRepository;
+    private INotificationService notificationService;
     private CompanyService companyService;
 
     @BeforeEach
@@ -40,6 +41,7 @@ public class CompanyServiceTest {
         offerRepository = mock(IRoleAppointmentOfferRepository.class);
         eventPublisher = new InMemoryEventPublisher();
         sessionTokenServiceMock = mock(ISessionTokenService.class);
+        notificationService = mock(INotificationService.class);
 
         // Wire up the event listener as requested by Tamar
         MemberCompanyOpenedEventHandler handler = new MemberCompanyOpenedEventHandler(memberRepository);

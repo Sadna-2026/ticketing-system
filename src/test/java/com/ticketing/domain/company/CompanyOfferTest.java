@@ -14,6 +14,7 @@ import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.PermissionDeniedException;
 import com.ticketing.domain.member.RoleAppointmentOffer;
+import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.StaffAppointment.StaffRole;
 
 public class CompanyOfferTest {
@@ -76,7 +77,7 @@ public class CompanyOfferTest {
         Set<ManagerPermission> perms = new HashSet<>();
         for (ManagerPermission p : permissions) perms.add(p);
         
-        com.ticketing.domain.member.StaffAppointment appointment = new com.ticketing.domain.member.StaffAppointment(
+        StaffAppointment appointment = new StaffAppointment(
             companyId,
             founderId,
             role,

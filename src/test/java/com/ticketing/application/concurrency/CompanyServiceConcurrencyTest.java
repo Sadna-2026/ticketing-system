@@ -17,14 +17,17 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 import com.ticketing.application.CompanyService;
+import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.IRoleAppointmentOfferRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
+import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 /**
  * Concurrency tests for CompanyService
@@ -37,6 +40,7 @@ public class CompanyServiceConcurrencyTest {
     private IMemberRepository memberRepository;
     private IEventPublisher eventPublisher;
     private ISessionTokenService sessionTokenService;
+    private INotificationService notificationService;
     private CompanyService companyService;
 
     @BeforeEach
@@ -62,13 +66,16 @@ public class CompanyServiceConcurrencyTest {
             return null;
         });
 
-        com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository = mock(com.ticketing.domain.member.IRoleAppointmentOfferRepository.class);
+        notificationService = mock(INotificationService.class);
+
+        IRoleAppointmentOfferRepository offerRepository = mock(IRoleAppointmentOfferRepository.class);
         InitializationService initService = new InitializationService(
             companyRepository,
             memberRepository,
             offerRepository,
             eventPublisher,
-            sessionTokenService
+            sessionTokenService,
+            notificationService
         );
         companyService = initService.initialize();
     }

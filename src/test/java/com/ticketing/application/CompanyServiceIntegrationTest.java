@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.CompanyService;
+import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
@@ -17,10 +19,12 @@ import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.IRoleAppointmentOfferRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
+import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -35,6 +39,7 @@ public class CompanyServiceIntegrationTest {
     private IMemberRepository memberRepository;
     private IEventPublisher eventPublisher;
     private ISessionTokenService sessionTokenService;
+    private INotificationService notificationService;
     private CompanyService companyService;
     private InitializationService initializationService;
 
@@ -65,14 +70,17 @@ public class CompanyServiceIntegrationTest {
             return null;
         });
 
+        notificationService = mock(INotificationService.class);
+
         // Setup initialization
-        com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository = mock(com.ticketing.domain.member.IRoleAppointmentOfferRepository.class);
+        IRoleAppointmentOfferRepository offerRepository = mock(IRoleAppointmentOfferRepository.class);
         initializationService = new InitializationService(
             companyRepository,
             memberRepository,
             offerRepository,
             eventPublisher,
-            sessionTokenService
+            sessionTokenService,
+            notificationService
         );
 
         // Initialize with event listeners

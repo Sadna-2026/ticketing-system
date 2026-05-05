@@ -1,6 +1,7 @@
 package com.ticketing.application;
 
 import java.util.UUID;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,13 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEventPublisher;
+import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.IRoleAppointmentOfferRepository;
+import com.ticketing.domain.member.RoleAppointmentOffer;
+import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.communication.RoleAppointmentOfferedEvent;
 
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
@@ -17,16 +25,16 @@ public class CompanyService {
     private final ICompanyRepository companyRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
-    private final com.ticketing.domain.member.IMemberRepository memberRepository;
-    private final com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository;
+    private final IMemberRepository memberRepository;
+    private final IRoleAppointmentOfferRepository offerRepository;
     private final Object lock = new Object();
 
     public CompanyService(
             ICompanyRepository companyRepository, 
             IEventPublisher eventPublisher, 
             ISessionTokenService sessionTokenService,
-            com.ticketing.domain.member.IMemberRepository memberRepository,
-            com.ticketing.domain.member.IRoleAppointmentOfferRepository offerRepository
+            IMemberRepository memberRepository,
+            IRoleAppointmentOfferRepository offerRepository
     ) {
         this.companyRepository = companyRepository;
         this.eventPublisher = eventPublisher;
@@ -75,24 +83,24 @@ public class CompanyService {
             String token, 
             String companyName, 
             UUID targetMemberId, 
-            com.ticketing.domain.member.StaffAppointment.StaffRole role, 
-            java.util.Set<com.ticketing.domain.member.ManagerPermission> permissions
+            StaffAppointment.StaffRole role, 
+            Set<ManagerPermission> permissions
     ) {
         UUID appointerId = validateToken(token);
         
-        com.ticketing.domain.member.Member appointer = memberRepository.findById(appointerId)
+        Member appointer = memberRepository.findById(appointerId)
             .orElseThrow(() -> new IllegalArgumentException("Appointer not found"));
-        com.ticketing.domain.member.Member target = memberRepository.findById(targetMemberId)
+        Member target = memberRepository.findById(targetMemberId)
             .orElseThrow(() -> new IllegalArgumentException("Target member not found"));
         Company company = companyRepository.findByName(companyName)
             .orElseThrow(() -> new IllegalArgumentException("Company not found"));
 
-        com.ticketing.domain.member.RoleAppointmentOffer offer = company.offerRole(appointer, target, role, permissions);
+        RoleAppointmentOffer offer = company.offerRole(appointer, target, role, permissions);
         offerRepository.save(offer);
 
         // Publish event for notification
-        com.ticketing.domain.member.communication.RoleAppointmentOfferedEvent event = 
-            new com.ticketing.domain.member.communication.RoleAppointmentOfferedEvent(offer.getOfferId(), companyName, targetMemberId);
+        RoleAppointmentOfferedEvent event = 
+            new RoleAppointmentOfferedEvent(offer.getOfferId(), companyName, targetMemberId);
         eventPublisher.publish(event);
 
         log.info("Role appointment offered: company={}, appointer={}, target={}, role={}", 
