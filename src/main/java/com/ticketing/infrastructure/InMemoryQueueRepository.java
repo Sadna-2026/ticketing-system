@@ -23,6 +23,15 @@ public class InMemoryQueueRepository implements IQueueRepository {
     }
 
     @Override
+    public Optional<QueueSession> findBySessionId(UUID sessionId) {
+        if (sessionId == null) return Optional.empty();
+        for (QueueSession q : store.values()) {
+            if (sessionId.equals(q.getSessionId())) return Optional.of(q);
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public List<QueueSession> findAll() {
         return new ArrayList<>(store.values());
     }

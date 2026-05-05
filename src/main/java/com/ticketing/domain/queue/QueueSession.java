@@ -7,6 +7,13 @@ import java.util.UUID;
 /**
  * One member or guest waiting in the virtual queue for a high-demand event.
  * Aggregate root for queue-related operations.
+ *
+ * Two distinct UUIDs by design:
+ *   {@code id}        — this QueueSession's own aggregate identity (repo key).
+ *   {@code sessionId} — the user-side HTTP session sitting in the queue, used
+ *                       to answer "am I (this browser) currently in a queue?".
+ *                       Not a foreign key to a database row — it's the same
+ *                       sessionId carried in the JWT.
  */
 public class QueueSession {
 

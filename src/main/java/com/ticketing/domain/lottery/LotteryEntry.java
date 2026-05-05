@@ -11,7 +11,7 @@ public record LotteryEntry(
         UUID id,
         UUID eventId,
         UUID memberId,
-        String zoneName,
+        UUID zoneId,
         int quantity,
         Instant registeredAt
 ) {
@@ -19,7 +19,7 @@ public record LotteryEntry(
         if (id == null) throw new IllegalArgumentException("id is required");
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
         if (memberId == null) throw new IllegalArgumentException("memberId is required");
-        if (zoneName == null || zoneName.isBlank()) throw new IllegalArgumentException("zoneName is required");
+        if (zoneId == null) throw new IllegalArgumentException("zoneId is required");
         if (quantity <= 0) throw new IllegalArgumentException("quantity must be positive");
         if (registeredAt == null) throw new IllegalArgumentException("registeredAt is required");
     }
