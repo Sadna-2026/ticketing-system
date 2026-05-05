@@ -15,7 +15,10 @@ public class PasswordEncryptionUtils {
      * @param password raw password
      * @return BCrypt hashed password
      */
-    public String encryptPassword(String password) {
+    public String hashPassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("Password cannot be null or blank");
+        }
         return passwordEncoder.encode(password);
     }
 

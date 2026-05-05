@@ -1,21 +1,17 @@
 package com.ticketing.application;
-import org.slf4j.LoggerFactory;
-
-import com.ticketing.domain.company.Company;
-import com.ticketing.domain.company.ICompanyRepository;
-import com.ticketing.domain.user.IMemberRepository;
-import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.domain.user.Member;
-import com.ticketing.domain.user.Producer;
-import com.ticketing.domain.user.ProducerRole;
-import com.ticketing.domain.user.RoleFactory;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.UUID;
+import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.application.auth.ISessionTokenService;
 
-import javax.management.relation.Role;
+import java.util.Collections;
+import java.util.UUID;
 
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
@@ -52,15 +48,20 @@ public class CompanyService {
             throw new IllegalArgumentException("A production company with this name already exists.");
         }
 
-        Member founder = memberRepository.findById(founderId);
+        Member founder = memberRepository.findById(founderId)
+            .orElseThrow(() -> new IllegalArgumentException("Member not found"));
 
         Company company = new Company(name, description, founderId);
         companyRepository.save(company);
 
-        // Assign Founder appointment to the member
-        ProducerRole founderRole = RoleFactory.createFounder();
-        Producer founderAppointment = new Producer(company.getName(), founderId, null, founderRole);
-        founder.addCompanyRole(founderAppointment);
+        // Assign Owner appointment to the member
+        StaffAppointment ownerAppointment = new StaffAppointment(
+            company.getName(),
+            founderId,
+            StaffAppointment.StaffRole.OWNER,
+            Collections.emptySet()
+        );
+        founder.addStaffAppointment(company.getName(), ownerAppointment);
         memberRepository.save(founder);
 
         log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);

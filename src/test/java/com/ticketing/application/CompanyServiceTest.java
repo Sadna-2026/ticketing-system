@@ -3,11 +3,12 @@ package com.ticketing.application;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
-import com.ticketing.domain.user.IMemberRepository;
-import com.ticketing.domain.user.Member;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,11 +33,11 @@ public class CompanyServiceTest {
         String companyName = "Company A";
         String description = "Meow";
         UUID founderId = UUID.randomUUID();
-        Member mockFounder = new Member(founderId, null, null, null); // minimal member for testing
+        Member mockFounder = new Member(founderId, "founder_user", "founder@example.com", "hashed_password");
 
         when(sessionTokenServiceMock.isValid(validToken)).thenReturn(true);
         when(sessionTokenServiceMock.extractMemberId(validToken)).thenReturn(founderId);
-        when(memberRepositoryMock.findById(founderId)).thenReturn(mockFounder);
+        when(memberRepositoryMock.findById(founderId)).thenReturn(Optional.of(mockFounder));
 
         // Test company creation processing
         String result = companyService.openProductionCompany(validToken, companyName, description);
