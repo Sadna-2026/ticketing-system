@@ -38,6 +38,7 @@ import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 public class EventServiceCreateEventTest {
 
@@ -62,7 +63,8 @@ public class EventServiceCreateEventTest {
         sessionTokenService = mock(ISessionTokenService.class);
 
         eventService = new EventService(
-                eventRepository, companyRepository, memberRepository, sessionTokenService);
+                eventRepository, companyRepository, memberRepository,
+                mock(IActiveOrderRepository.class), sessionTokenService);
 
         memberId = UUID.randomUUID();
         member = new Member(memberId, "ownerUser", "owner@example.com", "encryptedPw");
@@ -283,7 +285,8 @@ public class EventServiceCreateEventTest {
         ICompanyRepository mocked = mock(ICompanyRepository.class);
         when(mocked.findByName(COMPANY_NAME)).thenReturn(Optional.of(stub));
         eventService = new EventService(
-                eventRepository, mocked, memberRepository, sessionTokenService);
+                eventRepository, mocked, memberRepository,
+                mock(IActiveOrderRepository.class), sessionTokenService);
     }
 
     private static Company stubCompany(String name, CompanyStatus status) {

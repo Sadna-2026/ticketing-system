@@ -110,6 +110,40 @@ public class Event{
         this.status = EventStatus.CANCELLED;
     }
 
+    // --- core-detail setters (used by EventService.editEvent) ---
+
+    public void setName(String name) {
+        rejectIfCancelled();
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Event name cannot be blank");
+        }
+        this.name = name;
+    }
+
+    public void setDescription(String description) {
+        rejectIfCancelled();
+        this.description = description;
+    }
+
+    public void setArtist(String artist) {
+        rejectIfCancelled();
+        this.artist = artist;
+    }
+
+    public void setSchedule(EventSchedule schedule) {
+        rejectIfCancelled();
+        if (schedule == null) {
+            throw new IllegalArgumentException("Schedule is required");
+        }
+        this.schedule = schedule;
+    }
+
+    private void rejectIfCancelled() {
+        if (status == EventStatus.CANCELLED) {
+            throw new IllegalStateException("Cannot edit a cancelled event");
+        }
+    }
+
     public void publish() {
         if (status != EventStatus.DRAFT) {
             throw new IllegalStateException("Can only publish a DRAFT event");
