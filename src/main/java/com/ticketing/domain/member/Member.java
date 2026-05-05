@@ -1,7 +1,9 @@
 package com.ticketing.domain.member;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.UUID;
 
 public class Member {
@@ -13,6 +15,7 @@ public class Member {
     private String encryptedPassword;
     private String phoneNumber;
     private LocalDate dateOfBirth;
+    private List<PendingRoleOffer> pendingOffers;
 
     public Member(UUID memberId, String username, String email, String encryptedPassword, String phoneNumber, LocalDate dateOfBirth) {
         if (memberId == null) {
@@ -37,7 +40,9 @@ public class Member {
         this.encryptedPassword = encryptedPassword;
         this.staffAppointments  = new Hashtable<>();
         this.phoneNumber = phoneNumber;
-        this.dateOfBirth = dateOfBirth;
+        this.dateOfBirth = dateOfBirth;        
+        this.pendingOffers = new ArrayList<>();
+
     }
     
     // Getters
@@ -88,7 +93,7 @@ public class Member {
         this.encryptedPassword = newEncryptedPassword;
     }
 
-    public void addStaffAppointment(String companyId, StaffAppointment appointment) {
+    public synchronized void addStaffAppointment(String companyId, StaffAppointment appointment) {
         if (companyId == null || companyId.isBlank()) {
             throw new IllegalArgumentException("companyId cannot be null or blank");
         }
@@ -100,7 +105,7 @@ public class Member {
         staffAppointments.put(companyId, appointment);
     }
 
-    public void removeStaffAppointment(String companyId) {
+    public synchronized void removeStaffAppointment(String companyId) {
         if (companyId == null || companyId.isBlank()) {
             throw new IllegalArgumentException("companyId cannot be null or blank");
         }
@@ -116,7 +121,25 @@ public class Member {
         return staffAppointments.get(companyId);
     }
 
-    public void clearStaffAppointments() {
+    public synchronized void clearStaffAppointments() {
         staffAppointments.clear();
+    }
+
+    public boolean hasStaffAppointment(String companyId, StaffAppointment.StaffRole role) {
+        StaffAppointment appointment = getStaffAppointment(companyId);
+        return appointment != null && appointment.getRole() == role;
+    }
+
+    public List<PendingRoleOffer> getPendingOffers() {
+        synchronized(this) {
+            return Collections.unmodifiableList(new ArrayList<>(pendingOffers));
+        }
+    }
+
+    public synchronized void addPendingOffer(PendingRoleOffer offer) {
+        if (offer == null) {
+            throw new IllegalArgumentException("offer cannot be null");
+        }
+        pendingOffers.add(offer);
     }
 }

@@ -1,13 +1,26 @@
 package com.ticketing.domain.member;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Repository interface for the Member aggregate root.
- */
 public interface IMemberRepository {
+    Optional<Member> findById(UUID memberId);
 
-    Optional<Member> findById(UUID id);
+    void save(Member member);
 
+    Optional<Member> findByUsername(String username);
+
+    Optional<Member> findByEmail(String email);
+
+    boolean existsByUsername(String username);
+
+    boolean existsByEmail(String email);
+
+    boolean saveIfUsernameAndEmailAvailable(Member member);
+
+    long count();
+
+    List<Member> findByCompanyAppointment(String companyName);
 }
+

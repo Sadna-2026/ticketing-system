@@ -22,6 +22,7 @@ import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 import com.ticketing.infrastructure.Interface.IEventRepository;
 import com.ticketing.infrastructure.Interface.IMemberRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
+import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
 
 
 public class ActiveOrderService {
@@ -177,7 +178,7 @@ public class ActiveOrderService {
         // Generate tickets
         List<String> ticketCodes;
         try {
-            ticketCodes = ticketSupplyService.generateTickets(order.getId(), order.getTotalTicketCount());
+            ticketCodes = ITicketSupplyGateway.issueTickets(order.getId(), order.getTotalTicketCount());
         } catch (TicketSupplyException e) {
             // Compensation: refund payment
             try {

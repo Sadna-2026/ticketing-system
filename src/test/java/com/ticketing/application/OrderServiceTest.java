@@ -59,7 +59,7 @@ public class OrderServiceTest {
     // private UUID memberId;
     // private UUID sessionId;
     private UUID eventId;
-    private UUID companyId;
+    private String companyId;
     private UUID gaZoneId;
     private UUID assignedZoneId;
     private UUID seatId;
@@ -101,7 +101,7 @@ public class OrderServiceTest {
     private void setUpEvent(){
         // add event
         eventId = UUID.randomUUID();
-        companyId = UUID.randomUUID();
+        companyId = "Test Company";
         EventSchedule schedule = new EventSchedule(
                 Instant.parse("2026-07-01T20:00:00Z"),
                 Instant.parse("2026-07-01T23:00:00Z"),

@@ -1,0 +1,30 @@
+package com.ticketing.domain.member;
+
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.Set;
+import java.util.UUID;
+
+import com.ticketing.domain.member.StaffAppointment.StaffRole;
+
+public class PendingRoleOffer {
+    private final UUID offerId;
+    private final String companyName;
+    private final StaffRole role;
+    private final Set<ManagerPermission> permissions;
+    private final LocalDateTime createdAt;
+
+    public PendingRoleOffer(String companyName, StaffRole role, Set<ManagerPermission> permissions) {
+        this.offerId = UUID.randomUUID();
+        this.companyName = companyName;
+        this.role = role;
+        this.permissions = permissions != null ? Collections.unmodifiableSet(permissions) : Collections.emptySet();
+        this.createdAt = LocalDateTime.now();
+    }
+
+    public UUID getOfferId() { return offerId; }
+    public String getCompanyName() { return companyName; }
+    public StaffRole getRole() { return role; }
+    public Set<ManagerPermission> getPermissions() { return permissions; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+}
