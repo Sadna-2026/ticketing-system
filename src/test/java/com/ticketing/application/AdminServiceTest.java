@@ -31,6 +31,8 @@ public class AdminServiceTest {
         memberRepository = new InMemoryMemberRepository();
         companyRepository = new InMemoryCompanyRepository();
         sessionTokenService = mock(ISessionTokenService.class);
+        
+        when(sessionTokenService.isValid(anyString())).thenReturn(true);
 
         adminService = new AdminService(memberRepository, companyRepository, sessionTokenService);
     }
