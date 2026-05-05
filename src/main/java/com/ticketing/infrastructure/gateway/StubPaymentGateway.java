@@ -6,6 +6,7 @@ import com.ticketing.domain.gateway.PaymentDetails;
 import com.ticketing.domain.gateway.PaymentResult;
 import com.ticketing.domain.gateway.RefundResult;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public class StubPaymentGateway implements IPaymentGateway {
@@ -17,7 +18,7 @@ public class StubPaymentGateway implements IPaymentGateway {
     }
 
     @Override
-    public PaymentResult charge(double amount, PaymentDetails details) {
+    public PaymentResult charge(BigDecimal amount, PaymentDetails details) {
         if (shouldFail) {
             return PaymentResult.failed("Payment declined by issuer.");
         }

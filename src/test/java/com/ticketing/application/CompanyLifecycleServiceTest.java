@@ -29,7 +29,6 @@ import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.LockTimerDuration;
-import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -39,6 +38,7 @@ import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.Interface.IPaymentGateway;
 
 public class CompanyLifecycleServiceTest {
 

@@ -1,7 +1,5 @@
 package  com.ticketing.infrastructure;
 
-import com.ticketing.infrastructure.Interface.*;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 /**
  * In-memory implementation of IEventRepository with CAS-style optimistic locking.

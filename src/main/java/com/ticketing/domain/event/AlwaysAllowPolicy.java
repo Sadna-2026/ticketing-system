@@ -1,15 +1,13 @@
-// package  com.ticketing.domain.event;
+package com.ticketing.domain.event;
 
-// import com.ticketing.infrastructure.Interface.*;
+import java.util.UUID;
 
+import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
-// import com.ticketing.domain.member.User;
-// import com.ticketing.domain.order.ActiveOrder;
-
-// public class AlwaysAllowPolicy implements IPurchasePolicy {
-//     @Override
-//     public PolicyResult isAllowed(ActiveOrder order, User user) {
-//         return PolicyResult.success();
-//     }
-// }
-
+public class AlwaysAllowPolicy implements IPurchasePolicy {
+    @Override
+    public PolicyResult isAllowed(ActiveOrder order, UUID memberId) {
+        return PolicyResult.success();
+    }
+}

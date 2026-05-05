@@ -6,4 +6,8 @@ public record RegisterRequest(
         String password,
         String phoneNumber,
         java.time.LocalDate dateOfBirth
-) {}
+) {
+    public RegisterRequest(String username, String email, String password) {
+        this(username, email, password, null, null);
+    }
+}

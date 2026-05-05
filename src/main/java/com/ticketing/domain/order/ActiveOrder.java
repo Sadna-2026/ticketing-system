@@ -61,6 +61,7 @@ public class ActiveOrder{
     public boolean isExpired() { return status == OrderStatus.EXPIRED; }
     public OrderStatus getStatus() { return status; }
     public UUID getEventId() { return eventId; }
+    public UUID getMemberId() { return memberId; }
 
     public boolean isExpiredAt(Instant now, Duration lockDuration) {
         return now.isAfter(createdAt.plus(lockDuration));
@@ -123,5 +124,19 @@ public class ActiveOrder{
             throw new IllegalStateException("Can only revert from CHECKOUT_IN_PROGRESS");
         }
         this.status = OrderStatus.ACTIVE;
+    }
+
+    public void complete() {
+        if (status != OrderStatus.CHECKOUT_IN_PROGRESS) {
+            throw new IllegalStateException("Can only complete from CHECKOUT_IN_PROGRESS");
+        }
+        this.status = OrderStatus.COMPLETED;
+    }
+
+    public void cancel() {
+        if (status == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+        this.status = OrderStatus.CANCELLED;
     }
 }

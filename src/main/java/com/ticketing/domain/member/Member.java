@@ -18,6 +18,10 @@ public class Member {
     private LocalDate dateOfBirth;
     private List<PendingRoleOffer> pendingOffers;
 
+    public Member(UUID memberId, String username, String email, String encryptedPassword) {
+        this(memberId, username, email, encryptedPassword, null, null);
+    }
+
     public Member(UUID memberId, String username, String email, String encryptedPassword, String phoneNumber, LocalDate dateOfBirth) {
         if (memberId == null) {
             throw new IllegalArgumentException("memberId cannot be null");

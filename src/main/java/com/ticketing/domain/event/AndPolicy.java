@@ -1,29 +1,26 @@
-// package  com.ticketing.domain.event;
+package com.ticketing.domain.event;
 
-// import com.ticketing.infrastructure.Interface.*;
+import java.util.List;
+import java.util.UUID;
 
+import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
-// import com.ticketing.domain.member.User;
-// import com.ticketing.domain.order.ActiveOrder;
+public class AndPolicy implements IPurchasePolicy {
+    private final List<IPurchasePolicy> policies;
 
-// import java.util.List;
+    public AndPolicy(List<IPurchasePolicy> policies) {
+        this.policies = policies == null ? List.of() : List.copyOf(policies);
+    }
 
-// public class AndPolicy implements IPurchasePolicy {
-//     private final List<IPurchasePolicy> policies;
-
-//     public AndPolicy(List<IPurchasePolicy> policies) {
-//         this.policies = policies;
-//     }
-
-//     @Override
-//     public PolicyResult isAllowed(ActiveOrder order, User user) {
-//         for (IPurchasePolicy policy : policies) {
-//             PolicyResult result = policy.isAllowed(order, user);
-//             if (!result.allowed()) {
-//                 return result;
-//             }
-//         }
-//         return PolicyResult.success();
-//     }
-// }
-
+    @Override
+    public PolicyResult isAllowed(ActiveOrder order, UUID memberId) {
+        for (IPurchasePolicy policy : policies) {
+            PolicyResult result = policy.isAllowed(order, memberId);
+            if (!result.allowed()) {
+                return result;
+            }
+        }
+        return PolicyResult.success();
+    }
+}

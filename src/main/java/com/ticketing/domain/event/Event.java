@@ -67,6 +67,12 @@ public class Event{
         this.eventDiscountPolicy = eventDiscountPolicy;
         this.version = 0;
     }
+
+    public Event(UUID id, String companyName, String name, String description,
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
+        this(id, companyName, name, description, category, schedule, lockTimerDuration,
+                new AlwaysAllowPolicy(), new NoDiscountPolicy());
+    }
     public LockTimerDuration getLockTimerDuration() { return lockTimerDuration; }
 
     public InventoryZone findZone(UUID zoneId) {

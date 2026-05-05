@@ -20,7 +20,6 @@ import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
@@ -30,6 +29,7 @@ import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 public class EventServiceCancelEventTest {
 
