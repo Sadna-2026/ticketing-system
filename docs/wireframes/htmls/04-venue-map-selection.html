@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Venue Map + Ticket Selection</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 16px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.crumbs { font-size: 12px; color: #666; margin-bottom: 12px; }
+.layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+.map-area { border: 1px solid #999; padding: 20px; }
+.stage { background: #333; color: #fff; text-align: center; padding: 8px; font-size: 12px; letter-spacing: 4px; }
+.zones { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 24px; }
+.zone-block { border: 1px solid #999; padding: 30px 16px; text-align: center; min-height: 120px; }
+.zone-block.selected { border: 2px solid #333; background: #f0f0f0; }
+.zone-block .name { font-weight: 600; margin-bottom: 6px; }
+.zone-block .info { font-size: 11px; color: #666; }
+.ga-zone { background: repeating-linear-gradient(45deg, #fff, #fff 8px, #f0f0f0 8px, #f0f0f0 16px); }
+.legend { display: flex; gap: 16px; font-size: 12px; margin-top: 16px; }
+.legend .swatch { display: inline-block; width: 14px; height: 14px; vertical-align: middle; border: 1px solid #333; margin-right: 4px; }
+.s-avail { background: #fff; }
+.s-locked { background: #ccc; }
+.s-sold { background: #333; }
+.side { border: 1px solid #333; padding: 16px; height: fit-content; }
+.side h3 { font-size: 14px; margin-bottom: 12px; }
+.pick-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #ccc; font-size: 13px; }
+.pick-row .x { cursor: pointer; color: #666; }
+.qty-row { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; font-size: 13px; }
+.qty { display: flex; align-items: center; gap: 4px; }
+.qty button { width: 24px; height: 24px; border: 1px solid #333; background: #fff; cursor: pointer; }
+.qty .v { width: 28px; text-align: center; }
+.totals { margin-top: 14px; padding-top: 10px; border-top: 1px solid #999; font-size: 14px; }
+.totals .row { display: flex; justify-content: space-between; margin: 4px 0; }
+.totals .grand { font-weight: 700; font-size: 16px; }
+.btn-primary { display: block; width: 100%; padding: 10px; background: #333; color: #fff; border: 1px solid #333; cursor: pointer; font-weight: 600; margin-top: 12px; text-align: center; text-decoration: none; }
+.btn-primary.disabled { background: #ccc; border-color: #ccc; pointer-events: none; }
+.note { font-size: 11px; color: #666; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <div style="font-size:13px;">Hello, member</div>
+  </div>
+
+  <div class="crumbs"><a href="#">← Spring Concert</a> / Pick your seats</div>
+
+  <div class="layout">
+    <div class="map-area">
+      <div class="stage">— STAGE —</div>
+      <div class="zones">
+        <div class="zone-block ga-zone">
+          <div class="name">Floor (GA)</div>
+          <div class="info">$50 · 80 / 100 left</div>
+        </div>
+        <div class="zone-block selected">
+          <div class="name">VIP (assigned)</div>
+          <div class="info">$150 · click seat ▾</div>
+          <div style="display:grid; grid-template-columns:repeat(8,1fr); gap:3px; margin-top:10px;">
+            <div style="background:#fff;border:1px solid #333;height:18px;font-size:9px;">A1</div>
+            <div style="background:#333;color:#fff;border:1px solid #333;height:18px;font-size:9px;">A2</div>
+            <div style="background:#fff;border:1px solid #333;height:18px;font-size:9px;">A3</div>
+            <div style="background:#ccc;border:1px solid #333;height:18px;font-size:9px;">A4</div>
+            <div style="background:#fff;border:1px solid #333;height:18px;font-size:9px;">A5</div>
+            <div style="background:#333;color:#fff;border:1px solid #333;height:18px;font-size:9px;">A6</div>
+            <div style="background:#fff;border:1px solid #333;height:18px;font-size:9px;">A7</div>
+            <div style="background:#fff;border:1px solid #333;height:18px;font-size:9px;">A8</div>
+          </div>
+        </div>
+        <div class="zone-block ga-zone">
+          <div class="name">Balcony (GA)</div>
+          <div class="info">$80 · 30 / 50 left</div>
+        </div>
+      </div>
+      <div class="legend">
+        <div><span class="swatch s-avail"></span> Available</div>
+        <div><span class="swatch s-locked"></span> Held / locked</div>
+        <div><span class="swatch s-sold"></span> Sold</div>
+      </div>
+    </div>
+
+    <div class="side">
+      <h3>YOUR SELECTION</h3>
+      <div class="pick-row">
+        <div>VIP · A2</div>
+        <div>$150 <span class="x">✕</span></div>
+      </div>
+      <div class="pick-row">
+        <div>VIP · A6</div>
+        <div>$150 <span class="x">✕</span></div>
+      </div>
+      <div class="qty-row">
+        <div>Floor (GA)</div>
+        <div class="qty">
+          <button>−</button>
+          <div class="v">2</div>
+          <button>+</button>
+        </div>
+      </div>
+      <div class="totals">
+        <div class="row"><span>Subtotal</span><span>$400.00</span></div>
+        <div class="row grand"><span>Total</span><span>$400.00</span></div>
+      </div>
+      <a class="btn-primary" href="#">Continue to checkout</a>
+      <div class="note">Selection holds for 15 min once you proceed.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

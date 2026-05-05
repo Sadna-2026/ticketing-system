@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Lottery Registration</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 16px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.crumbs { font-size: 12px; color: #666; margin-bottom: 12px; }
+.banner { background: repeating-linear-gradient(45deg, #eee, #eee 14px, #f5f5f5 14px, #f5f5f5 28px); border: 1px solid #999; height: 160px; display: flex; align-items: center; justify-content: center; color: #888; margin-bottom: 16px; }
+.title-block { margin-bottom: 24px; }
+.title-block h1 { font-size: 26px; }
+.title-block .meta { font-size: 14px; color: #555; margin-top: 6px; }
+.lottery-tag { display: inline-block; padding: 4px 10px; border: 2px solid #333; font-size: 12px; font-weight: 700; letter-spacing: 1px; margin-top: 8px; }
+.layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+.explainer { border: 1px solid #999; padding: 18px 20px; margin-bottom: 18px; }
+.explainer h3 { font-size: 14px; margin-bottom: 10px; }
+.explainer p { font-size: 13px; line-height: 1.6; color: #555; }
+.explainer ol { margin-top: 10px; padding-left: 20px; font-size: 13px; line-height: 1.7; color: #555; }
+.form { border: 1px solid #999; padding: 18px 20px; }
+.form h3 { font-size: 14px; margin-bottom: 14px; }
+label { display: block; font-size: 12px; color: #555; margin-top: 12px; margin-bottom: 4px; }
+select, input { width: 100%; padding: 8px 10px; border: 1px solid #999; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dates-card { border: 1px solid #333; padding: 16px; height: fit-content; margin-bottom: 14px; }
+.dates-card h3 { font-size: 12px; text-transform: uppercase; color: #555; margin-bottom: 12px; }
+.date-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px dashed #ccc; }
+.date-row:last-child { border-bottom: none; font-weight: 700; }
+.btn-primary { display: block; width: 100%; padding: 12px; background: #333; color: #fff; border: 1px solid #333; cursor: pointer; font-weight: 600; margin-top: 16px; text-align: center; text-decoration: none; }
+.status-card { border: 1px dashed #999; padding: 12px 16px; background: #f5f5f5; font-size: 13px; margin-bottom: 14px; }
+.status-card .icon { font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <div style="font-size:13px;">Hello, member</div>
+  </div>
+
+  <div class="crumbs"><a href="#">← Browse</a> / High Demand Concert / Lottery</div>
+
+  <div class="banner">[ event banner image ]</div>
+
+  <div class="title-block">
+    <h1>High Demand Concert</h1>
+    <div class="meta">Madonna · Sep 21, 2026 · Tel Aviv</div>
+    <div class="lottery-tag">🎲 LOTTERY ALLOCATION</div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="explainer">
+        <h3>HOW THIS LOTTERY WORKS</h3>
+        <p>Demand for this event significantly exceeds supply, so tickets are allocated by lottery instead of first-come-first-served.</p>
+        <ol>
+          <li>Register below for a chance to buy tickets — registration is free.</li>
+          <li>The draw runs automatically on the date shown to the right.</li>
+          <li>If selected, you'll get an email + 24 hours to complete payment.</li>
+          <li>If not selected, no charge — you can still try other events.</li>
+        </ol>
+      </div>
+
+      <div class="form">
+        <h3>REGISTER FOR THE LOTTERY</h3>
+        <div class="row2">
+          <div>
+            <label>Zone</label>
+            <select>
+              <option>Floor (GA) — $80</option>
+              <option>VIP Pit (assigned) — $250</option>
+              <option>Balcony (GA) — $120</option>
+            </select>
+          </div>
+          <div>
+            <label>How many tickets?</label>
+            <select>
+              <option>1 ticket</option>
+              <option>2 tickets</option>
+              <option>3 tickets</option>
+              <option>4 tickets (max)</option>
+            </select>
+          </div>
+        </div>
+        <label>Confirmation email</label>
+        <input type="email" value="harel@example.com">
+        <a class="btn-primary" href="#">Enter the lottery</a>
+      </div>
+    </div>
+
+    <div>
+      <div class="status-card">
+        <div><span class="icon">ℹ</span> You haven't entered yet.</div>
+      </div>
+
+      <div class="dates-card">
+        <h3>KEY DATES</h3>
+        <div class="date-row"><span>Registration opens</span><span>now</span></div>
+        <div class="date-row"><span>Registration closes</span><span>Aug 30, 18:00</span></div>
+        <div class="date-row"><span>Draw runs</span><span>Aug 31, 12:00</span></div>
+        <div class="date-row"><span>Result email</span><span>Aug 31, 14:00</span></div>
+        <div class="date-row"><span>Event date</span><span>Sep 21, 2026</span></div>
+      </div>
+
+      <div class="dates-card">
+        <h3>FAIR PLAY</h3>
+        <div style="font-size:12px; color:#555; line-height:1.5;">
+          One entry per member. Multiple entries from the same account are merged into the first valid one.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

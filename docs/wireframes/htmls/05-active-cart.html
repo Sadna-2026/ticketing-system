@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Active Cart</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 16px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.timer-banner { border: 2px solid #333; background: #f0f0f0; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; font-weight: 600; }
+.timer-banner .clock { font-size: 22px; font-family: monospace; }
+.layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+.cart { border: 1px solid #999; }
+.cart-row { display: grid; grid-template-columns: 1fr 80px 100px 30px; align-items: center; padding: 14px 16px; border-bottom: 1px solid #ccc; font-size: 14px; }
+.cart-row:last-child { border-bottom: none; }
+.cart-row .ev { font-weight: 600; }
+.cart-row .meta { font-size: 12px; color: #666; margin-top: 2px; }
+.cart-row .qty-or-seat { text-align: center; }
+.cart-row .price { text-align: right; }
+.cart-row .x { text-align: center; cursor: pointer; color: #666; }
+.cart-head { background: #f5f5f5; font-size: 11px; text-transform: uppercase; color: #666; }
+.summary { border: 1px solid #333; padding: 16px; height: fit-content; }
+.summary h3 { font-size: 14px; margin-bottom: 12px; }
+.s-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+.s-row.total { font-size: 18px; font-weight: 700; padding-top: 10px; border-top: 1px solid #999; margin-top: 6px; }
+.btn { display: block; width: 100%; padding: 10px; cursor: pointer; text-align: center; text-decoration: none; }
+.btn-primary { background: #333; color: #fff; border: 1px solid #333; font-weight: 600; margin-top: 12px; }
+.btn-secondary { background: #fff; color: #333; border: 1px solid #333; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <div style="font-size:13px;">Hello, member</div>
+  </div>
+
+  <div class="timer-banner">
+    <div>⏱ Lock expires in</div>
+    <div class="clock">12 : 34</div>
+    <div style="font-size:12px; color:#555;">Complete checkout before timer ends or selection is released</div>
+  </div>
+
+  <div class="layout">
+    <div class="cart">
+      <div class="cart-row cart-head">
+        <div>Item</div><div>Type</div><div>Price</div><div></div>
+      </div>
+      <div class="cart-row">
+        <div>
+          <div class="ev">Spring Concert · Beethoven</div>
+          <div class="meta">VIP · Row A · Seat 2 · Jul 12, 2026</div>
+        </div>
+        <div class="qty-or-seat">Seat</div>
+        <div class="price">$150.00</div>
+        <div class="x">✕</div>
+      </div>
+      <div class="cart-row">
+        <div>
+          <div class="ev">Spring Concert · Beethoven</div>
+          <div class="meta">VIP · Row A · Seat 6 · Jul 12, 2026</div>
+        </div>
+        <div class="qty-or-seat">Seat</div>
+        <div class="price">$150.00</div>
+        <div class="x">✕</div>
+      </div>
+      <div class="cart-row">
+        <div>
+          <div class="ev">Spring Concert · Beethoven</div>
+          <div class="meta">Floor (GA) · Jul 12, 2026</div>
+        </div>
+        <div class="qty-or-seat">Qty: 2</div>
+        <div class="price">$100.00</div>
+        <div class="x">✕</div>
+      </div>
+    </div>
+
+    <div class="summary">
+      <h3>ORDER SUMMARY</h3>
+      <div class="s-row"><span>Subtotal</span><span>$400.00</span></div>
+      <div class="s-row"><span>Service fee</span><span>$8.00</span></div>
+      <div class="s-row total"><span>Total</span><span>$408.00</span></div>
+      <a class="btn btn-primary" href="#">Proceed to checkout</a>
+      <a class="btn btn-secondary" href="#">Continue shopping</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

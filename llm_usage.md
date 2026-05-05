@@ -208,3 +208,20 @@ Modifications made:
 - Snapshot semantics + immutable lists baked into the DTO.
 Initial gaps in understanding (if any):
 Final understanding (brief explanation in your own words):
+
+## Feature / Component: Issue #12 (INF-11 — UI wireframes) - HTML wireframe generation
+Purpose of LLM use: Generate plain HTML mid-fidelity B&W wireframes from the layout briefs so we don't have to draw 12 screens by hand in draw.io.
+Summary of prompt(s):
+1. "Generate HTML wireframes for each screen — black and white, mid-fidelity, no JS, no images, just boxes and labels."
+Output received (short description):
+- 12 self-contained HTML files (one per screen) using inline CSS — system fonts, outlined buttons, grey placeholder rectangles for images.
+- Each file is 1280×800, opens in a browser, can be print-to-PDF or screenshot for the deliverable.
+Files / components affected:
+- docs/wireframes/01-login-register.html through 12-lottery-registration.html (all new)
+- docs/wireframes/README.md (filename table + per-screen layout briefs)
+- README.md (Documentation section linking to wireframes folder)
+Modifications made:
+- HTML wireframes drafted from the layout briefs in the README.
+- Print-to-PDF instructions in the README so a human can convert to the PNG/PDF format the spec asks for.
+Initial gaps in understanding (if any):
+Final understanding (brief explanation in your own words):

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Admin Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { display: grid; grid-template-columns: 200px 1fr; min-height: 800px; }
+.sidebar { background: #333; color: #fff; padding: 20px 0; }
+.sidebar .logo { padding: 0 20px 18px; font-weight: 700; letter-spacing: 1px; border-bottom: 1px solid #555; }
+.sidebar .role { padding: 8px 20px; font-size: 11px; color: #aaa; margin-top: 8px; }
+.sidebar nav a { display: block; padding: 10px 20px; color: #ddd; text-decoration: none; font-size: 13px; }
+.sidebar nav a.active { background: #555; color: #fff; border-left: 3px solid #fff; padding-left: 17px; }
+.main { padding: 24px; display: grid; grid-template-columns: 1fr 280px; gap: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.header h1 { font-size: 20px; }
+.search-box { padding: 6px 10px; border: 1px solid #999; width: 240px; }
+.companies-table { border: 1px solid #999; }
+.companies-table h3 { padding: 12px 16px; font-size: 13px; background: #f5f5f5; border-bottom: 1px solid #999; display: flex; justify-content: space-between; }
+.t-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 140px; padding: 10px 16px; border-bottom: 1px dashed #ccc; font-size: 13px; align-items: center; }
+.t-row:last-child { border-bottom: none; }
+.t-head { font-size: 11px; color: #666; text-transform: uppercase; background: #fafafa; }
+.status { display: inline-block; padding: 2px 6px; border: 1px solid #333; font-size: 11px; }
+.status.suspended { background: #f5f5f5; }
+.status.closed { background: #333; color: #fff; }
+.actions a { color: #333; text-decoration: underline; font-size: 12px; margin-right: 6px; }
+.actions a.warn { color: #900; }
+.right { display: flex; flex-direction: column; gap: 14px; }
+.panel { border: 1px solid #999; padding: 14px; }
+.panel h3 { font-size: 12px; text-transform: uppercase; color: #555; margin-bottom: 10px; }
+.health-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12px; border-bottom: 1px dashed #ddd; }
+.health-row:last-child { border-bottom: none; }
+.health-row .ok { color: #333; font-weight: 600; }
+.health-row .warn { color: #900; font-weight: 600; }
+.audit-row { padding: 6px 0; font-size: 12px; border-bottom: 1px dashed #ddd; }
+.audit-row:last-child { border-bottom: none; }
+.audit-row .when { color: #888; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="sidebar">
+    <div class="logo">[ TICKETING ]</div>
+    <div class="role">SYSTEM ADMIN</div>
+    <nav>
+      <a class="active" href="#">🏢 Companies</a>
+      <a href="#">👥 Members</a>
+      <a href="#">📈 System metrics</a>
+      <a href="#">📋 Audit log</a>
+      <a href="#" style="margin-top:20px;">↳ Sign out</a>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div>
+      <div class="header">
+        <h1>Production Companies</h1>
+        <input class="search-box" placeholder="Search companies…">
+      </div>
+
+      <div class="companies-table">
+        <h3><span>ALL COMPANIES (47)</span><span style="font-weight:normal; font-size:11px; color:#666;">filter: all</span></h3>
+        <div class="t-row t-head"><div>Name</div><div>Founder</div><div>Status</div><div>Founded</div><div>Actions</div></div>
+        <div class="t-row">
+          <div>Acme Productions</div>
+          <div>harel@example.com</div>
+          <div><span class="status">ACTIVE</span></div>
+          <div>2026-03-12</div>
+          <div class="actions"><a>view</a><a class="warn">suspend</a><a class="warn">close</a></div>
+        </div>
+        <div class="t-row">
+          <div>Beta Music</div>
+          <div>tamar@example.com</div>
+          <div><span class="status">ACTIVE</span></div>
+          <div>2026-03-15</div>
+          <div class="actions"><a>view</a><a class="warn">suspend</a><a class="warn">close</a></div>
+        </div>
+        <div class="t-row">
+          <div>Gamma Theater</div>
+          <div>noa@example.com</div>
+          <div><span class="status suspended">SUSPENDED</span></div>
+          <div>2026-02-28</div>
+          <div class="actions"><a>view</a><a>reopen</a><a class="warn">close</a></div>
+        </div>
+        <div class="t-row">
+          <div>Delta Festivals</div>
+          <div>amit@example.com</div>
+          <div><span class="status suspended">PENDING_CLOSURE</span></div>
+          <div>2025-11-10</div>
+          <div class="actions"><a>view</a><a>retry refunds</a></div>
+        </div>
+        <div class="t-row">
+          <div>Epsilon Live</div>
+          <div>shira@example.com</div>
+          <div><span class="status closed">CLOSED</span></div>
+          <div>2025-09-04</div>
+          <div class="actions"><a>view</a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>SYSTEM HEALTH</h3>
+        <div class="health-row"><span>Active sessions</span><span class="ok">1,247</span></div>
+        <div class="health-row"><span>Payment gateway</span><span class="ok">OK</span></div>
+        <div class="health-row"><span>Ticket supply</span><span class="ok">OK</span></div>
+        <div class="health-row"><span>Pending refunds</span><span class="warn">3 queued</span></div>
+        <div class="health-row"><span>Build version</span><span>V1-RC2</span></div>
+      </div>
+
+      <div class="panel">
+        <h3>RECENT AUDIT</h3>
+        <div class="audit-row"><div>admin@x suspended Gamma Theater</div><div class="when">12 min ago</div></div>
+        <div class="audit-row"><div>Delta Festivals → PENDING_CLOSURE</div><div class="when">1 h ago</div></div>
+        <div class="audit-row"><div>Epsilon Live closed by admin</div><div class="when">yesterday</div></div>
+        <div class="audit-row"><div>4 manager appointments revoked</div><div class="when">yesterday</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
