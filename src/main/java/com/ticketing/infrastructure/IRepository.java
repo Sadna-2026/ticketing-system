@@ -1,11 +1,10 @@
 package com.ticketing.infrastructure;
 import java.util.List;
+import java.util.Optional;
 
-import java.util.UUID;
-
-public interface IRepository<T> {
-    T findById(UUID id);
+public interface IRepository<T, S> {
+    Optional<T> findById(S id);
     List<T> getAll();
-    void delete();
+    void delete(S id);
     void save(T entity);
 }
