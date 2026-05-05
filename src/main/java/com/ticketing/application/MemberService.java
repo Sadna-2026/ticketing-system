@@ -13,7 +13,7 @@ import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.response.LogoutResponse;
 import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
-import com.ticketing.infrastructure.Interface.IMemberRepository;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 @Service
 public class MemberService {

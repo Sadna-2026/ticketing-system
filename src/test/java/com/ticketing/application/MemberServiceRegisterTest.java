@@ -19,7 +19,7 @@ import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
-import com.ticketing.infrastructure.Interface.IMemberRepository;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.infrastructure.Interface.ISessionTokenRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 

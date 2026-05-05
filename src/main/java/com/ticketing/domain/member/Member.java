@@ -108,10 +108,8 @@ public class Member {
         staffAppointments.clear();
     }
 
-
-
-
-
-
-
+    public boolean hasStaffAppointment(String companyId, StaffAppointment.StaffRole role) {
+        StaffAppointment appointment = getStaffAppointment(companyId);
+        return appointment != null && appointment.getRole() == role;
+    }
 }
