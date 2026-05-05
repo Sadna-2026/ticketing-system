@@ -9,6 +9,14 @@ import java.util.stream.Collectors;
 
 public class Event{
 
+    /**
+     * V1 default currency for the no-discount fallback. Lives here as a constant
+     * so it's discoverable and overridable in one place. When multi-currency
+     * support lands (V2+), the default policy should be injected via the
+     * constructor instead of read from this constant.
+     */
+    public static final java.util.Currency DEFAULT_CURRENCY = java.util.Currency.getInstance("USD");
+
     private final UUID id;
     private final String companyName;
     private String name;
@@ -44,7 +52,7 @@ public class Event{
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
         this.purchasePolicy = new AlwaysAllowPolicy();
-        this.discountPolicy = new NoDiscountPolicy(java.util.Currency.getInstance("USD"));
+        this.discountPolicy = new NoDiscountPolicy(DEFAULT_CURRENCY);
         this.version = 0;
     }
 

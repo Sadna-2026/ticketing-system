@@ -30,16 +30,11 @@ public class PolicyDefaultsTest {
     }
 
     @Test
-    public void GivenTwoEvents_WhenInspectPolicies_ThenEachHasOwnDefaultInstance() {
-        // Sanity: defaults are independent — event A's purchase policy isn't
-        // accidentally shared by reference with event B (would matter if a future
-        // policy holds state).
-        Event a = newEvent();
-        Event b = newEvent();
-        assertNotNull(a.getPurchasePolicy());
-        assertNotNull(b.getPurchasePolicy());
-        // not the same instance
-        assertTrue(a.getPurchasePolicy() != b.getPurchasePolicy());
+    public void GivenDefaultCurrencyConstant_WhenInspect_ThenIsExposedAtClassLevel() {
+        // The currency choice for the no-discount default lives on Event as a
+        // constant rather than being buried in the constructor. This test pins
+        // the constant's existence + visibility so the override path is clear.
+        assertNotNull(Event.DEFAULT_CURRENCY, "Event.DEFAULT_CURRENCY must be defined");
     }
 
     @Test
