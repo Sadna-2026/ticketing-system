@@ -4,6 +4,10 @@ import java.util.Objects;
 import java.util.UUID;
 
 import com.ticketing.domain.event.IPurchasePolicy;
+import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.PermissionDeniedException;
+import com.ticketing.domain.member.StaffAppointment;
 
 public class Company {
     private String name; // also the unique identifier for the company
@@ -51,8 +55,8 @@ public class Company {
      * Example method: Edits the company policy.
      * Requires POLICY_MODIFICATION permission.
      */
-    public void editPolicy(com.ticketing.domain.member.Member member) {
-        checkPermission(member, com.ticketing.domain.member.ManagerPermission.POLICY_MODIFICATION);
+    public void editPolicy(Member member) {
+        checkPermission(member, ManagerPermission.POLICY_MODIFICATION);
         // Policy modification logic would go here
     }
 
@@ -60,8 +64,8 @@ public class Company {
      * Example method: Defines the venue map.
      * Requires MAP_DEFINITION permission.
      */
-    public void defineMap(com.ticketing.domain.member.Member member) {
-        checkPermission(member, com.ticketing.domain.member.ManagerPermission.MAP_DEFINITION);
+    public void defineMap(Member member) {
+        checkPermission(member, ManagerPermission.MAP_DEFINITION);
         // Map definition logic would go here
     }
 
@@ -69,8 +73,8 @@ public class Company {
      * Example method: Manages company personnel.
      * Requires PERSONNEL_MGMT permission.
      */
-    public void managePersonnel(com.ticketing.domain.member.Member member) {
-        checkPermission(member, com.ticketing.domain.member.ManagerPermission.PERSONNEL_MGMT);
+    public void managePersonnel(Member member) {
+        checkPermission(member, ManagerPermission.PERSONNEL_MGMT);
         // Personnel management logic would go here
     }
 
@@ -78,8 +82,8 @@ public class Company {
      * Example method: Views company reports.
      * Requires VIEW_REPORTS permission.
      */
-    public void viewReports(com.ticketing.domain.member.Member member) {
-        checkPermission(member, com.ticketing.domain.member.ManagerPermission.VIEW_REPORTS);
+    public void viewReports(Member member) {
+        checkPermission(member, ManagerPermission.VIEW_REPORTS);
         // Report viewing logic would go here
     }
 
@@ -87,15 +91,15 @@ public class Company {
      * Internal helper to check domain-level permissions.
      * Role-based permission should be checked within the domain as per project standards.
      */
-    private void checkPermission(com.ticketing.domain.member.Member member, com.ticketing.domain.member.ManagerPermission permission) {
+    private void checkPermission(Member member, ManagerPermission permission) {
         if (member == null) {
             throw new IllegalArgumentException("Member is required for permission check");
         }
 
-        com.ticketing.domain.member.StaffAppointment appointment = member.getStaffAppointment(this.name);
+        StaffAppointment appointment = member.getStaffAppointment(this.name);
         
         if (appointment == null || !appointment.hasPermission(permission)) {
-            throw new com.ticketing.domain.member.PermissionDeniedException(
+            throw new PermissionDeniedException(
                 "Member " + member.getId() + " does not have permission " + permission + " for company " + this.name
             );
         }
