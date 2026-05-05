@@ -59,7 +59,7 @@ public class EventService {
 
         Event event = new Event(
                 UUID.randomUUID(),
-                companyIdFor(company),
+                company.getName(),
                 request.name(),
                 request.description(),
                 request.category(),
@@ -165,8 +165,4 @@ public class EventService {
         return new VenueMap(sectionToZoneId);
     }
 
-    // Temporary bridge until Company exposes a UUID id; same name -> same UUID.
-    private static UUID companyIdFor(Company company) {
-        return UUID.nameUUIDFromBytes(company.getName().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
 }

@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 public class Event{
 
     private final UUID id;
-    private final UUID companyId;
+    private final String companyId;
     private String name;
     private String description;
     private String artist;
@@ -21,34 +21,16 @@ public class Event{
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
     private VenueMap venueMap;
-    //private final EventPurchasePolicy eventPurchasePolicy;
-    //private final EventDiscountPolicy eventDiscountPolicy;
+    // TODO(v2): add purchase/discount policies
     private int version;
 
-    /**
-     * Creates a new Event with required policies.
-     * Policies must be provided at creation time and cannot be changed afterward in V1.
-     *
-     * @param id unique event identifier
-     * @param companyId the production company that owns this event
-     * @param name the event name
-     * @param description event description (may be null)
-     * @param category event category (may be null for draft)
-     * @param schedule the event schedule (start time, end time, doors open)
-     * @param lockTimerDuration the per-event lock timer duration for active orders
-     * @param eventPurchasePolicy the event's purchase policy (required, per V1)
-     * @param eventDiscountPolicy the event's discount policy (required, per V1)
-     */
-    public Event(UUID id, UUID companyId, String name, String description,
-                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration){
-                 //EventPurchasePolicy eventPurchasePolicy, EventDiscountPolicy eventDiscountPolicy) {
+    public Event(UUID id, String companyId, String name, String description,
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
         if (id == null) throw new IllegalArgumentException("Event ID is required");
-        if (companyId == null) throw new IllegalArgumentException("Company ID is required");
+        if (companyId == null || companyId.isBlank()) throw new IllegalArgumentException("Company ID is required");
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Event name is required");
         if (schedule == null) throw new IllegalArgumentException("Event schedule is required");
         if (lockTimerDuration == null) throw new IllegalArgumentException("Lock timer duration is required");
-        //if (eventPurchasePolicy == null) throw new IllegalArgumentException("EventPurchasePolicy is required");
-        //if (eventDiscountPolicy == null) throw new IllegalArgumentException("EventDiscountPolicy is required");
 
         this.id = id;
         this.companyId = companyId;
@@ -93,7 +75,7 @@ public class Event{
     public UUID getId() {
         return id;
     }
-    public UUID getCompanyId() { return companyId; }
+    public String getCompanyId() { return companyId; }
     public String getName() { return name; }
     public String getDescription() { return description; }
     public String getArtist() { return artist; }
@@ -112,8 +94,8 @@ public class Event{
     }
 
     private void validateModifiable() {
-        if (isCancelled()) {
-            throw new IllegalStateException("Cannot modify a cancelled event");
+        if (status != EventStatus.DRAFT) {
+            throw new IllegalStateException("Cannot modify event in status: " + status);
         }
     }
     

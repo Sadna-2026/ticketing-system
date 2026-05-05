@@ -35,3 +35,38 @@ Modifications made:
 Initial gaps in understanding (if any): 
 
 Final understanding (brief explanation in your own words): Better understanding of decided repository structure.
+
+
+
+
+## Feature / Component: Issue #41 (UC-G4.1 — Create event with inventory and venue map) - Code review polish
+
+Purpose of LLM use: After implementing EventService.createEvent and the VenueMap value object, asked the LLM to review the code and tests for missed edge cases and for adherence to the project's testing conventions.
+
+Summary of prompt(s):
+1. "Look at my VenueMap and Event.setVenueMap — am I missing any edge cases on the zones-vs-sections check?"
+2. "Read 2-Model-implementation.pdf and confirm my test naming follows the course convention."
+3. "Help trim the javadocs on the new files to match the existing codebase style."
+4. Post merge, how does removal of company UUID effect the code
+
+Output received (short description):
+- Pointed out that I was only checking one direction of the bijection (every section maps to a real zone) and was missing the reverse (every zone must be referenced by at least one section); I added the second check to Event.setVenueMap.
+- Confirmed my test method names should follow Given<Condition>_When<Method>_Then<Result>
+- Suggested trimming the verbose javadoc blocks on VenueMap/Event/EventService to match the minimal style used in Company.java and InventoryZone.java.
+- Refactored usage of companyID to companyName
+
+Files / components affected:
+- src/main/java/com/ticketing/domain/event/Event.java (reverse-direction bijection check added; trimmed comments)
+- src/main/java/com/ticketing/domain/event/VenueMap.java (trimmed comments)
+- src/main/java/com/ticketing/application/EventService.java (trimmed comments)
+- src/main/java/com/ticketing/application/CreateEventRequest.java (trimmed comments)
+- src/test/java/com/ticketing/application/EventServiceCreateEventTest.java (renamed test methods to Given_When_Then; removed @DisplayName)
+
+Modifications made:
+- Added the reverse bijection check in Event.setVenueMap (every event zone must be referenced by at least one VenueMap section).
+- Renamed all 19 test methods in EventServiceCreateEventTest to the Given_When_Then format.
+- Removed @DisplayName annotations and trimmed class-level / method-level javadocs across the new files to match the existing codebase style.
+
+Initial gaps in understanding (if any):
+
+Final understanding (brief explanation in your own words): understood zoneMap edge cases better and naming/documenting conventions.

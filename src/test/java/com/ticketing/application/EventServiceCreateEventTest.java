@@ -1,7 +1,6 @@
 package com.ticketing.application;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
@@ -85,7 +84,7 @@ public class EventServiceCreateEventTest {
         assertNotNull(eventId);
         Event saved = eventRepository.findById(eventId).orElseThrow();
         assertEquals("Spring Concert", saved.getName());
-        assertEquals(expectedCompanyId(COMPANY_NAME), saved.getCompanyId());
+        assertEquals(COMPANY_NAME, saved.getCompanyId());
         assertEquals(EventStatus.DRAFT, saved.getStatus());
         assertEquals(2, saved.getZones().size());
         VenueMap vm = saved.getVenueMap();
@@ -293,10 +292,6 @@ public class EventServiceCreateEventTest {
         when(c.isActive()).thenReturn(status == CompanyStatus.ACTIVE);
         when(c.getStatus()).thenReturn(status);
         return c;
-    }
-
-    private static UUID expectedCompanyId(String companyName) {
-        return UUID.nameUUIDFromBytes(companyName.getBytes(StandardCharsets.UTF_8));
     }
 
     private CreateEventRequest validRequest() {

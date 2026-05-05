@@ -69,9 +69,9 @@ public class InventoryZone {
     public ZoneType getType() { return type; }
     public BigDecimal getPricePerTicket() { return pricePerTicket; }
     public int getMaxCapacity() { return maxCapacity; }
-    public int getAvailableCount() { return type == ZoneType.GENERAL_ADMISSION ? availableCount : (int) seats.stream().filter(Seat::isAvailable).count(); }
-    public int getLockedCount() { return type == ZoneType.GENERAL_ADMISSION ? lockedCount : (int) seats.stream().filter(Seat::isLocked).count(); }
-    public int getSoldCount() { return type == ZoneType.GENERAL_ADMISSION ? soldCount : (int) seats.stream().filter(Seat::isSold).count(); }
+    public int getAvailableCount() { return type == ZoneType.GENERAL_ADMISSION ? availableCount : Math.toIntExact(seats.stream().filter(Seat::isAvailable).count()); }
+    public int getLockedCount() { return type == ZoneType.GENERAL_ADMISSION ? lockedCount : Math.toIntExact(seats.stream().filter(Seat::isLocked).count()); }
+    public int getSoldCount() { return type == ZoneType.GENERAL_ADMISSION ? soldCount : Math.toIntExact(seats.stream().filter(Seat::isSold).count()); }
     public List<Seat> getSeats() { return Collections.unmodifiableList(seats); }
     public boolean isGA() { return type == ZoneType.GENERAL_ADMISSION; }
     public boolean isAssigned() { return type == ZoneType.ASSIGNED_SEATING; }
