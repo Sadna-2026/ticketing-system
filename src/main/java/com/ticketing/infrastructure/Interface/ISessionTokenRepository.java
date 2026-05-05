@@ -42,6 +42,16 @@ public interface ISessionTokenRepository {
     void revokeAllBySessionId(UUID sessionId, String reason);
 
     /**
+     * Revokes all active tokens for a specific member.
+     *
+     * Used when a member is removed from the system.
+     *
+     * @param memberId member id
+     * @param reason revocation reason
+     */
+    void revokeAllByMemberId(UUID memberId, String reason);
+
+    /**
      * Checks whether a token exists, is not revoked, and is not expired.
      *
      * @param tokenId token id
