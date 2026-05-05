@@ -98,16 +98,32 @@ public class CompanyLifecycleService {
         if (company.getStatus() != com.ticketing.domain.company.CompanyStatus.PENDING_CLOSURE) {
             throw new IllegalStateException("Company is not pending closure");
         }
-        Deque<RefundJob> queue = pendingRefunds.getOrDefault(companyName, new ArrayDeque<>());
+
+        Deque<RefundJob> queue = pendingRefunds.get(companyName);
+        if (queue == null || queue.isEmpty()) {
+            // The in-memory queue is lost on process restart, but the company can
+            // still be in PENDING_CLOSURE per the persisted CompanyStatus. Rehydrate
+            // by re-reading completed purchases from the repository.
+            // V1 caveat: this re-attempts every refund, including ones that succeeded
+            // in the original close. With the stub gateway this is harmless; for V2
+            // we'd track per-purchase refund status to avoid double-refund.
+            queue = new ArrayDeque<>();
+            for (CompletedPurchase p : completedPurchaseRepository.findByCompanyName(companyName)) {
+                queue.add(new RefundJob(p.transactionId(), p.amount()));
+            }
+        }
+
         while (!queue.isEmpty()) {
             RefundJob job = queue.peek();
             RefundResult r = paymentGateway.refund(job.transactionId, job.amount.doubleValue());
             if (!r.success()) {
                 log.warn("Retry refund still failing for company={}, transactionId={}", companyName, job.transactionId);
+                pendingRefunds.put(companyName, queue);
                 return; // stop on first failure, leave queue for next retry
             }
             queue.poll();
         }
+
         pendingRefunds.remove(companyName);
         company.completeClosure();
         companyRepository.save(company);

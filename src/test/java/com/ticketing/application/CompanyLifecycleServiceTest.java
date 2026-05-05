@@ -207,6 +207,34 @@ public class CompanyLifecycleServiceTest {
         verify(paymentGateway, atLeastOnce()).refund(anyString(), anyDouble());
     }
 
+    @Test
+    public void GivenPendingClosureAfterServiceRestart_WhenRetry_ThenRehydratesFromRepoAndCloses() {
+        // 1) seed an event + a completed purchase so there's data to refund
+        Event e = seedEvent(UUID.randomUUID());
+        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e.getId(), COMPANY,
+                UUID.randomUUID(), "txn-rehydrate", new BigDecimal("42.00")));
+
+        // 2) drive into PENDING_CLOSURE via a failing gateway
+        when(paymentGateway.refund(anyString(), anyDouble()))
+                .thenReturn(RefundResult.failed("down"));
+        service.permanentCloseByFounder(FOUNDER_TOKEN, COMPANY);
+        assertEquals(CompanyStatus.PENDING_CLOSURE,
+                companyRepo.findByName(COMPANY).orElseThrow().getStatus());
+
+        // 3) simulate a service restart: build a fresh service whose in-memory queue is empty
+        CompanyLifecycleService freshService = new CompanyLifecycleService(
+                companyRepo, eventRepo, memberRepo, purchaseRepo, paymentGateway, tokens);
+
+        // 4) gateway recovers; retry must rehydrate the queue from completedPurchaseRepo
+        when(paymentGateway.refund(anyString(), anyDouble()))
+                .thenReturn(RefundResult.successful("ref-ok"));
+
+        freshService.retryPendingRefunds(COMPANY);
+
+        assertEquals(CompanyStatus.CLOSED,
+                companyRepo.findByName(COMPANY).orElseThrow().getStatus());
+    }
+
     // --- negatives ---
 
     @Test
