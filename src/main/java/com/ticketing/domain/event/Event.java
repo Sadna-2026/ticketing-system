@@ -205,11 +205,11 @@ public class Event{
     }
 
     public IPurchasePolicy getEventPurchasePolicy() {
-        return eventPurchasePolicy;
+        return purchasePolicy;
     }
 
     public IDiscountPolicy getEventDiscountPolicy() {
-        return eventDiscountPolicy;
+        return discountPolicy;
     }
 
     public void setVenueMap(VenueMap venueMap) {
