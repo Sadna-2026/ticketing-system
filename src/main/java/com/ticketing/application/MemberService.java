@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ public class MemberService {
     private final IMemberRepository memberRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
     private final ISessionTokenService sessionTokenService;
+    private final ConcurrentHashMap<String, Object> loginLocksByUsername = new ConcurrentHashMap<>();
     private static final System.Logger logger = System.getLogger(MemberService.class.getName());
 
     public MemberService(
@@ -140,6 +142,17 @@ public class MemberService {
         }
 
         String username = normalizeUsername(request.username());
+        synchronized (loginLockFor(username)) {
+            return loginAuthenticatedGuest(username, request.password(), guestToken);
+        }
+    }
+
+    private LoginResponse loginAuthenticatedGuest(String username, String password, String guestToken) {
+        if (!sessionTokenService.isValid(guestToken)) {
+            logger.log(System.Logger.Level.WARNING, "Failed login: guest session was already upgraded");
+            return LoginResponse.failure("Invalid session token.");
+        }
+
         Member member = memberRepository.findByUsername(username).orElse(null);
 
         if (member == null) {
@@ -147,7 +160,7 @@ public class MemberService {
             return LoginResponse.failure("Invalid username or password.");
         }
 
-        if (!passwordEncryptionUtils.matches(request.password(), member.getEncryptedPassword())) {
+        if (!passwordEncryptionUtils.matches(password, member.getEncryptedPassword())) {
             logger.log(System.Logger.Level.WARNING, "Failed login: wrong password for username " + username);
             return LoginResponse.failure("Invalid username or password.");
         }
@@ -161,6 +174,10 @@ public class MemberService {
 
         logger.log(System.Logger.Level.INFO, "Member logged in: " + member.getId());
         return LoginResponse.success(MemberMapper.toDto(member), memberToken);
+    }
+
+    private Object loginLockFor(String username) {
+        return loginLocksByUsername.computeIfAbsent(username, ignored -> new Object());
     }
 
     public UpdateMemberDetailsResponse updateIdentifyingDetails(
