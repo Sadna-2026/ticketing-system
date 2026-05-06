@@ -41,7 +41,7 @@ public class OrderService {
     private final IEventRepository eventRepository;
     private final ISystemClock systemClock;
     private final IMemberRepository memberRepository;
-    private final IPaymentGateway paymentGateway;
+    private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketSupplyGateway> ticketSupplyGateways;
     private final TicketSelectionService ticketSelectionService;
 
@@ -50,7 +50,7 @@ public class OrderService {
                         IEventRepository eventRepository,
                         ISystemClock systemClock) {
         this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                null, new StubPaymentGateway(), List.of(new StubTicketSupplyGateway()),
+                null, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()),
                 new TicketSelectionService(eventRepository));
     }
 
@@ -59,10 +59,10 @@ public class OrderService {
                         IEventRepository eventRepository,
                         ISystemClock systemClock,
                         IMemberRepository memberRepository,
-                        IPaymentGateway paymentGateway,
+                        List<IPaymentGateway> paymentGateways,
                         ITicketSupplyGateway ticketSupplyGateway) {
         this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                memberRepository, paymentGateway, List.of(ticketSupplyGateway),
+                memberRepository, paymentGateways, List.of(ticketSupplyGateway),
                 new TicketSelectionService(eventRepository));
     }
 
@@ -71,14 +71,14 @@ public class OrderService {
                         IEventRepository eventRepository,
                         ISystemClock systemClock,
                         IMemberRepository memberRepository,
-                        IPaymentGateway paymentGateway,
+                        List<IPaymentGateway> paymentGateways,
                         List<ITicketSupplyGateway> ticketSupplyGateways,
                         TicketSelectionService ticketSelectionService) {
         if (orderRepository == null) throw new IllegalArgumentException("orderRepository is required");
         if (sessionTokenService == null) throw new IllegalArgumentException("sessionTokenService is required");
         if (eventRepository == null) throw new IllegalArgumentException("eventRepository is required");
         if (systemClock == null) throw new IllegalArgumentException("systemClock is required");
-        if (paymentGateway == null) throw new IllegalArgumentException("paymentGateway is required");
+        if (paymentGateways == null || paymentGateways.isEmpty()) throw new IllegalArgumentException("paymentGateways is required");
         if (ticketSupplyGateways == null || ticketSupplyGateways.isEmpty()) throw new IllegalArgumentException("ticketSupplyGateways is required");
         if (ticketSelectionService == null) throw new IllegalArgumentException("ticketSelectionService is required");
 
@@ -87,7 +87,7 @@ public class OrderService {
         this.eventRepository = eventRepository;
         this.systemClock = systemClock;
         this.memberRepository = memberRepository;
-        this.paymentGateway = paymentGateway;
+        this.paymentGateways = paymentGateways;
         this.ticketSupplyGateways = ticketSupplyGateways;
         this.ticketSelectionService = ticketSelectionService;
     }
@@ -180,12 +180,23 @@ public class OrderService {
         order.startCheckout();
         orderRepository.save(order);
 
-        PaymentResult payment = paymentGateway.charge(finalAmount,
-                new PaymentDetails(order.getId(), event.getId(), memberId, buyerContact.getEmail()));
-        if (!payment.success()) {
+        PaymentResult payment = null;
+        for (IPaymentGateway gateway : paymentGateways) {
+            try {
+                payment = gateway.charge(finalAmount,
+                        new PaymentDetails(order.getId(), event.getId(), memberId, buyerContact.getEmail()));
+                if (payment != null && payment.success()) {
+                    break;
+                }
+            } catch (Exception e) {
+                log.error("Payment Gateway failed with exception", e);
+            }
+        }
+
+        if (payment == null || !payment.success()) {
             order.revertToActive();
             orderRepository.save(order);
-            throw new IllegalStateException("Payment failed: " + payment.errorMessage());
+            throw new IllegalStateException("Payment failed: " + (payment != null ? payment.errorMessage() : "All gateways failed"));
         }
 
         SupplyResult supply = null;
@@ -331,11 +342,28 @@ public class OrderService {
         return tickets;
     }
 
+    public void refundEventPurchases(UUID eventId) {
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
+        for (CompletedPurchase purchase : purchases) {
+            refundPayment(purchase.transactionId(), purchase.amount());
+        }
+    }
+
     private void refundPayment(String transactionId, BigDecimal amount) {
-        RefundResult refund = paymentGateway.refund(transactionId, amount.doubleValue());
-        if (!refund.success()) {
+        RefundResult refund = null;
+        for (IPaymentGateway gateway : paymentGateways) {
+            try {
+                refund = gateway.refund(transactionId, amount.doubleValue());
+                if (refund != null && refund.success()) {
+                    break;
+                }
+            } catch (Exception e) {
+                log.error("Refund Gateway failed with exception", e);
+            }
+        }
+        if (refund == null || !refund.success()) {
             log.error("ESCALATION: Refund failed after ticket supply failure: transactionId={}, reason={}",
-                    transactionId, refund.errorMessage());
+                    transactionId, refund != null ? refund.errorMessage() : "All gateways failed");
         }
     }
 
