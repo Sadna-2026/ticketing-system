@@ -186,7 +186,9 @@ public class AdminServiceTest {
 
         assertEquals(2, results.size());
         assertEquals("Event1", results.get(0).eventName());
+        assertEquals("Comp1", results.get(0).companyName());
         assertEquals("Event2", results.get(1).eventName());
+        assertEquals("Comp2", results.get(1).companyName());
         verify(orderRepository).findCompletedByMemberId(buyerId);
     }
 
@@ -204,6 +206,7 @@ public class AdminServiceTest {
 
         assertEquals(1, results.size());
         assertEquals("Event1", results.get(0).eventName());
+        assertEquals(companyName, results.get(0).companyName());
         verify(orderRepository).findCompletedByCompanyName(companyName);
     }
     
@@ -234,5 +237,39 @@ public class AdminServiceTest {
 
         assertNotNull(results);
         assertTrue(results.isEmpty());
+    }
+
+    @Test
+    public void testHistoryPreservedAfterEventCancelled() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        UUID eventId = UUID.randomUUID();
+        CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), eventId, "Cancelled Event", "Comp1", UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
+        
+        // Even if the event is "cancelled" in the real system, the historical record in the repo remains.
+        when(orderRepository.findAllCompleted()).thenReturn(List.of(p1));
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, null);
+
+        assertEquals(1, results.size());
+        assertEquals("Cancelled Event", results.get(0).eventName());
+    }
+
+    @Test
+    public void testHistoryPreservedAfterCompanyClosure() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        String companyName = "Closed Company";
+        CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event1", companyName, UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
+        
+        // Even if the company is "closed" in the repository, the historical purchase record remains.
+        when(orderRepository.findCompletedByCompanyName(companyName)).thenReturn(List.of(p1));
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, companyName);
+
+        assertEquals(1, results.size());
+        assertEquals(companyName, results.get(0).companyName());
     }
 }
