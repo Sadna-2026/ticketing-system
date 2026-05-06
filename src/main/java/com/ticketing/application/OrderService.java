@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.PolicyResult;
@@ -24,6 +25,7 @@ import com.ticketing.domain.order.BuyerContactSnapshot;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
+import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.infrastructure.Interface.IEventRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
 import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
@@ -131,6 +133,7 @@ public class OrderService {
         validateToken(token);
         if (request == null) throw new IllegalArgumentException("request is required");
         ActiveOrder order = findActiveOrder(orderId);
+        validateOrderOwnership(token, order);
         if (!order.getEventId().equals(request.eventId())) {
             throw new IllegalArgumentException("Selection event does not match order event");
         }
@@ -323,16 +326,7 @@ public class OrderService {
         }
     }
 
-    private void releaseAllInventory(Event event, ActiveOrder order) {
-        for (OrderItem item : order.getItems()) {
-            InventoryZone zone = event.findZone(item.getZoneId());
-            if (item.isAssignedSeat()) {
-                zone.releaseSeat(item.getSeatId());
-            } else {
-                zone.releaseGA(item.getQuantity());
-            }
-        }
-    }
+    
 
     private void sellAllInventory(Event event, ActiveOrder order) {
         for (OrderItem item : order.getItems()) {
@@ -351,4 +345,119 @@ public class OrderService {
             eventRepository.save(event);
         }
     }
+
+    public void removeItemFromOrder(String token, UUID orderId, UUID itemId) {
+        validateToken(token);
+
+        ActiveOrder order = findActiveOrder(orderId);
+        validateOrderOwnership(token, order);
+        Event event = findEvent(order.getEventId());
+
+        OrderItem item = order.getItems().stream()
+                .filter(i -> i.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Item not found: " + itemId));
+
+        releaseInventoryForItem(event, item);
+        eventRepository.save(event);
+
+        order.removeItem(itemId);
+        orderRepository.save(order);
+        log.info("Item removed from order: orderId={}, itemId={}", orderId, itemId);
+    }
+
+    public ActiveOrderDto getActiveOrder(String token, UUID orderId) {
+        ActiveOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+        validateOrderOwnership(token, order);
+        return new ActiveOrderDto(
+                order.getId(),
+                order.getSessionId(),
+                order.getMemberId(),
+                order.getEventId(),
+                order.getCreatedAt(),
+                order.getStatus().name(),
+                order.getItemsDto(),
+                order.getTotalPrice()
+        );
+    }
+
+
+    public void updateGAQuantity(String token, UUID orderId, UUID zoneId, int newQuantity) {
+        validateToken(token);
+
+        ActiveOrder order = findActiveOrder(orderId);
+        validateOrderOwnership(token, order);
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+
+        OrderItem item = order.findItemByZoneId(zoneId)
+                .orElseThrow(() -> new IllegalArgumentException("No GA item found for zone: " + zoneId));
+
+        InventoryZone zone = event.findZone(zoneId);
+        int oldQuantity = item.getQuantity();
+        int diff = newQuantity - oldQuantity;
+
+        if (diff > 0) {
+            zone.lockGA(diff);
+        } else if (diff < 0) {
+            zone.releaseGA(-diff);
+        }
+        eventRepository.save(event);
+
+        item.updateQuantity(newQuantity);
+        orderRepository.save(order);
+        log.info("GA quantity updated: orderId={}, zoneId={}", orderId, zoneId);
+    }
+    
+    private void releaseAllInventory(Event event, ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            try {
+                releaseInventoryForItem(event, item);
+            } catch (Exception e) {
+                log.error("Failed to release inventory for item: {}", item.getId(), e);
+            }
+        }
+    }
+
+    public void cancelOrder(String token, UUID orderId) {
+        validateToken(token);
+
+        ActiveOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+        validateOrderOwnership(token, order);
+        if (order.getStatus() == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+
+        Event event = findEvent(order.getEventId());
+        releaseAllInventory(event, order);
+        eventRepository.save(event);
+
+        order.cancel();
+        orderRepository.save(order);
+        log.info("Order cancelled: orderId={}", orderId);
+    }
+
+    private void validateOrderOwnership(String token, ActiveOrder order) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Authentication token is required to access an order");
+        }
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+        if (!order.getSessionId().equals(sessionId)) {
+            throw new IllegalStateException("Order does not belong to this session");
+        }
+    }
+
+    private void releaseInventoryForItem(Event event, OrderItem item) {
+        InventoryZone zone = event.findZone(item.getZoneId());
+        if (item.isAssignedSeat()) {
+            zone.releaseSeat(item.getSeatId());
+        } else {
+            zone.releaseGA(item.getQuantity());
+        }
+    }
+
+    
 }
