@@ -1,5 +1,7 @@
 package com.ticketing.application;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -9,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.LotteryRegistrationRequest;
+import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
@@ -17,6 +21,8 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.VenueMap;
+import com.ticketing.domain.lottery.ILotteryRepository;
+import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -33,6 +39,8 @@ public class EventService {
     private final IMemberRepository memberRepository;
     private final IOrderRepository orderRepository;
     private final ISessionTokenService sessionTokenService;
+    private final ILotteryRepository lotteryRepository;
+    private final Clock clock;
 
     // Per-event lock so inventory edits on Event A don't block Event B.
     private final java.util.concurrent.ConcurrentHashMap<UUID, Object> eventLocks =
@@ -46,12 +54,25 @@ public class EventService {
                         ICompanyRepository companyRepository,
                         IMemberRepository memberRepository,
                         IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService) {
+                        ISessionTokenService sessionTokenService,
+                        ILotteryRepository lotteryRepository,
+                        Clock clock) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.orderRepository = orderRepository;
         this.sessionTokenService = sessionTokenService;
+        this.lotteryRepository = lotteryRepository;
+        this.clock = clock;
+    }
+
+    public EventService(IEventRepository eventRepository,
+                        ICompanyRepository companyRepository,
+                        IMemberRepository memberRepository,
+                        IOrderRepository orderRepository,
+                        ISessionTokenService sessionTokenService) {
+        this(eventRepository, companyRepository, memberRepository, orderRepository,
+                sessionTokenService, null, Clock.systemUTC());
     }
 
     /**
@@ -80,7 +101,9 @@ public class EventService {
                 request.schedule(),
                 request.lockTimerDuration(),
                 new AlwaysAllowPolicy(),
-                new NoDiscountPolicy());
+                new NoDiscountPolicy(),
+                request.saleMethod(),
+                request.lotteryWindow());
 
         Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
         for (CreateEventRequest.ZoneSpec spec : request.zones()) {
@@ -99,6 +122,54 @@ public class EventService {
         log.info("Event created: eventId={}, companyName={}, status=DRAFT",
                 event.getId(), company.getName());
         return event.getId();
+    }
+
+    /**
+     * UC-II.3.6 — Register a member for an event's purchase-right lottery.
+     * Validates: event supports lottery, registration window is open, member not already registered.
+     */
+    public LotteryRegistrationResponse registerForLottery(String token, LotteryRegistrationRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(request.eventId())
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
+
+        if (!event.isLottery()) {
+            log.warn("Lottery registration denied: event {} does not support lottery", request.eventId());
+            return LotteryRegistrationResponse.failure("Event does not support lottery sale method.");
+        }
+
+        Instant now = clock.instant();
+        if (!event.isLotteryRegistrationOpen(now)) {
+            log.warn("Lottery registration denied: registration window closed for event {}", request.eventId());
+            return LotteryRegistrationResponse.failure("Lottery registration window is closed.");
+        }
+
+        if (lotteryRepository.findByEventAndMember(request.eventId(), memberId).isPresent()) {
+            log.warn("Lottery registration denied: member {} already registered for event {}", memberId, request.eventId());
+            return LotteryRegistrationResponse.failure("Member is already registered for this lottery.");
+        }
+
+        // Validate zone exists in event
+        event.findZone(request.zoneId());
+
+        LotteryEntry entry = new LotteryEntry(
+                UUID.randomUUID(),
+                request.eventId(),
+                memberId,
+                request.zoneId(),
+                request.quantity(),
+                now
+        );
+        lotteryRepository.save(entry);
+
+        log.info("Lottery registration successful: memberId={}, eventId={}, entryId={}",
+                memberId, request.eventId(), entry.id());
+        return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
     public void cancelEvent(String token, UUID eventId) {
