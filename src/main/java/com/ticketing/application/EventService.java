@@ -21,7 +21,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.Interface.IEventRepository;
 
 public class EventService {
@@ -31,7 +31,7 @@ public class EventService {
     private final IEventRepository eventRepository;
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
-    private final IActiveOrderRepository activeOrderRepository;
+    private final IOrderRepository orderRepository;
     private final ISessionTokenService sessionTokenService;
 
     // Per-event lock so inventory edits on Event A don't block Event B.
@@ -45,12 +45,12 @@ public class EventService {
     public EventService(IEventRepository eventRepository,
                         ICompanyRepository companyRepository,
                         IMemberRepository memberRepository,
-                        IActiveOrderRepository activeOrderRepository,
+                        IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
-        this.activeOrderRepository = activeOrderRepository;
+        this.orderRepository = orderRepository;
         this.sessionTokenService = sessionTokenService;
     }
 
@@ -70,7 +70,7 @@ public class EventService {
 
         log.info("Creating event: companyName={}, memberId={}, name={}",
                 company.getName(), memberId, request.name());
-
+        //TODO : in V2 add to here support for choosing type of policies
         Event event = new Event(
                 UUID.randomUUID(),
                 company.getName(),
@@ -180,7 +180,7 @@ public class EventService {
     }
 
     private boolean hasActiveReservations(UUID eventId) {
-        return !activeOrderRepository.findActiveByEventId(eventId).isEmpty();
+        return !orderRepository.findActiveByEventId(eventId).isEmpty();
     }
 
     // --- UC-C.1: layout & inventory ---

@@ -158,7 +158,9 @@ class MemberServiceExitPlatformTest {
         RegisterRequest request = new RegisterRequest(
                 username,
                 email,
-                "123456"
+                "123456",
+                "0501234567",
+                "2000-01-01"
         );
 
         RegisterResponse response = memberService.register(request, guestToken);

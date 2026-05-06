@@ -1,13 +1,13 @@
 package com.ticketing.domain.member.request;
-
+import java.time.LocalDate;
 public record RegisterRequest(
         String username,
         String email,
         String password,
         String phoneNumber,
-        java.time.LocalDate dateOfBirth
+        LocalDate dateOfBirth
 ) {
-    public RegisterRequest(String username, String email, String password) {
-        this(username, email, password, null, null);
+    public RegisterRequest(String username, String email, String password, String phoneNumber, String dateOfBirth) {
+        this(username, email, password, phoneNumber, LocalDate.parse(dateOfBirth));
     }
 }

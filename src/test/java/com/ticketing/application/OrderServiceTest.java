@@ -48,9 +48,9 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
-import com.ticketing.infrastructure.InMemoryActiveOrderRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
 import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
@@ -60,7 +60,7 @@ import java.util.Base64;
 public class OrderServiceTest {
 
     private OrderService orderService;
-    private InMemoryActiveOrderRepository orderRepo;
+    private InMemoryOrderRepository orderRepo;
     private InMemoryEventRepository eventRepo;
     private InMemoryMemberRepository memberRepo;
     private SessionTokenService sessionService;
@@ -77,7 +77,7 @@ public class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        orderRepo = new InMemoryActiveOrderRepository();
+        orderRepo = new InMemoryOrderRepository();
         eventRepo = new InMemoryEventRepository();
         memberRepo = new InMemoryMemberRepository();
         paymentGateway = new TestPaymentGateway();
