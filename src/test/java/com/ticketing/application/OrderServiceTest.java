@@ -86,7 +86,7 @@ public class OrderServiceTest {
         sessionService = new SessionTokenService(secret, 120, new InMemorySessionTokenRepository());
 
         orderService = new OrderService(orderRepo, sessionService, eventRepo, clock,
-                memberRepo, paymentGateway, ticketSupplyGateway);
+                memberRepo, List.of(paymentGateway), ticketSupplyGateway);
 
         guestToken = sessionService.generateGuestToken();
         setUpPublishedEvent();
@@ -551,7 +551,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
         
         OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, paymentGateway, List.of(primaryGateway, secondaryGateway),
+                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
                 new TicketSelectionService(eventRepo));
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
@@ -575,7 +575,7 @@ public class OrderServiceTest {
         secondaryGateway.failIssue = true;
         
         OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, paymentGateway, List.of(primaryGateway, secondaryGateway),
+                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
                 new TicketSelectionService(eventRepo));
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
@@ -600,7 +600,7 @@ public class OrderServiceTest {
         primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success 
         
         OrderService partialService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, paymentGateway, List.of(primaryGateway),
+                memberRepo, List.of(paymentGateway), List.of(primaryGateway),
                 new TicketSelectionService(eventRepo));
 
         UUID orderId = partialService.createOrder(guestToken, eventId);
@@ -636,6 +636,72 @@ public class OrderServiceTest {
         // we at least ensure the flow acts correctly and does not throw UNHANDLED exceptions.
         ActiveOrder cancelled = orderRepo.findById(orderId).get();
         assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+    }
+
+    @Test
+    void GivenPrimaryPaymentFails_WhenCheckout_ThenFailsOverToSecondary() {
+        TestPaymentGateway primaryPayment = new TestPaymentGateway();
+        primaryPayment.failCharges = true;
+        TestPaymentGateway secondaryPayment = new TestPaymentGateway();
+        
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
+                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
+                new TicketSelectionService(eventRepo));
+
+        UUID orderId = failoverService.createOrder(guestToken, eventId);
+        failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+        UUID purchaseId = failoverService.checkout(guestToken, orderId, null);
+
+        assertNotNull(purchaseId);
+        assertEquals(1, primaryPayment.chargeCalls);
+        assertEquals(1, secondaryPayment.chargeCalls);
+        ActiveOrder completed = orderRepo.findById(orderId).get();
+        assertEquals(OrderStatus.COMPLETED, completed.getStatus());
+    }
+
+    @Test
+    void GivenAllPaymentGatewaysFail_WhenCheckout_ThenOrderRemainsActive() {
+        TestPaymentGateway primaryPayment = new TestPaymentGateway();
+        primaryPayment.failCharges = true;
+        TestPaymentGateway secondaryPayment = new TestPaymentGateway();
+        secondaryPayment.failCharges = true;
+        
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
+                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
+                new TicketSelectionService(eventRepo));
+
+        UUID orderId = failoverService.createOrder(guestToken, eventId);
+        failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+
+        assertThrows(IllegalStateException.class,
+                () -> failoverService.checkout(guestToken, orderId, null));
+        
+        assertEquals(1, primaryPayment.chargeCalls);
+        assertEquals(1, secondaryPayment.chargeCalls);
+        ActiveOrder active = orderRepo.findById(orderId).get();
+        assertEquals(OrderStatus.ACTIVE, active.getStatus());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+    }
+
+    @Test
+    void GivenEventWithCompletedPurchases_WhenRefundEventPurchases_ThenAllPurchasesRefunded() {
+        // Create a successful order to refund
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 2);
+        UUID purchaseId = orderService.checkout(guestToken, orderId, null);
+
+        assertNotNull(purchaseId);
+        assertEquals(0, paymentGateway.refundCalls); // Should be 0 before we call refundEventPurchases
+
+        // Now trigger the refund (which simulates the Event cancellation side-effect for OrderService)
+        orderService.refundEventPurchases(eventId);
+
+        // Verify that the refund was processed via the payment gateway
+        assertEquals(1, paymentGateway.refundCalls);
+        assertEquals(new BigDecimal("100.00"), paymentGateway.chargedAmount); // Original charge amount was 100
+        
+        // Ensure that the CompletedPurchase still exists but refund logic executed
+        assertTrue(orderRepo.findCompletedById(purchaseId).isPresent());
     }
 
 }
