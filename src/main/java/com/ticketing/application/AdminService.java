@@ -1,6 +1,7 @@
 package com.ticketing.application;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
@@ -20,18 +21,21 @@ public class AdminService {
     private final IMemberRepository memberRepository;
     private final ICompanyRepository companyRepository;
     private final ISessionTokenService sessionTokenService;
+    private final IAdminRepository adminRepository;
 
     public AdminService(
             IMemberRepository memberRepository,
             ICompanyRepository companyRepository,
-            ISessionTokenService sessionTokenService
+            ISessionTokenService sessionTokenService,
+            IAdminRepository adminRepository
     ) {
-        if (memberRepository == null || companyRepository == null || sessionTokenService == null) {
+        if (memberRepository == null || companyRepository == null || sessionTokenService == null || adminRepository == null) {
             throw new IllegalArgumentException("Dependencies cannot be null");
         }
         this.memberRepository = memberRepository;
         this.companyRepository = companyRepository;
         this.sessionTokenService = sessionTokenService;
+        this.adminRepository = adminRepository;
     }
 
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {
@@ -44,7 +48,7 @@ public class AdminService {
         Member target = memberRepository.findById(targetMemberId)
                 .orElseThrow(() -> new IllegalArgumentException("Target member not found: " + targetMemberId));
 
-        // 3. Sole Admin Check (Stubbed)
+        // 3. Sole Admin Check (Real)
         if (isSoleAdmin(targetMemberId)) {
             throw new IllegalStateException("SoleAdminProtection: Cannot remove the last system admin");
         }
@@ -79,8 +83,14 @@ public class AdminService {
         return perms != null && perms.contains(ADMIN_PERMISSION);
     }
 
-    // TODO: implement sole admin check when Admin aggregate is in scope
     private boolean isSoleAdmin(UUID targetId) {
-        return false;
+        // Check if the target member is also a system admin
+        boolean isTargetAdmin = adminRepository.findById(targetId).isPresent();
+        if (!isTargetAdmin) {
+            return false;
+        }
+
+        // If target is an admin, check if they are the last one
+        return adminRepository.findAll().size() <= 1;
     }
 }

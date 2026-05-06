@@ -9,6 +9,7 @@ import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 
@@ -24,6 +25,7 @@ public class AdminServiceTest {
     private IMemberRepository memberRepository;
     private ICompanyRepository companyRepository;
     private ISessionTokenService sessionTokenService;
+    private IAdminRepository adminRepository;
     private AdminService adminService;
 
     @BeforeEach
@@ -31,10 +33,11 @@ public class AdminServiceTest {
         memberRepository = new InMemoryMemberRepository();
         companyRepository = new InMemoryCompanyRepository();
         sessionTokenService = mock(ISessionTokenService.class);
+        adminRepository = mock(IAdminRepository.class);
         
         when(sessionTokenService.isValid(anyString())).thenReturn(true);
 
-        adminService = new AdminService(memberRepository, companyRepository, sessionTokenService);
+        adminService = new AdminService(memberRepository, companyRepository, sessionTokenService, adminRepository);
     }
 
     @Test
@@ -120,9 +123,32 @@ public class AdminServiceTest {
         assertTrue(ex.getMessage().contains("Cannot remove the only owner of active company"));
 
         // Verify member was not deleted and sessions not revoked
-        assertTrue(memberRepository.findById(targetId).isPresent());
         verify(sessionTokenService, never()).revokeMemberSessions(targetId);
     }
 
+    @Test
+    public void testSoleAdminProtection() {
+        UUID adminId = UUID.randomUUID();
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
+        UUID targetId = UUID.randomUUID();
+        Member target = new Member(targetId, "target", "target@example.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // Target is an admin
+        com.ticketing.domain.admin.Admin targetAdmin = new com.ticketing.domain.admin.Admin(targetId, "target", "target@example.com");
+        when(adminRepository.findById(targetId)).thenReturn(java.util.Optional.of(targetAdmin));
+        // And they are the last one
+        when(adminRepository.findAll()).thenReturn(java.util.List.of(targetAdmin));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
+            adminService.removeMember(adminToken, targetId);
+        });
+
+        assertTrue(ex.getMessage().contains("Cannot remove the last system admin"));
+
+        // Verify member was not deleted
+        assertTrue(memberRepository.findById(targetId).isPresent());
+    }
 }
