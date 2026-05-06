@@ -1,14 +1,10 @@
 package com.ticketing.domain.member.response;
 
-
-import java.util.UUID;
-
 import com.ticketing.domain.member.MemberDto;
 
 public record RegisterResponse(
         boolean success,
         String message,
-        UUID memberId,
         MemberDto member,
         String sessionToken
 ) {
@@ -16,7 +12,6 @@ public record RegisterResponse(
         return new RegisterResponse(
                 true,
                 "Member registered and logged in successfully.",
-                member.memberId(),
                 member,
                 sessionToken
         );
@@ -26,7 +21,6 @@ public record RegisterResponse(
         return new RegisterResponse(
                 false,
                 message,
-                null,
                 null,
                 null
         );
