@@ -157,10 +157,11 @@ public class CompanyServiceIntegrationTest {
         Member target = new Member(targetId, "target", "target@test.com", "pass");
         memberRepository.saveIfUsernameAndEmailAvailable(target);
 
-        // 4. Attempt offer - since InMemoryEventPublisher swallows exceptions in listeners
-        // to prevent one listener from breaking others, we don't expect an exception here.
-        // Instead, we verify that the side effect (adding the offer) DID NOT happen.
-        companyService.offerRoleAppointment(token, companyName, targetId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+        // 4. Attempt offer - with the updated InMemoryEventPublisher, exceptions now propagate.
+        // We expect a PermissionDenied error when an unauthorized user attempts to offer a role.
+        assertThrows(com.ticketing.domain.member.Member.PermissionDenied.class, () -> 
+            companyService.offerRoleAppointment(token, companyName, targetId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet())
+        );
 
         assertEquals(0, memberRepository.findById(targetId).get().getPendingOffers().size(), 
             "Offer should not have been added due to unauthorized appointer");
