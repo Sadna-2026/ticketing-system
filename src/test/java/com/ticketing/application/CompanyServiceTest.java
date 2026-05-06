@@ -1,16 +1,23 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.Collections;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -22,7 +29,6 @@ import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-import static org.mockito.ArgumentMatchers.*;
 
 public class CompanyServiceTest {
 
@@ -62,6 +68,8 @@ public class CompanyServiceTest {
         when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
         when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(memberId);
 
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(memberId, "founder", "founder@test.com", "pass"));
+
         String result = companyService.openProductionCompany(token, companyName, "Description");
 
         assertEquals(companyName, result);
@@ -76,6 +84,8 @@ public class CompanyServiceTest {
 
         when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
         when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(memberId);
+
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(memberId, "founder", "founder@test.com", "pass"));
 
         companyService.openProductionCompany(token, companyName, "First");
 
