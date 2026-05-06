@@ -13,7 +13,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
 
 /**
  * Read-side history queries for a company's completed purchases.
@@ -25,16 +25,16 @@ public class CompanyHistoryService {
 
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
-    private final IOrderRepository orderRepository;
+    private final ICompletedPurchaseRepository completedPurchaseRepository;
     private final ISessionTokenService sessionTokenService;
 
     public CompanyHistoryService(ICompanyRepository companyRepository,
                                  IMemberRepository memberRepository,
-                                 IOrderRepository orderRepository,
+                                 ICompletedPurchaseRepository completedPurchaseRepository,
                                  ISessionTokenService sessionTokenService) {
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
-        this.orderRepository = orderRepository;
+        this.completedPurchaseRepository = completedPurchaseRepository;
         this.sessionTokenService = sessionTokenService;
     }
 
@@ -53,7 +53,7 @@ public class CompanyHistoryService {
         }
 
         log.info("Purchase history requested: company={}, by={}", company.getName(), memberId);
-        return orderRepository.findCompletedByCompanyName(company.getName()).stream()
+        return completedPurchaseRepository.findByCompanyName(company.getName()).stream()
                 .map(PurchaseRecordDTO::from)
                 .toList();
     }

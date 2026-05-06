@@ -1,17 +1,17 @@
 package com.ticketing.application.concurrency;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
-
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.ticketing.application.CompanyService;
 import com.ticketing.application.INotificationService;
@@ -22,6 +22,7 @@ import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
+import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 
@@ -58,7 +59,7 @@ public class CompanyServiceConcurrencyTest {
             eventPublisher,
             sessionTokenService,
             notificationService,
-            new com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository()
+            new InMemoryCompletedPurchaseRepository()
         );
         companyService = initService.initialize();
     }
