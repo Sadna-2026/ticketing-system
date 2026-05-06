@@ -1,7 +1,7 @@
 package com.ticketing.application;
 
-import java.util.UUID;
 import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,11 +10,11 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
-import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.event.IEventPublisher;
-import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.communication.RevokePersonnelEvent;
+import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferResponseEvent;
 
@@ -92,6 +92,35 @@ public class CompanyService {
 
         log.info("Role appointment requested: company={}, appointer={}, target={}, role={}", 
             companyName, appointerId, targetMemberId, role);
+    }
+
+    public void changeManagerPermissions(
+            String token,
+            String companyName,
+            UUID targetMemberId,
+            Set<ManagerPermission> newPermissions
+    ) {
+        UUID callerId = validateToken(token);
+
+        if (callerId == null) {
+            throw new IllegalArgumentException("A guest user cannot change manager permissions. Please log in.");
+        }
+
+        if (targetMemberId == null) {
+            throw new IllegalArgumentException("Target member ID is required");
+        }
+
+        if (!companyRepository.existsByName(companyName)) {
+            throw new IllegalArgumentException("Company not found: " + companyName);
+        }
+
+        // Publish event for MemberService/Handler to handle authorization and update
+        ManagerPermissionsChangedEvent event = 
+            new ManagerPermissionsChangedEvent(callerId, targetMemberId, companyName, newPermissions);
+        eventPublisher.publish(event);
+
+        log.info("Manager permissions change requested: company={}, caller={}, target={}", 
+            companyName, callerId, targetMemberId);
     }
 
     public void respondToRoleAppointment(
