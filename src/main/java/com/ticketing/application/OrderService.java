@@ -500,5 +500,20 @@ public class OrderService {
         }
     }
 
-    
+    public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
+        validateToken(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests do not have a purchase history");
+        }
+
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByMemberId(memberId);
+        
+        List<PurchaseRecordDTO> result = new ArrayList<>();
+        for (CompletedPurchase p : purchases) {
+            result.add(PurchaseRecordDTO.from(p));
+        }
+        
+        return result;
+    }
 }
