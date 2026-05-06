@@ -25,9 +25,9 @@ public class InMemoryEventPublisher implements IEventPublisher {
                 try {
                     listener.handle(event);
                 } catch (Exception e) {
-                    // Log but don't propagate - prevent one listener from breaking others
                     System.err.println("Error handling event of type " + eventType + ": " + e.getMessage());
-                    e.printStackTrace();
+                    if (e instanceof RuntimeException) throw (RuntimeException) e;
+                    throw new RuntimeException("Event listener failed", e);
                 }
             }
         }

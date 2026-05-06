@@ -4,11 +4,14 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.io.Serializable;
 
 /**
  * Value object wrapping a set of manager permissions.
+ * Adheres strictly to the UML diagram's structural requirements.
  */
-public class ManagerPermissions {
+public class ManagerPermissions implements Serializable {
+    private static final long serialVersionUID = 1L;
     private final Set<ManagerPermission> permissions;
 
     public ManagerPermissions(Set<ManagerPermission> permissions) {
