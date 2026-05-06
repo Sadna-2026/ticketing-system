@@ -1,18 +1,18 @@
 package com.ticketing.domain.event;
 
-import java.util.List;
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.ticketing.domain.order.ActiveOrder;
+import java.util.List;
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+
 import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
 class PolicyFrameworkTest {
@@ -20,10 +20,9 @@ class PolicyFrameworkTest {
     @Test
     void testAlwaysAllowPolicy() {
         IPurchasePolicy policy = new AlwaysAllowPolicy();
-        ActiveOrder mockOrder = mock(ActiveOrder.class);
         UUID memberId = UUID.randomUUID();
         
-        PolicyResult result = policy.isAllowed(mockOrder, memberId);
+        PolicyResult result = policy.isAllowed(null, memberId);
         
         assertTrue(result.allowed());
         assertNull(result.errorCode());

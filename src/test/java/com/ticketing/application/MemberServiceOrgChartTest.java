@@ -60,6 +60,19 @@ public class MemberServiceOrgChartTest {
     }
 
     @Test
+    public void testGetOrganizationChart_InvalidToken_ThrowsIllegalArgumentException() {
+        when(sessionTokenService.isValid(AUTH_TOKEN)).thenReturn(false);
+        assertThrows(IllegalArgumentException.class, () -> memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME));
+    }
+
+    @Test
+    public void testGetOrganizationChart_GuestToken_ThrowsSecurityException() {
+        when(sessionTokenService.isValid(AUTH_TOKEN)).thenReturn(true);
+        when(sessionTokenService.extractMemberId(AUTH_TOKEN)).thenReturn(null);
+        assertThrows(SecurityException.class, () -> memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME));
+    }
+
+    @Test
     public void testGetOrganizationChart_Success() {
         // Setup Owner (Root)
         Member owner = new Member(ownerId, "owner", "o@test.com", "pass");

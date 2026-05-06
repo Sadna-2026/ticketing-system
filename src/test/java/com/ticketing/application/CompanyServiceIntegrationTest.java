@@ -1,16 +1,24 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.CompanyService;
-import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -19,17 +27,14 @@ import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
-import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.PendingRoleOffer;
-import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
+import com.ticketing.domain.member.PermissionDeniedException;
+import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-
-import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
 
 /**
  * Integration tests for CompanyService with real (non-mocked) repositories
@@ -157,10 +162,11 @@ public class CompanyServiceIntegrationTest {
         Member target = new Member(targetId, "target", "target@test.com", "pass");
         memberRepository.saveIfUsernameAndEmailAvailable(target);
 
-        // 4. Attempt offer - since InMemoryEventPublisher swallows exceptions in listeners
-        // to prevent one listener from breaking others, we don't expect an exception here.
-        // Instead, we verify that the side effect (adding the offer) DID NOT happen.
-        companyService.offerRoleAppointment(token, companyName, targetId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+        // 4. Attempt offer - with the updated InMemoryEventPublisher, exceptions now propagate.
+        // We expect a PermissionDeniedException when an unauthorized user attempts to offer a role.
+        assertThrows(PermissionDeniedException.class, () -> 
+            companyService.offerRoleAppointment(token, companyName, targetId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet())
+        );
 
         assertEquals(0, memberRepository.findById(targetId).get().getPendingOffers().size(), 
             "Offer should not have been added due to unauthorized appointer");
