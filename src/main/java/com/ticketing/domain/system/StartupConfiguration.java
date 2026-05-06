@@ -11,6 +11,7 @@ public class StartupConfiguration {
     private final boolean clearingServiceConfigured;
     private final boolean supplyServiceConfigured;
     private boolean active;
+    private boolean marketOpen;
 
     public StartupConfiguration() {
         this("admin", "admin@ticketing.local", "admin123", true, true);
@@ -56,5 +57,13 @@ public class StartupConfiguration {
 
     public void activate() {
         this.active = true;
+    }
+
+    public boolean isMarketOpen() {
+        return marketOpen;
+    }
+
+    public void openMarket() {
+        this.marketOpen = true;
     }
 }
