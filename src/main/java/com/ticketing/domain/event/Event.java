@@ -34,8 +34,8 @@ public class Event{
     private VenueMap venueMap;
   
     // TODO(v2): add purchase/discount policies
-    private final IPurchasePolicy eventPurchasePolicy;
-    private final IDiscountPolicy eventDiscountPolicy;
+    private final IPurchasePolicy purchasePolicy;
+    private final IDiscountPolicy discountPolicy;
     private int version;
 
     /**
@@ -73,8 +73,8 @@ public class Event{
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
 
-        this.eventPurchasePolicy = eventPurchasePolicy;
-        this.eventDiscountPolicy = eventDiscountPolicy;
+        this.purchasePolicy = eventPurchasePolicy;
+        this.discountPolicy = eventDiscountPolicy;
 
         this.version = 0;
     }
