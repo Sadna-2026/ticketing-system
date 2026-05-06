@@ -4,6 +4,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -208,6 +213,89 @@ class MemberServiceLoginTest {
         assertNull(sessionTokenService.extractMemberId(guestToken));
     }
 
+    @Test
+    @DisplayName("ConcurrentLogin - one guest token can only be upgraded once")
+    void GivenSameGuestToken_WhenLoginConcurrently_ThenOnlyOneLoginSucceeds() throws Exception {
+        // Arrange
+        registerMember("tamar", "tamar@example.com", "123456");
+        String guestToken = sessionTokenService.generateGuestToken();
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successes = new AtomicInteger(0);
+        AtomicInteger failures = new AtomicInteger(0);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        Runnable loginAttempt = () -> {
+            try {
+                startLatch.await();
+                LoginResponse response = memberService.login(new LoginRequest("tamar", "123456"), guestToken);
+                if (response.success()) {
+                    successes.incrementAndGet();
+                } else {
+                    failures.incrementAndGet();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                failures.incrementAndGet();
+            }
+        };
+
+        executor.submit(loginAttempt);
+        executor.submit(loginAttempt);
+
+        // Act
+        startLatch.countDown();
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+
+        // Assert
+        assertEquals(1, successes.get());
+        assertEquals(1, failures.get());
+        assertFalse(sessionTokenService.isValid(guestToken));
+    }
+
+    @Test
+    @DisplayName("ConcurrentLogin - different users can log in independently")
+    void GivenDifferentGuestTokensAndUsers_WhenLoginConcurrently_ThenBothLoginsSucceed() throws Exception {
+        // Arrange
+        registerMember("tamar", "tamar@example.com", "123456");
+        registerMember("daniel", "daniel@example.com", "123456");
+        String tamarGuestToken = sessionTokenService.generateGuestToken();
+        String danielGuestToken = sessionTokenService.generateGuestToken();
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successes = new AtomicInteger(0);
+        AtomicInteger failures = new AtomicInteger(0);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        Runnable tamarLogin = concurrentLoginAttempt(
+                startLatch,
+                successes,
+                failures,
+                new LoginRequest("tamar", "123456"),
+                tamarGuestToken
+        );
+        Runnable danielLogin = concurrentLoginAttempt(
+                startLatch,
+                successes,
+                failures,
+                new LoginRequest("daniel", "123456"),
+                danielGuestToken
+        );
+
+        executor.submit(tamarLogin);
+        executor.submit(danielLogin);
+
+        // Act
+        startLatch.countDown();
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+
+        // Assert
+        assertEquals(2, successes.get());
+        assertEquals(0, failures.get());
+        assertFalse(sessionTokenService.isValid(tamarGuestToken));
+        assertFalse(sessionTokenService.isValid(danielGuestToken));
+    }
+
     private RegisterResponse registerMember(String username, String email, String password) {
         String guestToken = sessionTokenService.generateGuestToken();
 
@@ -220,5 +308,28 @@ class MemberServiceLoginTest {
         assertNotNull(response.sessionToken());
 
         return response;
+    }
+
+    private Runnable concurrentLoginAttempt(
+            CountDownLatch startLatch,
+            AtomicInteger successes,
+            AtomicInteger failures,
+            LoginRequest request,
+            String guestToken
+    ) {
+        return () -> {
+            try {
+                startLatch.await();
+                LoginResponse response = memberService.login(request, guestToken);
+                if (response.success()) {
+                    successes.incrementAndGet();
+                } else {
+                    failures.incrementAndGet();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                failures.incrementAndGet();
+            }
+        };
     }
 }
