@@ -253,3 +253,11 @@ Modifications made:
 - Print-to-PDF instructions in the README so a human can convert to the PNG/PDF format the spec asks for.
 Initial gaps in understanding (if any):
 Final understanding (brief explanation in your own words):
+
+## Feature / Component: UC-I.4 (Ticket Issuance Failover & Acceptance Tests)
+Purpose of LLM use: Verify UC-I.4 implementation status, implement missing ticket supply gateway failover, refund escalation logic, and add TDD tests for edge cases.
+Summary of prompt(s):
+1. "check if this was implemented" based on ITicketSupplyGateway and OrderService rules.
+2. "add tests for this use case. checkout the format that is already exists... checked all acceptance tests"
+Output received (short description):
+- Added 4 acceptance tests to `OrderServiceTest` (for secondary failover, all-failing, partial cancellations, and refund rejection).

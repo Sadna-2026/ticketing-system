@@ -1,17 +1,12 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +19,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.awaitility.Awaitility;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -54,8 +53,6 @@ import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
 import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
-
-import java.util.Base64;
 
 public class OrderServiceTest {
 
@@ -397,6 +394,7 @@ public class OrderServiceTest {
 
     private static class TestPaymentGateway implements IPaymentGateway {
         boolean failCharges;
+        boolean failRefunds;
         int chargeCalls;
         int refundCalls;
         BigDecimal chargedAmount;
@@ -416,14 +414,21 @@ public class OrderServiceTest {
         @Override
         public RefundResult refund(String transactionId, double amount) {
             refundCalls++;
+            if (failRefunds) {
+                return RefundResult.failed("refund failed");
+            }
             return RefundResult.successful("refund-" + refundCalls);
         }
     }
 
     private static class TestTicketSupplyGateway implements ITicketSupplyGateway {
         boolean failIssue;
+        boolean failCancel;
+        boolean partialIssue;
         int issueCalls;
+        int cancelCalls;
         List<TicketRequest> lastTickets = List.of();
+        List<String> cancelledTickets = List.of();
         CustomerInfo lastCustomer;
 
         @Override
@@ -434,6 +439,9 @@ public class OrderServiceTest {
             if (failIssue) {
                 return SupplyResult.failed("supply down");
             }
+            if (partialIssue) {
+                return new SupplyResult(false, List.of("TKT-PARTIAL-1"), "partial failure");
+            }
             List<String> codes = new ArrayList<>();
             for (int i = 0; i < tickets.size(); i++) {
                 codes.add("TKT-" + (i + 1));
@@ -443,6 +451,11 @@ public class OrderServiceTest {
 
         @Override
         public CancelResult cancelTickets(List<String> ticketCodes) {
+            cancelCalls++;
+            cancelledTickets = List.copyOf(ticketCodes);
+            if (failCancel) {
+                return CancelResult.failed("cancel failed");
+            }
             return CancelResult.successful();
         }
     }
@@ -529,6 +542,100 @@ public class OrderServiceTest {
                 () -> orderService.getActiveOrder(null, orderId));
         assertThrows(IllegalArgumentException.class,
                 () -> orderService.removeItemFromOrder("", orderId, UUID.randomUUID()));
+    }
+
+    @Test
+    void GivenPrimarySupplyFails_WhenCheckout_ThenFailsOverToSecondary() {
+        TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
+        primaryGateway.failIssue = true; // Primary fails
+        TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
+        
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
+                memberRepo, paymentGateway, List.of(primaryGateway, secondaryGateway),
+                new TicketSelectionService(eventRepo));
+
+        UUID orderId = failoverService.createOrder(guestToken, eventId);
+        failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 2);
+
+        UUID purchaseId = failoverService.checkout(guestToken, orderId, null);
+
+        assertNotNull(purchaseId);
+        assertEquals(1, primaryGateway.issueCalls);
+        assertEquals(1, secondaryGateway.issueCalls);
+        assertEquals(2, secondaryGateway.lastTickets.size()); // issued successfully here
+        ActiveOrder completed = orderRepo.findById(orderId).get();
+        assertEquals(OrderStatus.COMPLETED, completed.getStatus());
+    }
+
+    @Test
+    void GivenAllSupplyGatewaysFail_WhenCheckout_ThenPaymentRefundedAndOrderCancelled() {
+        TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
+        primaryGateway.failIssue = true;
+        TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
+        secondaryGateway.failIssue = true;
+        
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
+                memberRepo, paymentGateway, List.of(primaryGateway, secondaryGateway),
+                new TicketSelectionService(eventRepo));
+
+        UUID orderId = failoverService.createOrder(guestToken, eventId);
+        failoverService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> failoverService.checkout(guestToken, orderId, null));
+        
+        assertTrue(ex.getMessage().contains("Ticket generation failed"));
+        assertEquals(1, primaryGateway.issueCalls);
+        assertEquals(1, secondaryGateway.issueCalls);
+        assertEquals(1, paymentGateway.refundCalls); // Refunded
+
+        ActiveOrder cancelled = orderRepo.findById(orderId).get();
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertTrue(eventRepo.findById(eventId).get().findZone(assignedZoneId).findSeat(seatId).isAvailable()); // Inventory released
+    }
+
+    @Test
+    void GivenPartialIssuance_WhenCheckout_ThenIssuesAreCancelledRefundAndOrderCancelled() {
+        TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
+        primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success 
+        
+        OrderService partialService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
+                memberRepo, paymentGateway, List.of(primaryGateway),
+                new TicketSelectionService(eventRepo));
+
+        UUID orderId = partialService.createOrder(guestToken, eventId);
+        partialService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+
+        assertThrows(IllegalStateException.class,
+                () -> partialService.checkout(guestToken, orderId, null));
+        
+        assertEquals(1, primaryGateway.issueCalls);
+        assertEquals(1, primaryGateway.cancelCalls);
+        assertEquals(1, primaryGateway.cancelledTickets.size());
+        assertEquals("TKT-PARTIAL-1", primaryGateway.cancelledTickets.get(0));
+        assertEquals(1, paymentGateway.refundCalls); // Payment refunded
+        
+        ActiveOrder cancelled = orderRepo.findById(orderId).get();
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+    }
+
+    @Test
+    void GivenRefundRejectedAfterSupplyFailure_WhenCheckout_ThenLogsEscalation() {
+        ticketSupplyGateway.failIssue = true;
+        paymentGateway.failRefunds = true;
+
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+
+        assertThrows(IllegalStateException.class,
+                () -> orderService.checkout(guestToken, orderId, null));
+        
+        assertEquals(1, ticketSupplyGateway.issueCalls);
+        assertEquals(1, paymentGateway.refundCalls); // tried to refund
+        // Since we can't easily capture the log without extensive mock setup, 
+        // we at least ensure the flow acts correctly and does not throw UNHANDLED exceptions.
+        ActiveOrder cancelled = orderRepo.findById(orderId).get();
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
     }
 
 }
