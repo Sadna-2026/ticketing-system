@@ -446,4 +446,89 @@ public class OrderServiceTest {
             return CancelResult.successful();
         }
     }
+
+    @Test
+    void GivenActiveOrder_WhenGetActiveOrder_ThenReturnsDtoWithCorrectData() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
+
+        var dto = orderService.getActiveOrder(guestToken, orderId);
+
+        assertEquals(orderId, dto.getId());
+        assertEquals(sessionService.extractSessionId(guestToken), dto.getSessionId());
+        assertEquals(eventId, dto.getEventId());
+        assertEquals("ACTIVE", dto.getStatus());
+        assertEquals(1, dto.getItems().size());
+        assertEquals(new BigDecimal("150.00"), dto.getTotalPrice());
+    }
+
+    @Test
+    void GivenGAZoneWithLimitedInventory_WhenAddBeyondAvailable_ThenRejectsAndInventoryUnchanged() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+
+        // GA zone has 100 tickets available — try to lock 101
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 101));
+
+        // Verify inventory unchanged
+        Event event = eventRepo.findById(eventId).get();
+        assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
+        assertEquals(0, event.findZone(gaZoneId).getLockedCount());
+    }
+
+    @Test
+    void GivenAlreadyLockedSeat_WhenAnotherOrderTriesToLock_ThenRejects() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
+
+        // Second session tries to lock the same seat
+        String token2 = sessionService.generateGuestToken();
+        UUID orderId2 = orderService.createOrder(token2, eventId);
+
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addSeatToOrder(token2, orderId2, assignedZoneId, seatId));
+    }
+
+    @Test
+    void GivenOrderOwnedBySessionA_WhenSessionBTriesToModify_ThenRejects() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
+
+        // Different session tries to modify
+        String otherToken = sessionService.generateGuestToken();
+
+        // Cannot add tickets
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(otherToken, orderId, gaZoneId, 1));
+
+        // Cannot remove items
+        ActiveOrder order = orderRepo.findById(orderId).orElseThrow();
+        UUID itemId = order.getItems().get(0).getId();
+        assertThrows(IllegalStateException.class,
+                () -> orderService.removeItemFromOrder(otherToken, orderId, itemId));
+
+        // Cannot cancel
+        assertThrows(IllegalStateException.class,
+                () -> orderService.cancelOrder(otherToken, orderId));
+
+        // Cannot view
+        assertThrows(IllegalStateException.class,
+                () -> orderService.getActiveOrder(otherToken, orderId));
+
+        // Original order is still intact
+        ActiveOrder intact = orderRepo.findById(orderId).orElseThrow();
+        assertTrue(intact.isActive());
+        assertEquals(3, intact.getTotalTicketCount());
+    }
+
+    @Test
+    void GivenNoToken_WhenTryToAccessOrder_ThenRejectsWithAuthError() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.getActiveOrder(null, orderId));
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.removeItemFromOrder("", orderId, UUID.randomUUID()));
+    }
+
 }

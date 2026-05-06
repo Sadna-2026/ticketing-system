@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.ticketing.application.dto.OrderItemDto;
+
 public class ActiveOrder{
 
     private final UUID id;
@@ -67,6 +69,21 @@ public class ActiveOrder{
         return now.isAfter(createdAt.plus(lockDuration));
     }
 
+    public BigDecimal getTotalPrice() {
+        return items.stream()
+                .map(OrderItem::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public Instant getCreatedAt() { return this.createdAt; }
+
+    public List<OrderItemDto> getItemsDto() {
+        List<OrderItemDto> rDtos = new ArrayList<>();
+        for (OrderItem item : items)
+            rDtos.add(item.getOrderItemDto());
+        return rDtos;
+    }
+
     /**
      * Adds an item to the order. Only on ACTIVE orders.
      */
@@ -107,11 +124,12 @@ public class ActiveOrder{
 
     public List<OrderItem> getItems() { return items; }
 
-    public BigDecimal getTotalPrice() {
-        return items.stream()
-                .map(OrderItem::getTotalPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    public void removeItem(UUID itemId) {
+        validateActive();
+        boolean removed = items.removeIf(i -> i.getId().equals(itemId));
+        if (!removed) throw new IllegalArgumentException("Item not found: " + itemId);
     }
+    
 
     public void startCheckout() {
         validateActive();
