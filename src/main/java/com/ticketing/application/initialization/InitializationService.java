@@ -68,7 +68,11 @@ public class InitializationService {
         eventPublisher.subscribe("RoleAppointmentOfferRequested", requestHandler);
 
         // Register the handler for RoleAppointmentOfferResponse
-        RoleAppointmentOfferResponseHandler responseHandler = new RoleAppointmentOfferResponseHandler(memberRepository, companyRepository);
+        RoleAppointmentOfferResponseHandler responseHandler = new RoleAppointmentOfferResponseHandler(
+            memberRepository,
+            companyRepository,
+            notificationService
+        );
         eventPublisher.subscribe("RoleAppointmentOfferResponse", responseHandler);
         
         log.info("Event listeners registered");
