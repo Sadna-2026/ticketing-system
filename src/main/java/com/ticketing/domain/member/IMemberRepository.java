@@ -19,6 +19,8 @@ public interface IMemberRepository {
 
     boolean saveIfUsernameAndEmailAvailable(Member member);
 
+    boolean updateIfUsernameAndEmailAvailable(Member member, String username, String email);
+
     long count();
 
     List<Member> findByCompanyAppointment(String companyName);
