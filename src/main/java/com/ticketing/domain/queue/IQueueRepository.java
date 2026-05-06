@@ -6,9 +6,9 @@ import java.util.UUID;
 
 public interface IQueueRepository {
     Optional<VirtualQueue> findById(UUID id);
-    Optional<VirtualQueue> findBySessionId(UUID sessionId);
+    //Optional<VirtualQueue> findBySessionId(UUID sessionId);
     List<VirtualQueue> findAll();
-    List<VirtualQueue> findByEventId(UUID eventId);
+    Optional<VirtualQueue> findByEventId(UUID eventId);
     void save(VirtualQueue session);
     void delete(UUID id);
     List<VirtualQueue> findAllActive();

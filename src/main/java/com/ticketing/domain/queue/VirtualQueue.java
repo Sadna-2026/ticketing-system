@@ -134,6 +134,6 @@ public class VirtualQueue {
     }
 
     public VirtualQueueDto toVirtualQueueDto(){
-        return new VirtualQueueDto(id, eventId, currentActiveUsers, version, active, currentActiveUsers, currentActiveUsers, entries.stream().map(QueueEntry::toQueueDto).toList());
+        return new VirtualQueueDto(id, eventId, config.getThreshold(), config.getFlowRate(), active, currentActiveUsers, getWaitingCount(), entries.stream().map(QueueEntry::toQueueDto).toList());
     }
 }

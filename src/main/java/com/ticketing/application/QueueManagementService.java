@@ -170,13 +170,11 @@ public class QueueManagementService {
     }
 
     private UUID validateAdmin(String token) {
-        UUID memberId = validateToken(token);
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("Member not found"));
+        UUID adminId = validateToken(token);
         if (!tokenService.extractPermissions(token).contains("Admin")) {
             throw new IllegalStateException("Only System Admins can perform this action");
         }
-        return memberId;
+        return adminId;
     }
 
     private UUID validateToken(String token) {
