@@ -1,6 +1,5 @@
 package com.ticketing.application;
 
-import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -15,7 +14,6 @@ import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.member.ManagerPermission;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -241,9 +239,13 @@ public class MemberService {
             throw new IllegalArgumentException("Authentication token is required.");
         }
         if (!sessionTokenService.isValid(token)) {
-            throw new SecurityException("Invalid or expired authentication token.");
+            throw new IllegalArgumentException("Invalid or expired authentication token.");
         }
-        return sessionTokenService.extractMemberId(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests cannot view the organization chart. Please log in.");
+        }
+        return memberId;
     }
 
     private boolean isValidRegisterRequest(RegisterRequest request) {
