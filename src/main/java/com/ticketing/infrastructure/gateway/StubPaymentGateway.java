@@ -18,6 +18,11 @@ public class StubPaymentGateway implements IPaymentGateway {
     }
 
     @Override
+    public boolean isReachable() {
+        return !shouldFail;
+    }
+
+    @Override
     public PaymentResult charge(BigDecimal amount, PaymentDetails details) {
         if (shouldFail) {
             return PaymentResult.failed("Payment declined by issuer.");
