@@ -7,6 +7,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.ticketing.infrastructure.Interface.IDiscountPolicy;
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
+
 public class Event{
 
     /**
@@ -29,18 +32,36 @@ public class Event{
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
     private VenueMap venueMap;
-    // V1 (UC-C.2 partial): every Event gets default policies; full edit API is V2.
-    private IPurchasePolicy purchasePolicy;
-    private IDiscountPolicy discountPolicy;
+  
+    // TODO(v2): add purchase/discount policies
+    private final IPurchasePolicy purchasePolicy;
+    private final IDiscountPolicy discountPolicy;
     private int version;
 
+    /**
+     * Creates a new Event with required policies.
+     * Policies must be provided at creation time and cannot be changed afterward in V1.
+     *
+     * @param id unique event identifier
+     * @param companyId the production company that owns this event
+     * @param name the event name
+     * @param description event description (may be null)
+     * @param category event category (may be null for draft)
+     * @param schedule the event schedule (start time, end time, doors open)
+     * @param lockTimerDuration the per-event lock timer duration for active orders
+     * @param eventPurchasePolicy the event's purchase policy (required, per V1)
+     * @param eventDiscountPolicy the event's discount policy (required, per V1)
+     */
     public Event(UUID id, String companyName, String name, String description,
-                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration,
+                 IPurchasePolicy eventPurchasePolicy, IDiscountPolicy eventDiscountPolicy) {
         if (id == null) throw new IllegalArgumentException("Event ID is required");
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("Company name is required");
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Event name is required");
         if (schedule == null) throw new IllegalArgumentException("Event schedule is required");
         if (lockTimerDuration == null) throw new IllegalArgumentException("Lock timer duration is required");
+        if (eventPurchasePolicy == null) throw new IllegalArgumentException("EventPurchasePolicy is required");
+        if (eventDiscountPolicy == null) throw new IllegalArgumentException("EventDiscountPolicy is required");
 
         this.id = id;
         this.companyName = companyName;
@@ -51,11 +72,18 @@ public class Event{
         this.status = EventStatus.DRAFT;
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
-        this.purchasePolicy = new AlwaysAllowPolicy();
-        this.discountPolicy = new NoDiscountPolicy(DEFAULT_CURRENCY);
+
+        this.purchasePolicy = eventPurchasePolicy;
+        this.discountPolicy = eventDiscountPolicy;
+
         this.version = 0;
     }
 
+    public Event(UUID id, String companyName, String name, String description,
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
+        this(id, companyName, name, description, category, schedule, lockTimerDuration,
+                new AlwaysAllowPolicy(), new NoDiscountPolicy());
+    }
     public LockTimerDuration getLockTimerDuration() { return lockTimerDuration; }
 
     public InventoryZone findZone(UUID zoneId) {
@@ -174,6 +202,14 @@ public class Event{
             throw new IllegalStateException("Event must have at least one inventory zone to publish");
         }
         this.status = EventStatus.PUBLISHED;
+    }
+
+    public IPurchasePolicy getEventPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public IDiscountPolicy getEventDiscountPolicy() {
+        return discountPolicy;
     }
 
     public void setVenueMap(VenueMap venueMap) {
