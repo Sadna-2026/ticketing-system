@@ -20,6 +20,11 @@ public class StubTicketSupplyGateway implements ITicketSupplyGateway {
     }
 
     @Override
+    public boolean isReachable() {
+        return !shouldFail;
+    }
+
+    @Override
     public SupplyResult issueTickets(List<TicketRequest> tickets, CustomerInfo customer) {
         if (shouldFail) {
             return SupplyResult.failed("External ticket generation service unavailable.");
