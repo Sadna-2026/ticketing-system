@@ -13,8 +13,8 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 /**
  * Public search over events. Token-less (guest-callable). Returns only events

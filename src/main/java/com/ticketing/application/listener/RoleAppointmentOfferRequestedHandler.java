@@ -1,5 +1,6 @@
 package com.ticketing.application.listener;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import com.ticketing.domain.event.IEvent;
@@ -41,9 +42,11 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
 
             // Create and add the offer to the target member
             PendingRoleOffer offer = new PendingRoleOffer(
-                reqEvent.getCompanyName(), 
-                reqEvent.getRole(), 
-                reqEvent.getPermissions()
+                reqEvent.getAppointerId(),
+                reqEvent.getCompanyName(),
+                reqEvent.getRole(),
+                reqEvent.getPermissions(),
+                LocalDateTime.now().plusDays(7)
             );
             target.addPendingOffer(offer);
             

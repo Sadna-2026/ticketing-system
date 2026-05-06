@@ -5,9 +5,9 @@ import org.slf4j.LoggerFactory;
 
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 /**
  * Pre-reservation validation per UC-II.8. Confirms the requested seats / GA

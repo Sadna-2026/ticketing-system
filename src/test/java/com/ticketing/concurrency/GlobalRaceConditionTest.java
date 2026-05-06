@@ -70,7 +70,13 @@ public class GlobalRaceConditionTest {
         int threads = 20;
         String username = "uniqueUser";
         String email = "unique@test.com";
-        RegisterRequest request = new RegisterRequest(username, email, "password123");
+        RegisterRequest request = new RegisterRequest(
+            username,
+            email,
+            "password123",
+            "0501234567",
+            "2000-01-01"
+        );
         String guestToken = "guest-token";
 
         when(tokenService.extractMemberId(guestToken)).thenReturn(null);

@@ -1,11 +1,15 @@
 package com.ticketing.domain.event;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import com.ticketing.infrastructure.Interface.IDiscountPolicy;
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
 public class Event{
 
@@ -29,18 +33,35 @@ public class Event{
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
     private VenueMap venueMap;
-    // V1 (UC-C.2 partial): every Event gets default policies; full edit API is V2.
-    private IPurchasePolicy purchasePolicy;
-    private IDiscountPolicy discountPolicy;
+  
+    // TODO(v2): add purchase/discount policies
+    private final IPurchasePolicy purchasePolicy;
+    private final IDiscountPolicy discountPolicy;
+
+    private final SaleMethod saleMethod;
+    private final LotteryWindow lotteryWindow; // non-null only when saleMethod == LOTTERY
+
     private int version;
 
+    /**
+     * Creates a new Event with required policies and sale method.
+     * Policies must be provided at creation time and cannot be changed afterward in V1.
+     */
     public Event(UUID id, String companyName, String name, String description,
-                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration,
+                 IPurchasePolicy eventPurchasePolicy, IDiscountPolicy eventDiscountPolicy,
+                 SaleMethod saleMethod, LotteryWindow lotteryWindow) {
         if (id == null) throw new IllegalArgumentException("Event ID is required");
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("Company name is required");
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Event name is required");
         if (schedule == null) throw new IllegalArgumentException("Event schedule is required");
         if (lockTimerDuration == null) throw new IllegalArgumentException("Lock timer duration is required");
+        if (eventPurchasePolicy == null) throw new IllegalArgumentException("EventPurchasePolicy is required");
+        if (eventDiscountPolicy == null) throw new IllegalArgumentException("EventDiscountPolicy is required");
+        if (saleMethod == null) throw new IllegalArgumentException("SaleMethod is required");
+        if (saleMethod == SaleMethod.LOTTERY && lotteryWindow == null) {
+            throw new IllegalArgumentException("LotteryWindow is required for LOTTERY sale method");
+        }
 
         this.id = id;
         this.companyName = companyName;
@@ -51,12 +72,37 @@ public class Event{
         this.status = EventStatus.DRAFT;
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
-        this.purchasePolicy = new AlwaysAllowPolicy();
-        this.discountPolicy = new NoDiscountPolicy(DEFAULT_CURRENCY);
+
+        this.purchasePolicy = eventPurchasePolicy;
+        this.discountPolicy = eventDiscountPolicy;
+        this.saleMethod = saleMethod;
+        this.lotteryWindow = lotteryWindow;
+
         this.version = 0;
     }
 
+    public Event(UUID id, String companyName, String name, String description,
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration,
+                 IPurchasePolicy eventPurchasePolicy, IDiscountPolicy eventDiscountPolicy) {
+        this(id, companyName, name, description, category, schedule, lockTimerDuration,
+                eventPurchasePolicy, eventDiscountPolicy, SaleMethod.REGULAR, null);
+    }
+
+    public Event(UUID id, String companyName, String name, String description,
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
+        this(id, companyName, name, description, category, schedule, lockTimerDuration,
+                new AlwaysAllowPolicy(), new NoDiscountPolicy(), SaleMethod.REGULAR, null);
+    }
     public LockTimerDuration getLockTimerDuration() { return lockTimerDuration; }
+
+    public SaleMethod getSaleMethod() { return saleMethod; }
+    public LotteryWindow getLotteryWindow() { return lotteryWindow; }
+
+    public boolean isLottery() { return saleMethod == SaleMethod.LOTTERY; }
+
+    public boolean isLotteryRegistrationOpen(Instant now) {
+        return isLottery() && lotteryWindow.isOpen(now);
+    }
 
     public InventoryZone findZone(UUID zoneId) {
         return zones.stream()
@@ -174,6 +220,14 @@ public class Event{
             throw new IllegalStateException("Event must have at least one inventory zone to publish");
         }
         this.status = EventStatus.PUBLISHED;
+    }
+
+    public IPurchasePolicy getEventPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public IDiscountPolicy getEventDiscountPolicy() {
+        return discountPolicy;
     }
 
     public void setVenueMap(VenueMap venueMap) {

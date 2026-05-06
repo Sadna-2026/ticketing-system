@@ -1,4 +1,4 @@
-package com.ticketing.domain.member;
+package com.ticketing.infrastructure.Interface;
 
 import java.util.List;
 
@@ -11,3 +11,4 @@ public interface IPendingNotificationRepository {
     List<String> getPendingNotifications(String userId);
     void clearPendingNotifications(String userId);
 }
+

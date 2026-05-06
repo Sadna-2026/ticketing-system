@@ -3,6 +3,8 @@ package com.ticketing.application;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.LotteryWindow;
+import com.ticketing.domain.event.SaleMethod;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -16,8 +18,18 @@ public record CreateEventRequest(
         EventSchedule schedule,
         LockTimerDuration lockTimerDuration,
         List<ZoneSpec> zones,
-        Map<String, String> sectionToZoneName
+        Map<String, String> sectionToZoneName,
+        SaleMethod saleMethod,
+        LotteryWindow lotteryWindow
 ) {
+
+    public CreateEventRequest(String companyName, String name, String description,
+                              EventCategory category, EventSchedule schedule,
+                              LockTimerDuration lockTimerDuration,
+                              List<ZoneSpec> zones, Map<String, String> sectionToZoneName) {
+        this(companyName, name, description, category, schedule, lockTimerDuration,
+                zones, sectionToZoneName, SaleMethod.REGULAR, null);
+    }
 
     public CreateEventRequest {
         if (companyName == null || companyName.isBlank()) {
@@ -37,6 +49,12 @@ public record CreateEventRequest(
         }
         if (sectionToZoneName == null || sectionToZoneName.isEmpty()) {
             throw new IllegalArgumentException("sectionToZoneName must have at least one entry");
+        }
+        if (saleMethod == null) {
+            saleMethod = SaleMethod.REGULAR;
+        }
+        if (saleMethod == SaleMethod.LOTTERY && lotteryWindow == null) {
+            throw new IllegalArgumentException("lotteryWindow is required for LOTTERY sale method");
         }
         zones = List.copyOf(zones);
         sectionToZoneName = Map.copyOf(sectionToZoneName);
