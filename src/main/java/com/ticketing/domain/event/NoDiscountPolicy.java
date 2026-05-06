@@ -1,19 +1,14 @@
 package com.ticketing.domain.event;
 
-import com.ticketing.domain.member.User;
-import com.ticketing.domain.order.ActiveOrder;
+import java.math.BigDecimal;
+import java.time.Instant;
 
-import java.util.Currency;
+import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.infrastructure.Interface.IDiscountPolicy;
 
 public class NoDiscountPolicy implements IDiscountPolicy {
-    private final Currency defaultCurrency;
-
-    public NoDiscountPolicy(Currency defaultCurrency) {
-        this.defaultCurrency = defaultCurrency;
-    }
-
     @Override
-    public Money applyTo(ActiveOrder order, User user) {
-        return Money.zero(defaultCurrency);
+    public BigDecimal applyTo(ActiveOrder order, String couponCode, Instant systemClock) {
+        return BigDecimal.ZERO;
     }
 }

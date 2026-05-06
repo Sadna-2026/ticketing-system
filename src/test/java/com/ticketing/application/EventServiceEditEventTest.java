@@ -25,10 +25,10 @@ import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 public class EventServiceEditEventTest {
 
@@ -38,7 +38,7 @@ public class EventServiceEditEventTest {
     private InMemoryEventRepository eventRepo;
     private InMemoryCompanyRepository companyRepo;
     private InMemoryMemberRepository memberRepo;
-    private IActiveOrderRepository orderRepo;
+    private IOrderRepository orderRepo;
     private ISessionTokenService tokens;
     private EventService eventService;
 
@@ -51,7 +51,7 @@ public class EventServiceEditEventTest {
         eventRepo = new InMemoryEventRepository();
         companyRepo = new InMemoryCompanyRepository();
         memberRepo = new InMemoryMemberRepository();
-        orderRepo = mock(IActiveOrderRepository.class);
+        orderRepo = mock(IOrderRepository.class);
         tokens = mock(ISessionTokenService.class);
         when(orderRepo.findActiveByEventId(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(List.of()); // no active orders by default

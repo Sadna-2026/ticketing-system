@@ -1,11 +1,14 @@
 package com.ticketing.domain.order;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.ticketing.application.dto.OrderItemDto;
 
 public class ActiveOrder{
 
@@ -60,9 +63,25 @@ public class ActiveOrder{
     public boolean isExpired() { return status == OrderStatus.EXPIRED; }
     public OrderStatus getStatus() { return status; }
     public UUID getEventId() { return eventId; }
+    public UUID getMemberId() { return memberId; }
 
     public boolean isExpiredAt(Instant now, Duration lockDuration) {
         return now.isAfter(createdAt.plus(lockDuration));
+    }
+
+    public BigDecimal getTotalPrice() {
+        return items.stream()
+                .map(OrderItem::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public Instant getCreatedAt() { return this.createdAt; }
+
+    public List<OrderItemDto> getItemsDto() {
+        List<OrderItemDto> rDtos = new ArrayList<>();
+        for (OrderItem item : items)
+            rDtos.add(item.getOrderItemDto());
+        return rDtos;
     }
 
     /**
@@ -104,5 +123,38 @@ public class ActiveOrder{
     }
 
     public List<OrderItem> getItems() { return items; }
+
+    public void removeItem(UUID itemId) {
+        validateActive();
+        boolean removed = items.removeIf(i -> i.getId().equals(itemId));
+        if (!removed) throw new IllegalArgumentException("Item not found: " + itemId);
+    }
     
+
+    public void startCheckout() {
+        validateActive();
+        if (items.isEmpty()) throw new IllegalStateException("Cannot checkout an empty order");
+        this.status = OrderStatus.CHECKOUT_IN_PROGRESS;
+    }
+    
+    public void revertToActive() {
+        if (status != OrderStatus.CHECKOUT_IN_PROGRESS) {
+            throw new IllegalStateException("Can only revert from CHECKOUT_IN_PROGRESS");
+        }
+        this.status = OrderStatus.ACTIVE;
+    }
+
+    public void complete() {
+        if (status != OrderStatus.CHECKOUT_IN_PROGRESS) {
+            throw new IllegalStateException("Can only complete from CHECKOUT_IN_PROGRESS");
+        }
+        this.status = OrderStatus.COMPLETED;
+    }
+
+    public void cancel() {
+        if (status == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+        this.status = OrderStatus.CANCELLED;
+    }
 }

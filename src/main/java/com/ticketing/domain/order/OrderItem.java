@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.ticketing.application.dto.OrderItemDto;
+
 /**
  * Entity within the ActiveOrder aggregate.
  *
@@ -46,6 +48,10 @@ public class OrderItem {
         this.seatId = seatId;
         this.quantity = quantity;
         this.pricePerTicket = pricePerTicket;
+    }
+
+    public OrderItemDto getOrderItemDto(){
+        return new OrderItemDto(id, zoneId, seatId, quantity, pricePerTicket, pricePerTicket, isAssignedSeat());
     }
 
     public UUID getId() { return id; }
