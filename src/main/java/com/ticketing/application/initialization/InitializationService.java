@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.CompanyService;
+import com.ticketing.application.CompletedPurchaseService;
 import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.listener.ManagerPermissionsChangedHandler;
@@ -13,6 +14,7 @@ import com.ticketing.application.listener.RoleAppointmentOfferResponseHandler;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.order.ICompletedPurchaseRepository;
 
 /**
  * Initializes and wires up application services with their dependencies.
@@ -26,16 +28,19 @@ public class InitializationService {
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
     private final INotificationService notificationService;
+    private final ICompletedPurchaseRepository completedPurchaseRepository;
 
     public InitializationService(
             ICompanyRepository companyRepository,
             IMemberRepository memberRepository,
             IEventPublisher eventPublisher,
             ISessionTokenService sessionTokenService,
-            INotificationService notificationService
+            INotificationService notificationService,
+            ICompletedPurchaseRepository completedPurchaseRepository
     ) {
         if (companyRepository == null || memberRepository == null || 
-            eventPublisher == null || sessionTokenService == null || notificationService == null) {
+            eventPublisher == null || sessionTokenService == null || notificationService == null ||
+            completedPurchaseRepository == null) {
             throw new IllegalArgumentException("All dependencies must be provided");
         }
         this.companyRepository = companyRepository;
@@ -43,6 +48,7 @@ public class InitializationService {
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
         this.notificationService = notificationService;
+        this.completedPurchaseRepository = completedPurchaseRepository;
     }
 
     /**
@@ -52,6 +58,20 @@ public class InitializationService {
     public CompanyService initializeCompanyService() {
         log.info("Initializing CompanyService");
         return new CompanyService(companyRepository, eventPublisher, sessionTokenService);
+    }
+
+    /**
+     * Initializes the CompletedPurchaseService with all required dependencies.
+     * @return initialized CompletedPurchaseService
+     */
+    public CompletedPurchaseService initializeCompletedPurchaseService() {
+        log.info("Initializing CompletedPurchaseService");
+        return new CompletedPurchaseService(
+                completedPurchaseRepository,
+                companyRepository,
+                memberRepository,
+                sessionTokenService
+        );
     }
 
     /**
