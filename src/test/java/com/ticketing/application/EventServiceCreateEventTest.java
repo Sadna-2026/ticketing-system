@@ -290,10 +290,12 @@ public class EventServiceCreateEventTest {
     }
 
     private static Company stubCompany(String name, CompanyStatus status) {
-        Company c = mock(Company.class);
-        when(c.getName()).thenReturn(name);
-        when(c.isActive()).thenReturn(status == CompanyStatus.ACTIVE);
-        when(c.getStatus()).thenReturn(status);
+        Company c = new Company(name, "desc", UUID.randomUUID());
+        if (status == CompanyStatus.SUSPENDED) {
+            c.suspend();
+        } else if (status == CompanyStatus.CLOSED) {
+            c.close();
+        }
         return c;
     }
 
