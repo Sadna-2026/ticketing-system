@@ -1,6 +1,6 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -73,6 +73,32 @@ public class CompanyServicePermissionsTest {
         assertThrows(IllegalArgumentException.class, () -> 
             companyService.changeManagerPermissions(VALID_TOKEN, COMPANY_NAME, TARGET_ID, Collections.emptySet())
         );
+        
+        verify(eventPublisher, never()).publish(any());
+    }
+
+    @Test
+    public void testChangeManagerPermissions_GuestCaller_ThrowsIllegalArgumentException() {
+        when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
+        when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(null); // Guest
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> 
+            companyService.changeManagerPermissions(VALID_TOKEN, COMPANY_NAME, TARGET_ID, Collections.emptySet())
+        );
+        assertTrue(ex.getMessage().contains("guest"));
+        
+        verify(eventPublisher, never()).publish(any());
+    }
+
+    @Test
+    public void testChangeManagerPermissions_NullTarget_ThrowsIllegalArgumentException() {
+        when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
+        when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(CALLER_ID);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> 
+            companyService.changeManagerPermissions(VALID_TOKEN, COMPANY_NAME, null, Collections.emptySet())
+        );
+        assertTrue(ex.getMessage().contains("Target member ID is required"));
         
         verify(eventPublisher, never()).publish(any());
     }

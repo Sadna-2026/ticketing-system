@@ -100,6 +100,14 @@ public class CompanyService {
     ) {
         UUID callerId = validateToken(token);
 
+        if (callerId == null) {
+            throw new IllegalArgumentException("A guest user cannot change manager permissions. Please log in.");
+        }
+
+        if (targetMemberId == null) {
+            throw new IllegalArgumentException("Target member ID is required");
+        }
+
         if (!companyRepository.existsByName(companyName)) {
             throw new IllegalArgumentException("Company not found: " + companyName);
         }
