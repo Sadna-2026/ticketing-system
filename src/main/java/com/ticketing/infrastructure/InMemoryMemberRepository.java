@@ -43,6 +43,41 @@ public class InMemoryMemberRepository implements IMemberRepository {
     }
 
     @Override
+    public synchronized boolean updateIfUsernameAndEmailAvailable(Member member, String username, String email) {
+        if (member == null) {
+            throw new IllegalArgumentException("member cannot be null");
+        }
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("username cannot be null or blank");
+        }
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("email cannot be null or blank");
+        }
+
+        String newUsername = normalizeUsername(username);
+        String newEmail = normalizeEmail(email);
+        Optional<Member> usernameOwner = findByUsername(newUsername);
+        Optional<Member> emailOwner = findByEmail(newEmail);
+
+        if (usernameOwner.isPresent() && !usernameOwner.get().getId().equals(member.getId())) {
+            return false;
+        }
+        if (emailOwner.isPresent() && !emailOwner.get().getId().equals(member.getId())) {
+            return false;
+        }
+
+        idsByUsername.remove(normalizeUsername(member.getUsername()), member.getId());
+        idsByEmail.remove(normalizeEmail(member.getEmail()), member.getId());
+
+        member.updateUsername(newUsername);
+        member.updateEmail(newEmail);
+
+        save(member);
+
+        return true;
+    }
+
+    @Override
     public Optional<Member> findById(UUID memberId) {
         if (memberId == null) {
             return Optional.empty();
