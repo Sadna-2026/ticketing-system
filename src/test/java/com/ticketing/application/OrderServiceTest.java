@@ -638,4 +638,50 @@ public class OrderServiceTest {
         assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
     }
 
+    @Test
+    void GivenMemberWithPurchases_WhenGetPurchaseHistory_ThenReturnsHistory() {
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "historyUser", "history@example.com", "pw",
+                "050-1111111", LocalDate.of(1990, 1, 1));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        // No history initially
+        List<PurchaseRecordDTO> history1 = orderService.getPurchaseHistory(memberToken);
+        assertTrue(history1.isEmpty());
+
+        // Make a purchase
+        UUID orderId = orderService.createOrder(memberToken, eventId);
+        orderService.addGATicketsToOrder(memberToken, orderId, gaZoneId, 1);
+        UUID purchaseId = orderService.checkout(memberToken, orderId, null);
+
+        // Fetch history
+        List<PurchaseRecordDTO> history2 = orderService.getPurchaseHistory(memberToken);
+        assertEquals(1, history2.size());
+        
+        PurchaseRecordDTO record = history2.get(0);
+        assertEquals(purchaseId, record.purchaseId());
+        assertEquals(eventId, record.eventId());
+        assertEquals("Summer Concert", record.eventName());
+        assertEquals(new BigDecimal("50.00"), record.amount());
+        
+        // Mutate event details
+        Event event = eventRepo.findById(eventId).orElseThrow();
+        event.setName("Winter Concert");
+        // We cannot change price if tickets are sold, so mutating the name is sufficient for the test
+        eventRepo.save(event);
+        
+        // History should still show original details
+        List<PurchaseRecordDTO> history3 = orderService.getPurchaseHistory(memberToken);
+        assertEquals(1, history3.size());
+        PurchaseRecordDTO recordAfterMutate = history3.get(0);
+        assertEquals("Summer Concert", recordAfterMutate.eventName());
+        assertEquals(new BigDecimal("50.00"), recordAfterMutate.amount());
+    }
+
+    @Test
+    void GivenGuestToken_WhenGetPurchaseHistory_ThenThrowsSecurityException() {
+        assertThrows(SecurityException.class, () -> orderService.getPurchaseHistory(guestToken));
+    }
 }

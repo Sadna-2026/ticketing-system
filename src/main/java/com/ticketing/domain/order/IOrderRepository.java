@@ -22,4 +22,6 @@ public interface IOrderRepository {
     List<CompletedPurchase> findCompletedByCompanyName(String companyName);
 
     List<CompletedPurchase> findCompletedByEventId(UUID eventId);
+
+    List<CompletedPurchase> findCompletedByMemberId(UUID memberId);
 }

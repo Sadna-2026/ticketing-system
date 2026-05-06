@@ -96,6 +96,16 @@ public class InMemoryOrderRepository implements IOrderRepository {
         return hits;
     }
 
+    @Override
+    public List<CompletedPurchase> findCompletedByMemberId(UUID memberId) {
+        if (memberId == null) return List.of();
+        List<CompletedPurchase> hits = new ArrayList<>();
+        for (CompletedPurchase p : completedPurchases.values()) {
+            if (memberId.equals(p.memberId())) hits.add(p);
+        }
+        return hits;
+    }
+
     private static class VersionedActiveOrder {
         final ActiveOrder entity;
         final int version;
