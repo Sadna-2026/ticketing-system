@@ -57,7 +57,8 @@ public class CompanyServiceConcurrencyTest {
             memberRepository,
             eventPublisher,
             sessionTokenService,
-            notificationService
+            notificationService,
+            new com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository()
         );
         companyService = initService.initialize();
     }

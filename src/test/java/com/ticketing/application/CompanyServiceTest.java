@@ -53,7 +53,8 @@ public class CompanyServiceTest {
             memberRepository,
             eventPublisher,
             sessionTokenServiceMock,
-            notificationService
+            notificationService,
+            new com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository()
         );
 
         companyService = initializationService.initialize();

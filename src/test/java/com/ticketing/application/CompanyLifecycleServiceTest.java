@@ -37,7 +37,7 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-import com.ticketing.infrastructure.InMemoryOrderRepository;
+import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
 
 public class CompanyLifecycleServiceTest {
@@ -50,7 +50,7 @@ public class CompanyLifecycleServiceTest {
     private InMemoryCompanyRepository companyRepo;
     private InMemoryEventRepository eventRepo;
     private InMemoryMemberRepository memberRepo;
-    private InMemoryOrderRepository orderRepo;
+    private InMemoryCompletedPurchaseRepository completedPurchaseRepo;
     private IPaymentGateway paymentGateway;
     private ISessionTokenService tokens;
     private CompanyLifecycleService service;
@@ -64,11 +64,11 @@ public class CompanyLifecycleServiceTest {
         companyRepo = new InMemoryCompanyRepository();
         eventRepo = new InMemoryEventRepository();
         memberRepo = new InMemoryMemberRepository();
-        orderRepo = new InMemoryOrderRepository();
+        completedPurchaseRepo = new InMemoryCompletedPurchaseRepository();
         paymentGateway = mock(IPaymentGateway.class);
         tokens = mock(ISessionTokenService.class);
         service = new CompanyLifecycleService(
-                companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway, tokens);
+                companyRepo, eventRepo, memberRepo, completedPurchaseRepo, paymentGateway, tokens);
 
         founderId = UUID.randomUUID();
         founder = new Member(founderId, "founder", "founder@x.com", "pw");
@@ -117,9 +117,9 @@ public class CompanyLifecycleServiceTest {
         Event e2 = seedEvent(UUID.randomUUID());
 
         // seed two completed purchases tied to those events
-        orderRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), "Concert 1",
+        completedPurchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), "Concert 1",
                 COMPANY, UUID.randomUUID(), "txn-1", new BigDecimal("50.00"), java.time.Instant.now()));
-        orderRepo.save(new CompletedPurchase(UUID.randomUUID(), e2.getId(), "Concert 2",
+        completedPurchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e2.getId(), "Concert 2",
                 COMPANY, UUID.randomUUID(), "txn-2", new BigDecimal("75.00"), java.time.Instant.now()));
 
         when(paymentGateway.refund(anyString(), anyDouble()))
@@ -171,7 +171,7 @@ public class CompanyLifecycleServiceTest {
     @Test
     public void GivenPaymentGatewayFails_WhenPermanentClose_ThenStatusBecomesPendingClosure() {
         Event e1 = seedEvent(UUID.randomUUID());
-        orderRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), "Concert",
+        completedPurchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e1.getId(), "Concert",
                 COMPANY, UUID.randomUUID(), "txn-fail", new BigDecimal("99.00"), java.time.Instant.now()));
 
         when(paymentGateway.refund(anyString(), anyDouble()))
@@ -188,7 +188,7 @@ public class CompanyLifecycleServiceTest {
     @Test
     public void GivenPendingClosureWithSuccessfulRetry_WhenRetry_ThenStatusBecomesClosed() {
         seedEvent(UUID.randomUUID());
-        orderRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Retry Concert",
+        completedPurchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Retry Concert",
                 COMPANY, UUID.randomUUID(), "txn-retry", new BigDecimal("12.00"), java.time.Instant.now()));
         when(paymentGateway.refund(anyString(), anyDouble()))
                 .thenReturn(RefundResult.failed("first try fails"));
@@ -211,7 +211,7 @@ public class CompanyLifecycleServiceTest {
     public void GivenPendingClosureAfterServiceRestart_WhenRetry_ThenRehydratesFromRepoAndCloses() {
         // 1) seed an event + a completed purchase so there's data to refund
         Event e = seedEvent(UUID.randomUUID());
-        orderRepo.save(new CompletedPurchase(UUID.randomUUID(), e.getId(), "Rehydrate Concert",
+        completedPurchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), e.getId(), "Rehydrate Concert",
                 COMPANY, UUID.randomUUID(), "txn-rehydrate", new BigDecimal("42.00"), java.time.Instant.now()));
 
         // 2) drive into PENDING_CLOSURE via a failing gateway
@@ -223,7 +223,7 @@ public class CompanyLifecycleServiceTest {
 
         // 3) simulate a service restart: build a fresh service whose in-memory queue is empty
         CompanyLifecycleService freshService = new CompanyLifecycleService(
-                companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway, tokens);
+                companyRepo, eventRepo, memberRepo, completedPurchaseRepo, paymentGateway, tokens);
 
         // 4) gateway recovers; retry must rehydrate the queue from completedPurchaseRepo
         when(paymentGateway.refund(anyString(), anyDouble()))
