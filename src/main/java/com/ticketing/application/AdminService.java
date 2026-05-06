@@ -7,7 +7,9 @@ import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-
+import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.IOrderRepository;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -22,20 +24,23 @@ public class AdminService {
     private final ICompanyRepository companyRepository;
     private final ISessionTokenService sessionTokenService;
     private final IAdminRepository adminRepository;
+    private final IOrderRepository orderRepository;
 
     public AdminService(
             IMemberRepository memberRepository,
             ICompanyRepository companyRepository,
             ISessionTokenService sessionTokenService,
-            IAdminRepository adminRepository
+            IAdminRepository adminRepository,
+            IOrderRepository orderRepository
     ) {
-        if (memberRepository == null || companyRepository == null || sessionTokenService == null || adminRepository == null) {
+        if (memberRepository == null || companyRepository == null || sessionTokenService == null || adminRepository == null || orderRepository == null) {
             throw new IllegalArgumentException("Dependencies cannot be null");
         }
         this.memberRepository = memberRepository;
         this.companyRepository = companyRepository;
         this.sessionTokenService = sessionTokenService;
         this.adminRepository = adminRepository;
+        this.orderRepository = orderRepository;
     }
 
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {
@@ -92,5 +97,27 @@ public class AdminService {
 
         // If target is an admin, check if they are the last one
         return adminRepository.findAll().size() <= 1;
+    }
+
+    public List<PurchaseRecordDTO> getGlobalPurchaseHistory(String adminToken, UUID buyerId, String companyName) {
+        // 1. Authorization
+        if (!isAdmin(adminToken)) {
+            throw new SecurityException("System admin permission required");
+        }
+
+        // 2. Fetch based on filters
+        List<CompletedPurchase> purchases;
+        if (buyerId != null) {
+            purchases = orderRepository.findCompletedByMemberId(buyerId);
+        } else if (companyName != null && !companyName.isBlank()) {
+            purchases = orderRepository.findCompletedByCompanyName(companyName);
+        } else {
+            purchases = orderRepository.findAllCompleted();
+        }
+
+        // 3. Map to DTOs
+        return purchases.stream()
+                .map(PurchaseRecordDTO::from)
+                .collect(Collectors.toList());
     }
 }
