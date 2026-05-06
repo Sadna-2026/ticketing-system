@@ -17,7 +17,7 @@ import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
-import com.ticketing.infrastructure.Interface.IMemberRepository;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.infrastructure.Interface.ISessionTokenRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
@@ -158,7 +158,9 @@ class MemberServiceExitPlatformTest {
         RegisterRequest request = new RegisterRequest(
                 username,
                 email,
-                "123456"
+                "123456",
+                "0501234567",
+                "2000-01-01"
         );
 
         RegisterResponse response = memberService.register(request, guestToken);

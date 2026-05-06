@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import com.ticketing.application.dto.OrderItemDto;
 
@@ -33,8 +32,6 @@ public class ActiveOrder{
     public ActiveOrder(UUID id, UUID sessionId, UUID eventId, Instant createdAt) {
         this(id, sessionId, null, eventId, createdAt);
     }
-
-    public UUID getMemberId() { return this.memberId; }
 
     /**
      * Creates an ActiveOrder. memberId may be null for guest orders.
@@ -66,6 +63,7 @@ public class ActiveOrder{
     public boolean isExpired() { return status == OrderStatus.EXPIRED; }
     public OrderStatus getStatus() { return status; }
     public UUID getEventId() { return eventId; }
+    public UUID getMemberId() { return memberId; }
 
     public boolean isExpiredAt(Instant now, Duration lockDuration) {
         return now.isAfter(createdAt.plus(lockDuration));
@@ -131,6 +129,27 @@ public class ActiveOrder{
         boolean removed = items.removeIf(i -> i.getId().equals(itemId));
         if (!removed) throw new IllegalArgumentException("Item not found: " + itemId);
     }
+    
+
+    public void startCheckout() {
+        validateActive();
+        if (items.isEmpty()) throw new IllegalStateException("Cannot checkout an empty order");
+        this.status = OrderStatus.CHECKOUT_IN_PROGRESS;
+    }
+    
+    public void revertToActive() {
+        if (status != OrderStatus.CHECKOUT_IN_PROGRESS) {
+            throw new IllegalStateException("Can only revert from CHECKOUT_IN_PROGRESS");
+        }
+        this.status = OrderStatus.ACTIVE;
+    }
+
+    public void complete() {
+        if (status != OrderStatus.CHECKOUT_IN_PROGRESS) {
+            throw new IllegalStateException("Can only complete from CHECKOUT_IN_PROGRESS");
+        }
+        this.status = OrderStatus.COMPLETED;
+    }
 
     public void cancel() {
         if (status == OrderStatus.COMPLETED) {
@@ -138,8 +157,4 @@ public class ActiveOrder{
         }
         this.status = OrderStatus.CANCELLED;
     }
-
-
-    
-    
 }

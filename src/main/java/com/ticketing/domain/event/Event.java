@@ -1,13 +1,27 @@
 package com.ticketing.domain.event;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
+import com.ticketing.infrastructure.Interface.IDiscountPolicy;
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
 public class Event{
 
+    /**
+     * V1 default currency for the no-discount fallback. Lives here as a constant
+     * so it's discoverable and overridable in one place. When multi-currency
+     * support lands (V2+), the default policy should be injected via the
+     * constructor instead of read from this constant.
+     */
+    public static final java.util.Currency DEFAULT_CURRENCY = java.util.Currency.getInstance("USD");
+
     private final UUID id;
-    private final UUID companyId;
+    private final String companyName;
     private String name;
     private String description;
     private String artist;
@@ -17,8 +31,11 @@ public class Event{
     private EventStatus status;
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
-    //private final EventPurchasePolicy eventPurchasePolicy;
-    //private final EventDiscountPolicy eventDiscountPolicy;
+    private VenueMap venueMap;
+  
+    // TODO(v2): add purchase/discount policies
+    private final IPurchasePolicy purchasePolicy;
+    private final IDiscountPolicy discountPolicy;
     private int version;
 
     /**
@@ -35,19 +52,19 @@ public class Event{
      * @param eventPurchasePolicy the event's purchase policy (required, per V1)
      * @param eventDiscountPolicy the event's discount policy (required, per V1)
      */
-    public Event(UUID id, UUID companyId, String name, String description,
-                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration){
-                 //EventPurchasePolicy eventPurchasePolicy, EventDiscountPolicy eventDiscountPolicy) {
+    public Event(UUID id, String companyName, String name, String description,
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration,
+                 IPurchasePolicy eventPurchasePolicy, IDiscountPolicy eventDiscountPolicy) {
         if (id == null) throw new IllegalArgumentException("Event ID is required");
-        if (companyId == null) throw new IllegalArgumentException("Company ID is required");
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("Company name is required");
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Event name is required");
         if (schedule == null) throw new IllegalArgumentException("Event schedule is required");
         if (lockTimerDuration == null) throw new IllegalArgumentException("Lock timer duration is required");
-        //if (eventPurchasePolicy == null) throw new IllegalArgumentException("EventPurchasePolicy is required");
-        //if (eventDiscountPolicy == null) throw new IllegalArgumentException("EventDiscountPolicy is required");
+        if (eventPurchasePolicy == null) throw new IllegalArgumentException("EventPurchasePolicy is required");
+        if (eventDiscountPolicy == null) throw new IllegalArgumentException("EventDiscountPolicy is required");
 
         this.id = id;
-        this.companyId = companyId;
+        this.companyName = companyName;
         this.name = name;
         this.description = description;
         this.category = category;
@@ -55,11 +72,18 @@ public class Event{
         this.status = EventStatus.DRAFT;
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
-        //this.eventPurchasePolicy = eventPurchasePolicy;
-        //this.eventDiscountPolicy = eventDiscountPolicy;
+
+        this.purchasePolicy = eventPurchasePolicy;
+        this.discountPolicy = eventDiscountPolicy;
+
         this.version = 0;
     }
 
+    public Event(UUID id, String companyName, String name, String description,
+                 EventCategory category, EventSchedule schedule, LockTimerDuration lockTimerDuration) {
+        this(id, companyName, name, description, category, schedule, lockTimerDuration,
+                new AlwaysAllowPolicy(), new NoDiscountPolicy());
+    }
     public LockTimerDuration getLockTimerDuration() { return lockTimerDuration; }
 
     public InventoryZone findZone(UUID zoneId) {
@@ -89,6 +113,19 @@ public class Event{
     public UUID getId() {
         return id;
     }
+    public String getCompanyName() { return companyName; }
+    public String getName() { return name; }
+    public String getDescription() { return description; }
+    public String getArtist() { return artist; }
+    public EventCategory getCategory() { return category; }
+    public String getRegion() { return region; }
+    public EventSchedule getSchedule() { return schedule; }
+    public EventStatus getStatus() { return status; }
+    public List<InventoryZone> getZones() { return java.util.Collections.unmodifiableList(zones); }
+    public IPurchasePolicy getPurchasePolicy() { return purchasePolicy; }
+    public IDiscountPolicy getDiscountPolicy() { return discountPolicy; }
+    /** Repository-internal: called by InMemoryEventRepository.save() as part of the
+     *  optimistic-lock flow. Service code should not call this directly. */
     public void incrementVersion() { this.version++; }
     public int getVersion() { return this.version; }
 
@@ -98,13 +135,64 @@ public class Event{
         zones.add(zone);
     }
 
+    // Two distinct guards by design:
+    //   validateModifiable() — DRAFT-only — gates STRUCTURAL changes (zones, venue map)
+    //   rejectIfCancelled()  — not-CANCELLED — gates EDITORIAL changes (name, schedule, etc.)
+    // After publish, the venue layout is locked but core details remain editable
+    // (subject to the active-reservations check in EventService.editEvent).
     private void validateModifiable() {
-        if (isCancelled()) {
-            throw new IllegalStateException("Cannot modify a cancelled event");
+        if (status != EventStatus.DRAFT) {
+            throw new IllegalStateException("Cannot modify event in status: " + status);
         }
     }
     
     public boolean isCancelled() { return status == EventStatus.CANCELLED; }
+
+    public void cancel() {
+        if (status == EventStatus.CANCELLED) {
+            throw new IllegalStateException("Event is already cancelled");
+        }
+        this.status = EventStatus.CANCELLED;
+    }
+
+    // --- core-detail setters (used by EventService.editEvent) ---
+
+    public void setName(String name) {
+        rejectIfCancelled();
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Event name cannot be blank");
+        }
+        this.name = name;
+    }
+
+    public void setDescription(String description) {
+        rejectIfCancelled();
+        this.description = description;
+    }
+
+    public void setArtist(String artist) {
+        rejectIfCancelled();
+        this.artist = artist;
+    }
+
+    public void setRegion(String region) {
+        rejectIfCancelled();
+        this.region = region;
+    }
+
+    public void setSchedule(EventSchedule schedule) {
+        rejectIfCancelled();
+        if (schedule == null) {
+            throw new IllegalArgumentException("Schedule is required");
+        }
+        this.schedule = schedule;
+    }
+
+    private void rejectIfCancelled() {
+        if (status == EventStatus.CANCELLED) {
+            throw new IllegalStateException("Cannot edit a cancelled event");
+        }
+    }
 
     public void publish() {
         if (status != EventStatus.DRAFT) {
@@ -114,6 +202,46 @@ public class Event{
             throw new IllegalStateException("Event must have at least one inventory zone to publish");
         }
         this.status = EventStatus.PUBLISHED;
+    }
+
+    public IPurchasePolicy getEventPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public IDiscountPolicy getEventDiscountPolicy() {
+        return discountPolicy;
+    }
+
+    public void setVenueMap(VenueMap venueMap) {
+        validateModifiable();
+        if (venueMap == null) {
+            throw new IllegalArgumentException("VenueMap cannot be null");
+        }
+
+        Set<UUID> mappedIds = venueMap.mappedZoneIds();
+        Set<UUID> zoneIds = zones.stream()
+                .map(InventoryZone::getId)
+                .collect(Collectors.toSet());
+
+        Set<UUID> unknown = new HashSet<>(mappedIds);
+        unknown.removeAll(zoneIds);
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "VenueMap references unknown zone ids: " + unknown);
+        }
+
+        Set<UUID> unmapped = new HashSet<>(zoneIds);
+        unmapped.removeAll(mappedIds);
+        if (!unmapped.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Zones not referenced by any venue map section: " + unmapped);
+        }
+
+        this.venueMap = venueMap;
+    }
+
+    public VenueMap getVenueMap() {
+        return venueMap;
     }
 
 }

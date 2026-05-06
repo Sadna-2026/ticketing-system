@@ -1,12 +1,14 @@
-package com.ticketing.infrastructure;
+package  com.ticketing.infrastructure;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 /**
  * In-memory implementation of IEventRepository with CAS-style optimistic locking.
@@ -41,6 +43,27 @@ public class InMemoryEventRepository implements IEventRepository {
         return entry != null ? Optional.of(entry.entity) : Optional.empty();
     }
 
+    @Override
+    public List<Event> findByCompanyName(String companyName) {
+        if (companyName == null) return List.of();
+        List<Event> hits = new ArrayList<>();
+        for (VersionedEntry<Event> entry : store.values()) {
+            if (companyName.equals(entry.entity.getCompanyName())) {
+                hits.add(entry.entity);
+            }
+        }
+        return hits;
+    }
+
+    @Override
+    public List<Event> findAll() {
+        List<Event> all = new ArrayList<>(store.size());
+        for (VersionedEntry<Event> entry : store.values()) {
+            all.add(entry.entity);
+        }
+        return all;
+    }
+
     private static class VersionedEntry<T> {
         final T entity;
         final int version;
@@ -51,3 +74,5 @@ public class InMemoryEventRepository implements IEventRepository {
         }
     }
 }
+
+

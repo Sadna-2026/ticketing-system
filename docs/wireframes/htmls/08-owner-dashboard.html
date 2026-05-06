@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Owner Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { display: grid; grid-template-columns: 200px 1fr; min-height: 800px; }
+.sidebar { background: #333; color: #fff; padding: 20px 0; }
+.sidebar .logo { padding: 0 20px 18px; font-weight: 700; letter-spacing: 1px; border-bottom: 1px solid #555; }
+.sidebar .role { padding: 8px 20px; font-size: 11px; color: #aaa; margin-top: 8px; }
+.sidebar nav a { display: block; padding: 10px 20px; color: #ddd; text-decoration: none; font-size: 13px; }
+.sidebar nav a.active { background: #555; color: #fff; border-left: 3px solid #fff; padding-left: 17px; }
+.sidebar nav a:hover { color: #fff; }
+.main { padding: 24px; display: grid; grid-template-columns: 1fr 280px; gap: 20px; }
+.content { }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.header h1 { font-size: 20px; }
+.btn-primary { padding: 8px 14px; background: #333; color: #fff; border: 1px solid #333; cursor: pointer; font-size: 13px; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+.metric { border: 1px solid #999; padding: 14px 16px; }
+.metric .label { font-size: 11px; color: #666; text-transform: uppercase; }
+.metric .value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+.metric .delta { font-size: 11px; color: #666; }
+.events-table { border: 1px solid #999; }
+.events-table h3 { padding: 12px 16px; font-size: 13px; background: #f5f5f5; border-bottom: 1px solid #999; }
+.t-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 90px; padding: 10px 16px; border-bottom: 1px dashed #ccc; font-size: 13px; align-items: center; }
+.t-row:last-child { border-bottom: none; }
+.t-head { font-size: 11px; color: #666; text-transform: uppercase; background: #fafafa; }
+.status { display: inline-block; padding: 2px 6px; border: 1px solid #333; font-size: 11px; }
+.actions a { color: #333; text-decoration: underline; font-size: 12px; margin-right: 6px; }
+.right { display: flex; flex-direction: column; gap: 14px; }
+.panel { border: 1px solid #999; padding: 14px; }
+.panel h3 { font-size: 12px; text-transform: uppercase; color: #555; margin-bottom: 10px; }
+.activity-row { padding: 6px 0; font-size: 12px; border-bottom: 1px dashed #ddd; }
+.activity-row:last-child { border-bottom: none; }
+.activity-row .when { color: #888; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="sidebar">
+    <div class="logo">[ TICKETING ]</div>
+    <div class="role">OWNER · Acme Productions</div>
+    <nav>
+      <a class="active" href="#">📅 Events</a>
+      <a href="#">🎟 Inventory</a>
+      <a href="#">👥 Staff</a>
+      <a href="#">📊 Reports</a>
+      <a href="#">⚙ Company settings</a>
+      <a href="#" style="margin-top:20px;">↳ Sign out</a>
+    </nav>
+  </div>
+
+  <div class="main">
+    <div class="content">
+      <div class="header">
+        <h1>Events</h1>
+        <button class="btn-primary">+ Create event</button>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><div class="label">Tickets sold</div><div class="value">2,341</div><div class="delta">↑ 18% vs last month</div></div>
+        <div class="metric"><div class="label">Revenue</div><div class="value">$84,520</div><div class="delta">↑ 12% vs last month</div></div>
+        <div class="metric"><div class="label">Upcoming events</div><div class="value">7</div><div class="delta">3 publish-ready</div></div>
+      </div>
+
+      <div class="events-table">
+        <h3>YOUR EVENTS</h3>
+        <div class="t-row t-head"><div>Name</div><div>Date</div><div>Status</div><div>Sold / Total</div><div>Actions</div></div>
+        <div class="t-row"><div>Spring Concert</div><div>Jul 12, 2026</div><div><span class="status">PUBLISHED</span></div><div>180 / 200</div><div class="actions"><a>edit</a><a>cancel</a></div></div>
+        <div class="t-row"><div>Jazz Brunch</div><div>Aug 04, 2026</div><div><span class="status">PUBLISHED</span></div><div>45 / 100</div><div class="actions"><a>edit</a><a>cancel</a></div></div>
+        <div class="t-row"><div>Symphony No. 9</div><div>Sep 15, 2026</div><div><span class="status">DRAFT</span></div><div>—</div><div class="actions"><a>edit</a><a>publish</a></div></div>
+        <div class="t-row"><div>Indie Showcase</div><div>Jul 28, 2026</div><div><span class="status">SOLD_OUT</span></div><div>500 / 500</div><div class="actions"><a>edit</a></div></div>
+        <div class="t-row"><div>Stand-up Night</div><div>Jul 22, 2026</div><div><span class="status">PUBLISHED</span></div><div>120 / 150</div><div class="actions"><a>edit</a><a>cancel</a></div></div>
+        <div class="t-row"><div>Theater Premiere</div><div>Aug 18, 2026</div><div><span class="status">PUBLISHED</span></div><div>89 / 200</div><div class="actions"><a>edit</a><a>cancel</a></div></div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>RECENT ACTIVITY</h3>
+        <div class="activity-row"><div>Spring Concert · 12 tickets sold</div><div class="when">2 min ago</div></div>
+        <div class="activity-row"><div>Manager appointed for Jazz Brunch</div><div class="when">1 h ago</div></div>
+        <div class="activity-row"><div>Symphony No. 9 created (DRAFT)</div><div class="when">3 h ago</div></div>
+        <div class="activity-row"><div>Inventory: +50 GA on Indie Showcase</div><div class="when">yesterday</div></div>
+      </div>
+
+      <div class="panel">
+        <h3>QUICK ACTIONS</h3>
+        <a href="#" style="display:block; font-size:13px; padding:6px 0; text-decoration:underline;">+ Create event</a>
+        <a href="#" style="display:block; font-size:13px; padding:6px 0; text-decoration:underline;">+ Appoint manager</a>
+        <a href="#" style="display:block; font-size:13px; padding:6px 0; text-decoration:underline;">View purchase history</a>
+        <a href="#" style="display:block; font-size:13px; padding:6px 0; text-decoration:underline; color:#900;">⚠ Suspend company</a>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

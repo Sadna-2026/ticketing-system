@@ -69,15 +69,69 @@ public class InventoryZone {
     public ZoneType getType() { return type; }
     public BigDecimal getPricePerTicket() { return pricePerTicket; }
     public int getMaxCapacity() { return maxCapacity; }
-    public int getAvailableCount() { return type == ZoneType.GENERAL_ADMISSION ? availableCount : (int) seats.stream().filter(Seat::isAvailable).count(); }
-    public int getLockedCount() { return type == ZoneType.GENERAL_ADMISSION ? lockedCount : (int) seats.stream().filter(Seat::isLocked).count(); }
-    public int getSoldCount() { return type == ZoneType.GENERAL_ADMISSION ? soldCount : (int) seats.stream().filter(Seat::isSold).count(); }
+    public int getAvailableCount() { return type == ZoneType.GENERAL_ADMISSION ? availableCount : Math.toIntExact(seats.stream().filter(Seat::isAvailable).count()); }
+    public int getLockedCount() { return type == ZoneType.GENERAL_ADMISSION ? lockedCount : Math.toIntExact(seats.stream().filter(Seat::isLocked).count()); }
+    public int getSoldCount() { return type == ZoneType.GENERAL_ADMISSION ? soldCount : Math.toIntExact(seats.stream().filter(Seat::isSold).count()); }
     public List<Seat> getSeats() { return Collections.unmodifiableList(seats); }
     public boolean isGA() { return type == ZoneType.GENERAL_ADMISSION; }
     public boolean isAssigned() { return type == ZoneType.ASSIGNED_SEATING; }
 
     public void setName(String name) { this.name = name; }
-    public void setPricePerTicket(BigDecimal pricePerTicket) { this.pricePerTicket = pricePerTicket; }
+
+    /**
+     * Changes the price. Rejects if any ticket in this zone is locked or sold —
+     * we can't mutate the price someone is mid-purchase or has paid for.
+     */
+    public void setPricePerTicket(BigDecimal pricePerTicket) {
+        if (pricePerTicket == null || pricePerTicket.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Price must be non-negative");
+        }
+        if (getLockedCount() > 0 || getSoldCount() > 0) {
+            throw new IllegalStateException(
+                    "Cannot change price while tickets are locked or sold");
+        }
+        this.pricePerTicket = pricePerTicket;
+    }
+
+    /**
+     * GA only. Adds capacity; new tickets become immediately available.
+     */
+    public void increaseCapacity(int delta) {
+        if (!isGA()) throw new IllegalStateException("increaseCapacity only applies to GA zones");
+        if (delta <= 0) throw new IllegalArgumentException("delta must be positive");
+        this.maxCapacity += delta;
+        this.availableCount += delta;
+    }
+
+    /**
+     * GA only. Reduces capacity by removing available tickets.
+     * Rejects if there aren't enough free tickets to remove without touching
+     * locked or sold state.
+     */
+    public void decreaseCapacity(int delta) {
+        if (!isGA()) throw new IllegalStateException("decreaseCapacity only applies to GA zones");
+        if (delta <= 0) throw new IllegalArgumentException("delta must be positive");
+        if (availableCount < delta) {
+            throw new IllegalStateException(
+                    "Cannot remove " + delta + " tickets — only " + availableCount + " are free");
+        }
+        this.maxCapacity -= delta;
+        this.availableCount -= delta;
+    }
+
+    /**
+     * Assigned only. Removes a seat — only if it's currently AVAILABLE.
+     */
+    public void removeSeat(UUID seatId) {
+        if (!isAssigned()) throw new IllegalStateException("removeSeat only applies to assigned zones");
+        Seat seat = findSeat(seatId);
+        if (!seat.isAvailable()) {
+            throw new IllegalStateException(
+                    "Cannot remove seat " + seat.getRow() + "-" + seat.getSeatNumber()
+                    + " in status: " + seat.getStatus());
+        }
+        seats.removeIf(s -> s.getId().equals(seatId));
+    }
 
     /**
      * Adds a seat to an Assigned Seating zone.
