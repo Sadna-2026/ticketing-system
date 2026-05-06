@@ -60,7 +60,7 @@ class MemberServiceUpdateIdentifyingDetailsTest {
     void GivenLoggedInMember_WhenUpdateOwnDetails_ThenDetailsUpdatedAndDtoReturned() {
         // Arrange
         RegisterResponse registerResponse = registerMember("tamar", "tamar@example.com");
-        UUID memberId = registerResponse.memberId();
+        UUID memberId = registerResponse.member().memberId();
 
         UpdateMemberDetailsRequest request = updateRequest(
                 "tamar-new",
@@ -95,7 +95,7 @@ class MemberServiceUpdateIdentifyingDetailsTest {
     void GivenLoggedInMember_WhenUpdateOnlyUsername_ThenOtherDetailsRemainUnchanged() {
         // Arrange
         RegisterResponse registerResponse = registerMember("tamar", "tamar@example.com");
-        UUID memberId = registerResponse.memberId();
+        UUID memberId = registerResponse.member().memberId();
 
         UpdateMemberDetailsRequest request = new UpdateMemberDetailsRequest(
                 "tamar-new",
@@ -121,7 +121,7 @@ class MemberServiceUpdateIdentifyingDetailsTest {
     void GivenLoggedInMember_WhenUpdateOnlyEmail_ThenOtherDetailsRemainUnchanged() {
         // Arrange
         RegisterResponse registerResponse = registerMember("tamar", "tamar@example.com");
-        UUID memberId = registerResponse.memberId();
+        UUID memberId = registerResponse.member().memberId();
 
         UpdateMemberDetailsRequest request = new UpdateMemberDetailsRequest(
                 null,
@@ -158,14 +158,14 @@ class MemberServiceUpdateIdentifyingDetailsTest {
 
         // Act
         UpdateMemberDetailsResponse response =
-                memberService.updateIdentifyingDetails(tamar.sessionToken(), other.memberId(), request);
+                memberService.updateIdentifyingDetails(tamar.sessionToken(), other.member().memberId(), request);
 
         // Assert
         assertFalse(response.success());
         assertEquals("Members can only update their own details.", response.message());
         assertNull(response.member());
 
-        Member otherMember = memberRepository.findById(other.memberId()).orElseThrow();
+        Member otherMember = memberRepository.findById(other.member().memberId()).orElseThrow();
         assertEquals("other", otherMember.getUsername());
         assertEquals("other@example.com", otherMember.getEmail());
     }
@@ -187,7 +187,7 @@ class MemberServiceUpdateIdentifyingDetailsTest {
         UpdateMemberDetailsResponse response =
                 memberService.updateIdentifyingDetails(
                         registerResponse.sessionToken(),
-                        registerResponse.memberId(),
+                        registerResponse.member().memberId(),
                         request
                 );
 
@@ -196,7 +196,7 @@ class MemberServiceUpdateIdentifyingDetailsTest {
         assertEquals("Invalid member details.", response.message());
         assertNull(response.member());
 
-        Member savedMember = memberRepository.findById(registerResponse.memberId()).orElseThrow();
+        Member savedMember = memberRepository.findById(registerResponse.member().memberId()).orElseThrow();
         assertEquals("tamar", savedMember.getUsername());
         assertEquals("tamar@example.com", savedMember.getEmail());
     }
@@ -217,14 +217,14 @@ class MemberServiceUpdateIdentifyingDetailsTest {
 
         // Act
         UpdateMemberDetailsResponse response =
-                memberService.updateIdentifyingDetails(tamar.sessionToken(), tamar.memberId(), request);
+                memberService.updateIdentifyingDetails(tamar.sessionToken(), tamar.member().memberId(), request);
 
         // Assert
         assertFalse(response.success());
         assertEquals("Username or email already in use.", response.message());
         assertNull(response.member());
 
-        Member savedMember = memberRepository.findById(tamar.memberId()).orElseThrow();
+        Member savedMember = memberRepository.findById(tamar.member().memberId()).orElseThrow();
         assertEquals("tamar", savedMember.getUsername());
         assertEquals("tamar@example.com", savedMember.getEmail());
     }
@@ -245,14 +245,14 @@ class MemberServiceUpdateIdentifyingDetailsTest {
 
         // Act
         UpdateMemberDetailsResponse response =
-                memberService.updateIdentifyingDetails(tamar.sessionToken(), tamar.memberId(), request);
+                memberService.updateIdentifyingDetails(tamar.sessionToken(), tamar.member().memberId(), request);
 
         // Assert
         assertFalse(response.success());
         assertEquals("Username or email already in use.", response.message());
         assertNull(response.member());
 
-        Member savedMember = memberRepository.findById(tamar.memberId()).orElseThrow();
+        Member savedMember = memberRepository.findById(tamar.member().memberId()).orElseThrow();
         assertEquals("tamar", savedMember.getUsername());
         assertEquals("tamar@example.com", savedMember.getEmail());
     }
@@ -274,7 +274,7 @@ class MemberServiceUpdateIdentifyingDetailsTest {
         UpdateMemberDetailsResponse response =
                 memberService.updateIdentifyingDetails(
                         registerResponse.sessionToken(),
-                        registerResponse.memberId(),
+                        registerResponse.member().memberId(),
                         request
                 );
 

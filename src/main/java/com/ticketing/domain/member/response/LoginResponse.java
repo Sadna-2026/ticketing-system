@@ -2,23 +2,23 @@ package com.ticketing.domain.member.response;
 
 import com.ticketing.domain.member.MemberDto;
 
-public record RegisterResponse(
+public record LoginResponse(
         boolean success,
         String message,
         MemberDto member,
         String sessionToken
 ) {
-    public static RegisterResponse success(MemberDto member, String sessionToken) {
-        return new RegisterResponse(
+    public static LoginResponse success(MemberDto member, String sessionToken) {
+        return new LoginResponse(
                 true,
-                "Member registered and logged in successfully.",
+                "Member logged in successfully.",
                 member,
                 sessionToken
         );
     }
 
-    public static RegisterResponse failure(String message) {
-        return new RegisterResponse(
+    public static LoginResponse failure(String message) {
+        return new LoginResponse(
                 false,
                 message,
                 null,
