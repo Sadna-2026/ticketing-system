@@ -84,8 +84,7 @@ public class CompanyServiceIntegrationTest {
             memberRepository,
             eventPublisher,
             sessionTokenService,
-            notificationService,
-            new com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository()
+            notificationService
         );
 
         // Initialize with event listeners

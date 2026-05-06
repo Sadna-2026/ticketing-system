@@ -23,7 +23,7 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
-import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
+import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 /**
@@ -38,7 +38,7 @@ public class CompletedPurchaseServiceTest {
     private static final String GUEST_TOKEN = "guest-token";
     private static final String OUTSIDER_TOKEN = "outsider-token";
 
-    private InMemoryCompletedPurchaseRepository purchaseRepo;
+    private InMemoryOrderRepository orderRepo;
     private InMemoryCompanyRepository companyRepo;
     private InMemoryMemberRepository memberRepo;
     private ISessionTokenService tokens;
@@ -55,11 +55,11 @@ public class CompletedPurchaseServiceTest {
 
     @BeforeEach
     public void setUp() {
-        purchaseRepo = new InMemoryCompletedPurchaseRepository();
+        orderRepo = new InMemoryOrderRepository();
         companyRepo = new InMemoryCompanyRepository();
         memberRepo = new InMemoryMemberRepository();
         tokens = mock(ISessionTokenService.class);
-        service = new CompletedPurchaseService(purchaseRepo, companyRepo, memberRepo, tokens);
+        service = new CompletedPurchaseService(orderRepo, companyRepo, memberRepo, tokens);
 
         // Setup owner
         ownerId = UUID.randomUUID();
@@ -226,7 +226,7 @@ public class CompletedPurchaseServiceTest {
         companyRepo.save(new Company("Other Company", "other", otherOwnerId));
 
         // Add purchase under other company
-        purchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(),
+        orderRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(),
                 "Other Concert", "Other Company", otherOwnerId,
                 "txn-other", new BigDecimal("100.00"), Instant.now()));
 
@@ -292,7 +292,7 @@ public class CompletedPurchaseServiceTest {
     }
 
     private void addPurchase(UUID memberId, String eventName, BigDecimal amount) {
-        purchaseRepo.save(new CompletedPurchase(
+        orderRepo.save(new CompletedPurchase(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 eventName,

@@ -51,8 +51,7 @@ public class GlobalRaceConditionTest {
         passwordUtils = new PasswordEncryptionUtils();
 
         InitializationService initService = new InitializationService(
-            companyRepo, memberRepo, eventPublisher, tokenService, notificationService,
-            new com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository()
+            companyRepo, memberRepo, eventPublisher, tokenService, notificationService
         );
         companyService = initService.initialize();
         memberService = new MemberService(memberRepo, passwordUtils, tokenService);

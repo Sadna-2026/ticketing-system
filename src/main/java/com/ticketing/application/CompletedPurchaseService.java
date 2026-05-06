@@ -19,7 +19,7 @@ import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.order.IOrderRepository;
 
 /**
  * Application service for completed purchases (paid orders).
@@ -29,23 +29,23 @@ public class CompletedPurchaseService {
 
     private static final Logger log = LoggerFactory.getLogger(CompletedPurchaseService.class);
 
-    private final ICompletedPurchaseRepository completedPurchaseRepository;
+    private final IOrderRepository orderRepository;
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
     private final ISessionTokenService sessionTokenService;
 
     public CompletedPurchaseService(
-            ICompletedPurchaseRepository completedPurchaseRepository,
+            IOrderRepository orderRepository,
             ICompanyRepository companyRepository,
             IMemberRepository memberRepository,
             ISessionTokenService sessionTokenService
     ) {
-        if (completedPurchaseRepository == null) throw new IllegalArgumentException("completedPurchaseRepository is required");
+        if (orderRepository == null) throw new IllegalArgumentException("orderRepository is required");
         if (companyRepository == null) throw new IllegalArgumentException("companyRepository is required");
         if (memberRepository == null) throw new IllegalArgumentException("memberRepository is required");
         if (sessionTokenService == null) throw new IllegalArgumentException("sessionTokenService is required");
 
-        this.completedPurchaseRepository = completedPurchaseRepository;
+        this.orderRepository = orderRepository;
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.sessionTokenService = sessionTokenService;
@@ -92,7 +92,7 @@ public class CompletedPurchaseService {
         Set<UUID> subtreeMemberIds = collectSubtreeMembers(requesterId, company.getName(), requesterAppt);
 
         // Step 5: Fetch all CompletedPurchase for companyName
-        List<CompletedPurchase> allCompanyPurchases = completedPurchaseRepository.findByCompanyName(company.getName());
+        List<CompletedPurchase> allCompanyPurchases = orderRepository.findCompletedByCompanyName(company.getName());
 
         // Step 6: Filter purchases to those from the subtree
         List<PurchaseRecordDTO> subtreePurchases = allCompanyPurchases.stream()

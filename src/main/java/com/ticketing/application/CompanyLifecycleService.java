@@ -20,7 +20,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.Interface.IEventRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
 
@@ -36,7 +36,7 @@ public class CompanyLifecycleService {
     private final ICompanyRepository companyRepository;
     private final IEventRepository eventRepository;
     private final IMemberRepository memberRepository;
-    private final ICompletedPurchaseRepository completedPurchaseRepository;
+    private final IOrderRepository orderRepository;
     private final IPaymentGateway paymentGateway;
     private final ISessionTokenService sessionTokenService;
 
@@ -46,13 +46,13 @@ public class CompanyLifecycleService {
     public CompanyLifecycleService(ICompanyRepository companyRepository,
                                    IEventRepository eventRepository,
                                    IMemberRepository memberRepository,
-                                   ICompletedPurchaseRepository completedPurchaseRepository,
+                                   IOrderRepository orderRepository,
                                    IPaymentGateway paymentGateway,
                                    ISessionTokenService sessionTokenService) {
         this.companyRepository = companyRepository;
         this.eventRepository = eventRepository;
         this.memberRepository = memberRepository;
-        this.completedPurchaseRepository = completedPurchaseRepository;
+        this.orderRepository = orderRepository;
         this.paymentGateway = paymentGateway;
         this.sessionTokenService = sessionTokenService;
     }
@@ -108,7 +108,7 @@ public class CompanyLifecycleService {
             // in the original close. With the stub gateway this is harmless; for V2
             // we'd track per-purchase refund status to avoid double-refund.
             queue = new ArrayDeque<>();
-            for (CompletedPurchase p : completedPurchaseRepository.findByCompanyName(companyName)) {
+            for (CompletedPurchase p : orderRepository.findCompletedByCompanyName(companyName)) {
                 queue.add(new RefundJob(p.transactionId(), p.amount()));
             }
         }
@@ -145,7 +145,7 @@ public class CompanyLifecycleService {
 
         // 2) refund completed purchases
         Deque<RefundJob> failed = new ArrayDeque<>();
-        List<CompletedPurchase> purchases = completedPurchaseRepository.findByCompanyName(company.getName());
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByCompanyName(company.getName());
         for (CompletedPurchase p : purchases) {
             RefundResult result;
             try {

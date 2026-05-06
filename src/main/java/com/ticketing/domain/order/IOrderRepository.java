@@ -4,10 +4,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Repository for active (in-flight) orders.
- * Completed purchases are stored separately in ICompletedPurchaseRepository.
- */
 public interface IOrderRepository {
     Optional<ActiveOrder> findActiveBySessionId(UUID sessionId);
 
@@ -18,4 +14,16 @@ public interface IOrderRepository {
     List<ActiveOrder> findAllActive();
 
     List<ActiveOrder> findActiveByEventId(UUID eventId);
+
+    void save(CompletedPurchase purchase);
+
+    Optional<CompletedPurchase> findCompletedById(UUID purchaseId);
+
+    List<CompletedPurchase> findCompletedByCompanyName(String companyName);
+
+    List<CompletedPurchase> findCompletedByEventId(UUID eventId);
+
+    List<CompletedPurchase> findCompletedByMemberId(UUID memberId);
+
+    List<CompletedPurchase> findAllCompleted();
 }

@@ -1,19 +1,18 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
@@ -22,8 +21,8 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
-import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.InMemoryOrderRepository;
 
 public class CompanyHistoryServiceTest {
 
@@ -34,7 +33,7 @@ public class CompanyHistoryServiceTest {
 
     private InMemoryCompanyRepository companyRepo;
     private InMemoryMemberRepository memberRepo;
-    private InMemoryCompletedPurchaseRepository completedPurchaseRepo;
+    private InMemoryOrderRepository orderRepo;
     private ISessionTokenService tokens;
     private CompanyHistoryService service;
 
@@ -45,9 +44,9 @@ public class CompanyHistoryServiceTest {
     public void setUp() {
         companyRepo = new InMemoryCompanyRepository();
         memberRepo = new InMemoryMemberRepository();
-        completedPurchaseRepo = new InMemoryCompletedPurchaseRepository();
+        orderRepo = new InMemoryOrderRepository();
         tokens = mock(ISessionTokenService.class);
-        service = new CompanyHistoryService(companyRepo, memberRepo, completedPurchaseRepo, tokens);
+        service = new CompanyHistoryService(companyRepo, memberRepo, orderRepo, tokens);
 
         ownerId = UUID.randomUUID();
         owner = new Member(ownerId, "owner", "owner@x.com", "pw");
@@ -65,8 +64,8 @@ public class CompanyHistoryServiceTest {
 
     @Test
     public void GivenOwner_WhenGetPurchaseHistory_ThenReturnsAllCompanyPurchases() {
-        completedPurchaseRepo.save(purchase("Concert A", new BigDecimal("50.00")));
-        completedPurchaseRepo.save(purchase("Concert B", new BigDecimal("75.00")));
+        orderRepo.save(purchase("Concert A", new BigDecimal("50.00")));
+        orderRepo.save(purchase("Concert B", new BigDecimal("75.00")));
 
         List<PurchaseRecordDTO> history = service.getPurchaseHistory(OWNER_TOKEN, COMPANY);
 
@@ -83,7 +82,7 @@ public class CompanyHistoryServiceTest {
         memberRepo.save(manager);
         when(tokens.isValid("mgr-token")).thenReturn(true);
         when(tokens.extractMemberId("mgr-token")).thenReturn(managerId);
-        completedPurchaseRepo.save(purchase("Concert", new BigDecimal("20.00")));
+        orderRepo.save(purchase("Concert", new BigDecimal("20.00")));
 
         List<PurchaseRecordDTO> history = service.getPurchaseHistory("mgr-token", COMPANY);
 
@@ -141,11 +140,11 @@ public class CompanyHistoryServiceTest {
     public void GivenPurchasesAcrossCompanies_WhenGetPurchaseHistory_ThenReturnsOnlyOwn() {
         // seed another company with its own purchase
         companyRepo.save(new Company(OTHER_COMPANY, "x", UUID.randomUUID()));
-        completedPurchaseRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(),
+        orderRepo.save(new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(),
                 "Other Concert", OTHER_COMPANY, UUID.randomUUID(),
                 "txn-other", new BigDecimal("30.00"), Instant.now()));
         // and one purchase under our company
-        completedPurchaseRepo.save(purchase("Mine", new BigDecimal("99.00")));
+        orderRepo.save(purchase("Mine", new BigDecimal("99.00")));
 
         List<PurchaseRecordDTO> history = service.getPurchaseHistory(OWNER_TOKEN, COMPANY);
 
@@ -162,7 +161,7 @@ public class CompanyHistoryServiceTest {
         CompletedPurchase original = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(),
                 "Original Event Name", COMPANY, UUID.randomUUID(),
                 "txn-snap", new BigDecimal("123.45"), when);
-        completedPurchaseRepo.save(original);
+        orderRepo.save(original);
 
         PurchaseRecordDTO dto = service.getPurchaseHistory(OWNER_TOKEN, COMPANY).get(0);
 

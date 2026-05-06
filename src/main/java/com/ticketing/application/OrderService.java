@@ -23,7 +23,6 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.BuyerContactSnapshot;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.ICompletedPurchaseRepository;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.domain.order.OrderStatus;
@@ -39,7 +38,6 @@ public class OrderService {
 
     private final ISessionTokenService sessionTokenService;
     private final IOrderRepository orderRepository;
-    private final ICompletedPurchaseRepository completedPurchaseRepository;
     private final IEventRepository eventRepository;
     private final ISystemClock systemClock;
     private final IMemberRepository memberRepository;
@@ -51,7 +49,7 @@ public class OrderService {
                         ISessionTokenService sessionTokenService,
                         IEventRepository eventRepository,
                         ISystemClock systemClock) {
-        this(orderRepository, null, sessionTokenService, eventRepository, systemClock,
+        this(orderRepository, sessionTokenService, eventRepository, systemClock,
                 null, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()),
                 new TicketSelectionService(eventRepository));
     }
@@ -63,13 +61,12 @@ public class OrderService {
                         IMemberRepository memberRepository,
                         List<IPaymentGateway> paymentGateways,
                         ITicketSupplyGateway ticketSupplyGateway) {
-        this(orderRepository, null, sessionTokenService, eventRepository, systemClock,
+        this(orderRepository, sessionTokenService, eventRepository, systemClock,
                 memberRepository, paymentGateways, List.of(ticketSupplyGateway),
                 new TicketSelectionService(eventRepository));
     }
 
     public OrderService(IOrderRepository orderRepository,
-                        ICompletedPurchaseRepository completedPurchaseRepository,
                         ISessionTokenService sessionTokenService,
                         IEventRepository eventRepository,
                         ISystemClock systemClock,
@@ -78,7 +75,6 @@ public class OrderService {
                         List<ITicketSupplyGateway> ticketSupplyGateways,
                         TicketSelectionService ticketSelectionService) {
         if (orderRepository == null) throw new IllegalArgumentException("orderRepository is required");
-        if (completedPurchaseRepository == null) throw new IllegalArgumentException("completedPurchaseRepository is required");
         if (sessionTokenService == null) throw new IllegalArgumentException("sessionTokenService is required");
         if (eventRepository == null) throw new IllegalArgumentException("eventRepository is required");
         if (systemClock == null) throw new IllegalArgumentException("systemClock is required");
@@ -87,7 +83,6 @@ public class OrderService {
         if (ticketSelectionService == null) throw new IllegalArgumentException("ticketSelectionService is required");
 
         this.orderRepository = orderRepository;
-        this.completedPurchaseRepository = completedPurchaseRepository;
         this.sessionTokenService = sessionTokenService;
         this.eventRepository = eventRepository;
         this.systemClock = systemClock;
@@ -245,7 +240,7 @@ public class OrderService {
                 payment.transactionId(),
                 finalAmount,
                 systemClock.now());
-        completedPurchaseRepository.save(purchase);
+        orderRepository.save(purchase);
 
         checkAndPublishSoldOut(event);
         log.info("Checkout complete: orderId={}, purchaseId={}, amount={}",
@@ -254,7 +249,7 @@ public class OrderService {
     }
 
     public CompletedPurchase getCompletedPurchase(UUID purchaseId) {
-        return completedPurchaseRepository.findById(purchaseId)
+        return orderRepository.findCompletedById(purchaseId)
                 .orElseThrow(() -> new IllegalArgumentException("Completed purchase not found: " + purchaseId));
     }
 
@@ -348,7 +343,7 @@ public class OrderService {
     }
 
     public void refundEventPurchases(UUID eventId) {
-        List<CompletedPurchase> purchases = completedPurchaseRepository.findByEventId(eventId);
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
         for (CompletedPurchase purchase : purchases) {
             refundPayment(purchase.transactionId(), purchase.amount());
         }
@@ -512,7 +507,7 @@ public class OrderService {
             throw new SecurityException("Guests do not have a purchase history");
         }
 
-        List<CompletedPurchase> purchases = completedPurchaseRepository.findByMemberId(memberId);
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByMemberId(memberId);
         
         List<PurchaseRecordDTO> result = new ArrayList<>();
         for (CompletedPurchase p : purchases) {

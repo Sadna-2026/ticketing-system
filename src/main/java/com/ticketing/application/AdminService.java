@@ -8,7 +8,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.order.IOrderRepository;
 import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Set;
@@ -24,23 +24,23 @@ public class AdminService {
     private final ICompanyRepository companyRepository;
     private final ISessionTokenService sessionTokenService;
     private final IAdminRepository adminRepository;
-    private final ICompletedPurchaseRepository completedPurchaseRepository;
+    private final IOrderRepository orderRepository;
 
     public AdminService(
             IMemberRepository memberRepository,
             ICompanyRepository companyRepository,
             ISessionTokenService sessionTokenService,
             IAdminRepository adminRepository,
-            ICompletedPurchaseRepository completedPurchaseRepository
+            IOrderRepository orderRepository
     ) {
-        if (memberRepository == null || companyRepository == null || sessionTokenService == null || adminRepository == null || completedPurchaseRepository == null) {
+        if (memberRepository == null || companyRepository == null || sessionTokenService == null || adminRepository == null || orderRepository == null) {
             throw new IllegalArgumentException("Dependencies cannot be null");
         }
         this.memberRepository = memberRepository;
         this.companyRepository = companyRepository;
         this.sessionTokenService = sessionTokenService;
         this.adminRepository = adminRepository;
-        this.completedPurchaseRepository = completedPurchaseRepository;
+        this.orderRepository = orderRepository;
     }
 
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {
@@ -108,11 +108,11 @@ public class AdminService {
         // 2. Fetch based on filters
         List<CompletedPurchase> purchases;
         if (buyerId != null) {
-            purchases = completedPurchaseRepository.findByMemberId(buyerId);
+            purchases = orderRepository.findCompletedByMemberId(buyerId);
         } else if (companyName != null && !companyName.isBlank()) {
-            purchases = completedPurchaseRepository.findByCompanyName(companyName);
+            purchases = orderRepository.findCompletedByCompanyName(companyName);
         } else {
-            purchases = completedPurchaseRepository.findAll();
+            purchases = orderRepository.findAllCompleted();
         }
 
         // 3. Map to DTOs

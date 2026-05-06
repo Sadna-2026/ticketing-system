@@ -11,7 +11,7 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.ICompletedPurchaseRepository;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import java.math.BigDecimal;
@@ -31,7 +31,7 @@ public class AdminServiceTest {
     private ICompanyRepository companyRepository;
     private ISessionTokenService sessionTokenService;
     private IAdminRepository adminRepository;
-    private ICompletedPurchaseRepository completedPurchaseRepository;
+    private IOrderRepository orderRepository;
     private AdminService adminService;
 
     @BeforeEach
@@ -40,11 +40,11 @@ public class AdminServiceTest {
         companyRepository = new InMemoryCompanyRepository();
         sessionTokenService = mock(ISessionTokenService.class);
         adminRepository = mock(IAdminRepository.class);
-        completedPurchaseRepository = mock(ICompletedPurchaseRepository.class);
+        orderRepository = mock(IOrderRepository.class);
         
         when(sessionTokenService.isValid(anyString())).thenReturn(true);
 
-        adminService = new AdminService(memberRepository, companyRepository, sessionTokenService, adminRepository, completedPurchaseRepository);
+        adminService = new AdminService(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository);
     }
 
     @Test
@@ -180,7 +180,7 @@ public class AdminServiceTest {
         CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event1", "Comp1", buyerId, "T1", new BigDecimal("100"), Instant.now());
         CompletedPurchase p2 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event2", "Comp2", buyerId, "T2", new BigDecimal("200"), Instant.now());
         
-        when(completedPurchaseRepository.findByMemberId(buyerId)).thenReturn(List.of(p1, p2));
+        when(orderRepository.findCompletedByMemberId(buyerId)).thenReturn(List.of(p1, p2));
 
         List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, buyerId, null);
 
@@ -189,7 +189,7 @@ public class AdminServiceTest {
         assertEquals("Comp1", results.get(0).companyName());
         assertEquals("Event2", results.get(1).eventName());
         assertEquals("Comp2", results.get(1).companyName());
-        verify(completedPurchaseRepository).findByMemberId(buyerId);
+        verify(orderRepository).findCompletedByMemberId(buyerId);
     }
 
     @Test
@@ -200,14 +200,14 @@ public class AdminServiceTest {
         String companyName = "Comp1";
         CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event1", companyName, UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
         
-        when(completedPurchaseRepository.findByCompanyName(companyName)).thenReturn(List.of(p1));
+        when(orderRepository.findCompletedByCompanyName(companyName)).thenReturn(List.of(p1));
 
         List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, companyName);
 
         assertEquals(1, results.size());
         assertEquals("Event1", results.get(0).eventName());
         assertEquals(companyName, results.get(0).companyName());
-        verify(completedPurchaseRepository).findByCompanyName(companyName);
+        verify(orderRepository).findCompletedByCompanyName(companyName);
     }
     
     @Test
@@ -215,14 +215,14 @@ public class AdminServiceTest {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
-        when(completedPurchaseRepository.findAll()).thenReturn(List.of(
+        when(orderRepository.findAllCompleted()).thenReturn(List.of(
             new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "E1", "C1", UUID.randomUUID(), "T1", new BigDecimal("10"), Instant.now())
         ));
 
         List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, null);
 
         assertEquals(1, results.size());
-        verify(completedPurchaseRepository).findAll();
+        verify(orderRepository).findAllCompleted();
     }
 
     @Test
@@ -231,7 +231,7 @@ public class AdminServiceTest {
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
         UUID buyerId = UUID.randomUUID();
-        when(completedPurchaseRepository.findByMemberId(buyerId)).thenReturn(Collections.emptyList());
+        when(orderRepository.findCompletedByMemberId(buyerId)).thenReturn(Collections.emptyList());
 
         List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, buyerId, null);
 
@@ -248,7 +248,7 @@ public class AdminServiceTest {
         CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), eventId, "Cancelled Event", "Comp1", UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
         
         // Even if the event is "cancelled" in the real system, the historical record in the repo remains.
-        when(completedPurchaseRepository.findAll()).thenReturn(List.of(p1));
+        when(orderRepository.findAllCompleted()).thenReturn(List.of(p1));
 
         List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, null);
 
@@ -265,7 +265,7 @@ public class AdminServiceTest {
         CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event1", companyName, UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
         
         // Even if the company is "closed" in the repository, the historical purchase record remains.
-        when(completedPurchaseRepository.findByCompanyName(companyName)).thenReturn(List.of(p1));
+        when(orderRepository.findCompletedByCompanyName(companyName)).thenReturn(List.of(p1));
 
         List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, companyName);
 

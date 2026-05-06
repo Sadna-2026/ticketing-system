@@ -1,10 +1,5 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -24,6 +19,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.awaitility.Awaitility;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -48,7 +47,6 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
-import com.ticketing.infrastructure.InMemoryCompletedPurchaseRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -60,7 +58,6 @@ public class OrderServiceTest {
 
     private OrderService orderService;
     private InMemoryOrderRepository orderRepo;
-    private InMemoryCompletedPurchaseRepository completedPurchaseRepo;
     private InMemoryEventRepository eventRepo;
     private InMemoryMemberRepository memberRepo;
     private SessionTokenService sessionService;
@@ -78,7 +75,6 @@ public class OrderServiceTest {
     @BeforeEach
     void setUp() {
         orderRepo = new InMemoryOrderRepository();
-        completedPurchaseRepo = new InMemoryCompletedPurchaseRepository();
         eventRepo = new InMemoryEventRepository();
         memberRepo = new InMemoryMemberRepository();
         paymentGateway = new TestPaymentGateway();
@@ -89,9 +85,8 @@ public class OrderServiceTest {
                 "01234567890123456789012345678901".getBytes(StandardCharsets.UTF_8));
         sessionService = new SessionTokenService(secret, 120, new InMemorySessionTokenRepository());
 
-        orderService = new OrderService(orderRepo, completedPurchaseRepo, sessionService, eventRepo, clock,
-                memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway),
-                new TicketSelectionService(eventRepo));
+        orderService = new OrderService(orderRepo, sessionService, eventRepo, clock,
+                memberRepo, List.of(paymentGateway), ticketSupplyGateway);
 
         guestToken = sessionService.generateGuestToken();
         setUpPublishedEvent();
@@ -227,7 +222,7 @@ public class OrderServiceTest {
         assertEquals(3, event.findZone(gaZoneId).getSoldCount());
         assertTrue(event.findZone(assignedZoneId).findSeat(seatId).isSold());
 
-        CompletedPurchase purchase = completedPurchaseRepo.findById(purchaseId).orElseThrow();
+        CompletedPurchase purchase = orderRepo.findCompletedById(purchaseId).orElseThrow();
         assertEquals(eventId, purchase.eventId());
         assertEquals("Summer Concert", purchase.eventName());
         assertEquals(companyName, purchase.companyName());
@@ -267,7 +262,7 @@ public class OrderServiceTest {
         Event event = eventRepo.findById(eventId).orElseThrow();
         assertEquals(99, event.findZone(gaZoneId).getAvailableCount());
         assertEquals(1, event.findZone(gaZoneId).getLockedCount());
-        assertTrue(completedPurchaseRepo.findByEventId(eventId).isEmpty());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
         assertEquals(0, ticketSupplyGateway.issueCalls);
     }
 
@@ -285,7 +280,7 @@ public class OrderServiceTest {
         assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
         assertEquals(0, event.findZone(gaZoneId).getLockedCount());
         assertEquals(1, paymentGateway.refundCalls);
-        assertTrue(completedPurchaseRepo.findByEventId(eventId).isEmpty());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
     }
 
     @Test
@@ -327,7 +322,7 @@ public class OrderServiceTest {
         UUID purchaseId = orderService.checkout(guestToken, orderId, "SAVE20");
 
         assertEquals(new BigDecimal("80.00"), paymentGateway.chargedAmount);
-        assertEquals(new BigDecimal("80.00"), completedPurchaseRepo.findById(purchaseId).orElseThrow().amount());
+        assertEquals(new BigDecimal("80.00"), orderRepo.findCompletedById(purchaseId).orElseThrow().amount());
     }
 
     @Test
@@ -343,7 +338,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(memberToken, orderId, gaZoneId, 1);
         UUID purchaseId = orderService.checkout(memberToken, orderId, null);
 
-        assertEquals(memberId, completedPurchaseRepo.findById(purchaseId).orElseThrow().memberId());
+        assertEquals(memberId, orderRepo.findCompletedById(purchaseId).orElseThrow().memberId());
         assertEquals(memberId, paymentGateway.lastDetails.memberId());
         assertEquals("member@example.com", paymentGateway.lastDetails.email());
         assertEquals(memberId.toString(), ticketSupplyGateway.lastCustomer.userId());
@@ -555,7 +550,7 @@ public class OrderServiceTest {
         primaryGateway.failIssue = true; // Primary fails
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
         
-        OrderService failoverService = new OrderService(orderRepo, completedPurchaseRepo, sessionService, eventRepo, clock,
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
                 memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
                 new TicketSelectionService(eventRepo));
 
@@ -579,7 +574,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
         secondaryGateway.failIssue = true;
         
-        OrderService failoverService = new OrderService(orderRepo, completedPurchaseRepo, sessionService, eventRepo, clock,
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
                 memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
                 new TicketSelectionService(eventRepo));
 
@@ -604,7 +599,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
         primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success 
         
-        OrderService partialService = new OrderService(orderRepo, completedPurchaseRepo, sessionService, eventRepo, clock,
+        OrderService partialService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
                 memberRepo, List.of(paymentGateway), List.of(primaryGateway),
                 new TicketSelectionService(eventRepo));
 
@@ -694,7 +689,7 @@ public class OrderServiceTest {
         primaryPayment.failCharges = true;
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
         
-        OrderService failoverService = new OrderService(orderRepo, completedPurchaseRepo, sessionService, eventRepo, clock,
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
                 memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
                 new TicketSelectionService(eventRepo));
 
@@ -716,7 +711,7 @@ public class OrderServiceTest {
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
         secondaryPayment.failCharges = true;
         
-        OrderService failoverService = new OrderService(orderRepo, completedPurchaseRepo, sessionService, eventRepo, clock,
+        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
                 memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
                 new TicketSelectionService(eventRepo));
 
@@ -730,7 +725,7 @@ public class OrderServiceTest {
         assertEquals(1, secondaryPayment.chargeCalls);
         ActiveOrder active = orderRepo.findById(orderId).get();
         assertEquals(OrderStatus.ACTIVE, active.getStatus());
-        assertTrue(completedPurchaseRepo.findByEventId(eventId).isEmpty());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
     }
 
     @Test
@@ -751,7 +746,7 @@ public class OrderServiceTest {
         assertEquals(new BigDecimal("100.00"), paymentGateway.chargedAmount); // Original charge amount was 100
         
         // Ensure that the CompletedPurchase still exists but refund logic executed
-        assertTrue(completedPurchaseRepo.findById(purchaseId).isPresent());
+        assertTrue(orderRepo.findCompletedById(purchaseId).isPresent());
     }
 
 }

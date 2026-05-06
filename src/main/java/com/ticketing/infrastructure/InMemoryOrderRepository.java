@@ -1,5 +1,6 @@
 package com.ticketing.infrastructure;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -8,11 +9,13 @@ import java.util.stream.Collectors;
 
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 
 public class InMemoryOrderRepository implements IOrderRepository {
 
     private final ConcurrentHashMap<UUID, VersionedActiveOrder> activeOrders = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, CompletedPurchase> completedPurchases = new ConcurrentHashMap<>();
 
     @Override
     public Optional<ActiveOrder> findActiveBySessionId(UUID sessionId) {
@@ -60,6 +63,52 @@ public class InMemoryOrderRepository implements IOrderRepository {
                 .map(e -> e.entity)
                 .filter(o -> o.isActive() && eventId.equals(o.getEventId()))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public void save(CompletedPurchase purchase) {
+        if (purchase == null) throw new IllegalArgumentException("purchase cannot be null");
+        completedPurchases.put(purchase.purchaseId(), purchase);
+    }
+
+    @Override
+    public Optional<CompletedPurchase> findCompletedById(UUID purchaseId) {
+        return Optional.ofNullable(completedPurchases.get(purchaseId));
+    }
+
+    @Override
+    public List<CompletedPurchase> findCompletedByCompanyName(String companyName) {
+        if (companyName == null) return List.of();
+        List<CompletedPurchase> hits = new ArrayList<>();
+        for (CompletedPurchase p : completedPurchases.values()) {
+            if (companyName.equals(p.companyName())) hits.add(p);
+        }
+        return hits;
+    }
+
+    @Override
+    public List<CompletedPurchase> findCompletedByEventId(UUID eventId) {
+        if (eventId == null) return List.of();
+        List<CompletedPurchase> hits = new ArrayList<>();
+        for (CompletedPurchase p : completedPurchases.values()) {
+            if (eventId.equals(p.eventId())) hits.add(p);
+        }
+        return hits;
+    }
+
+    @Override
+    public List<CompletedPurchase> findCompletedByMemberId(UUID memberId) {
+        if (memberId == null) return List.of();
+        List<CompletedPurchase> hits = new ArrayList<>();
+        for (CompletedPurchase p : completedPurchases.values()) {
+            if (memberId.equals(p.memberId())) hits.add(p);
+        }
+        return hits;
+    }
+
+    @Override
+    public List<CompletedPurchase> findAllCompleted() {
+        return new ArrayList<>(completedPurchases.values());
     }
 
     private static class VersionedActiveOrder {
