@@ -1,5 +1,6 @@
 package com.ticketing.application;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -17,7 +18,6 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
@@ -284,5 +284,74 @@ public class CompanyServiceTest {
 
         assertEquals("Cannot revoke personnel from a suspended or closed company", exception.getMessage());
     }
-    
+
+    /**
+     * Fulfills Acceptance Test: "Valid Relinquishment Request Initiated" (happy path)
+     * Tests the core success path of the service layer before delegating to the Handler.
+     */
+    @Test
+    public void GivenValidRequest_WhenRelinquishOwnership_ThenPublishesEventSuccessfully() {
+        UUID ownerId = UUID.randomUUID();
+        String companyName = "TestCo";
+        String validToken = "valid-" + ownerId.toString();
+
+        Member owner = new Member(ownerId, "owner", "owner@test.com", "pass");
+        memberRepository.save(owner);
+
+        when(sessionTokenServiceMock.isValid(validToken)).thenReturn(true);
+        when(sessionTokenServiceMock.extractMemberId(validToken)).thenReturn(ownerId);
+
+        Company activeCompany = new Company(companyName, "desc", UUID.randomUUID());
+        companyRepository.save(activeCompany);
+
+        assertDoesNotThrow(() -> {
+            companyService.relinquishOwnership(validToken, companyName);
+        });
+    }
+
+    /**
+     * Fulfills Acceptance Test: "Inactive company blocks role changes"
+     * V0 Requirement: Cannot relinquish ownership from a suspended or closed company.
+     */
+    @Test
+    public void GivenInactiveCompany_WhenRelinquishOwnership_ThenThrowsIllegalArgumentException() {
+        UUID ownerId = UUID.randomUUID();
+        String companyName = "TestCo";
+        String validToken = "valid-" + ownerId.toString();
+
+        Member owner = new Member(ownerId, "owner", "owner@test.com", "pass");
+        memberRepository.save(owner);
+
+        when(sessionTokenServiceMock.isValid(validToken)).thenReturn(true);
+        when(sessionTokenServiceMock.extractMemberId(validToken)).thenReturn(ownerId);
+
+        Company inactiveCompany = new Company(companyName, "desc", UUID.randomUUID());
+        inactiveCompany.suspend();
+        companyRepository.save(inactiveCompany);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            companyService.relinquishOwnership(validToken, companyName);
+        });
+
+        assertEquals("Cannot relinquish ownership from a suspended or closed company", exception.getMessage());
+    }
+
+    /**
+     * Fulfills Acceptance Test: "Company not found"
+     */
+    @Test
+    public void GivenNonExistentCompany_WhenRelinquishOwnership_ThenThrowsIllegalArgumentException() {
+        UUID ownerId = UUID.randomUUID();
+        String companyName = "NonExistentCo";
+        String validToken = "valid-" + ownerId.toString();
+
+        when(sessionTokenServiceMock.isValid(validToken)).thenReturn(true);
+        when(sessionTokenServiceMock.extractMemberId(validToken)).thenReturn(ownerId);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            companyService.relinquishOwnership(validToken, companyName);
+        });
+
+        assertEquals("Company not found", exception.getMessage());
+    }
 }

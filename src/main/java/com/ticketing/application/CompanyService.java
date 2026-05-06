@@ -12,9 +12,10 @@ import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.ManagerPermission;
-import com.ticketing.domain.member.communication.RevokePersonnelEvent;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
+import com.ticketing.domain.member.communication.RelinquishOwnershipEvent;
+import com.ticketing.domain.member.communication.RevokePersonnelEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferResponseEvent;
 
@@ -164,6 +165,29 @@ public class CompanyService {
 
         log.info("Personnel revocation requested: company={}, revoker={}, target={}", 
             companyName, revokerId, targetMemberId);
+    }
+
+    public void relinquishOwnership(String token, String companyName) {
+        UUID ownerId = validateToken(token);
+
+        // Authorization check
+        if (ownerId == null) {
+            throw new IllegalArgumentException("A guest user cannot relinquish ownership. Please log in.");
+        }
+
+        // Check if the company exists
+        Company company = companyRepository.findByName(companyName)
+            .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+
+        // Check that company is active
+        if (!company.isActive()) {
+            throw new IllegalArgumentException("Cannot relinquish ownership from a suspended or closed company");
+        }
+
+        RelinquishOwnershipEvent event = new RelinquishOwnershipEvent(company, ownerId);
+        eventPublisher.publish(event);
+
+        log.info("Ownership relinquishment requested: company={}, owner={}", companyName, ownerId);
     }
 
     private UUID validateToken(String token) {
