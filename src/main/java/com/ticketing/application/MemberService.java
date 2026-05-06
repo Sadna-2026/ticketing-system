@@ -15,8 +15,10 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberMapper;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.request.UpdateMemberDetailsRequest;
+import com.ticketing.domain.member.response.LoginResponse;
 import com.ticketing.domain.member.response.LogoutResponse;
 import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
@@ -117,6 +119,48 @@ public class MemberService {
 
         logger.log(System.Logger.Level.INFO, "New member registered: " + username );
         return RegisterResponse.success(MemberMapper.toDto(member), memberToken);
+    }
+
+    public LoginResponse login(LoginRequest request, String guestToken) {
+        if (!sessionTokenService.isValid(guestToken)) {
+            logger.log(System.Logger.Level.WARNING, "Failed login: invalid session token");
+            return LoginResponse.failure("Invalid session token.");
+        }
+
+        UUID tokenMemberId = sessionTokenService.extractMemberId(guestToken);
+
+        if (tokenMemberId != null) {
+            logger.log(System.Logger.Level.WARNING, "Failed login: session is already member-bound " + tokenMemberId);
+            return LoginResponse.failure("Only guests can log in.");
+        }
+
+        if (!isValidLoginRequest(request)) {
+            logger.log(System.Logger.Level.WARNING, "Failed login: invalid credentials format");
+            return LoginResponse.failure("Invalid credentials.");
+        }
+
+        String username = normalizeUsername(request.username());
+        Member member = memberRepository.findByUsername(username).orElse(null);
+
+        if (member == null) {
+            logger.log(System.Logger.Level.WARNING, "Failed login: nonexistent username " + username);
+            return LoginResponse.failure("Invalid username or password.");
+        }
+
+        if (!passwordEncryptionUtils.matches(request.password(), member.getEncryptedPassword())) {
+            logger.log(System.Logger.Level.WARNING, "Failed login: wrong password for username " + username);
+            return LoginResponse.failure("Invalid username or password.");
+        }
+
+        UUID sessionId = sessionTokenService.extractSessionId(guestToken);
+        String memberToken = sessionTokenService.generateMemberToken(
+                sessionId,
+                member.getId(),
+                Set.of()
+        );
+
+        logger.log(System.Logger.Level.INFO, "Member logged in: " + member.getId());
+        return LoginResponse.success(MemberMapper.toDto(member), memberToken);
     }
 
     public UpdateMemberDetailsResponse updateIdentifyingDetails(
@@ -318,6 +362,14 @@ public class MemberService {
                 && request.email().contains("@")
                 && request.password() != null
                 && request.password().length() >= 6;
+    }
+
+    private boolean isValidLoginRequest(LoginRequest request) {
+        return request != null
+                && request.username() != null
+                && !request.username().isBlank()
+                && request.password() != null
+                && !request.password().isBlank();
     }
 
     private boolean isValidUpdateMemberDetailsRequest(UpdateMemberDetailsRequest request) {
