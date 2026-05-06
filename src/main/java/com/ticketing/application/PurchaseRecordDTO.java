@@ -15,6 +15,7 @@ public record PurchaseRecordDTO(
         UUID purchaseId,
         UUID eventId,
         String eventName,
+        String companyName,
         UUID memberId,
         String transactionId,
         BigDecimal amount,
@@ -22,7 +23,7 @@ public record PurchaseRecordDTO(
 ) {
     public static PurchaseRecordDTO from(CompletedPurchase p) {
         return new PurchaseRecordDTO(
-                p.purchaseId(), p.eventId(), p.eventName(), p.memberId(),
+                p.purchaseId(), p.eventId(), p.eventName(), p.companyName(), p.memberId(),
                 p.transactionId(), p.amount(), p.purchasedAt());
     }
 }

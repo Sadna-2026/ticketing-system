@@ -106,6 +106,11 @@ public class InMemoryOrderRepository implements IOrderRepository {
         return hits;
     }
 
+    @Override
+    public List<CompletedPurchase> findAllCompleted() {
+        return new ArrayList<>(completedPurchases.values());
+    }
+
     private static class VersionedActiveOrder {
         final ActiveOrder entity;
         final int version;

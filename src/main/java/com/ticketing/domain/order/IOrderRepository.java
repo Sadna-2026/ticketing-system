@@ -24,4 +24,6 @@ public interface IOrderRepository {
     List<CompletedPurchase> findCompletedByEventId(UUID eventId);
 
     List<CompletedPurchase> findCompletedByMemberId(UUID memberId);
+
+    List<CompletedPurchase> findAllCompleted();
 }

@@ -10,13 +10,18 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.admin.IAdminRepository;
+import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import java.math.BigDecimal;
+import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,6 +31,7 @@ public class AdminServiceTest {
     private ICompanyRepository companyRepository;
     private ISessionTokenService sessionTokenService;
     private IAdminRepository adminRepository;
+    private IOrderRepository orderRepository;
     private AdminService adminService;
 
     @BeforeEach
@@ -34,10 +40,11 @@ public class AdminServiceTest {
         companyRepository = new InMemoryCompanyRepository();
         sessionTokenService = mock(ISessionTokenService.class);
         adminRepository = mock(IAdminRepository.class);
+        orderRepository = mock(IOrderRepository.class);
         
         when(sessionTokenService.isValid(anyString())).thenReturn(true);
 
-        adminService = new AdminService(memberRepository, companyRepository, sessionTokenService, adminRepository);
+        adminService = new AdminService(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository);
     }
 
     @Test
@@ -150,5 +157,119 @@ public class AdminServiceTest {
 
         // Verify member was not deleted
         assertTrue(memberRepository.findById(targetId).isPresent());
+    }
+
+    @Test
+    public void testGetGlobalPurchaseHistory_NonAdminDenied() {
+        String token = "user-token";
+        when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
+
+        SecurityException ex = assertThrows(SecurityException.class, () -> {
+            adminService.getGlobalPurchaseHistory(token, null, null);
+        });
+
+        assertTrue(ex.getMessage().contains("System admin permission required"));
+    }
+
+    @Test
+    public void testGetGlobalPurchaseHistory_FilterByBuyer() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        UUID buyerId = UUID.randomUUID();
+        CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event1", "Comp1", buyerId, "T1", new BigDecimal("100"), Instant.now());
+        CompletedPurchase p2 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event2", "Comp2", buyerId, "T2", new BigDecimal("200"), Instant.now());
+        
+        when(orderRepository.findCompletedByMemberId(buyerId)).thenReturn(List.of(p1, p2));
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, buyerId, null);
+
+        assertEquals(2, results.size());
+        assertEquals("Event1", results.get(0).eventName());
+        assertEquals("Comp1", results.get(0).companyName());
+        assertEquals("Event2", results.get(1).eventName());
+        assertEquals("Comp2", results.get(1).companyName());
+        verify(orderRepository).findCompletedByMemberId(buyerId);
+    }
+
+    @Test
+    public void testGetGlobalPurchaseHistory_FilterByCompany() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        String companyName = "Comp1";
+        CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event1", companyName, UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
+        
+        when(orderRepository.findCompletedByCompanyName(companyName)).thenReturn(List.of(p1));
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, companyName);
+
+        assertEquals(1, results.size());
+        assertEquals("Event1", results.get(0).eventName());
+        assertEquals(companyName, results.get(0).companyName());
+        verify(orderRepository).findCompletedByCompanyName(companyName);
+    }
+    
+    @Test
+    public void testGetGlobalPurchaseHistory_NoFiltersReturnsAll() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        when(orderRepository.findAllCompleted()).thenReturn(List.of(
+            new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "E1", "C1", UUID.randomUUID(), "T1", new BigDecimal("10"), Instant.now())
+        ));
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, null);
+
+        assertEquals(1, results.size());
+        verify(orderRepository).findAllCompleted();
+    }
+
+    @Test
+    public void testGetGlobalPurchaseHistory_NonExistentFilterReturnsEmpty() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        UUID buyerId = UUID.randomUUID();
+        when(orderRepository.findCompletedByMemberId(buyerId)).thenReturn(Collections.emptyList());
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, buyerId, null);
+
+        assertNotNull(results);
+        assertTrue(results.isEmpty());
+    }
+
+    @Test
+    public void testHistoryPreservedAfterEventCancelled() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        UUID eventId = UUID.randomUUID();
+        CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), eventId, "Cancelled Event", "Comp1", UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
+        
+        // Even if the event is "cancelled" in the real system, the historical record in the repo remains.
+        when(orderRepository.findAllCompleted()).thenReturn(List.of(p1));
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, null);
+
+        assertEquals(1, results.size());
+        assertEquals("Cancelled Event", results.get(0).eventName());
+    }
+
+    @Test
+    public void testHistoryPreservedAfterCompanyClosure() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        String companyName = "Closed Company";
+        CompletedPurchase p1 = new CompletedPurchase(UUID.randomUUID(), UUID.randomUUID(), "Event1", companyName, UUID.randomUUID(), "T1", new BigDecimal("100"), Instant.now());
+        
+        // Even if the company is "closed" in the repository, the historical purchase record remains.
+        when(orderRepository.findCompletedByCompanyName(companyName)).thenReturn(List.of(p1));
+
+        List<PurchaseRecordDTO> results = adminService.getGlobalPurchaseHistory(adminToken, null, companyName);
+
+        assertEquals(1, results.size());
+        assertEquals(companyName, results.get(0).companyName());
     }
 }
