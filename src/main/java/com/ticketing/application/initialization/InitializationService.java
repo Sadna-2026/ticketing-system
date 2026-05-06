@@ -8,6 +8,7 @@ import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
 import com.ticketing.application.listener.RoleAppointmentOfferRequestedHandler;
+import com.ticketing.application.listener.RoleAppointmentOfferResponseHandler;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;
@@ -63,8 +64,16 @@ public class InitializationService {
         eventPublisher.subscribe("CompanyOpened", companyOpenedHandler);
 
         // Register the handler for RoleAppointmentOfferRequested
-        RoleAppointmentOfferRequestedHandler offerHandler = new RoleAppointmentOfferRequestedHandler(memberRepository);
-        eventPublisher.subscribe("RoleAppointmentOfferRequested", offerHandler);
+        RoleAppointmentOfferRequestedHandler requestHandler = new RoleAppointmentOfferRequestedHandler(memberRepository);
+        eventPublisher.subscribe("RoleAppointmentOfferRequested", requestHandler);
+
+        // Register the handler for RoleAppointmentOfferResponse
+        RoleAppointmentOfferResponseHandler responseHandler = new RoleAppointmentOfferResponseHandler(
+            memberRepository,
+            companyRepository,
+            notificationService
+        );
+        eventPublisher.subscribe("RoleAppointmentOfferResponse", responseHandler);
         
         log.info("Event listeners registered");
     }

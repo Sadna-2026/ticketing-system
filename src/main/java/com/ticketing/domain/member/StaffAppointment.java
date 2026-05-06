@@ -12,6 +12,7 @@ public class StaffAppointment {
     private final UUID appointedByMemberId;
     private StaffRole role;
     private Set<ManagerPermission> permissions;
+    private Set<UUID> appointedStaffMemberIds;
 
     public StaffAppointment(
             String companyId,
@@ -31,6 +32,29 @@ public class StaffAppointment {
         this.appointedByMemberId = appointedByMemberId;
         this.role = role;
         this.permissions = copyPermissions(permissions);
+        this.appointedStaffMemberIds = Collections.emptySet();
+    }
+
+    public StaffAppointment(
+            String companyId,
+            UUID appointedByMemberId,
+            StaffRole role,
+            Set<ManagerPermission> permissions,
+            Set<UUID> appointedStaffMemberIds
+    ) {
+        if (companyId == null || companyId.isBlank()) {
+            throw new IllegalArgumentException("companyId cannot be null or blank");
+        }
+
+        if (role == null) {
+            throw new IllegalArgumentException("role cannot be null");
+        }
+
+        this.companyId = normalizeCompanyId(companyId);
+        this.appointedByMemberId = appointedByMemberId;
+        this.role = role;
+        this.permissions = copyPermissions(permissions);
+        this.appointedStaffMemberIds = copyAppointedStaffIds(appointedStaffMemberIds);
     }
 
     public String getCompanyId() {
@@ -47,6 +71,20 @@ public class StaffAppointment {
 
     public Set<ManagerPermission> getPermissions() {
         return Collections.unmodifiableSet(permissions);
+    }
+
+    public Set<UUID> getAppointedStaffMemberIds() {
+        return Collections.unmodifiableSet(appointedStaffMemberIds);
+    }
+
+    public void addAppointedStaffMember(UUID memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId cannot be null");
+        }
+
+        Set<UUID> updated = new HashSet<>(appointedStaffMemberIds);
+        updated.add(memberId);
+        this.appointedStaffMemberIds = copyAppointedStaffIds(updated);
     }
 
     public boolean isOwner() {
@@ -84,6 +122,14 @@ public class StaffAppointment {
         }
 
         return Collections.unmodifiableSet(new HashSet<>(permissions));
+    }
+
+    private Set<UUID> copyAppointedStaffIds(Set<UUID> appointedStaffMemberIds) {
+        if (appointedStaffMemberIds == null || appointedStaffMemberIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return Collections.unmodifiableSet(new HashSet<>(appointedStaffMemberIds));
     }
 
     private String normalizeCompanyId(String companyId) {

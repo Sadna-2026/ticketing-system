@@ -89,6 +89,7 @@ public class CompanyServiceIntegrationTest {
         testEventListener = new TestEventListener();
         eventPublisher.subscribe("CompanyOpened", testEventListener);
         eventPublisher.subscribe("RoleAppointmentOfferRequested", testEventListener);
+        eventPublisher.subscribe("RoleAppointmentOfferResponse", testEventListener);
     }
 
     @Test
@@ -164,6 +165,177 @@ public class CompanyServiceIntegrationTest {
         assertEquals(0, memberRepository.findById(targetId).get().getPendingOffers().size(), 
             "Offer should not have been added due to unauthorized appointer");
     }
+
+    // SuccessfulRoleAcceptance
+    @Test
+    public void GivenAcceptedResponse_WhenRespondToRoleAppointment_ThenNotifiesAppointee() {
+        UUID appointerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String companyName = "TestCo";
+        String appointerToken = "valid-" + appointerId.toString();
+        String targetToken = "valid-" + targetId.toString();
+
+        // Setup Company and Appointer
+        Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(appointer);
+        companyService.openProductionCompany(appointerToken, companyName, "Desc");
+
+        // Setup Target
+        Member target = new Member(targetId, "target", "target@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // Offer role
+        companyService.offerRoleAppointment(appointerToken, companyName, targetId, StaffAppointment.StaffRole.MANAGER, new java.util.HashSet<>(Collections.singletonList(ManagerPermission.PERSONNEL_MGMT)));
+
+        // Get the offer ID
+        PendingRoleOffer offer = memberRepository.findById(targetId).get().getPendingOffers().get(0);
+
+        // Respond to offer
+        companyService.respondToRoleAppointment(targetToken, offer.getOfferId(), true);
+
+        // Verify appointment and notification
+        Optional<Member> updatedTarget = memberRepository.findById(targetId);
+        assertTrue(updatedTarget.isPresent());
+        assertNotNull(updatedTarget.get().getStaffAppointment(companyName));
+        verify(notificationService).notify(eq(appointerId.toString()), contains("accepted the manager role offer"));
+    }
+
+    // Role rejection
+    @Test
+    public void GivenRejectedResponse_WhenRespondToRoleAppointment_ThenNotifiesAppointeeWithoutAppointment() {
+        UUID appointerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String companyName = "TestCo";
+        String appointerToken = "valid-" + appointerId.toString();
+        String targetToken = "valid-" + targetId.toString();
+
+        // Setup Company and Appointer
+        Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(appointer);
+        companyService.openProductionCompany(appointerToken, companyName, "Desc");
+
+        // Setup Target
+        Member target = new Member(targetId, "target", "target@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // Offer role
+        companyService.offerRoleAppointment(appointerToken, companyName, targetId, StaffAppointment.StaffRole.MANAGER, new java.util.HashSet<>(Collections.singletonList(ManagerPermission.PERSONNEL_MGMT)));
+
+        // Get the offer ID
+        PendingRoleOffer offer = memberRepository.findById(targetId).get().getPendingOffers().get(0);
+
+        // Respond to offer
+        companyService.respondToRoleAppointment(targetToken, offer.getOfferId(), false);
+
+        // Verify no appointment and notification
+        Optional<Member> updatedTarget = memberRepository.findById(targetId);
+        assertTrue(updatedTarget.isPresent());
+        assertNull(updatedTarget.get().getStaffAppointment(companyName));
+        verify(notificationService).notify(eq(appointerId.toString()), contains("declined the manager role offer"));
+    }
+
+    // Manager promotion acceptance
+    @Test
+    public void GivenManagerPromotionAccepted_WhenRespondToRoleAppointment_ThenNotifiesAppointee() {
+        UUID appointerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String companyName = "TestCo";
+        String appointerToken = "valid-" + appointerId.toString();
+        String targetToken = "valid-" + targetId.toString();
+
+        // Setup Company and Appointer
+        Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(appointer);
+        companyService.openProductionCompany(appointerToken, companyName, "Desc");
+
+        // Setup Target as Manager
+        Member target = new Member(targetId, "target", "target@test.com", "pass");
+        StaffAppointment managerAppointment = new StaffAppointment(companyName, appointerId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+        target.addStaffAppointment(companyName, managerAppointment);
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // Offer owner role
+        companyService.offerRoleAppointment(appointerToken, companyName, targetId, StaffAppointment.StaffRole.OWNER, Collections.emptySet());
+
+        // Get the offer ID
+        PendingRoleOffer offer = memberRepository.findById(targetId).get().getPendingOffers().get(0);
+
+        // Respond to offer
+        companyService.respondToRoleAppointment(targetToken, offer.getOfferId(), true);
+
+        // Verify promotion and notification
+        Optional<Member> updatedTarget = memberRepository.findById(targetId);
+        assertTrue(updatedTarget.isPresent());
+        assertEquals(StaffAppointment.StaffRole.OWNER, updatedTarget.get().getStaffAppointment(companyName).getRole());
+        verify(notificationService).notify(eq(appointerId.toString()), contains("promoted to owner"));
+    }
+
+    // Manager promotion rejection
+    @Test
+    public void GivenManagerPromotionRejected_WhenRespondToRoleAppointment_ThenNotifiesAppointee() {
+        UUID appointerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String companyName = "TestCo";
+        String appointerToken = "valid-" + appointerId.toString();
+        String targetToken = "valid-" + targetId.toString();
+
+        // Setup Company and Appointer
+        Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(appointer);
+        companyService.openProductionCompany(appointerToken, companyName, "Desc");
+
+        // Setup Target as Manager
+        Member target = new Member(targetId, "target", "target@test.com", "pass");
+        StaffAppointment managerAppointment = new StaffAppointment(companyName, appointerId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+        target.addStaffAppointment(companyName, managerAppointment);
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // Offer owner role
+        companyService.offerRoleAppointment(appointerToken, companyName, targetId, StaffAppointment.StaffRole.OWNER, Collections.emptySet());
+
+        // Get the offer ID
+        PendingRoleOffer offer = memberRepository.findById(targetId).get().getPendingOffers().get(0);
+
+        // Respond to offer
+        companyService.respondToRoleAppointment(targetToken, offer.getOfferId(), false);
+
+        // Verify still manager and notification
+        Optional<Member> updatedTarget = memberRepository.findById(targetId);
+        assertTrue(updatedTarget.isPresent());
+        assertEquals(StaffAppointment.StaffRole.MANAGER, updatedTarget.get().getStaffAppointment(companyName).getRole());
+        verify(notificationService).notify(eq(appointerId.toString()), contains("rejected the promotion to owner"));
+    }
+
+    // TODO: implement method to close company and test that role acceptance is blocked for closed companies with appropriate notification
+    /*@Test
+    public void GivenInactiveCompany_WhenRespondToRoleAppointment_ThenThrows() {
+        UUID appointerId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String companyName = "TestCo";
+        String appointerToken = "valid-" + appointerId.toString();
+        String targetToken = "valid-" + targetId.toString();
+
+        // Setup Company and Appointer
+        Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(appointer);
+        companyService.openProductionCompany(appointerToken, companyName, "Desc");
+
+        // Setup Target as Member
+        Member target = new Member(targetId, "target", "target@test.com", "pass");
+        memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+        // Offer owner role
+        companyService.offerRoleAppointment(appointerToken, companyName, targetId, StaffAppointment.StaffRole.OWNER, Collections.emptySet());
+
+        // Get the offer ID
+        PendingRoleOffer offer = memberRepository.findById(targetId).get().getPendingOffers().get(0);
+
+        // Close company
+        companyService.closeCompany(appointerToken, companyName);
+
+        // Respond to offer
+        assertThrows(CompanyClosedException.class, () -> companyService.respondToRoleAppointment(targetToken, offer.getOfferId(), true));
+    } */
 
     private static class TestEventListener implements IEventListener {
         private CompanyOpenedEvent lastCompanyOpenedEvent;
