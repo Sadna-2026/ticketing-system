@@ -78,7 +78,7 @@ public class InitializationService {
 
         // Register the handler for ManagerPermissionsChanged
         ManagerPermissionsChangedHandler permissionsHandler = new ManagerPermissionsChangedHandler(memberRepository, companyRepository);
-        eventPublisher.subscribe("ManagerPermissionsChangedEvent", permissionsHandler);
+        eventPublisher.subscribe("ManagerPermissionsChanged", permissionsHandler);
         
         log.info("Event listeners registered");
     }

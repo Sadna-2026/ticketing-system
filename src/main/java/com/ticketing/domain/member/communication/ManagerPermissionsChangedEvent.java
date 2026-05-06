@@ -31,7 +31,7 @@ public class ManagerPermissionsChangedEvent implements IEvent {
 
     @Override
     public String getEventType() {
-        return "ManagerPermissionsChangedEvent";
+        return "ManagerPermissionsChanged";
     }
 
     public UUID getCallerId() {
