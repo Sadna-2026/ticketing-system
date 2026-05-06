@@ -1,21 +1,19 @@
 package com.ticketing.application;
 
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.member.IMemberRepository;
-import com.ticketing.domain.member.Member;
 import com.ticketing.domain.queue.IQueueRepository;
 import com.ticketing.domain.queue.QueueConfig;
 import com.ticketing.domain.queue.QueueEntry;
 import com.ticketing.domain.queue.VirtualQueue;
-import com.ticketing.infrastructure.Interface.ISessionTokenRepository;
-
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 /**
  * Application Service: QueueService
