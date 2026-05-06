@@ -14,7 +14,9 @@ public final class MemberMapper {
         return new MemberDto(
                 member.getId(),
                 member.getUsername(),
-                member.getEmail()
+                member.getEmail(),
+                member.getPhoneNumber(),
+                member.getDateOfBirth()
         );
     }
 }

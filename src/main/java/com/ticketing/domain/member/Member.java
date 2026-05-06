@@ -92,6 +92,20 @@ public class Member {
         this.email = newEmail;
     }
 
+    public void updatePhoneNumber(String newPhoneNumber) {
+        if (newPhoneNumber == null || newPhoneNumber.isBlank()) {
+            throw new IllegalArgumentException("newPhoneNumber cannot be null or blank");
+        }
+        this.phoneNumber = newPhoneNumber;
+    }
+
+    public void updateDateOfBirth(LocalDate newDateOfBirth) {
+        if (newDateOfBirth == null) {
+            throw new IllegalArgumentException("newDateOfBirth cannot be null");
+        }
+        this.dateOfBirth = newDateOfBirth;
+    }
+
     public void updateEncryptedPassword(String newEncryptedPassword) {
         if (newEncryptedPassword == null || newEncryptedPassword.isBlank()) {
             throw new IllegalArgumentException("newEncryptedPassword cannot be null or blank");
