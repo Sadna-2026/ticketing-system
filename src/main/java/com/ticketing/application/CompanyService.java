@@ -7,12 +7,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.communication.RevokePersonnelEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferResponseEvent;
 
@@ -109,6 +111,30 @@ public class CompanyService {
 
         log.info("Role appointment response handled: responder={}, offer={}, accepted={}",
             responderId, appointmentOfferId, accepted);
+    }
+
+    public void revokePersonnel(String token, String companyName, UUID targetMemberId) {
+        UUID revokerId = validateToken(token);
+        
+        // Authorization check
+        if (revokerId == null) {
+            throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
+        }
+
+        // Check if the company exists
+        Company company = companyRepository.findByName(companyName)
+            .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+
+        // Check that company is active
+        if (!company.isActive()) {
+            throw new IllegalArgumentException("Cannot revoke personnel from a suspended or closed company");
+        }
+
+        RevokePersonnelEvent event = new RevokePersonnelEvent(company, revokerId, targetMemberId);
+        eventPublisher.publish(event);
+
+        log.info("Personnel revocation requested: company={}, revoker={}, target={}", 
+            companyName, revokerId, targetMemberId);
     }
 
     private UUID validateToken(String token) {
