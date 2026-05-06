@@ -32,10 +32,10 @@ import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
 
 public class EventServiceInventoryTest {
 
@@ -61,7 +61,7 @@ public class EventServiceInventoryTest {
         memberRepo = new InMemoryMemberRepository();
         tokens = mock(ISessionTokenService.class);
         eventService = new EventService(eventRepo, companyRepo, memberRepo,
-                mock(IActiveOrderRepository.class), tokens);
+                mock(IOrderRepository.class), tokens);
 
         memberId = UUID.randomUUID();
         member = new Member(memberId, "owner", "owner@x.com", "pw");

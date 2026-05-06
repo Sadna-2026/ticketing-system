@@ -1,3 +1,5 @@
 package com.ticketing.domain.gateway;
 
-public record PaymentDetails(String paymentMethodId, String currency) {}
+import java.util.UUID;
+
+public record PaymentDetails(UUID orderId, UUID eventId, UUID memberId, String email) {}

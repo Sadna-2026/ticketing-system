@@ -4,7 +4,9 @@ import com.ticketing.domain.gateway.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,8 +23,8 @@ class StubGatewaysTest {
 
     @Test
     void testPaymentGateway_SuccessMode() {
-        PaymentDetails details = new PaymentDetails("tok_123", "ILS");
-        PaymentResult result = paymentGateway.charge(150.0, details);
+        PaymentDetails details = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com");
+        PaymentResult result = paymentGateway.charge(new BigDecimal("150.00"), details);
         assertTrue(result.success());
         assertNotNull(result.transactionId());
     }
@@ -30,8 +32,8 @@ class StubGatewaysTest {
     @Test
     void testPaymentGateway_FailureMode() {
         paymentGateway.setShouldFail(true);
-        PaymentDetails details = new PaymentDetails("tok_123", "ILS");
-        PaymentResult result = paymentGateway.charge(150.0, details);
+        PaymentDetails details = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com");
+        PaymentResult result = paymentGateway.charge(new BigDecimal("150.00"), details);
         assertFalse(result.success());
         assertNotNull(result.errorMessage());
     }

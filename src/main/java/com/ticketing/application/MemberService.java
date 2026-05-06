@@ -88,7 +88,9 @@ public class MemberService {
                 newMemberId,
                 username,
                 email,
-                hashedPassword
+                hashedPassword,
+                request.phoneNumber()
+                ,request.dateOfBirth()
         );
 
         boolean saved = memberRepository.saveIfUsernameAndEmailAvailable(member);

@@ -1,4 +1,4 @@
-package com.ticketing.application;
+package  com.ticketing.application;
 
 import java.time.Instant;
 import java.util.List;
@@ -6,25 +6,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.infrastructure.Interface.IActiveOrderRepository;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
+import com.ticketing.infrastructure.Interface.IEventRepository;
 
 public class OrderTimeDomainService {
     private static final Logger log = LoggerFactory.getLogger(OrderTimeDomainService.class);
 
-    private final IActiveOrderRepository activeOrderRepository;
+    private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
     //private final IDomainEventPublisher eventPublisher;
     private final ISystemClock systemClock;
 
-    public OrderTimeDomainService(IActiveOrderRepository activeOrderRepository,
+    public OrderTimeDomainService(IOrderRepository orderRepository,
                                   IEventRepository eventRepository,
                                   //IDomainEventPublisher eventPublisher,
                                   ISystemClock systemClock) {
-        this.activeOrderRepository = activeOrderRepository;
+        this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
         //this.eventPublisher = eventPublisher;
         this.systemClock = systemClock;
@@ -36,7 +36,7 @@ public class OrderTimeDomainService {
      */
     public void expireOrders() {
         Instant now = systemClock.now();
-        List<ActiveOrder> activeOrders = activeOrderRepository.findAllActive();
+        List<ActiveOrder> activeOrders = orderRepository.findAllActive();
         log.info("Expiration sweep: checking {} active orders", activeOrders.size());
 
         int expiredCount = 0;
@@ -45,7 +45,7 @@ public class OrderTimeDomainService {
                 Event event = eventRepository.findById(order.getEventId()).orElse(null);
                 if (event == null) {
                     order.expire();
-                    activeOrderRepository.save(order);
+                    orderRepository.save(order);
                     expiredCount++;
                     continue;
                 }
@@ -80,10 +80,11 @@ public class OrderTimeDomainService {
         eventRepository.save(event);
 
         order.expire();
-        activeOrderRepository.save(order);
+        orderRepository.save(order);
 
         // eventPublisher.publish(new OrderExpiredEvent(
         //         order.getId(), order.getSessionId(), order.getEventId(), systemClock.now()));
         // log.info("Order expired: orderId={}, eventId={}", order.getId(), order.getEventId());
     }
 }
+

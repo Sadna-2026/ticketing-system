@@ -1,10 +1,11 @@
 package com.ticketing.domain.member;
 
-import java.util.Hashtable;
-import java.util.UUID;
+import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Collections;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.UUID;
 
 public class Member {
 
@@ -13,9 +14,15 @@ public class Member {
     private Hashtable<String,StaffAppointment> staffAppointments; // key is CompanyId
     private String email;
     private String encryptedPassword;
+    private String phoneNumber;
+    private LocalDate dateOfBirth;
     private List<PendingRoleOffer> pendingOffers;
 
     public Member(UUID memberId, String username, String email, String encryptedPassword) {
+        this(memberId, username, email, encryptedPassword, null, null);
+    }
+
+    public Member(UUID memberId, String username, String email, String encryptedPassword, String phoneNumber, LocalDate dateOfBirth) {
         if (memberId == null) {
             throw new IllegalArgumentException("memberId cannot be null");
         }
@@ -37,10 +44,12 @@ public class Member {
         this.email = email;
         this.encryptedPassword = encryptedPassword;
         this.staffAppointments  = new Hashtable<>();
+        this.phoneNumber = phoneNumber;
+        this.dateOfBirth = dateOfBirth;        
         this.pendingOffers = new ArrayList<>();
 
     }
-
+    
     // Getters
     public UUID getId() {
         return memberId;
@@ -56,6 +65,14 @@ public class Member {
 
     public String getEncryptedPassword() {
         return encryptedPassword;
+    }
+
+     public String getPhoneNumber() {
+        return this.phoneNumber;
+    }
+
+     public LocalDate getDateOfBirth() {
+        return this.dateOfBirth;
     }
 
 
