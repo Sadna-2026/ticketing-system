@@ -269,3 +269,39 @@ Summary of prompt(s):
 2. "add tests for this use case. checkout the format that is already exists... checked all acceptance tests"
 Output received (short description):
 - Added 4 acceptance tests to `OrderServiceTest` (for secondary failover, all-failing, partial cancellations, and refund rejection).
+
+## Feature / Component: UC-II.3.2 — Open production company
+- Purpose of LLM use: Tests help
+- Summary of prompt(s): Helped me with consistent mocking and validation, shortening writing time repetetive code (with slight changes for each case).
+- Output received (short description): Test code using mockito and integration
+- Files / components affected: RevokePersonnelHandlerTest, CompanyServiceTest
+- Modifications made: written above.
+- Initial gaps in understanding (if any): none
+- Final understanding (brief explanation in your own words): helped me understand the sequence of the checking better.
+
+## Feature / Component: UC-II.3.2 — Open production company
+- Purpose of LLM use: Skeleton code help
+- Summary of prompt(s): Helped me with constructing basic functions without too much logic.
+- Output received (short description): skeleton code base
+- Files / components affected: company files in the domain layer
+- Modifications made: documentation and some corrections to make it suitable and better to understand.
+- Initial gaps in understanding (if any): none
+- Final understanding (brief explanation in your own words): helped me understand better the fundamentals of the project we just discussed in theory.
+
+## Feature / Component: UC-C.5 — Respond to role offer
+- Purpose of LLM use: Understanding the code of my mates to implement something similar on my own. (and tests)
+- Summary of prompt(s): understanding the connections between new classes and helping with skeleton. also helped with tests
+- Output received (short description): some code and tests
+- Files / components affected: handler, event and service function
+- Modifications made: documentation and some corrections to make it suitable and better to understand, and making some tests actually pass.
+- Initial gaps in understanding (if any): understand the code of the others to make something similar
+- Final understanding (brief explanation in your own words): better understanding of message passing in this project.
+
+## Feature / Component: UC-C.6 — Revoke personnel
+- Purpose of LLM use: Tests help
+- Summary of prompt(s): Helped me with consistent mocking and validation, shortening writing time repetetive code (with slight changes for each case).
+- Output received (short description): Test code using mockito and integration
+- Files / components affected: RevokePersonnelHandlerTest, CompanyServiceTest
+- Modifications made: documentation and some corrections to make it suitable and better to understand.
+- Initial gaps in understanding (if any): none
+- Final understanding (brief explanation in your own words): helped me understand the sequence of the checking better.

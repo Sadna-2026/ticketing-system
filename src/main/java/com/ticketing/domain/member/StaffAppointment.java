@@ -9,7 +9,7 @@ import java.util.UUID;
 public class StaffAppointment {
 
     private final String companyId;
-    private final UUID appointedByMemberId;
+    private UUID appointedByMemberId;
     private StaffRole role;
     private ManagerPermissions permissions;
     private Set<UUID> appointedStaffMemberIds;
@@ -91,6 +91,26 @@ public class StaffAppointment {
         this.appointedStaffMemberIds = copyAppointedStaffIds(updated);
     }
 
+    public void addAppointedStaffMemberGroup(Set<UUID> memberIds) {
+        if (memberIds == null) {
+            throw new IllegalArgumentException("memberIds cannot be null");
+        }
+
+        Set<UUID> updated = new HashSet<>(appointedStaffMemberIds);
+        updated.addAll(memberIds);
+        this.appointedStaffMemberIds = copyAppointedStaffIds(updated);
+    }
+
+    public void removeAppointedStaffMember(UUID memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId cannot be null");
+        }
+
+        Set<UUID> updated = new HashSet<>(appointedStaffMemberIds);
+        updated.remove(memberId);
+        this.appointedStaffMemberIds = copyAppointedStaffIds(updated);
+    }
+
     public boolean isOwner() {
         return role == StaffRole.OWNER;
     }
@@ -127,6 +147,9 @@ public class StaffAppointment {
         updateManagerPermissions(new ManagerPermissions(newPermissions));
     }
 
+    public void updateAppointedBy(UUID newAppointerId) {
+        this.appointedByMemberId = newAppointerId;
+    }
 
     private Set<UUID> copyAppointedStaffIds(Set<UUID> appointedStaffMemberIds) {
         if (appointedStaffMemberIds == null || appointedStaffMemberIds.isEmpty()) {
