@@ -16,7 +16,10 @@ import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.ManagerPermission;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 @Service
@@ -180,27 +183,48 @@ public class MemberService {
         }
 
         List<Member> companyMembers = memberRepository.findByCompanyAppointment(companyName);
-        
-        // Build tree starting from roots (members whose appointer is not in the company or is null)
-        return companyMembers.stream()
+        if (companyMembers.isEmpty()) {
+            return List.of();
+        }
+
+        // Precompute for performance O(n)
+        Set<UUID> memberIdsInCompany = companyMembers.stream()
+                .map(Member::getId)
+                .collect(Collectors.toSet());
+
+        Map<UUID, List<Member>> subordinatesByAppointer = companyMembers.stream()
+                .filter(m -> {
+                    StaffAppointment sa = m.getStaffAppointment(companyName);
+                    return sa != null && sa.getAppointedByMemberId() != null;
+                })
+                .collect(Collectors.groupingBy(m -> m.getStaffAppointment(companyName).getAppointedByMemberId()));
+
+        // Identify roots: no appointer, or appointer is not in the company
+        List<Member> roots = companyMembers.stream()
                 .filter(m -> {
                     StaffAppointment sa = m.getStaffAppointment(companyName);
                     UUID appointerId = sa.getAppointedByMemberId();
-                    return appointerId == null || companyMembers.stream().noneMatch(c -> c.getId().equals(appointerId));
+                    return appointerId == null || !memberIdsInCompany.contains(appointerId);
                 })
-                .map(root -> buildSubtree(root, companyMembers, companyName))
+                .sorted(Comparator.comparing(Member::getUsername))
+                .toList();
+
+        if (roots.isEmpty()) {
+            logger.log(System.Logger.Level.ERROR, "Data inconsistency: Company " + companyName + " has members but no hierarchy roots.");
+            throw new IllegalStateException("Organization hierarchy is corrupted: no roots found.");
+        }
+
+        return roots.stream()
+                .map(root -> buildSubtree(root, subordinatesByAppointer, companyName))
                 .collect(Collectors.toList());
     }
 
-    private OrgNodeDTO buildSubtree(Member member, List<Member> allMembers, String companyName) {
+    private OrgNodeDTO buildSubtree(Member member, Map<UUID, List<Member>> subordinatesByAppointer, String companyName) {
         StaffAppointment appt = member.getStaffAppointment(companyName);
         
-        List<OrgNodeDTO> subordinates = allMembers.stream()
-                .filter(m -> {
-                    StaffAppointment sa = m.getStaffAppointment(companyName);
-                    return sa != null && member.getId().equals(sa.getAppointedByMemberId());
-                })
-                .map(m -> buildSubtree(m, allMembers, companyName))
+        List<OrgNodeDTO> subordinates = subordinatesByAppointer.getOrDefault(member.getId(), List.of()).stream()
+                .sorted(Comparator.comparing(Member::getUsername))
+                .map(m -> buildSubtree(m, subordinatesByAppointer, companyName))
                 .collect(Collectors.toList());
 
         return new OrgNodeDTO(
