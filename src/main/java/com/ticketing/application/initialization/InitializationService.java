@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.application.CompanyService;
 import com.ticketing.application.INotificationService;
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.listener.ManagerPermissionsChangedHandler;
 import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
 import com.ticketing.application.listener.RoleAppointmentOfferRequestedHandler;
 import com.ticketing.application.listener.RoleAppointmentOfferResponseHandler;
@@ -74,6 +75,10 @@ public class InitializationService {
             notificationService
         );
         eventPublisher.subscribe("RoleAppointmentOfferResponse", responseHandler);
+
+        // Register the handler for ManagerPermissionsChanged
+        ManagerPermissionsChangedHandler permissionsHandler = new ManagerPermissionsChangedHandler(memberRepository, companyRepository);
+        eventPublisher.subscribe("ManagerPermissionsChangedEvent", permissionsHandler);
         
         log.info("Event listeners registered");
     }
