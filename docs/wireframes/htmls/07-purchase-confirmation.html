@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Purchase Confirmation</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 24px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.center { display: flex; flex-direction: column; align-items: center; padding-top: 30px; }
+.check { width: 80px; height: 80px; border: 3px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 700; }
+h1 { font-size: 28px; margin-top: 18px; }
+.order-num { font-family: monospace; font-size: 18px; color: #555; margin-top: 8px; padding: 6px 14px; border: 1px dashed #999; }
+.tickets { width: 720px; margin-top: 28px; border: 1px solid #333; }
+.tickets h3 { font-size: 14px; padding: 12px 16px; border-bottom: 1px solid #999; background: #f5f5f5; }
+.t-row { display: grid; grid-template-columns: 1fr 100px 100px; padding: 12px 16px; border-bottom: 1px dashed #ccc; align-items: center; }
+.t-row:last-child { border-bottom: none; }
+.t-row .name { font-weight: 600; }
+.t-row .meta { font-size: 12px; color: #666; margin-top: 2px; }
+.t-row .qty { text-align: center; font-size: 13px; }
+.t-row .price { text-align: right; }
+.totals { display: flex; justify-content: space-between; padding: 14px 16px; background: #f5f5f5; border-top: 1px solid #999; font-weight: 700; }
+.email-note { width: 720px; margin-top: 18px; padding: 14px 16px; border: 1px dashed #999; font-size: 13px; }
+.email-note strong { font-family: monospace; }
+.actions { width: 720px; margin-top: 24px; display: flex; gap: 12px; }
+.btn { flex: 1; padding: 12px; cursor: pointer; text-align: center; text-decoration: none; }
+.btn-primary { background: #333; color: #fff; border: 1px solid #333; font-weight: 600; }
+.btn-secondary { background: #fff; color: #333; border: 1px solid #333; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <div style="font-size:13px;">Hello, member</div>
+  </div>
+
+  <div class="center">
+    <div class="check">✓</div>
+    <h1>Order confirmed!</h1>
+    <div class="order-num">ORD-7K9F-3M2A</div>
+
+    <div class="tickets">
+      <h3>YOUR TICKETS — SPRING CONCERT · JUL 12, 2026</h3>
+      <div class="t-row">
+        <div><div class="name">VIP · Row A · Seat 2</div><div class="meta">Beethoven · Tel Aviv · 20:00</div></div>
+        <div class="qty">1 ticket</div>
+        <div class="price">$150.00</div>
+      </div>
+      <div class="t-row">
+        <div><div class="name">VIP · Row A · Seat 6</div><div class="meta">Beethoven · Tel Aviv · 20:00</div></div>
+        <div class="qty">1 ticket</div>
+        <div class="price">$150.00</div>
+      </div>
+      <div class="t-row">
+        <div><div class="name">Floor (General Admission)</div><div class="meta">Beethoven · Tel Aviv · 20:00</div></div>
+        <div class="qty">2 tickets</div>
+        <div class="price">$100.00</div>
+      </div>
+      <div class="totals"><span>Total paid</span><span>$408.00</span></div>
+    </div>
+
+    <div class="email-note">
+      📧 Tickets and receipt sent to <strong>harel@example.com</strong>
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-secondary" href="#">View order details</a>
+      <a class="btn btn-primary" href="#">Browse more events</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

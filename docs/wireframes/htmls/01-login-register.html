@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Login / Register</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; padding: 0; }
+.page { width: 1280px; min-height: 800px; padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 32px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.guest-link { color: #333; text-decoration: underline; font-size: 14px; }
+.center { display: flex; justify-content: center; }
+.card { border: 1px solid #333; width: 420px; padding: 28px 32px; background: #fff; }
+.title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+.tabs { display: flex; border-bottom: 1px solid #999; margin-bottom: 20px; }
+.tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; }
+.tab.active { border-bottom: 2px solid #333; font-weight: 600; }
+.tab.inactive { color: #999; }
+label { display: block; font-size: 12px; color: #555; margin-top: 12px; margin-bottom: 4px; }
+input { width: 100%; padding: 8px 10px; border: 1px solid #999; background: #fff; }
+.row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px; }
+.btn-primary { width: 100%; margin-top: 20px; padding: 10px; border: 1px solid #333; background: #333; color: #fff; cursor: pointer; font-weight: 600; }
+.muted { color: #777; font-size: 12px; }
+.foot { text-align: center; margin-top: 16px; font-size: 13px; }
+.foot a { color: #333; text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <a class="guest-link" href="#">Continue as guest →</a>
+  </div>
+
+  <div class="center">
+    <div class="card">
+      <div class="title">Sign in to Ticketing</div>
+      <div class="tabs">
+        <div class="tab active">Sign In</div>
+        <div class="tab inactive">Register</div>
+      </div>
+      <label>Username</label>
+      <input type="text" placeholder="username">
+      <label>Password</label>
+      <input type="password" placeholder="••••••••">
+      <div class="row"><a href="#" class="muted">Forgot password?</a></div>
+      <button class="btn-primary">Sign In</button>
+      <div class="foot"><span class="muted">No account?</span> <a href="#">Register</a></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

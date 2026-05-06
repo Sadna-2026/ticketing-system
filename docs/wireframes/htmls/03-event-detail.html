@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Event Detail</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 16px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.user { font-size: 13px; }
+.crumbs { font-size: 12px; color: #666; margin-bottom: 12px; }
+.crumbs a { color: #333; }
+.hero { display: grid; grid-template-columns: 1fr 360px; gap: 24px; }
+.hero-img { background: repeating-linear-gradient(45deg, #eee, #eee 14px, #f5f5f5 14px, #f5f5f5 28px); border: 1px solid #999; height: 280px; display: flex; align-items: center; justify-content: center; color: #888; }
+.title-block { padding: 4px 0; }
+.title-block h1 { font-size: 28px; margin: 12px 0 6px; }
+.title-block .meta { color: #555; font-size: 14px; line-height: 1.7; }
+.title-block .meta span { display: inline-block; margin-right: 16px; }
+.cta-card { border: 1px solid #333; padding: 16px; height: fit-content; }
+.cta-card .price { font-size: 24px; font-weight: 700; }
+.cta-card .from { color: #666; font-size: 12px; }
+.btn-primary { display: block; width: 100%; padding: 12px; background: #333; color: #fff; border: 1px solid #333; cursor: pointer; font-weight: 600; margin-top: 12px; text-align: center; }
+.section { margin-top: 32px; }
+.section h2 { font-size: 16px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
+.desc { font-size: 14px; line-height: 1.6; color: #555; }
+.company-card { border: 1px solid #999; padding: 14px; display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+.company-logo { width: 56px; height: 56px; border: 1px solid #333; }
+.related { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+.rel-card { border: 1px solid #999; }
+.rel-thumb { background: repeating-linear-gradient(45deg, #eee, #eee 10px, #f5f5f5 10px, #f5f5f5 20px); height: 80px; border-bottom: 1px solid #999; }
+.rel-body { padding: 8px; font-size: 12px; }
+.rel-body h5 { font-size: 13px; margin-bottom: 4px; }
+.rel-body .m { color: #666; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <div class="user">Hello, member</div>
+  </div>
+
+  <div class="crumbs"><a href="#">← Browse</a> / Spring Concert</div>
+
+  <div class="hero">
+    <div>
+      <div class="hero-img">[ event hero image ]</div>
+      <div class="title-block">
+        <h1>Spring Concert</h1>
+        <div class="meta">
+          <span>♪ Beethoven</span>
+          <span>📅 Jul 12, 2026 · 20:00</span>
+          <span>📍 Tel Aviv</span>
+        </div>
+      </div>
+    </div>
+    <div class="cta-card">
+      <div class="from">From</div>
+      <div class="price">$50.00</div>
+      <a class="btn-primary" href="#">Get tickets</a>
+      <div style="margin-top:10px; font-size:11px; color:#666;">Lock timer: 15 min after selection</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>About this event</h2>
+    <p class="desc">Lorem ipsum description block. Two or three paragraphs of placeholder text describing the event, the artist, what to expect at the venue, and any special notes for attendees. The actual copy will be shorter.</p>
+  </div>
+
+  <div class="section">
+    <h2>Hosted by</h2>
+    <div class="company-card">
+      <div class="company-logo"></div>
+      <div>
+        <div style="font-weight:600;">Acme Productions</div>
+        <div style="font-size:12px; color:#666;">Active company · 12 events on sale</div>
+      </div>
+      <a href="#" style="margin-left:auto; font-size:13px; text-decoration:underline; color:#333;">View company →</a>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Other events by Acme</h2>
+    <div class="related">
+      <div class="rel-card"><div class="rel-thumb"></div><div class="rel-body"><h5>Jazz Brunch</h5><div class="m">Aug 4 · TLV</div></div></div>
+      <div class="rel-card"><div class="rel-thumb"></div><div class="rel-body"><h5>Symphony No. 9</h5><div class="m">Sep 15 · HFA</div></div></div>
+      <div class="rel-card"><div class="rel-thumb"></div><div class="rel-body"><h5>Indie Showcase</h5><div class="m">Jul 28 · TLV</div></div></div>
+      <div class="rel-card"><div class="rel-thumb"></div><div class="rel-body"><h5>Stand-up Night</h5><div class="m">Jul 22 · TLV</div></div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -12,6 +12,14 @@ import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
 public class Event{
 
+    /**
+     * V1 default currency for the no-discount fallback. Lives here as a constant
+     * so it's discoverable and overridable in one place. When multi-currency
+     * support lands (V2+), the default policy should be injected via the
+     * constructor instead of read from this constant.
+     */
+    public static final java.util.Currency DEFAULT_CURRENCY = java.util.Currency.getInstance("USD");
+
     private final UUID id;
     private final String companyName;
     private String name;
@@ -24,6 +32,7 @@ public class Event{
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
     private VenueMap venueMap;
+  
     // TODO(v2): add purchase/discount policies
     private final IPurchasePolicy eventPurchasePolicy;
     private final IDiscountPolicy eventDiscountPolicy;
@@ -63,8 +72,10 @@ public class Event{
         this.status = EventStatus.DRAFT;
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
+
         this.eventPurchasePolicy = eventPurchasePolicy;
         this.eventDiscountPolicy = eventDiscountPolicy;
+
         this.version = 0;
     }
 
@@ -111,6 +122,8 @@ public class Event{
     public EventSchedule getSchedule() { return schedule; }
     public EventStatus getStatus() { return status; }
     public List<InventoryZone> getZones() { return java.util.Collections.unmodifiableList(zones); }
+    public IPurchasePolicy getPurchasePolicy() { return purchasePolicy; }
+    public IDiscountPolicy getDiscountPolicy() { return discountPolicy; }
     /** Repository-internal: called by InMemoryEventRepository.save() as part of the
      *  optimistic-lock flow. Service code should not call this directly. */
     public void incrementVersion() { this.version++; }
