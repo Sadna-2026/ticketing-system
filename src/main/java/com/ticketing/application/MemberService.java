@@ -14,6 +14,10 @@ import com.ticketing.domain.member.response.LogoutResponse;
 import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.ManagerPermission;
+import java.util.List;
+import java.util.stream.Collectors;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 @Service
 public class MemberService {
@@ -155,6 +159,67 @@ public class MemberService {
         logger.log(System.Logger.Level.INFO, "exited platform: " + tokenData.getUsername());
 
         return MemberExitResponse.successResponse(tokenData.getUsername());
+    }
+
+    /**
+     * Retrieves the organizational hierarchy for a company.
+     * Only accessible to members with the OWNER role in that company.
+     */
+    public List<OrgNodeDTO> getOrganizationChart(String token, String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            throw new IllegalArgumentException("Company name is required.");
+        }
+
+        UUID requestorId = validateTokenForChart(token);
+        Member requestor = memberRepository.findById(requestorId)
+                .orElseThrow(() -> new SecurityException("Authenticated member not found."));
+
+        StaffAppointment appt = requestor.getStaffAppointment(companyName);
+        if (appt == null || appt.getRole() != StaffAppointment.StaffRole.OWNER) {
+            throw new SecurityException("Access denied. Only company owners can view the organization chart.");
+        }
+
+        List<Member> companyMembers = memberRepository.findByCompanyAppointment(companyName);
+        
+        // Build tree starting from roots (members whose appointer is not in the company or is null)
+        return companyMembers.stream()
+                .filter(m -> {
+                    StaffAppointment sa = m.getStaffAppointment(companyName);
+                    UUID appointerId = sa.getAppointedByMemberId();
+                    return appointerId == null || companyMembers.stream().noneMatch(c -> c.getId().equals(appointerId));
+                })
+                .map(root -> buildSubtree(root, companyMembers, companyName))
+                .collect(Collectors.toList());
+    }
+
+    private OrgNodeDTO buildSubtree(Member member, List<Member> allMembers, String companyName) {
+        StaffAppointment appt = member.getStaffAppointment(companyName);
+        
+        List<OrgNodeDTO> subordinates = allMembers.stream()
+                .filter(m -> {
+                    StaffAppointment sa = m.getStaffAppointment(companyName);
+                    return sa != null && member.getId().equals(sa.getAppointedByMemberId());
+                })
+                .map(m -> buildSubtree(m, allMembers, companyName))
+                .collect(Collectors.toList());
+
+        return new OrgNodeDTO(
+                member.getId(),
+                member.getUsername(),
+                appt.getRole(),
+                appt.getPermissions(),
+                subordinates
+        );
+    }
+
+    private UUID validateTokenForChart(String token) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Authentication token is required.");
+        }
+        if (!sessionTokenService.isValid(token)) {
+            throw new SecurityException("Invalid or expired authentication token.");
+        }
+        return sessionTokenService.extractMemberId(token);
     }
 
     private boolean isValidRegisterRequest(RegisterRequest request) {
