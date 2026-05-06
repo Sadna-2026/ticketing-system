@@ -24,5 +24,7 @@ public interface IMemberRepository {
     long count();
 
     List<Member> findByCompanyAppointment(String companyName);
+
+    void delete(Member member);
 }
 

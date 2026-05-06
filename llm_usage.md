@@ -209,6 +209,34 @@ Modifications made:
 Initial gaps in understanding (if any):
 Final understanding (brief explanation in your own words):
 
+## Feature / Component: Issue #39 (UC-II.3.6 — Register for purchase-right lottery) - Implementation & tests
+
+Purpose of LLM use: Assisted in implementing the lottery registration use case — domain model extensions and acceptance tests.
+
+Summary of prompt(s):
+1. Help unite LotteryRegistration inside Event.
+2. Design the plan and explain what needs to be added.
+
+Output received (short description):
+- Implementation plan identifying existing lottery infrastructure (LotteryEntry, ILotteryRepository) and missing pieces
+- SaleMethod enum (REGULAR/LOTTERY) and LotteryWindow value object with isOpen(Instant) check
+- Plan 4 acceptance tests: SuccessfulLotteryRegistration, LotteryNotSupported, DuplicateLotteryRegistration, ClosedLotteryRegistration
+
+Files / components affected:
+- src/main/java/com/ticketing/domain/event/Event.java (suggenst to add saleMethod, lotteryWindow fields + query methods)
+- src/main/java/com/ticketing/application/CreateEventRequest.java (added optional saleMethod/lotteryWindow)
+- src/test/java/com/ticketing/application/LotteryRegistrationTest.java
+
+Modifications made:
+- Created SaleMethod enum and LotteryWindow value object in the domain layer
+- Extended Event aggregate with lottery fields, backward-compatible constructors, and isLottery()/isLotteryRegistrationOpen() methods
+- Added registerForLottery() to EventService validating: event supports lottery, registration window is open, member not already registered
+- Planned 4 acceptance tests matching the V0 spec
+
+Initial gaps in understanding (if any):
+
+Final understanding: LLM helpend plan the necessary changes and helped designing the test.
+
 ## Feature / Component: Issue #12 (INF-11 — UI wireframes) - HTML wireframe generation
 Purpose of LLM use: Generate plain HTML mid-fidelity B&W wireframes from the layout briefs so we don't have to draw 12 screens by hand in draw.io.
 Summary of prompt(s):
@@ -232,3 +260,12 @@ Purpose of LLM use: create examples for tests
 Summary of prompt(s): complete test details and fix syntax
 Output received (short description): complete calls in tests
 Files / components affected: src\test\java\com\ticketing\application\MemberServiceUpdateIdentifyingDetailsTest.java
+  
+  
+## Feature / Component: UC-I.4 (Ticket Issuance Failover & Acceptance Tests)
+Purpose of LLM use: Verify UC-I.4 implementation status, implement missing ticket supply gateway failover, refund escalation logic, and add TDD tests for edge cases.
+Summary of prompt(s):
+1. "check if this was implemented" based on ITicketSupplyGateway and OrderService rules.
+2. "add tests for this use case. checkout the format that is already exists... checked all acceptance tests"
+Output received (short description):
+- Added 4 acceptance tests to `OrderServiceTest` (for secondary failover, all-failing, partial cancellations, and refund rejection).

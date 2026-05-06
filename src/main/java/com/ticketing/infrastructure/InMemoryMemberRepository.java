@@ -143,6 +143,14 @@ public class InMemoryMemberRepository implements IMemberRepository {
         idsByEmail.put(normalizeEmail(member.getEmail()), member.getId());
     }
 
+    @Override
+    public synchronized void delete(Member member) {
+        if (member == null) return;
+        membersById.remove(member.getId());
+        idsByUsername.remove(normalizeUsername(member.getUsername()));
+        idsByEmail.remove(normalizeEmail(member.getEmail()));
+    }
+
     private String normalizeUsername(String username) {
         return username.trim();
     }

@@ -90,4 +90,11 @@ public interface ISessionTokenService {
      * @return new guest JWT token
      */
     String logout(String token);
+
+    /**
+     * Revokes all active sessions for a specific member.
+     *
+     * @param memberId member id
+     */
+    void revokeMemberSessions(UUID memberId);
 }
