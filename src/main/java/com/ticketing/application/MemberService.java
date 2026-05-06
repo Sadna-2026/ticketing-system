@@ -1,28 +1,28 @@
 package com.ticketing.application;
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.auth.SessionTokenData;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberMapper;
+import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.response.LogoutResponse;
 import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
-import com.ticketing.domain.member.IMemberRepository;
-import com.ticketing.domain.member.StaffAppointment;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
+
 @Service
 public class MemberService {
-
     
     private final IMemberRepository memberRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;

@@ -1,7 +1,10 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.Collections;
 import java.util.List;
@@ -14,9 +17,9 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 public class MemberServiceOrgChartTest {
