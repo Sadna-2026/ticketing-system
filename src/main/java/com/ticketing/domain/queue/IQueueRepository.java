@@ -5,10 +5,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface IQueueRepository {
-    Optional<QueueSession> findById(UUID id);
-    Optional<QueueSession> findBySessionId(UUID sessionId);
-    List<QueueSession> findAll();
-    List<QueueSession> findByEventId(UUID eventId);
-    void save(QueueSession session);
+    Optional<VirtualQueue> findById(UUID id);
+    //Optional<VirtualQueue> findBySessionId(UUID sessionId);
+    List<VirtualQueue> findAll();
+    Optional<VirtualQueue> findByEventId(UUID eventId);
+    void save(VirtualQueue session);
     void delete(UUID id);
+    List<VirtualQueue> findAllActive();
 }
