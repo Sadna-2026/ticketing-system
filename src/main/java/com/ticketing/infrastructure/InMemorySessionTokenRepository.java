@@ -61,6 +61,19 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
     }
 
     @Override
+    public void revokeAllByMemberId(UUID memberId, String reason) {
+        if (memberId == null) {
+            return;
+        }
+
+        for (SessionToken token : tokens.values()) {
+            if (memberId.equals(token.getMemberId()) && token.isActive()) {
+                token.revoke(reason);
+            }
+        }
+    }
+
+    @Override
     public boolean isTokenActive(UUID tokenId) {
         if (tokenId == null) {
             return false;
@@ -76,17 +89,4 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
             if (token.isExpired()) {
                 tokens.remove(token.getTokenId());
     }}}
-
-    @Override
-    public void revokeAllByMemberId(UUID memberId, String reason) {
-        if (memberId == null) {
-            return;     
-        }
-        
-        for (SessionToken token : tokens.values()) {
-                if (memberId.equals(token.getMemberId()) && token.isActive()) {
-                    token.revoke(reason);
-                }
-        }
-    }
 }

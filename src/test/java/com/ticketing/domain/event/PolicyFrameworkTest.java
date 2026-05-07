@@ -1,45 +1,28 @@
 package com.ticketing.domain.event;
 
-import java.math.BigDecimal;
-import java.util.Currency;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.ticketing.domain.member.User;
-import com.ticketing.domain.order.ActiveOrder;
+import java.util.List;
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+
+import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
 class PolicyFrameworkTest {
-
-    private final Currency testCurrency = Currency.getInstance("ILS");
-
-    @Test
-    void testNoDiscountPolicyReturnsZeroOrGreater() {
-        IDiscountPolicy policy = new NoDiscountPolicy(testCurrency);
-        ActiveOrder mockOrder = mock(ActiveOrder.class);
-        User mockUser = mock(User.class);
-        
-        Money discount = policy.applyTo(mockOrder, mockUser);
-        
-        assertTrue(discount.amount().compareTo(BigDecimal.ZERO) >= 0);
-        assertEquals(BigDecimal.ZERO, discount.amount());
-        assertEquals(testCurrency, discount.currency());
-    }
 
     @Test
     void testAlwaysAllowPolicy() {
         IPurchasePolicy policy = new AlwaysAllowPolicy();
-        ActiveOrder mockOrder = mock(ActiveOrder.class);
-        User mockUser = mock(User.class);
+        UUID memberId = UUID.randomUUID();
         
-        PolicyResult result = policy.isAllowed(mockOrder, mockUser);
+        PolicyResult result = policy.isAllowed(null, memberId);
         
         assertTrue(result.allowed());
         assertNull(result.errorCode());

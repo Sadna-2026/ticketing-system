@@ -19,7 +19,7 @@ import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
-import com.ticketing.infrastructure.Interface.IMemberRepository;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.infrastructure.Interface.ISessionTokenRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
@@ -61,7 +61,7 @@ class MemberServiceRegisterTest {
         String guestToken = sessionTokenService.generateGuestToken();
         UUID originalSessionId = sessionTokenService.extractSessionId(guestToken);
 
-        RegisterRequest request = new RegisterRequest(
+        RegisterRequest request = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 "123456"
@@ -98,7 +98,7 @@ class MemberServiceRegisterTest {
         // Arrange
         String firstGuestToken = sessionTokenService.generateGuestToken();
 
-        RegisterRequest firstRequest = new RegisterRequest(
+        RegisterRequest firstRequest = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 "123456"
@@ -109,7 +109,7 @@ class MemberServiceRegisterTest {
 
         String secondGuestToken = sessionTokenService.generateGuestToken();
 
-        RegisterRequest duplicateUsernameRequest = new RegisterRequest(
+        RegisterRequest duplicateUsernameRequest = registerRequest(
                 "tamar",
                 "other@example.com",
                 "123456"
@@ -135,7 +135,7 @@ class MemberServiceRegisterTest {
         // Arrange
         String firstGuestToken = sessionTokenService.generateGuestToken();
 
-        RegisterRequest firstRequest = new RegisterRequest(
+        RegisterRequest firstRequest = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 "123456"
@@ -146,7 +146,7 @@ class MemberServiceRegisterTest {
 
         String secondGuestToken = sessionTokenService.generateGuestToken();
 
-        RegisterRequest duplicateEmailRequest = new RegisterRequest(
+        RegisterRequest duplicateEmailRequest = registerRequest(
                 "other",
                 "tamar@example.com",
                 "123456"
@@ -172,7 +172,7 @@ class MemberServiceRegisterTest {
         // Arrange
         String guestToken = sessionTokenService.generateGuestToken();
 
-        RegisterRequest invalidRequest = new RegisterRequest(
+        RegisterRequest invalidRequest = registerRequest(
                 "",
                 "bad-email",
                 "123"
@@ -216,7 +216,7 @@ class MemberServiceRegisterTest {
         // Arrange
         String invalidToken = "not.a.real.jwt";
 
-        RegisterRequest request = new RegisterRequest(
+        RegisterRequest request = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 "123456"
@@ -236,7 +236,7 @@ class MemberServiceRegisterTest {
     @DisplayName("InvalidToken — null token is denied")
     void GivenNullSessionToken_WhenRegister_ThenRegistrationDenied() {
         // Arrange
-        RegisterRequest request = new RegisterRequest(
+        RegisterRequest request = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 "123456"
@@ -256,7 +256,7 @@ class MemberServiceRegisterTest {
     @DisplayName("InvalidToken — blank token is denied")
     void GivenBlankSessionToken_WhenRegister_ThenRegistrationDenied() {
         // Arrange
-        RegisterRequest request = new RegisterRequest(
+        RegisterRequest request = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 "123456"
@@ -278,7 +278,7 @@ class MemberServiceRegisterTest {
         // Arrange
         String guestToken = sessionTokenService.generateGuestToken();
 
-        RegisterRequest firstRequest = new RegisterRequest(
+        RegisterRequest firstRequest = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 "123456"
@@ -288,7 +288,7 @@ class MemberServiceRegisterTest {
         assertTrue(firstResponse.success());
         assertNotNull(firstResponse.sessionToken());
 
-        RegisterRequest secondRequest = new RegisterRequest(
+        RegisterRequest secondRequest = registerRequest(
                 "other",
                 "other@example.com",
                 "123456"
@@ -312,7 +312,7 @@ class MemberServiceRegisterTest {
         String guestToken = sessionTokenService.generateGuestToken();
         String rawPassword = "123456";
 
-        RegisterRequest request = new RegisterRequest(
+        RegisterRequest request = registerRequest(
                 "tamar",
                 "tamar@example.com",
                 rawPassword
@@ -332,5 +332,15 @@ class MemberServiceRegisterTest {
                 rawPassword,
                 savedMember.getEncryptedPassword()
         ));
+    }
+
+    private RegisterRequest registerRequest(String username, String email, String password) {
+        return new RegisterRequest(
+                username,
+                email,
+                password,
+                "0501234567",
+                "2000-01-01"
+        );
     }
 }

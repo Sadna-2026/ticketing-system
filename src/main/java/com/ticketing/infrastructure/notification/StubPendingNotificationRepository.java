@@ -1,10 +1,11 @@
-package com.ticketing.infrastructure.notification;
+package  com.ticketing.infrastructure.notification;
+
+import com.ticketing.infrastructure.Interface.*;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Logger;
 
-import com.ticketing.domain.member.IPendingNotificationRepository;
 
 /**
  * No-op stub implementation for V1.
@@ -29,3 +30,5 @@ public class StubPendingNotificationRepository implements IPendingNotificationRe
         // No-op for V1
     }
 }
+
+

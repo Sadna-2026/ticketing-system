@@ -175,6 +175,13 @@ public class SessionTokenService implements ISessionTokenService {
         return generateGuestToken();
     }
 
+    @Override
+    public void revokeMemberSessions(UUID memberId) {
+        if (memberId != null) {
+            sessionTokenRepository.revokeAllByMemberId(memberId, "MEMBER_REMOVED");
+        }
+    }
+
     private String buildAndSaveToken(SessionTokenData tokenData) {
         UUID tokenId = UUID.randomUUID();
 

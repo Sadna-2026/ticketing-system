@@ -9,9 +9,10 @@ import java.util.UUID;
 public class StaffAppointment {
 
     private final String companyId;
-    private final UUID appointedByMemberId;
+    private UUID appointedByMemberId;
     private StaffRole role;
-    private Set<ManagerPermission> permissions;
+    private ManagerPermissions permissions;
+    private Set<UUID> appointedStaffMemberIds;
 
     public StaffAppointment(
             String companyId,
@@ -19,18 +20,41 @@ public class StaffAppointment {
             StaffRole role,
             Set<ManagerPermission> permissions
     ) {
+        this(companyId, appointedByMemberId, role, new ManagerPermissions(permissions), Collections.emptySet());
+    }
+
+    public StaffAppointment(
+            String companyId,
+            UUID appointedByMemberId,
+            StaffRole role,
+            Set<ManagerPermission> permissions,
+            Set<UUID> appointedStaffMemberIds
+    ) {
+        this(companyId, appointedByMemberId, role, new ManagerPermissions(permissions), appointedStaffMemberIds);
+    }
+
+    public StaffAppointment(
+            String companyId,
+            UUID appointedByMemberId,
+            StaffRole role,
+            ManagerPermissions permissions,
+            Set<UUID> appointedStaffMemberIds
+    ) {
         if (companyId == null || companyId.isBlank()) {
             throw new IllegalArgumentException("companyId cannot be null or blank");
         }
-
         if (role == null) {
             throw new IllegalArgumentException("role cannot be null");
+        }
+        if (permissions == null) {
+            throw new IllegalArgumentException("permissions cannot be null");
         }
 
         this.companyId = normalizeCompanyId(companyId);
         this.appointedByMemberId = appointedByMemberId;
         this.role = role;
-        this.permissions = copyPermissions(permissions);
+        this.permissions = permissions;
+        this.appointedStaffMemberIds = copyAppointedStaffIds(appointedStaffMemberIds);
     }
 
     public String getCompanyId() {
@@ -46,7 +70,45 @@ public class StaffAppointment {
     }
 
     public Set<ManagerPermission> getPermissions() {
-        return Collections.unmodifiableSet(permissions);
+        return permissions.getPermissions();
+    }
+
+    public ManagerPermissions getManagerPermissions() {
+        return permissions;
+    }
+
+    public Set<UUID> getAppointedStaffMemberIds() {
+        return Collections.unmodifiableSet(appointedStaffMemberIds);
+    }
+
+    public void addAppointedStaffMember(UUID memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId cannot be null");
+        }
+
+        Set<UUID> updated = new HashSet<>(appointedStaffMemberIds);
+        updated.add(memberId);
+        this.appointedStaffMemberIds = copyAppointedStaffIds(updated);
+    }
+
+    public void addAppointedStaffMemberGroup(Set<UUID> memberIds) {
+        if (memberIds == null) {
+            throw new IllegalArgumentException("memberIds cannot be null");
+        }
+
+        Set<UUID> updated = new HashSet<>(appointedStaffMemberIds);
+        updated.addAll(memberIds);
+        this.appointedStaffMemberIds = copyAppointedStaffIds(updated);
+    }
+
+    public void removeAppointedStaffMember(UUID memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId cannot be null");
+        }
+
+        Set<UUID> updated = new HashSet<>(appointedStaffMemberIds);
+        updated.remove(memberId);
+        this.appointedStaffMemberIds = copyAppointedStaffIds(updated);
     }
 
     public boolean isOwner() {
@@ -62,28 +124,39 @@ public class StaffAppointment {
             return false;
         }
 
-        return isOwner() || permissions.contains(permission);
+        return isOwner() || permissions.hasPermission(permission);
     }
 
     public void promoteToOwner() {
         this.role = StaffRole.OWNER;
-        this.permissions = Collections.emptySet();
+        this.permissions = ManagerPermissions.empty();
     }
 
-    public void updateManagerPermissions(Set<ManagerPermission> newPermissions) {
+    public void updateManagerPermissions(ManagerPermissions newPermissions) {
         if (isOwner()) {
             throw new IllegalStateException("Owner does not need manager permissions.");
         }
+        if (newPermissions == null) {
+            throw new IllegalArgumentException("newPermissions cannot be null");
+        }
 
-        this.permissions = copyPermissions(newPermissions);
+        this.permissions = newPermissions;
     }
 
-    private Set<ManagerPermission> copyPermissions(Set<ManagerPermission> permissions) {
-        if (permissions == null || permissions.isEmpty()) {
+    public void updateManagerPermissions(Set<ManagerPermission> newPermissions) {
+        updateManagerPermissions(new ManagerPermissions(newPermissions));
+    }
+
+    public void updateAppointedBy(UUID newAppointerId) {
+        this.appointedByMemberId = newAppointerId;
+    }
+
+    private Set<UUID> copyAppointedStaffIds(Set<UUID> appointedStaffMemberIds) {
+        if (appointedStaffMemberIds == null || appointedStaffMemberIds.isEmpty()) {
             return Collections.emptySet();
         }
 
-        return Collections.unmodifiableSet(new HashSet<>(permissions));
+        return Collections.unmodifiableSet(new HashSet<>(appointedStaffMemberIds));
     }
 
     private String normalizeCompanyId(String companyId) {

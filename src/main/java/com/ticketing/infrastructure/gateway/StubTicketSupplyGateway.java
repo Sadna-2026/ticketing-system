@@ -1,8 +1,9 @@
-package com.ticketing.infrastructure.gateway;
+package  com.ticketing.infrastructure.gateway;
+
+import com.ticketing.infrastructure.Interface.*;
 
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
-import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.gateway.SupplyResult;
 import com.ticketing.domain.gateway.TicketRequest;
 
@@ -16,6 +17,11 @@ public class StubTicketSupplyGateway implements ITicketSupplyGateway {
 
     public void setShouldFail(boolean shouldFail) {
         this.shouldFail = shouldFail;
+    }
+
+    @Override
+    public boolean isReachable() {
+        return !shouldFail;
     }
 
     @Override
@@ -39,3 +45,5 @@ public class StubTicketSupplyGateway implements ITicketSupplyGateway {
         return CancelResult.successful();
     }
 }
+
+

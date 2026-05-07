@@ -91,5 +91,12 @@ public interface ISessionTokenService {
      */
     String logout(String token);
 
+    /**
+     * Revokes all active sessions for a specific member.
+     *
+     * @param memberId member id
+     */
+    void revokeMemberSessions(UUID memberId);
+
     boolean endSession(String token);
 }

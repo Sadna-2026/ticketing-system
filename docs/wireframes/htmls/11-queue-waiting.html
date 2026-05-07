@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Queue Waiting</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 32px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.center { display: flex; flex-direction: column; align-items: center; padding-top: 60px; }
+.event-line { font-size: 14px; color: #555; margin-bottom: 8px; }
+.event-line strong { color: #333; font-weight: 700; font-size: 16px; }
+.spinner { width: 120px; height: 120px; border: 4px solid #ccc; border-top: 4px solid #333; border-radius: 50%; margin-top: 24px; }
+h1 { font-size: 30px; margin-top: 28px; font-weight: 700; }
+.sub { font-size: 16px; color: #666; margin-top: 8px; }
+.position-card { width: 480px; margin-top: 32px; border: 2px solid #333; padding: 28px; text-align: center; }
+.position-card .pos-num { font-size: 64px; font-weight: 700; line-height: 1; }
+.position-card .pos-label { font-size: 13px; color: #666; margin-top: 6px; text-transform: uppercase; letter-spacing: 1px; }
+.position-card .eta { margin-top: 20px; padding-top: 16px; border-top: 1px dashed #999; font-size: 14px; }
+.position-card .eta strong { font-size: 18px; }
+.note { width: 480px; margin-top: 20px; padding: 12px 16px; border: 1px dashed #999; background: #f5f5f5; font-size: 13px; text-align: center; color: #555; }
+.muted-note { width: 480px; margin-top: 12px; font-size: 11px; color: #888; text-align: center; }
+.progress { width: 480px; height: 8px; background: #eee; margin-top: 14px; }
+.progress-fill { width: 35%; height: 100%; background: #333; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <div style="font-size:13px;">Hello, member</div>
+  </div>
+
+  <div class="center">
+    <div class="event-line">You're waiting for</div>
+    <div class="event-line"><strong>Spring Concert · Beethoven · Jul 12, 2026</strong></div>
+
+    <div class="spinner"></div>
+
+    <h1>You're in line</h1>
+    <div class="sub">Please don't refresh — you'll lose your place.</div>
+
+    <div class="position-card">
+      <div class="pos-num">#234</div>
+      <div class="pos-label">Your position in queue</div>
+      <div class="progress"><div class="progress-fill"></div></div>
+      <div class="eta">Estimated wait: <strong>~ 4 minutes</strong></div>
+    </div>
+
+    <div class="note">
+      ⏱ The page auto-refreshes every 5 seconds. Once it's your turn, you'll be redirected to ticket selection.
+    </div>
+
+    <div class="muted-note">
+      Last updated: 12:47:03 · Queue moves at ~ 60 people / minute
+    </div>
+  </div>
+</div>
+</body>
+</html>

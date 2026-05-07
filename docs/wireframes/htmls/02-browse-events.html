@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Browse Events</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { width: 1280px; min-height: 800px; background: #fff; color: #333; }
+.page { padding: 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border: 1px solid #999; margin-bottom: 16px; }
+.logo { font-weight: 700; letter-spacing: 1px; }
+.search { flex: 1; margin: 0 24px; }
+.search input { width: 100%; padding: 8px 12px; border: 1px solid #999; }
+.user { display: flex; gap: 12px; align-items: center; font-size: 13px; }
+.avatar { width: 32px; height: 32px; border: 1px solid #333; border-radius: 50%; }
+.layout { display: grid; grid-template-columns: 220px 1fr; gap: 24px; }
+.filters { border: 1px solid #999; padding: 14px; }
+.filters h3 { font-size: 13px; margin-bottom: 10px; }
+.chip { display: inline-block; border: 1px solid #999; padding: 4px 8px; margin: 4px 4px 4px 0; font-size: 12px; cursor: pointer; }
+.filter-block { margin-bottom: 14px; }
+.filter-block label { display: block; font-size: 11px; color: #666; margin-top: 6px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.card { border: 1px solid #999; padding: 0; }
+.thumb { background: repeating-linear-gradient(45deg, #eee, #eee 10px, #f5f5f5 10px, #f5f5f5 20px); height: 130px; border-bottom: 1px solid #999; display: flex; align-items: center; justify-content: center; color: #888; font-size: 12px; }
+.cardbody { padding: 12px; }
+.cardbody h4 { font-size: 14px; margin-bottom: 6px; }
+.cardbody .meta { font-size: 12px; color: #666; line-height: 1.5; }
+.cardbody .price { font-weight: 600; margin-top: 8px; }
+.btn { display: inline-block; padding: 6px 12px; border: 1px solid #333; background: #fff; font-size: 12px; cursor: pointer; margin-top: 8px; }
+.btn-primary { background: #333; color: #fff; }
+.pagination { display: flex; justify-content: center; gap: 8px; margin-top: 24px; }
+.page-btn { padding: 4px 10px; border: 1px solid #999; cursor: pointer; }
+.page-btn.active { background: #333; color: #fff; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">[ TICKETING ]</div>
+    <div class="search"><input type="text" placeholder="Search by name, artist, category…"></div>
+    <div class="user"><div class="avatar"></div><span>Sign in</span></div>
+  </div>
+
+  <div class="layout">
+    <div class="filters">
+      <h3>FILTERS</h3>
+      <div class="filter-block">
+        <label>Region</label>
+        <span class="chip">Tel Aviv ✕</span>
+        <span class="chip">+ add</span>
+      </div>
+      <div class="filter-block">
+        <label>Category</label>
+        <span class="chip">Concert ✕</span>
+      </div>
+      <div class="filter-block">
+        <label>Price range</label>
+        <input type="text" value="$0 — $200" style="width:100%; padding:4px 6px; border:1px solid #999; font-size:12px;">
+      </div>
+      <div class="filter-block">
+        <label>Date range</label>
+        <input type="text" value="Any" style="width:100%; padding:4px 6px; border:1px solid #999; font-size:12px;">
+      </div>
+      <button class="btn" style="width:100%;">Apply filters</button>
+    </div>
+
+    <div>
+      <div class="grid">
+        <div class="card"><div class="thumb">[ event image ]</div><div class="cardbody"><h4>Spring Concert</h4><div class="meta">Beethoven<br>Jul 12 · Tel Aviv</div><div class="price">From $50</div><a class="btn btn-primary" href="#">View</a></div></div>
+        <div class="card"><div class="thumb">[ event image ]</div><div class="cardbody"><h4>Jazz Festival</h4><div class="meta">Various artists<br>Aug 03 · Jerusalem</div><div class="price">From $35</div><a class="btn btn-primary" href="#">View</a></div></div>
+        <div class="card"><div class="thumb">[ event image ]</div><div class="cardbody"><h4>Stand-up Night</h4><div class="meta">Open mic<br>Jul 22 · Tel Aviv</div><div class="price">From $20</div><a class="btn btn-primary" href="#">View</a></div></div>
+        <div class="card"><div class="thumb">[ event image ]</div><div class="cardbody"><h4>Symphony No. 9</h4><div class="meta">Phil. Orchestra<br>Sep 15 · Haifa</div><div class="price">From $80</div><a class="btn btn-primary" href="#">View</a></div></div>
+        <div class="card"><div class="thumb">[ event image ]</div><div class="cardbody"><h4>Indie Showcase</h4><div class="meta">5 bands<br>Jul 28 · Tel Aviv</div><div class="price">From $25</div><a class="btn btn-primary" href="#">View</a></div></div>
+        <div class="card"><div class="thumb">[ event image ]</div><div class="cardbody"><h4>Theater Premiere</h4><div class="meta">Hamlet (revival)<br>Aug 18 · Tel Aviv</div><div class="price">From $60</div><a class="btn btn-primary" href="#">View</a></div></div>
+      </div>
+      <div class="pagination">
+        <span class="page-btn">←</span>
+        <span class="page-btn active">1</span>
+        <span class="page-btn">2</span>
+        <span class="page-btn">3</span>
+        <span class="page-btn">→</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
