@@ -82,4 +82,11 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
         SessionToken token = tokens.get(tokenId);
         return token != null && token.isActive();
     }
+
+    @Override
+    public void deleteExpiredTokens() {
+        for (SessionToken token : tokens.values()) {
+            if (token.isExpired()) {
+                tokens.remove(token.getTokenId());
+    }}}
 }

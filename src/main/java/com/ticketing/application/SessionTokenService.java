@@ -340,4 +340,18 @@ public class SessionTokenService implements ISessionTokenService {
 
         return Collections.emptySet();
     }
+
+    @Override
+    public boolean endSession(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+
+        if (!isValid(token)) {
+            return false;
+        }
+
+        revokeToken(token);
+        return true;
+    }
 }

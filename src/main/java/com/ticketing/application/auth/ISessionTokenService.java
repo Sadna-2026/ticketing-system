@@ -97,4 +97,6 @@ public interface ISessionTokenService {
      * @param memberId member id
      */
     void revokeMemberSessions(UUID memberId);
+
+    boolean endSession(String token);
 }
