@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 class StubNotificationServiceTest {
 
     @Test
-    void testNotifyDoesNotThrowException() {
+    void GivenRecipientAndMessage_WhenNotify_ThenNoException() {
         StubNotificationService service = new StubNotificationService();
 
         // Acceptance Criteria: No-op implementation does not throw when called

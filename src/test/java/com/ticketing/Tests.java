@@ -30,7 +30,7 @@ public class Tests {
     // String Manipulation Tests
     @Test
     @DisplayName("Should create valid email address")
-    void testEmailCreation() {
+    void GivenUsernameAndDomain_WhenCreateEmail_ThenValidAddress() {
         String email = testUtils.createEmail("john", "example.com");
         assertEquals("john@example.com", email);
         assertTrue(email.contains("@"));
@@ -38,7 +38,7 @@ public class Tests {
 
     @Test
     @DisplayName("Should validate email format")
-    void testEmailValidation() {
+    void GivenEmailAddresses_WhenValidated_ThenCorrectResults() {
         assertTrue(testUtils.isValidEmail("user@example.com"));
         assertFalse(testUtils.isValidEmail("invalid-email"));
         assertFalse(testUtils.isValidEmail("@example.com"));
@@ -47,7 +47,7 @@ public class Tests {
     // Numeric Tests
     @Test
     @DisplayName("Should calculate ticket price correctly")
-    void testTicketPriceCalculation() {
+    void GivenBasePriceAndTax_WhenCalculatePrice_ThenTotalIncludesTax() {
         double basePrice = 100.0;
         double taxRate = 0.1;
         double totalPrice = testUtils.calculatePrice(basePrice, taxRate);
@@ -57,7 +57,7 @@ public class Tests {
     @ParameterizedTest
     @ValueSource(doubles = {10.0, 50.0, 100.0, 500.0})
     @DisplayName("Should apply discount to various prices")
-    void testDiscountApplication(double price) {
+    void GivenPriceAndDiscount_WhenApplyDiscount_ThenReducedPrice(double price) {
         double discountedPrice = testUtils.applyDiscount(price, 0.2);
         assertTrue(discountedPrice < price);
         assertEquals(price * 0.8, discountedPrice, 0.01);
@@ -66,7 +66,7 @@ public class Tests {
     // Collection Tests
     @Test
     @DisplayName("Should manage user list correctly")
-    void testUserListManagement() {
+    void GivenUserList_WhenChecked_ThenContainsExpectedUsers() {
         List<String> users = new ArrayList<>();
         users.add("Alice");
         users.add("Bob");
@@ -79,7 +79,7 @@ public class Tests {
 
     @Test
     @DisplayName("Should track event registrations")
-    void testEventRegistrationTracking() {
+    void GivenEventRegistrations_WhenSummed_ThenCorrectTotals() {
         Map<String, Integer> registrations = new HashMap<>();
         registrations.put("Conference", 150);
         registrations.put("Workshop", 50);
@@ -98,7 +98,7 @@ public class Tests {
             "user3, 200, 220"
     })
     @DisplayName("Should calculate total with tax for different amounts")
-    void testTaxCalculationForMultipleUsers(String username, double amount, double expected) {
+    void GivenAmountAndTaxRate_WhenCalculatePrice_ThenExpectedTotal(String username, double amount, double expected) {
         double result = testUtils.calculatePrice(amount, 0.1);
         assertEquals(expected, result, 0.01);
     }
@@ -106,7 +106,7 @@ public class Tests {
     // String Parsing Tests
     @Test
     @DisplayName("Should parse ticket code correctly")
-    void testTicketCodeParsing() {
+    void GivenEventAndId_WhenGenerateTicketCode_ThenValidFormat() {
         String ticketCode = testUtils.generateTicketCode("EVT001", 12345);
         assertTrue(ticketCode.startsWith("EVT001"));
         assertTrue(ticketCode.length() > 6);
@@ -114,7 +114,7 @@ public class Tests {
 
     @Test
     @DisplayName("Should handle empty strings safely")
-    void testEmptyStringHandling() {
+    void GivenEmptyInput_WhenSanitize_ThenEmptyStringReturned() {
         String result = testUtils.sanitizeInput("");
         assertEquals("", result);
         assertNotNull(result);
@@ -123,7 +123,7 @@ public class Tests {
     // Boolean Logic Tests
     @Test
     @DisplayName("Should verify user age eligibility")
-    void testAgeEligibility() {
+    void GivenAges_WhenChecked_ThenEligibleOnlyAtOrAbove18() {
         assertTrue(testUtils.isEligibleAge(25));
         assertTrue(testUtils.isEligibleAge(18));
         assertFalse(testUtils.isEligibleAge(17));
@@ -131,7 +131,7 @@ public class Tests {
 
     @Test
     @DisplayName("Should validate ticket availability")
-    void testTicketAvailability() {
+    void GivenCapacityAndSold_WhenCheckAvailability_ThenCorrectResult() {
         assertTrue(testUtils.isTicketAvailable(100, 50));  // 100 total, 50 sold
         assertTrue(testUtils.isTicketAvailable(100, 100)); // fully booked
         assertTrue(testUtils.isTicketAvailable(100, 99));  // almost sold out
@@ -140,7 +140,7 @@ public class Tests {
     // Exception Tests
     @Test
     @DisplayName("Should throw exception for invalid quantity")
-    void testInvalidQuantityException() {
+    void GivenNegativeQuantity_WhenValidateQuantity_ThenIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class, () -> {
             testUtils.validateQuantity(-5);
         });
@@ -148,7 +148,7 @@ public class Tests {
 
     @Test
     @DisplayName("Should throw exception for null user")
-    void testNullUserException() {
+    void GivenNullUser_WhenValidateUser_ThenNullPointerException() {
         assertThrows(NullPointerException.class, () -> {
             testUtils.validateUser(null);
         });
@@ -157,7 +157,7 @@ public class Tests {
     // Math Operations
     @Test
     @DisplayName("Should calculate average ticket price")
-    void testAverageTicketPrice() {
+    void GivenPriceList_WhenCalculateAverage_ThenCorrectAverage() {
         List<Double> prices = List.of(100.0, 150.0, 200.0);
         double average = testUtils.calculateAverage(prices);
         assertEquals(150.0, average, 0.01);
@@ -165,7 +165,7 @@ public class Tests {
 
     @Test
     @DisplayName("Should find minimum ticket price")
-    void testMinimumTicketPrice() {
+    void GivenPriceList_WhenFindMinPrice_ThenReturnsMinimum() {
         List<Double> prices = List.of(100.0, 50.0, 200.0, 75.0);
         double min = testUtils.findMinPrice(prices);
         assertEquals(50.0, min);
@@ -174,7 +174,7 @@ public class Tests {
     // Integration-style Tests
     @Test
     @DisplayName("Should process complete ticket order")
-    void testCompleteTicketOrder() {
+    void GivenPriceTaxAndDiscount_WhenProcessOrder_ThenCorrectFinalPrice() {
         double basePrice = 100.0;
         double taxRate = 0.1;
         double discountRate = 0.05;
@@ -188,7 +188,7 @@ public class Tests {
 
     @Test
     @DisplayName("Should generate valid purchase confirmation")
-    void testPurchaseConfirmation() {
+    void GivenOrderDetails_WhenGenerateConfirmation_ThenContainsAllFields() {
         String confirmation = testUtils.generateConfirmation("ORD001", "user@example.com", 100.0);
         assertTrue(confirmation.contains("ORD001"));
         assertTrue(confirmation.contains("user@example.com"));

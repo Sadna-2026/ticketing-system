@@ -42,7 +42,7 @@ public class CompanyServicePermissionsTest {
     }
 
     @Test
-    public void testChangeManagerPermissions_Success() {
+    public void GivenValidTokenAndCompany_WhenChangeManagerPermissions_ThenEventPublished() {
         when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
         when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(CALLER_ID);
         when(companyRepository.existsByName(COMPANY_NAME)).thenReturn(true);
@@ -55,7 +55,7 @@ public class CompanyServicePermissionsTest {
     }
 
     @Test
-    public void testChangeManagerPermissions_InvalidToken_ThrowsIllegalArgumentException() {
+    public void GivenInvalidToken_WhenChangeManagerPermissions_ThenThrowsIllegalArgumentException() {
         when(sessionTokenService.isValid("invalid")).thenReturn(false);
 
         assertThrows(IllegalArgumentException.class, () -> 
@@ -66,7 +66,7 @@ public class CompanyServicePermissionsTest {
     }
 
     @Test
-    public void testChangeManagerPermissions_CompanyNotFound_ThrowsIllegalArgumentException() {
+    public void GivenUnknownCompany_WhenChangeManagerPermissions_ThenThrowsIllegalArgumentException() {
         when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
         when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(CALLER_ID);
         when(companyRepository.existsByName(COMPANY_NAME)).thenReturn(false);
@@ -79,7 +79,7 @@ public class CompanyServicePermissionsTest {
     }
 
     @Test
-    public void testChangeManagerPermissions_GuestCaller_ThrowsIllegalArgumentException() {
+    public void GivenGuestCaller_WhenChangeManagerPermissions_ThenThrowsIllegalArgumentException() {
         when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
         when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(null); // Guest
 
@@ -92,7 +92,7 @@ public class CompanyServicePermissionsTest {
     }
 
     @Test
-    public void testChangeManagerPermissions_NullTarget_ThrowsIllegalArgumentException() {
+    public void GivenNullTarget_WhenChangeManagerPermissions_ThenThrowsIllegalArgumentException() {
         when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
         when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(CALLER_ID);
 

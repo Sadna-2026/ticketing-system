@@ -30,7 +30,7 @@ public class RoleAppointmentOfferRequestedHandlerTest {
     }
 
     @Test
-    public void testSuccessfulOfferCreation() {
+    public void GivenAuthorizedAppointer_WhenHandleOfferRequest_ThenPendingOfferCreated() {
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "TestCo";
@@ -53,7 +53,7 @@ public class RoleAppointmentOfferRequestedHandlerTest {
     }
 
     @Test
-    public void testUnauthorizedAppointerThrows() {
+    public void GivenUnauthorizedAppointer_WhenHandleOfferRequest_ThenPermissionDeniedException() {
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "TestCo";
@@ -72,7 +72,7 @@ public class RoleAppointmentOfferRequestedHandlerTest {
     }
 
     @Test
-    public void testCannotOfferToExistingOwner() {
+    public void GivenTargetAlreadyOwner_WhenHandleOfferRequest_ThenIllegalArgumentException() {
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "TestCo";

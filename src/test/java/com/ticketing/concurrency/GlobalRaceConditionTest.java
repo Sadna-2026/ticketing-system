@@ -66,7 +66,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentRegistration() throws InterruptedException {
+    public void GivenConcurrentGuests_WhenRegisterSameUser_ThenOnlyOneSucceeds() throws InterruptedException {
         int threads = 20;
         String username = "uniqueUser";
         String email = "unique@test.com";
@@ -107,7 +107,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentCompanyOpening() throws InterruptedException {
+    public void GivenConcurrentFounders_WhenOpenSameCompany_ThenOnlyOneSucceeds() throws InterruptedException {
         int threads = 20;
         String companyName = "RaceCorp";
         UUID founderId = UUID.randomUUID();
@@ -141,7 +141,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentRoleOffers() throws InterruptedException {
+    public void GivenConcurrentOffers_WhenOfferSameRole_ThenConsistentState() throws InterruptedException {
         int threads = 50;
         String companyName = "OfferCorp";
         UUID ownerId = UUID.randomUUID();
@@ -180,7 +180,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentStaffAppointments() throws InterruptedException {
+    public void GivenConcurrentAppointments_WhenAssignStaff_ThenConsistentState() throws InterruptedException {
         int threads = 50;
         UUID memberId = UUID.randomUUID();
         Member member = new Member(memberId, "staffer", "s@s.com", "p");

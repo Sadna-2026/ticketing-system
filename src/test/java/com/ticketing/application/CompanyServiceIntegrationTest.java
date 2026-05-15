@@ -98,7 +98,7 @@ public class CompanyServiceIntegrationTest {
     }
 
     @Test
-    public void testSuccessfulCompanyOpening() {
+    public void GivenValidFounder_WhenOpenProductionCompany_ThenCompanyAndAppointmentCreated() {
         UUID founderId = UUID.randomUUID();
         String token = "valid-" + founderId.toString();
         String companyName = "TechCorp";
@@ -116,7 +116,7 @@ public class CompanyServiceIntegrationTest {
     }
 
     @Test
-    public void testSuccessfulRoleOfferIntegration() {
+    public void GivenOwnerAndTarget_WhenOfferRoleAppointment_ThenPendingOfferCreated() {
         UUID ownerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "OfferCorp";
@@ -145,7 +145,7 @@ public class CompanyServiceIntegrationTest {
     }
 
     @Test
-    public void testUnauthorizedRoleOfferIntegration() {
+    public void GivenNonOwner_WhenOfferRoleAppointment_ThenPermissionDeniedException() {
         UUID nonOwnerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "SecCorp";

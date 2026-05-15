@@ -45,7 +45,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void systemAdminOpensMarketSuccessfully() {
+    void GivenSystemAdmin_WhenOpenMarket_ThenMarketOpened() {
         String adminToken = initializePlatformAndAdminToken();
 
         MarketInitializationResponse response = marketInitializationService.openMarket(adminToken);
@@ -56,7 +56,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void nonAdminAttemptRejected() {
+    void GivenNonAdmin_WhenOpenMarket_ThenRejected() {
         initializePlatformAndAdminToken();
         String nonAdminToken = sessionTokenService.generateMemberToken(
                 UUID.randomUUID(),
@@ -72,7 +72,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void paymentServiceUnavailableMarketStaysClosed() {
+    void GivenUnavailablePaymentService_WhenOpenMarket_ThenMarketStaysClosed() {
         String adminToken = initializePlatformAndAdminToken();
         paymentGateway.setShouldFail(true);
 
@@ -84,7 +84,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void supplyServiceUnavailableMarketStaysClosed() {
+    void GivenUnavailableSupplyService_WhenOpenMarket_ThenMarketStaysClosed() {
         String adminToken = initializePlatformAndAdminToken();
         supplyGateway.setShouldFail(true);
 
@@ -96,7 +96,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void noAdminInDatabaseCannotOpen() {
+    void GivenNoAdminInDatabase_WhenOpenMarket_ThenCannotOpen() {
         startupConfiguration.activate();
         String adminToken = sessionTokenService.generateMemberToken(
                 UUID.randomUUID(),

@@ -63,7 +63,7 @@ public class CompanyServiceConcurrencyTest {
     }
 
     @Test
-    public void testConcurrentCompanyCreationWithSameName() throws InterruptedException {
+    public void GivenConcurrentFounders_WhenOpenSameCompanyName_ThenOnlyOneSucceeds() throws InterruptedException {
         int threadCount = 10;
         String companyName = "ConcurrentCorp";
         String description = "Test description";

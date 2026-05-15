@@ -48,7 +48,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testNonAdminDenied() {
+    public void GivenNonAdmin_WhenRemoveMember_ThenSecurityException() {
         UUID targetId = UUID.randomUUID();
         String token = "user-token";
 
@@ -63,7 +63,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testCrossCompanyRoleRevocationAndSessionTermination() {
+    public void GivenAdminAndMultiCompanyMember_WhenRemoveMember_ThenRolesRevokedAndSessionsTerminated() {
         UUID adminId = UUID.randomUUID();
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
@@ -108,7 +108,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testCompanyIntegrityBlock() {
+    public void GivenSoleOwnerTarget_WhenRemoveMember_ThenIllegalStateException() {
         UUID adminId = UUID.randomUUID();
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
@@ -134,7 +134,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testSoleAdminProtection() {
+    public void GivenLastAdminTarget_WhenRemoveMember_ThenIllegalStateException() {
         UUID adminId = UUID.randomUUID();
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
@@ -160,7 +160,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_NonAdminDenied() {
+    public void GivenNonAdmin_WhenGetGlobalPurchaseHistory_ThenSecurityException() {
         String token = "user-token";
         when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
 
@@ -172,7 +172,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_FilterByBuyer() {
+    public void GivenAdminAndBuyerFilter_WhenGetGlobalPurchaseHistory_ThenFilteredByBuyer() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -193,7 +193,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_FilterByCompany() {
+    public void GivenAdminAndCompanyFilter_WhenGetGlobalPurchaseHistory_ThenFilteredByCompany() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -211,7 +211,7 @@ public class AdminServiceTest {
     }
     
     @Test
-    public void testGetGlobalPurchaseHistory_NoFiltersReturnsAll() {
+    public void GivenAdminNoFilters_WhenGetGlobalPurchaseHistory_ThenAllPurchasesReturned() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -226,7 +226,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_NonExistentFilterReturnsEmpty() {
+    public void GivenUnknownBuyer_WhenGetGlobalPurchaseHistory_ThenEmptyList() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -240,7 +240,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testHistoryPreservedAfterEventCancelled() {
+    public void GivenCancelledEventPurchase_WhenGetGlobalPurchaseHistory_ThenHistoryPreserved() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -257,7 +257,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testHistoryPreservedAfterCompanyClosure() {
+    public void GivenClosedCompanyPurchase_WhenGetGlobalPurchaseHistory_ThenHistoryPreserved() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 

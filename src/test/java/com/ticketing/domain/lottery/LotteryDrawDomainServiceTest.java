@@ -70,7 +70,7 @@ public class LotteryDrawDomainServiceTest {
 
     @Test
     @DisplayName("Winners count = min(registrants, capacity)")
-    void testWinnersCount() {
+    void GivenRegistrantsAndCapacity_WhenDraw_ThenWinnerCountIsMinOfBoth() {
         // Register 5 members
         for (int i = 0; i < 5; i++) {
             lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, UUID.randomUUID(), zoneId, 1, systemClock.now()));
@@ -94,7 +94,7 @@ public class LotteryDrawDomainServiceTest {
 
     @Test
     @DisplayName("No duplicate winners")
-    void testNoDuplicateWinners() {
+    void GivenRegistrants_WhenDraw_ThenNoDuplicateWinners() {
         for (int i = 0; i < 10; i++) {
             lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, UUID.randomUUID(), zoneId, 1, systemClock.now()));
         }
@@ -110,7 +110,7 @@ public class LotteryDrawDomainServiceTest {
 
     @Test
     @DisplayName("Winners receive reservation/authorization")
-    void testWinnersReceiveReservation() {
+    void GivenRegistrants_WhenDraw_ThenWinnersReceiveReservation() {
         UUID memberId = UUID.randomUUID();
         int requestedQuantity = 2;
         lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, zoneId, requestedQuantity, systemClock.now()));
@@ -141,7 +141,7 @@ public class LotteryDrawDomainServiceTest {
 
     @Test
     @DisplayName("Deterministic in tests via injected Random - strict comparison")
-    void testDeterministicRandomStrict() {
+    void GivenFixedRandom_WhenDraw_ThenDeterministicWinners() {
         long seed = 42L;
         
         // Generate 10 entries

@@ -22,7 +22,7 @@ class StubGatewaysTest {
     }
 
     @Test
-    void testPaymentGateway_SuccessMode() {
+    void GivenSuccessMode_WhenProcessPayment_ThenApproved() {
         PaymentDetails details = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com");
         PaymentResult result = paymentGateway.charge(new BigDecimal("150.00"), details);
         assertTrue(result.success());
@@ -30,7 +30,7 @@ class StubGatewaysTest {
     }
 
     @Test
-    void testPaymentGateway_FailureMode() {
+    void GivenFailureMode_WhenProcessPayment_ThenDeclined() {
         paymentGateway.setShouldFail(true);
         PaymentDetails details = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com");
         PaymentResult result = paymentGateway.charge(new BigDecimal("150.00"), details);
@@ -39,7 +39,7 @@ class StubGatewaysTest {
     }
 
     @Test
-    void testTicketSupplyGateway_SuccessMode() {
+    void GivenSuccessMode_WhenSupplyTickets_ThenSupplied() {
         List<TicketRequest> requests = List.of(new TicketRequest("evt_1", "tkt_1", "seat_A1"));
         CustomerInfo customer = new CustomerInfo("user_1", "test@test.com", "John Doe");
         

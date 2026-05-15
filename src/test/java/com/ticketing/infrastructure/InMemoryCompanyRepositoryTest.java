@@ -31,7 +31,7 @@ public class InMemoryCompanyRepositoryTest {
     // ===== CRUD Tests =====
 
     @Test
-    public void testSaveAndFindById() {
+    public void GivenNewCompany_WhenSaveAndFindById_ThenFound() {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -42,13 +42,13 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testFindByIdNotFound() {
+    public void GivenUnknownId_WhenFindById_ThenEmpty() {
         Optional<Company> found = repository.findById("NonExistent");
         assertFalse(found.isPresent());
     }
 
     @Test
-    public void testFindByName() {
+    public void GivenNewCompany_WhenSaveAndFindByName_ThenFound() {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -59,13 +59,13 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testFindByNameNotFound() {
+    public void GivenUnknownName_WhenFindByName_ThenEmpty() {
         Optional<Company> found = repository.findByName("NonExistent");
         assertFalse(found.isPresent());
     }
 
     @Test
-    public void testExistsById() {
+    public void GivenSavedCompany_WhenExistsById_ThenTrueForKnownFalseForUnknown() {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -75,7 +75,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testExistsByName() {
+    public void GivenSavedCompany_WhenExistsByName_ThenTrueForKnownFalseForUnknown() {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -85,7 +85,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testGetAll() {
+    public void GivenMultipleCompanies_WhenGetAll_ThenAllReturned() {
         Company company1 = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         Company company2 = new Company("FinServ", "A financial services company", java.util.UUID.randomUUID());
         
@@ -97,7 +97,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testDeleteThrows() {
+    public void GivenRepository_WhenDelete_ThenUnsupportedOperationException() {
         assertThrows(UnsupportedOperationException.class, () -> {
             repository.delete("anyId");
         });
@@ -106,7 +106,7 @@ public class InMemoryCompanyRepositoryTest {
     // ===== Normalization Tests =====
 
     @Test
-    public void testNameNormalizationCaseInsensitive() {
+    public void GivenSavedCompany_WhenFindByIdWithDifferentCase_ThenFound() {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -123,7 +123,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testNameNormalizationWithWhitespace() {
+    public void GivenSavedCompany_WhenFindByIdWithWhitespace_ThenFound() {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -134,7 +134,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testNameNormalizationCombined() {
+    public void GivenSavedCompany_WhenFindByIdWithCaseAndWhitespace_ThenFound() {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -145,7 +145,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testUpdateCompany() {
+    public void GivenSavedCompany_WhenUpdateDescription_ThenPersisted() {
         Company company = new Company("TechCorp", "Old description", java.util.UUID.randomUUID());
         
         repository.save(company);
@@ -160,7 +160,7 @@ public class InMemoryCompanyRepositoryTest {
     // ===== Thread Safety Tests =====
 
     @Test
-    public void testConcurrentSaveOperations() throws InterruptedException {
+    public void GivenConcurrentThreads_WhenSaveDifferentCompanies_ThenAllPersisted() throws InterruptedException {
         int threadCount = 10;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch latch = new CountDownLatch(threadCount);
@@ -186,7 +186,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testConcurrentReadOperations() throws InterruptedException {
+    public void GivenSavedCompany_WhenConcurrentReads_ThenAllFindCompany() throws InterruptedException {
         Company company = new Company("TechCorp", "A tech company", java.util.UUID.randomUUID());
         repository.save(company);
 
@@ -216,7 +216,7 @@ public class InMemoryCompanyRepositoryTest {
     }
 
     @Test
-    public void testConcurrentMixedOperations() throws InterruptedException {
+    public void GivenConcurrentReadersAndWriters_WhenMixedOperations_ThenConsistentState() throws InterruptedException {
         int threadCount = 20;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch latch = new CountDownLatch(threadCount);

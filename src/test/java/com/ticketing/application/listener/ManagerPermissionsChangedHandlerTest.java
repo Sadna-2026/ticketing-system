@@ -39,7 +39,7 @@ public class ManagerPermissionsChangedHandlerTest {
     }
 
     @Test
-    public void testHandle_FounderChangesPermissions_Success() {
+    public void GivenFounderCaller_WhenHandlePermissionsChange_ThenManagerPermissionsUpdated() {
         UUID founderId = UUID.randomUUID();
         Member founder = new Member(founderId, "founder", "f@test.com", "pass");
         founder.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
@@ -64,7 +64,7 @@ public class ManagerPermissionsChangedHandlerTest {
     }
 
     @Test
-    public void testHandle_DirectAppointerChangesPermissions_Success() {
+    public void GivenDirectAppointer_WhenHandlePermissionsChange_ThenManagerPermissionsUpdated() {
         UUID founderId = UUID.randomUUID();
         UUID appointerId = UUID.randomUUID();
         Member appointer = new Member(appointerId, "appointer", "a@test.com", "pass");
@@ -90,7 +90,7 @@ public class ManagerPermissionsChangedHandlerTest {
     }
 
     @Test
-    public void testHandle_SiblingOwnerCannotModify_ThrowsSecurityException() {
+    public void GivenSiblingOwner_WhenHandlePermissionsChange_ThenSecurityException() {
         UUID founderId = UUID.randomUUID();
         UUID owner2Id = UUID.randomUUID();
         
@@ -117,7 +117,7 @@ public class ManagerPermissionsChangedHandlerTest {
     }
 
     @Test
-    public void testHandle_Idempotency_NoSave() {
+    public void GivenUnchangedPermissions_WhenHandlePermissionsChange_ThenNoSave() {
         UUID founderId = UUID.randomUUID();
         Member founder = new Member(founderId, "founder", "f@test.com", "pass");
         founder.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
@@ -141,7 +141,7 @@ public class ManagerPermissionsChangedHandlerTest {
     }
 
     @Test
-    public void testHandle_TargetNotManager_ThrowsIllegalArgumentException() {
+    public void GivenTargetOwner_WhenHandlePermissionsChange_ThenIllegalArgumentException() {
         UUID founderId = UUID.randomUUID();
         Member founder = new Member(founderId, "founder", "f@test.com", "pass");
         founder.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));

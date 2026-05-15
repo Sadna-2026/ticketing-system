@@ -35,7 +35,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void successfulInitialization_AllValid_PlatformActiveBothServicesLiveAdminExists() {
+    void GivenValidConfig_WhenInitialize_ThenPlatformActiveAndAdminExists() {
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
         PlatformInitializationService.InitializationResult result = service.initialize();
@@ -50,7 +50,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initNoClearingService_HaltsWithUnableToConnectToClearingService() {
+    void GivenNoClearingService_WhenInitialize_ThenHaltsWithClearingError() {
         paymentGateway.reachable = false;
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
@@ -64,7 +64,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initNoSupplyService_HaltsWithUnableToConnectToSupplyService() {
+    void GivenNoSupplyService_WhenInitialize_ThenHaltsWithSupplyError() {
         supplyGateway.reachable = false;
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
@@ -78,7 +78,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initInvalidAdminCredentials_HaltsWithInvalidCredentialsError() {
+    void GivenInvalidAdminCredentials_WhenInitialize_ThenHaltsWithCredentialsError() {
         StartupConfiguration invalidConfig = new StartupConfiguration(
                 "",
                 "not-an-email",
@@ -97,7 +97,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initializeTwice_DoesNotDuplicateAdmin() {
+    void GivenInitializedPlatform_WhenInitializeAgain_ThenAdminNotDuplicated() {
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
         service.initialize();

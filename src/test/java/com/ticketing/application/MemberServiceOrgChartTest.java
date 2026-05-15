@@ -46,7 +46,7 @@ public class MemberServiceOrgChartTest {
     }
 
     @Test
-    public void testGetOrganizationChart_AccessDeniedForNonOwner() {
+    public void GivenManagerCaller_WhenGetOrganizationChart_ThenSecurityException() {
         UUID managerId = UUID.randomUUID();
         Member manager = new Member(managerId, "manager", "m@test.com", "pass");
         manager.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, ownerId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet()));
@@ -60,20 +60,20 @@ public class MemberServiceOrgChartTest {
     }
 
     @Test
-    public void testGetOrganizationChart_InvalidToken_ThrowsIllegalArgumentException() {
+    public void GivenInvalidToken_WhenGetOrganizationChart_ThenIllegalArgumentException() {
         when(sessionTokenService.isValid(AUTH_TOKEN)).thenReturn(false);
         assertThrows(IllegalArgumentException.class, () -> memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME));
     }
 
     @Test
-    public void testGetOrganizationChart_GuestToken_ThrowsSecurityException() {
+    public void GivenGuestToken_WhenGetOrganizationChart_ThenSecurityException() {
         when(sessionTokenService.isValid(AUTH_TOKEN)).thenReturn(true);
         when(sessionTokenService.extractMemberId(AUTH_TOKEN)).thenReturn(null);
         assertThrows(SecurityException.class, () -> memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME));
     }
 
     @Test
-    public void testGetOrganizationChart_Success() {
+    public void GivenOwnerAndStaffHierarchy_WhenGetOrganizationChart_ThenTreeBuiltWithPermissions() {
         // Setup Owner (Root)
         Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
         owner.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
@@ -109,7 +109,7 @@ public class MemberServiceOrgChartTest {
     }
 
     @Test
-    public void testGetOrganizationChart_HandlesDisconnectedRoots() {
+    public void GivenMultipleTopLevelOwners_WhenGetOrganizationChart_ThenMultipleRootsReturned() {
         // Case where founder is gone, but multiple top-level owners exist
         Member owner1 = new Member(ownerId, "owner1", "o1@test.com", "pass");
         owner1.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, UUID.randomUUID(), StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
