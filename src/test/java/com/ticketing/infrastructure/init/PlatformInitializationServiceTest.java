@@ -4,6 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
@@ -16,10 +22,6 @@ import com.ticketing.domain.system.StartupConfiguration;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
 import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
-import java.math.BigDecimal;
-import java.util.List;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 class PlatformInitializationServiceTest {
 
@@ -35,7 +37,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void successfulInitialization_AllValid_PlatformActiveBothServicesLiveAdminExists() {
+    void GivenValidConfig_WhenInitialize_ThenPlatformActiveAndAdminExists() {
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
         PlatformInitializationService.InitializationResult result = service.initialize();
@@ -50,7 +52,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initNoClearingService_HaltsWithUnableToConnectToClearingService() {
+    void GivenNoClearingService_WhenInitialize_ThenHaltsWithClearingError() {
         paymentGateway.reachable = false;
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
@@ -64,7 +66,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initNoSupplyService_HaltsWithUnableToConnectToSupplyService() {
+    void GivenNoSupplyService_WhenInitialize_ThenHaltsWithSupplyError() {
         supplyGateway.reachable = false;
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
@@ -78,7 +80,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initInvalidAdminCredentials_HaltsWithInvalidCredentialsError() {
+    void GivenInvalidAdminCredentials_WhenInitialize_ThenHaltsWithCredentialsError() {
         StartupConfiguration invalidConfig = new StartupConfiguration(
                 "",
                 "not-an-email",
@@ -97,7 +99,7 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
-    void initializeTwice_DoesNotDuplicateAdmin() {
+    void GivenInitializedPlatform_WhenInitializeAgain_ThenAdminNotDuplicated() {
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 
         service.initialize();

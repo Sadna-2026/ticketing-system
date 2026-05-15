@@ -4,6 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Set;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.system.StartupConfiguration;
@@ -12,12 +20,6 @@ import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
 import com.ticketing.infrastructure.init.PlatformInitializationService;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.Set;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 class MarketInitializationServiceTest {
 
@@ -45,7 +47,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void systemAdminOpensMarketSuccessfully() {
+    void GivenSystemAdmin_WhenOpenMarket_ThenMarketOpened() {
         String adminToken = initializePlatformAndAdminToken();
 
         MarketInitializationResponse response = marketInitializationService.openMarket(adminToken);
@@ -56,7 +58,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void nonAdminAttemptRejected() {
+    void GivenNonAdmin_WhenOpenMarket_ThenRejected() {
         initializePlatformAndAdminToken();
         String nonAdminToken = sessionTokenService.generateMemberToken(
                 UUID.randomUUID(),
@@ -72,7 +74,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void paymentServiceUnavailableMarketStaysClosed() {
+    void GivenUnavailablePaymentService_WhenOpenMarket_ThenMarketStaysClosed() {
         String adminToken = initializePlatformAndAdminToken();
         paymentGateway.setShouldFail(true);
 
@@ -84,7 +86,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void supplyServiceUnavailableMarketStaysClosed() {
+    void GivenUnavailableSupplyService_WhenOpenMarket_ThenMarketStaysClosed() {
         String adminToken = initializePlatformAndAdminToken();
         supplyGateway.setShouldFail(true);
 
@@ -96,7 +98,7 @@ class MarketInitializationServiceTest {
     }
 
     @Test
-    void noAdminInDatabaseCannotOpen() {
+    void GivenNoAdminInDatabase_WhenOpenMarket_ThenCannotOpen() {
         startupConfiguration.activate();
         String adminToken = sessionTokenService.generateMemberToken(
                 UUID.randomUUID(),
