@@ -1,14 +1,22 @@
 package com.ticketing.infrastructure.gateway;
 
-import com.ticketing.domain.gateway.*;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import com.ticketing.domain.gateway.CustomerInfo;
+import com.ticketing.domain.gateway.PaymentDetails;
+import com.ticketing.domain.gateway.PaymentResult;
+import com.ticketing.domain.gateway.SupplyResult;
+import com.ticketing.domain.gateway.TicketRequest;
 
 class StubGatewaysTest {
 

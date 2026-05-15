@@ -4,6 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Set;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.system.StartupConfiguration;
@@ -12,12 +20,6 @@ import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
 import com.ticketing.infrastructure.init.PlatformInitializationService;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.Set;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 class MarketInitializationServiceTest {
 

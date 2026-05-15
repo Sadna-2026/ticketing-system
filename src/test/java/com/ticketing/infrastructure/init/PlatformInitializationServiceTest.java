@@ -4,6 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
@@ -16,10 +22,6 @@ import com.ticketing.domain.system.StartupConfiguration;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
 import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
-import java.math.BigDecimal;
-import java.util.List;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 class PlatformInitializationServiceTest {
 

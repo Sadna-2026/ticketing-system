@@ -1,29 +1,36 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-import java.math.BigDecimal;
-import java.time.Instant;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
 
 public class AdminServiceTest {
 
