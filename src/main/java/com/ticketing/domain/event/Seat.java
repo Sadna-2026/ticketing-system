@@ -2,6 +2,7 @@ package com.ticketing.domain.event;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Entity within the InventoryZone (which is within the Event aggregate).
@@ -12,13 +13,16 @@ import java.util.UUID;
  * - A seat can only be locked if AVAILABLE.
  * - A seat can only be sold if LOCKED.
  * - A released seat returns to AVAILABLE.
+ *
+ * Seat status transitions use CAS so locking stays correct when the same aggregate
+ * is mutated concurrently (e.g. in-memory repositories return shared instances).
  */
 public class Seat {
 
     private final UUID id;
     private final String row;
     private final String seatNumber;
-    private SeatStatus status;
+    private final AtomicReference<SeatStatus> status = new AtomicReference<>(SeatStatus.AVAILABLE);
 
     public Seat(UUID id, String row, String seatNumber) {
         if (id == null) throw new IllegalArgumentException("Seat ID is required");
@@ -27,46 +31,50 @@ public class Seat {
         this.id = id;
         this.row = row;
         this.seatNumber = seatNumber;
-        this.status = SeatStatus.AVAILABLE;
     }
 
     public UUID getId() { return id; }
     public String getRow() { return row; }
     public String getSeatNumber() { return seatNumber; }
-    public SeatStatus getStatus() { return status; }
+    public SeatStatus getStatus() { return status.get(); }
 
-    public boolean isAvailable() { return status == SeatStatus.AVAILABLE; }
-    public boolean isLocked() { return status == SeatStatus.LOCKED; }
-    public boolean isSold() { return status == SeatStatus.SOLD; }
+    public boolean isAvailable() { return status.get() == SeatStatus.AVAILABLE; }
+    public boolean isLocked() { return status.get() == SeatStatus.LOCKED; }
+    public boolean isSold() { return status.get() == SeatStatus.SOLD; }
 
     /**
      * Locks this seat (reserves it for an active order).
      */
     public void lock() {
-        if (status != SeatStatus.AVAILABLE) {
-            throw new IllegalStateException("Seat " + row + "-" + seatNumber + " is not available (status: " + status + ")");
+        if (!status.compareAndSet(SeatStatus.AVAILABLE, SeatStatus.LOCKED)) {
+            SeatStatus current = status.get();
+            throw new IllegalStateException("Seat " + row + "-" + seatNumber + " is not available (status: " + current + ")");
         }
-        this.status = SeatStatus.LOCKED;
     }
 
     /**
      * Marks this seat as sold.
      */
     public void sell() {
-        if (status != SeatStatus.LOCKED) {
-            throw new IllegalStateException("Seat " + row + "-" + seatNumber + " is not locked (status: " + status + ")");
+        if (!status.compareAndSet(SeatStatus.LOCKED, SeatStatus.SOLD)) {
+            SeatStatus current = status.get();
+            throw new IllegalStateException("Seat " + row + "-" + seatNumber + " is not locked (status: " + current + ")");
         }
-        this.status = SeatStatus.SOLD;
     }
 
     /**
      * Releases this seat back to available.
      */
     public void release() {
-        if (status == SeatStatus.AVAILABLE) {
-            throw new IllegalStateException("Seat is already available");
+        while (true) {
+            SeatStatus current = status.get();
+            if (current == SeatStatus.AVAILABLE) {
+                throw new IllegalStateException("Seat is already available");
+            }
+            if (status.compareAndSet(current, SeatStatus.AVAILABLE)) {
+                return;
+            }
         }
-        this.status = SeatStatus.AVAILABLE;
     }
 
     @Override
@@ -82,4 +90,3 @@ public class Seat {
         return Objects.hash(id);
     }
 }
-
