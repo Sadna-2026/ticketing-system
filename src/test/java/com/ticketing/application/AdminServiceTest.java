@@ -1,29 +1,36 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-import java.math.BigDecimal;
-import java.time.Instant;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
 
 public class AdminServiceTest {
 
@@ -48,7 +55,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testNonAdminDenied() {
+    public void GivenNonAdmin_WhenRemoveMember_ThenSecurityException() {
         UUID targetId = UUID.randomUUID();
         String token = "user-token";
 
@@ -63,7 +70,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testCrossCompanyRoleRevocationAndSessionTermination() {
+    public void GivenAdminAndMultiCompanyMember_WhenRemoveMember_ThenRolesRevokedAndSessionsTerminated() {
         UUID adminId = UUID.randomUUID();
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
@@ -108,7 +115,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testCompanyIntegrityBlock() {
+    public void GivenSoleOwnerTarget_WhenRemoveMember_ThenIllegalStateException() {
         UUID adminId = UUID.randomUUID();
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
@@ -134,7 +141,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testSoleAdminProtection() {
+    public void GivenLastAdminTarget_WhenRemoveMember_ThenIllegalStateException() {
         UUID adminId = UUID.randomUUID();
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
@@ -160,7 +167,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_NonAdminDenied() {
+    public void GivenNonAdmin_WhenGetGlobalPurchaseHistory_ThenSecurityException() {
         String token = "user-token";
         when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
 
@@ -172,7 +179,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_FilterByBuyer() {
+    public void GivenAdminAndBuyerFilter_WhenGetGlobalPurchaseHistory_ThenFilteredByBuyer() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -193,7 +200,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_FilterByCompany() {
+    public void GivenAdminAndCompanyFilter_WhenGetGlobalPurchaseHistory_ThenFilteredByCompany() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -211,7 +218,7 @@ public class AdminServiceTest {
     }
     
     @Test
-    public void testGetGlobalPurchaseHistory_NoFiltersReturnsAll() {
+    public void GivenAdminNoFilters_WhenGetGlobalPurchaseHistory_ThenAllPurchasesReturned() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -226,7 +233,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testGetGlobalPurchaseHistory_NonExistentFilterReturnsEmpty() {
+    public void GivenUnknownBuyer_WhenGetGlobalPurchaseHistory_ThenEmptyList() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -240,7 +247,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testHistoryPreservedAfterEventCancelled() {
+    public void GivenCancelledEventPurchase_WhenGetGlobalPurchaseHistory_ThenHistoryPreserved() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 
@@ -257,7 +264,7 @@ public class AdminServiceTest {
     }
 
     @Test
-    public void testHistoryPreservedAfterCompanyClosure() {
+    public void GivenClosedCompanyPurchase_WhenGetGlobalPurchaseHistory_ThenHistoryPreserved() {
         String adminToken = "admin-token";
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
 

@@ -1,11 +1,12 @@
 package com.ticketing.concurrency;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.Collections;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -17,13 +18,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.CompanyService;
-import com.ticketing.application.MemberService;
 import com.ticketing.application.INotificationService;
+import com.ticketing.application.MemberService;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
-import com.ticketing.domain.member.request.RegisterRequest;
-import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
@@ -66,7 +67,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentRegistration() throws InterruptedException {
+    public void GivenConcurrentGuests_WhenRegisterSameUser_ThenOnlyOneSucceeds() throws InterruptedException {
         int threads = 20;
         String username = "uniqueUser";
         String email = "unique@test.com";
@@ -107,7 +108,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentCompanyOpening() throws InterruptedException {
+    public void GivenConcurrentFounders_WhenOpenSameCompany_ThenOnlyOneSucceeds() throws InterruptedException {
         int threads = 20;
         String companyName = "RaceCorp";
         UUID founderId = UUID.randomUUID();
@@ -141,7 +142,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentRoleOffers() throws InterruptedException {
+    public void GivenConcurrentOffers_WhenOfferSameRole_ThenConsistentState() throws InterruptedException {
         int threads = 50;
         String companyName = "OfferCorp";
         UUID ownerId = UUID.randomUUID();
@@ -180,7 +181,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void testConcurrentStaffAppointments() throws InterruptedException {
+    public void GivenConcurrentAppointments_WhenAssignStaff_ThenConsistentState() throws InterruptedException {
         int threads = 50;
         UUID memberId = UUID.randomUUID();
         Member member = new Member(memberId, "staffer", "s@s.com", "p");

@@ -18,7 +18,7 @@ import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 class PolicyFrameworkTest {
 
     @Test
-    void testAlwaysAllowPolicy() {
+    void GivenAlwaysAllowPolicy_WhenEvaluate_ThenAllowed() {
         IPurchasePolicy policy = new AlwaysAllowPolicy();
         UUID memberId = UUID.randomUUID();
         
@@ -29,7 +29,7 @@ class PolicyFrameworkTest {
     }
 
     @Test
-    void testAndPolicyCombinations() {
+    void GivenAndPolicy_WhenEvaluateCombinations_ThenExpectedResults() {
         IPurchasePolicy truePolicy = mock(IPurchasePolicy.class);
         when(truePolicy.isAllowed(any(), any())).thenReturn(PolicyResult.success());
         
@@ -46,7 +46,7 @@ class PolicyFrameworkTest {
     }
 
     @Test
-    void testOrPolicyCombinations() {
+    void GivenOrPolicy_WhenEvaluateCombinations_ThenExpectedResults() {
         IPurchasePolicy truePolicy = mock(IPurchasePolicy.class);
         when(truePolicy.isAllowed(any(), any())).thenReturn(PolicyResult.success());
         

@@ -1,11 +1,14 @@
 package com.ticketing.application.listener;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -13,7 +16,6 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.PermissionDeniedException;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
@@ -30,7 +32,7 @@ public class RoleAppointmentOfferRequestedHandlerTest {
     }
 
     @Test
-    public void testSuccessfulOfferCreation() {
+    public void GivenAuthorizedAppointer_WhenHandleOfferRequest_ThenPendingOfferCreated() {
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "TestCo";
@@ -53,7 +55,7 @@ public class RoleAppointmentOfferRequestedHandlerTest {
     }
 
     @Test
-    public void testUnauthorizedAppointerThrows() {
+    public void GivenUnauthorizedAppointer_WhenHandleOfferRequest_ThenPermissionDeniedException() {
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "TestCo";
@@ -72,7 +74,7 @@ public class RoleAppointmentOfferRequestedHandlerTest {
     }
 
     @Test
-    public void testCannotOfferToExistingOwner() {
+    public void GivenTargetAlreadyOwner_WhenHandleOfferRequest_ThenIllegalArgumentException() {
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String companyName = "TestCo";
