@@ -49,8 +49,8 @@ import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
-import com.ticketing.infrastructure.Interface.ISessionTokenRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
+import com.ticketing.infrastructure.Interface.ISessionTokenRepository;
 
 @DisplayName("MemberService")
 class MemberServiceTest {
