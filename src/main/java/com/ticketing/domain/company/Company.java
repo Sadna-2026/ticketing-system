@@ -8,6 +8,7 @@ public class Company {
     private String description;
     private final UUID founderId;
     private CompanyStatus status;
+    private int version;
 
     public Company(String name, String description, UUID founderId) {
         if (name == null || name.isBlank()) {
@@ -30,6 +31,10 @@ public class Company {
     public CompanyStatus getStatus() { return status; }
 
     public boolean isActive() { return status == CompanyStatus.ACTIVE; }
+
+    public int getVersion() { return version; }
+
+    public void incrementVersion() { this.version++; }
 
     // --- Setters ---
     public void setName(String name) {

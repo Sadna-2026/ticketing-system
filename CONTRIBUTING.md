@@ -1,4 +1,14 @@
 
+## Concurrency / locking (in-memory repositories)
+
+The project uses **optimistic locking** for concurrent updates to shared aggregates stored in in-memory repositories (`Event`, `ActiveOrder`, `Company`):
+
+- Each aggregate carries a `version` field; the repository increments it on every successful `save`.
+- `save` uses `ConcurrentHashMap.compute` with compare-and-set semantics. If the entity's version does not match the stored version, `OptimisticLockException` is thrown.
+- Creating a company with a name that already exists fails atomically in `InMemoryCompanyRepository` (no global service lock required).
+
+Application services must **not** use a single `synchronized` lock or `Object lock` to serialize all company operations. Per-company concurrency belongs in the repository layer. Callers may retry after `OptimisticLockException`.
+
 ## Notifications Architecture (V1 vs V2)
 As per V1 specifications (#UC-I.5 and #UC-I.6), full real-time and delayed notification delivery is **deferred to V2**.
 *   **Real-Time:** Services should use the INotificationService interface in the application layer. In V1, this is bound to a no-op StubNotificationService that simply logs the intent.

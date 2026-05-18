@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.company.Company;
+import com.ticketing.domain.exception.OptimisticLockException;
 
 @DisplayName("In-memory repositories")
 class InMemoryRepositoryTest {
@@ -343,6 +344,63 @@ class InMemoryRepositoryTest {
             List<Company> companies = repository.getAll();
             assertNotNull(companies);
             assertTrue(companies.size() >= 5);
+        }
+
+        @Test
+        public void GivenConcurrentThreads_WhenDuplicateInsertSameName_ThenOnlyOnePersists()
+                throws InterruptedException {
+            int threadCount = 10;
+            String companyName = "DuplicateCorp";
+            ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+            CountDownLatch startLatch = new CountDownLatch(1);
+            CountDownLatch doneLatch = new CountDownLatch(threadCount);
+            AtomicInteger successCount = new AtomicInteger(0);
+            AtomicInteger duplicateFailures = new AtomicInteger(0);
+
+            for (int i = 0; i < threadCount; i++) {
+                executor.submit(() -> {
+                    try {
+                        startLatch.await();
+                        Company company = new Company(
+                                companyName, "desc", UUID.randomUUID());
+                        repository.save(company);
+                        successCount.incrementAndGet();
+                    } catch (IllegalArgumentException ex) {
+                        if (ex.getMessage() != null
+                                && ex.getMessage().contains("already exists")) {
+                            duplicateFailures.incrementAndGet();
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        doneLatch.countDown();
+                    }
+                });
+            }
+
+            startLatch.countDown();
+            doneLatch.await();
+            executor.shutdown();
+
+            assertEquals(1, successCount.get());
+            assertEquals(threadCount - 1, duplicateFailures.get());
+            assertEquals(1, repository.getAll().size());
+        }
+
+        @Test
+        public void GivenSavedCompany_WhenSaveWithStaleVersion_ThenOptimisticLockException()
+                throws Exception {
+            Company company = new Company("TechCorp", "desc", UUID.randomUUID());
+            repository.save(company);
+            company.setDescription("First update");
+            repository.save(company);
+
+            var versionField = Company.class.getDeclaredField("version");
+            versionField.setAccessible(true);
+            versionField.setInt(company, 1);
+
+            company.setDescription("Stale update");
+            assertThrows(OptimisticLockException.class, () -> repository.save(company));
         }
     }
 }

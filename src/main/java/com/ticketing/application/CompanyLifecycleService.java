@@ -57,7 +57,7 @@ public class CompanyLifecycleService {
         this.sessionTokenService = sessionTokenService;
     }
 
-    public synchronized void suspendCompany(String token, String companyName) {
+    public void suspendCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
@@ -67,7 +67,7 @@ public class CompanyLifecycleService {
         log.info("Company suspended: name={}, by={}", companyName, memberId);
     }
 
-    public synchronized void reopenCompany(String token, String companyName) {
+    public void reopenCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
@@ -77,14 +77,14 @@ public class CompanyLifecycleService {
         log.info("Company reopened: name={}, by={}", companyName, memberId);
     }
 
-    public synchronized void permanentCloseByFounder(String token, String companyName) {
+    public void permanentCloseByFounder(String token, String companyName) {
         UUID memberId = requireMember(token);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
         runClose(company, false);
     }
 
-    public synchronized void permanentCloseByAdmin(String token, String companyName) {
+    public void permanentCloseByAdmin(String token, String companyName) {
         requireMember(token);
         if (!isAdmin(token)) {
             throw new SecurityException("System admin permission required");
@@ -93,7 +93,7 @@ public class CompanyLifecycleService {
         runClose(company, true);
     }
 
-    public synchronized void retryPendingRefunds(String companyName) {
+    public void retryPendingRefunds(String companyName) {
         Company company = loadCompany(companyName);
         if (company.getStatus() != com.ticketing.domain.company.CompanyStatus.PENDING_CLOSURE) {
             throw new IllegalStateException("Company is not pending closure");
