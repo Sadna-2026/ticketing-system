@@ -52,6 +52,10 @@ public class RevokePersonnelHandler implements IEventListener {
         }
 
         UUID appointerId = targetAppointment.getAppointedByMemberId();
+        if (appointerId == null) {
+            throw new IllegalArgumentException(
+                    "Cannot revoke a member without an appointer in this company.");
+        }
         if (!appointerId.equals(revokerId)) {
             throw new IllegalArgumentException(
                     "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees.");
