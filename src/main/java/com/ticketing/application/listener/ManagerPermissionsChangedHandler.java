@@ -5,7 +5,6 @@ import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.member.IMemberRepository;
-import com.ticketing.domain.member.ManagerPermissions;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
@@ -63,14 +62,12 @@ public class ManagerPermissionsChangedHandler implements IEventListener {
             throw new SecurityException("Only the founder or the direct appointer can modify manager permissions.");
         }
 
-        ManagerPermissions newPerms = new ManagerPermissions(changeEvent.getNewPermissions());
-        
         // Idempotency check
-        if (targetAppt.getManagerPermissions().equals(newPerms)) {
+        if (targetAppt.getPermissions().equals(changeEvent.getNewPermissions())) {
             return;
         }
 
-        targetAppt.updateManagerPermissions(newPerms);
+        targetAppt.updateManagerPermissions(changeEvent.getNewPermissions());
         memberRepository.save(targetMember);
     }
 }
