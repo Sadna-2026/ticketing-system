@@ -8,6 +8,7 @@ public class Company {
     private String description;
     private final UUID founderId;
     private CompanyStatus status;
+    private int version;
 
     public Company(String name, String description, UUID founderId) {
         if (name == null || name.isBlank()) {
@@ -30,6 +31,21 @@ public class Company {
     public CompanyStatus getStatus() { return status; }
 
     public boolean isActive() { return status == CompanyStatus.ACTIVE; }
+
+    public int getVersion() { return version; }
+
+    public void incrementVersion() { this.version++; }
+
+    /**
+     * Returns a detached copy with the same field values and version.
+     * Callers may mutate the copy without affecting the repository's stored instance.
+     */
+    public Company detachedCopy() {
+        Company copy = new Company(name, description, founderId);
+        copy.status = this.status;
+        copy.version = this.version;
+        return copy;
+    }
 
     // --- Setters ---
     public void setName(String name) {
