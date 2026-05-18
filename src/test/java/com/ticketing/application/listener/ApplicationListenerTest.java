@@ -298,8 +298,9 @@ class ApplicationListenerTest {
             assertFalse(founder.getStaffAppointment(companyName).getAppointedStaffMemberIds().contains(targetManagerId));
             assertFalse(founder.getStaffAppointment(companyName).getAppointedStaffMemberIds().contains(subordinateId));
 
-            assertTrue(targetManager.getStaffAppointment(companyName).isRevoked());
-            assertNotNull(targetManager.getStaffAppointment(companyName));
+            StaffAppointment revokedAppointment = targetManager.getStaffAppointment(companyName);
+            assertNotNull(revokedAppointment);
+            assertTrue(revokedAppointment.isRevoked());
             assertEquals(targetManagerId, subordinate.getStaffAppointment(companyName).getAppointedByMemberId());
 
             verify(memberRepository).save(founder);
