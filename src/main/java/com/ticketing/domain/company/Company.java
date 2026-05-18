@@ -36,6 +36,17 @@ public class Company {
 
     public void incrementVersion() { this.version++; }
 
+    /**
+     * Returns a detached copy with the same field values and version.
+     * Callers may mutate the copy without affecting the repository's stored instance.
+     */
+    public Company detachedCopy() {
+        Company copy = new Company(name, description, founderId);
+        copy.status = this.status;
+        copy.version = this.version;
+        return copy;
+    }
+
     // --- Setters ---
     public void setName(String name) {
         if (name == null || name.isBlank()) {

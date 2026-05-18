@@ -388,19 +388,30 @@ class InMemoryRepositoryTest {
         }
 
         @Test
-        public void GivenSavedCompany_WhenSaveWithStaleVersion_ThenOptimisticLockException()
-                throws Exception {
+        public void GivenTwoDetachedSnapshots_WhenSecondSaveIsStale_ThenOptimisticLockException() {
             Company company = new Company("TechCorp", "desc", UUID.randomUUID());
             repository.save(company);
-            company.setDescription("First update");
+
+            Company firstSnapshot = repository.findByName("TechCorp").orElseThrow();
+            Company secondSnapshot = repository.findByName("TechCorp").orElseThrow();
+
+            firstSnapshot.setDescription("First update");
+            repository.save(firstSnapshot);
+
+            secondSnapshot.setDescription("Stale update");
+            assertThrows(OptimisticLockException.class, () -> repository.save(secondSnapshot));
+        }
+
+        @Test
+        public void GivenSavedCompany_WhenMutateReturnedCopyWithoutSave_ThenStoredStateUnchanged() {
+            Company company = new Company("TechCorp", "desc", UUID.randomUUID());
             repository.save(company);
 
-            var versionField = Company.class.getDeclaredField("version");
-            versionField.setAccessible(true);
-            versionField.setInt(company, 1);
+            Company copy = repository.findByName("TechCorp").orElseThrow();
+            copy.setDescription("Mutated outside save");
 
-            company.setDescription("Stale update");
-            assertThrows(OptimisticLockException.class, () -> repository.save(company));
+            Company stored = repository.findByName("TechCorp").orElseThrow();
+            assertEquals("desc", stored.getDescription());
         }
     }
 }

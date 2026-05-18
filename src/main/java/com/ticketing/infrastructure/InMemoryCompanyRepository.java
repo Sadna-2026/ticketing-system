@@ -12,6 +12,7 @@ import com.ticketing.domain.exception.OptimisticLockException;
 /**
  * In-memory implementation of ICompanyRepository with CAS-style optimistic locking.
  * Uses a version counter alongside the entity to detect concurrent modifications.
+ * Stored aggregates are detached from callers: reads return copies and saves persist copies.
  */
 public class InMemoryCompanyRepository implements ICompanyRepository {
 
@@ -24,29 +25,29 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
     @Override
     public Optional<Company> findById(String id) {
         VersionedEntry<Company> entry = companies.get(normalizeKey(id));
-        return entry != null ? Optional.of(entry.entity) : Optional.empty();
+        return entry != null ? Optional.of(entry.entity.detachedCopy()) : Optional.empty();
     }
 
     public boolean existsById(String id) {
-        return findById(id).isPresent();
+        return companies.containsKey(normalizeKey(id));
     }
 
     @Override
     public boolean existsByName(String name) {
-        return findByName(name).isPresent();
+        return companies.containsKey(normalizeKey(name));
     }
 
     @Override
     public Optional<Company> findByName(String name) {
         VersionedEntry<Company> entry = companies.get(normalizeKey(name));
-        return entry != null ? Optional.of(entry.entity) : Optional.empty();
+        return entry != null ? Optional.of(entry.entity.detachedCopy()) : Optional.empty();
     }
 
     @Override
     public List<Company> getAll() {
         List<Company> all = new ArrayList<>(companies.size());
         for (VersionedEntry<Company> entry : companies.values()) {
-            all.add(entry.entity);
+            all.add(entry.entity.detachedCopy());
         }
         return all;
     }
@@ -60,7 +61,8 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
         companies.compute(key, (k, existing) -> {
             if (existing == null) {
                 company.incrementVersion();
-                return new VersionedEntry<>(company, company.getVersion());
+                Company stored = company.detachedCopy();
+                return new VersionedEntry<>(stored, stored.getVersion());
             }
             if (company.getVersion() == 0) {
                 throw new IllegalArgumentException(
@@ -70,7 +72,8 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
                 throw new OptimisticLockException("Company", k);
             }
             company.incrementVersion();
-            return new VersionedEntry<>(company, company.getVersion());
+            Company stored = company.detachedCopy();
+            return new VersionedEntry<>(stored, stored.getVersion());
         });
     }
 
