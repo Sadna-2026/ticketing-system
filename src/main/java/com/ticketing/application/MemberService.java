@@ -351,6 +351,7 @@ public class MemberService {
                 member.getUsername(),
                 appt.getRole(),
                 appt.getPermissions(),
+                appt.isRevoked(),
                 subordinates
         );
     }

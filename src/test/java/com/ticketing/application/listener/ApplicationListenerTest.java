@@ -258,12 +258,11 @@ class ApplicationListenerTest {
         }
 
         /**
-         * Fulfills Acceptance Test: "Hierarchy remains valid after non-cascading removal" 
-         * V0 Requirement: Members that X previously appointed remain in their roles.
-         * Architectural Implementation: Target is removed, and their subordinates roll up to the Revoker.
+         * Fulfills Acceptance Test: "Hierarchy remains valid after non-cascading removal"
+         * V1 fix: subordinates remain orphans under the revoked node (no re-parenting).
          */
         @Test
-        public void GivenValidRevocationWithSubordinates_WhenHandle_ThenRemovesTargetAndReassignsSubordinates() {
+        public void GivenValidRevocationWithSubordinates_WhenHandle_ThenChildrenRemainOrphans() {
             UUID founderId = UUID.randomUUID();
             UUID targetManagerId = UUID.randomUUID();
             UUID subordinateId = UUID.randomUUID();
@@ -296,21 +295,19 @@ class ApplicationListenerTest {
             // Act
             handler.handle(event);
 
-            // Assert 1: Target is removed from Founder's list, but Subordinate is added to Founder's list (Reparenting)
             assertFalse(founder.getStaffAppointment(companyName).getAppointedStaffMemberIds().contains(targetManagerId));
-            assertTrue(founder.getStaffAppointment(companyName).getAppointedStaffMemberIds().contains(subordinateId));
+            assertFalse(founder.getStaffAppointment(companyName).getAppointedStaffMemberIds().contains(subordinateId));
 
-            // Assert 2: Subordinate's appointer is updated to the Founder
-            assertEquals(founderId, subordinate.getStaffAppointment(companyName).getAppointedByMemberId());
+            assertTrue(targetManager.getStaffAppointment(companyName).isRevoked());
+            assertNotNull(targetManager.getStaffAppointment(companyName));
+            assertEquals(targetManagerId, subordinate.getStaffAppointment(companyName).getAppointedByMemberId());
 
-            // Assert 3: Saves were called correctly
             verify(memberRepository).save(founder);
             verify(memberRepository).save(targetManager);
-            verify(memberRepository).save(subordinate);
+            verify(memberRepository, never()).save(subordinate);
 
-            // Assert 4: Notifications were sent
             verify(notificationService).notify(eq(targetManagerId.toString()), anyString());
-            verify(notificationService).notify(eq(subordinateId.toString()), anyString());
+            verify(notificationService, never()).notify(eq(subordinateId.toString()), anyString());
         }
 
         /**
@@ -347,10 +344,11 @@ class ApplicationListenerTest {
             // Act: Revoke the target
             handler.handle(new RevokePersonnelEvent(company, founderId, targetId));
 
-            // Assert: Target is removed from Founder's list, but Sibling remains completely intact
             assertFalse(founder.getStaffAppointment(companyName).getAppointedStaffMemberIds().contains(targetId));
             assertTrue(founder.getStaffAppointment(companyName).getAppointedStaffMemberIds().contains(siblingId));
-            assertNotNull(sibling.getStaffAppointment(companyName)); // Sibling still has their role
+            assertTrue(target.getStaffAppointment(companyName).isRevoked());
+            assertNotNull(sibling.getStaffAppointment(companyName));
+            assertFalse(sibling.getStaffAppointment(companyName).isRevoked());
         }
 
         /**
@@ -382,9 +380,9 @@ class ApplicationListenerTest {
             // Act: Revoke from TestCo
             handler.handle(new RevokePersonnelEvent(company, founderId, targetId));
 
-            // Assert: TestCo role is gone, but OtherCo role is perfectly intact
-            assertNull(target.getStaffAppointment(targetCompany));
+            assertTrue(target.getStaffAppointment(targetCompany).isRevoked());
             assertNotNull(target.getStaffAppointment(otherCompany));
+            assertFalse(target.getStaffAppointment(otherCompany).isRevoked());
         }
     }
 

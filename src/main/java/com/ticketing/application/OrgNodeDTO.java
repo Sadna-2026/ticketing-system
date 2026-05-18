@@ -16,5 +16,6 @@ public record OrgNodeDTO(
         String username,
         StaffAppointment.StaffRole role,
         Set<ManagerPermission> permissions,
+        boolean revoked,
         List<OrgNodeDTO> subordinates
 ) {}

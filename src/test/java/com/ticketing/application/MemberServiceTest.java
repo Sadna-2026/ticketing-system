@@ -1250,6 +1250,36 @@ class MemberServiceTest {
             OrgNodeDTO juniorNode = managerNode.subordinates().get(0);
             assertEquals(juniorId, juniorNode.memberId());
             assertTrue(juniorNode.subordinates().isEmpty());
+            assertFalse(managerNode.revoked());
+        }
+
+        @Test
+        void GivenRevokedManagerWithSubordinate_WhenGetOrganizationChart_ThenRevokedNodeMarkedWithSubtree() {
+            Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
+            owner.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+
+            UUID managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "m@test.com", "pass");
+            StaffAppointment managerAppt = new StaffAppointment(
+                    COMPANY_NAME, ownerId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+            managerAppt.revoke();
+            manager.addStaffAppointment(COMPANY_NAME, managerAppt);
+
+            UUID juniorId = UUID.randomUUID();
+            Member junior = new Member(juniorId, "junior", "j@test.com", "pass");
+            junior.addStaffAppointment(COMPANY_NAME, new StaffAppointment(
+                    COMPANY_NAME, managerId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet()));
+
+            when(memberRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+            when(memberRepository.findByCompanyAppointment(COMPANY_NAME)).thenReturn(List.of(owner, manager, junior));
+
+            List<OrgNodeDTO> chart = memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME);
+
+            OrgNodeDTO managerNode = chart.get(0).subordinates().get(0);
+            assertTrue(managerNode.revoked());
+            assertEquals(1, managerNode.subordinates().size());
+            assertEquals(juniorId, managerNode.subordinates().get(0).memberId());
+            assertFalse(managerNode.subordinates().get(0).revoked());
         }
 
         @Test
