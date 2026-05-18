@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.auth.SessionTokenData;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberMapper;
 import com.ticketing.domain.member.StaffAppointment;
@@ -23,7 +24,6 @@ import com.ticketing.domain.member.response.LogoutResponse;
 import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.response.UpdateMemberDetailsResponse;
-import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @Service
