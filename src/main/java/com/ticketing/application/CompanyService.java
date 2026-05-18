@@ -25,7 +25,6 @@ public class CompanyService {
     private final ICompanyRepository companyRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
-    private final Object lock = new Object();
 
     public CompanyService(
             ICompanyRepository companyRepository, 
@@ -49,28 +48,29 @@ public class CompanyService {
      */
     public String openProductionCompany(String token, String name, String description) {
         UUID founderId = validateToken(token);
-        
-        synchronized (lock) {
-            log.info("Creating company: founderId={}, name={}", founderId, name);
-            
-            if (founderId == null) {
-                throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
-            }
 
-            if (companyRepository.existsByName(name)) {
-                throw new IllegalArgumentException("A production company with this name already exists.");
-            }
+        log.info("Creating company: founderId={}, name={}", founderId, name);
 
-            com.ticketing.domain.company.Company company = new com.ticketing.domain.company.Company(name, description, founderId);
-            companyRepository.save(company);
-
-            // Publish event for listeners to handle member updates
-            CompanyOpenedEvent event = new CompanyOpenedEvent(company.getName(), founderId);
-            eventPublisher.publish(event);
-
-            log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
-            return company.getName();
+        if (founderId == null) {
+            throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
         }
+
+        if (companyRepository.existsByName(name)) {
+            throw new IllegalArgumentException("A production company with this name already exists.");
+        }
+
+        Company company = new Company(name, description, founderId);
+        try {
+            companyRepository.save(company);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("A production company with this name already exists.");
+        }
+
+        CompanyOpenedEvent event = new CompanyOpenedEvent(company.getName(), founderId);
+        eventPublisher.publish(event);
+
+        log.info("Company created: companyName={}, founderId={}", company.getName(), founderId);
+        return company.getName();
     }
 
     public void offerRoleAppointment(

@@ -2,11 +2,10 @@ package com.ticketing.application;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,7 +40,10 @@ public class CompanyLifecycleService {
     private final ISessionTokenService sessionTokenService;
 
     // queue of pending refund jobs per company, used when payment service is down
-    private final Map<String, Deque<RefundJob>> pendingRefunds = new HashMap<>();
+    private final ConcurrentHashMap<String, Deque<RefundJob>> pendingRefunds = new ConcurrentHashMap<>();
+
+    /** Per-company lock for workflows with non-idempotent side effects (close / refund retry). */
+    private final ConcurrentHashMap<String, Object> companyLocks = new ConcurrentHashMap<>();
 
     public CompanyLifecycleService(ICompanyRepository companyRepository,
                                    IEventRepository eventRepository,
@@ -57,7 +59,7 @@ public class CompanyLifecycleService {
         this.sessionTokenService = sessionTokenService;
     }
 
-    public synchronized void suspendCompany(String token, String companyName) {
+    public void suspendCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
@@ -67,7 +69,7 @@ public class CompanyLifecycleService {
         log.info("Company suspended: name={}, by={}", companyName, memberId);
     }
 
-    public synchronized void reopenCompany(String token, String companyName) {
+    public void reopenCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
@@ -77,57 +79,65 @@ public class CompanyLifecycleService {
         log.info("Company reopened: name={}, by={}", companyName, memberId);
     }
 
-    public synchronized void permanentCloseByFounder(String token, String companyName) {
+    public void permanentCloseByFounder(String token, String companyName) {
         UUID memberId = requireMember(token);
-        Company company = loadCompany(companyName);
-        requireFounder(memberId, company);
-        runClose(company, false);
+        synchronized (companyLock(companyName)) {
+            Company company = loadCompany(companyName);
+            requireFounder(memberId, company);
+            runClose(company, false);
+        }
     }
 
-    public synchronized void permanentCloseByAdmin(String token, String companyName) {
+    public void permanentCloseByAdmin(String token, String companyName) {
         requireMember(token);
         if (!isAdmin(token)) {
             throw new SecurityException("System admin permission required");
         }
-        Company company = loadCompany(companyName);
-        runClose(company, true);
+        synchronized (companyLock(companyName)) {
+            Company company = loadCompany(companyName);
+            runClose(company, true);
+        }
     }
 
-    public synchronized void retryPendingRefunds(String companyName) {
-        Company company = loadCompany(companyName);
-        if (company.getStatus() != com.ticketing.domain.company.CompanyStatus.PENDING_CLOSURE) {
-            throw new IllegalStateException("Company is not pending closure");
-        }
-
-        Deque<RefundJob> queue = pendingRefunds.get(companyName);
-        if (queue == null || queue.isEmpty()) {
-            // The in-memory queue is lost on process restart, but the company can
-            // still be in PENDING_CLOSURE per the persisted CompanyStatus. Rehydrate
-            // by re-reading completed purchases from the repository.
-            // V1 caveat: this re-attempts every refund, including ones that succeeded
-            // in the original close. With the stub gateway this is harmless; for V2
-            // we'd track per-purchase refund status to avoid double-refund.
-            queue = new ArrayDeque<>();
-            for (CompletedPurchase p : orderRepository.findCompletedByCompanyName(companyName)) {
-                queue.add(new RefundJob(p.transactionId(), p.amount()));
+    public void retryPendingRefunds(String companyName) {
+        synchronized (companyLock(companyName)) {
+            Company company = loadCompany(companyName);
+            if (company.getStatus() != com.ticketing.domain.company.CompanyStatus.PENDING_CLOSURE) {
+                throw new IllegalStateException("Company is not pending closure");
             }
-        }
 
-        while (!queue.isEmpty()) {
-            RefundJob job = queue.peek();
-            RefundResult r = paymentGateway.refund(job.transactionId, job.amount.doubleValue());
-            if (!r.success()) {
-                log.warn("Retry refund still failing for company={}, transactionId={}", companyName, job.transactionId);
-                pendingRefunds.put(companyName, queue);
-                return; // stop on first failure, leave queue for next retry
+            String key = normalizeCompanyKey(companyName);
+            Deque<RefundJob> queue = pendingRefunds.get(key);
+            if (queue == null || queue.isEmpty()) {
+                // The in-memory queue is lost on process restart, but the company can
+                // still be in PENDING_CLOSURE per the persisted CompanyStatus. Rehydrate
+                // by re-reading completed purchases from the repository.
+                // V1 caveat: this re-attempts every refund, including ones that succeeded
+                // in the original close. With the stub gateway this is harmless; for V2
+                // we'd track per-purchase refund status to avoid double-refund.
+                queue = new ArrayDeque<>();
+                for (CompletedPurchase p : orderRepository.findCompletedByCompanyName(companyName)) {
+                    queue.add(new RefundJob(p.transactionId(), p.amount()));
+                }
             }
-            queue.poll();
-        }
 
-        pendingRefunds.remove(companyName);
-        company.completeClosure();
-        companyRepository.save(company);
-        log.info("Pending closure completed: company={}", companyName);
+            while (!queue.isEmpty()) {
+                RefundJob job = queue.peek();
+                RefundResult r = paymentGateway.refund(job.transactionId, job.amount.doubleValue());
+                if (!r.success()) {
+                    log.warn("Retry refund still failing for company={}, transactionId={}",
+                            companyName, job.transactionId);
+                    pendingRefunds.put(key, queue);
+                    return;
+                }
+                queue.poll();
+            }
+
+            pendingRefunds.remove(key);
+            company.completeClosure();
+            companyRepository.save(company);
+            log.info("Pending closure completed: company={}", companyName);
+        }
     }
 
     // --- internals ---
@@ -160,7 +170,7 @@ public class CompanyLifecycleService {
         }
 
         if (!failed.isEmpty()) {
-            pendingRefunds.put(company.getName(), failed);
+            pendingRefunds.put(normalizeCompanyKey(company.getName()), failed);
             company.markPendingClosure();
             companyRepository.save(company);
             log.warn("Closure pending due to refund failures: company={}, failed={}",
@@ -208,6 +218,14 @@ public class CompanyLifecycleService {
     private Company loadCompany(String companyName) {
         return companyRepository.findByName(companyName)
                 .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
+    }
+
+    private Object companyLock(String companyName) {
+        return companyLocks.computeIfAbsent(normalizeCompanyKey(companyName), k -> new Object());
+    }
+
+    private static String normalizeCompanyKey(String companyName) {
+        return companyName.toLowerCase().trim();
     }
 
     private void requireFounder(UUID memberId, Company company) {
