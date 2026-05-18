@@ -305,3 +305,12 @@ Output received (short description):
 - Modifications made: documentation and some corrections to make it suitable and better to understand.
 - Initial gaps in understanding (if any): none
 - Final understanding (brief explanation in your own words): helped me understand the sequence of the checking better.
+
+## Feature / Component: Given/When/Then on the whole test tree
+- Purpose of LLM use: I wanted every test method to match our `Given_When_Then` style and get it merged without missing files.
+- Summary of prompt(s): Find leftovers, rename them, split follow-up work into small PRs, commit/push/PR; later tidy imports; log this in `llm_usage`.
+- Output received (short description): List of stragglers; I renamed ~90 methods in 16 files with a tiny Python script (just `pathlib` + string replace on a hand-made old→new map, longest names first so nothing collides). Ran `mvn test`. Also noted follow-ups for later PRs (drop pointless `Serializable` on `ManagerPermissions`, register the relinquish-ownership listener).
+- Files / components affected: assorted tests under `src/test` (admin, permissions, org chart, listeners, concurrency, infra, `Tests.java`, etc.).
+- Modifications made: renames only, then organized imports on the files I'd touched.
+- Initial gaps in understanding (if any): Tests should be GWT.
+- Final understanding (brief explanation in your own words): Tests should be GWT format. AI is great for monotonic tasks like renaming test functions that are never called from anywhere else.
