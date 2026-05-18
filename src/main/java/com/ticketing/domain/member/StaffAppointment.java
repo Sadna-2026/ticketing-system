@@ -13,6 +13,7 @@ public class StaffAppointment {
     private StaffRole role;
     private Set<ManagerPermission> managerPermissions;
     private Set<UUID> appointedStaffMemberIds;
+    private boolean revoked;
 
     public StaffAppointment(
             String companyId,
@@ -102,8 +103,26 @@ public class StaffAppointment {
         return role == StaffRole.MANAGER;
     }
 
+    public boolean isRevoked() {
+        return revoked;
+    }
+
+    public boolean isActive() {
+        return !revoked;
+    }
+
+    public void revoke() {
+        if (isOwner()) {
+            throw new IllegalStateException("Cannot revoke an owner appointment.");
+        }
+        if (revoked) {
+            throw new IllegalStateException("Appointment is already revoked.");
+        }
+        this.revoked = true;
+    }
+
     public boolean hasPermission(ManagerPermission permission) {
-        if (permission == null) {
+        if (permission == null || revoked) {
             return false;
         }
 
