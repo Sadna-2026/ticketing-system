@@ -2,9 +2,10 @@ package com.ticketing.infrastructure.init;
 
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
+import com.ticketing.domain.auth.ITicketSupplyGateway;
 import com.ticketing.domain.system.StartupConfiguration;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
-import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

@@ -2,7 +2,7 @@ package com.ticketing.application.listener;
 
 import java.util.UUID;
 
-import com.ticketing.application.INotificationService;
+import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;

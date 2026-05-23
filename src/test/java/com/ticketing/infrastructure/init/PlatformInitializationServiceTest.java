@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.domain.admin.IAdminRepository;
+import com.ticketing.domain.auth.ITicketSupplyGateway;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
 import com.ticketing.domain.gateway.PaymentDetails;
@@ -21,7 +22,6 @@ import com.ticketing.domain.gateway.TicketRequest;
 import com.ticketing.domain.system.StartupConfiguration;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
-import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
 
 class PlatformInitializationServiceTest {
 

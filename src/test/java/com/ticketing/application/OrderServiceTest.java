@@ -26,7 +26,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.auth.SessionTokenData;
+import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.services.OrderService;
+import com.ticketing.application.services.OrderTimeDomainService;
+import com.ticketing.application.services.SessionTokenService;
+import com.ticketing.application.services.TicketSelectionService;
+import com.ticketing.domain.auth.ITicketSupplyGateway;
+import com.ticketing.domain.auth.SessionTokenData;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -52,7 +58,6 @@ import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.Interface.IPaymentGateway;
-import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
 
 public class OrderServiceTest {
 

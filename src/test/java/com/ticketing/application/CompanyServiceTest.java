@@ -34,8 +34,15 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.initialization.InitializationService;
+import com.ticketing.application.services.CompanyHistoryService;
+import com.ticketing.application.services.CompanyLifecycleService;
+import com.ticketing.application.services.CompanyQueryService;
+import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.INotificationService;
+import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
 import com.ticketing.domain.company.ICompanyRepository;

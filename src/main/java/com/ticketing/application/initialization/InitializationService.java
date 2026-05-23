@@ -3,13 +3,13 @@ package com.ticketing.application.initialization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.ticketing.application.CompanyService;
-import com.ticketing.application.INotificationService;
-import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.listener.ManagerPermissionsChangedHandler;
 import com.ticketing.application.listener.MemberCompanyOpenedEventHandler;
 import com.ticketing.application.listener.RoleAppointmentOfferRequestedHandler;
 import com.ticketing.application.listener.RoleAppointmentOfferResponseHandler;
+import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.INotificationService;
+import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.member.IMemberRepository;

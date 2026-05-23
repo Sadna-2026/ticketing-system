@@ -1,16 +1,15 @@
 package com.ticketing.application.listener;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.PermissionDeniedException;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 
 public class RoleAppointmentOfferRequestedHandler implements IEventListener {

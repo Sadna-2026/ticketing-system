@@ -2,6 +2,7 @@ package com.ticketing.application;
 
 import java.util.UUID;
 
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventSchedule;
 
 /**

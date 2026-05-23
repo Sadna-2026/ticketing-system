@@ -7,8 +7,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.exception.OptimisticLockException;
-import com.ticketing.infrastructure.Interface.IEventRepository;
 
 /**
  * In-memory implementation of IEventRepository with CAS-style optimistic locking.

@@ -1,0 +1,441 @@
+package com.ticketing.application.services;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.ticketing.application.CreateEventRequest;
+import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.CreateEventRequest.AssignedZoneSpec;
+import com.ticketing.application.CreateEventRequest.GAZoneSpec;
+import com.ticketing.application.CreateEventRequest.SeatSpec;
+import com.ticketing.application.CreateEventRequest.ZoneSpec;
+import com.ticketing.application.dto.EventDetailsDTO;
+import com.ticketing.application.dto.LotteryRegistrationRequest;
+import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.domain.auth.ISessionTokenService;
+import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.event.AlwaysAllowPolicy;
+import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.NoDiscountPolicy;
+import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.VenueMap;
+import com.ticketing.domain.lottery.ILotteryRepository;
+import com.ticketing.domain.lottery.LotteryEntry;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.order.IOrderRepository;
+
+public class EventService {
+
+    private static final Logger log = LoggerFactory.getLogger(EventService.class);
+
+    private final IEventRepository eventRepository;
+    private final ICompanyRepository companyRepository;
+    private final IMemberRepository memberRepository;
+    private final IOrderRepository orderRepository;
+    private final ISessionTokenService sessionTokenService;
+    private final ILotteryRepository lotteryRepository;
+    private final Clock clock;
+
+    // Per-event lock so inventory edits on Event A don't block Event B.
+    private final java.util.concurrent.ConcurrentHashMap<UUID, Object> eventLocks =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private Object lockFor(UUID eventId) {
+        return eventLocks.computeIfAbsent(eventId, k -> new Object());
+    }
+
+    public EventService(IEventRepository eventRepository,
+                        ICompanyRepository companyRepository,
+                        IMemberRepository memberRepository,
+                        IOrderRepository orderRepository,
+                        ISessionTokenService sessionTokenService,
+                        ILotteryRepository lotteryRepository,
+                        Clock clock) {
+        this.eventRepository = eventRepository;
+        this.companyRepository = companyRepository;
+        this.memberRepository = memberRepository;
+        this.orderRepository = orderRepository;
+        this.sessionTokenService = sessionTokenService;
+        this.lotteryRepository = lotteryRepository;
+        this.clock = clock;
+    }
+
+    public EventService(IEventRepository eventRepository,
+                        ICompanyRepository companyRepository,
+                        IMemberRepository memberRepository,
+                        IOrderRepository orderRepository,
+                        ISessionTokenService sessionTokenService) {
+        this(eventRepository, companyRepository, memberRepository, orderRepository,
+                sessionTokenService, null, Clock.systemUTC());
+    }
+
+    /**
+     * Creates a new DRAFT event with inventory zones and venue map.
+     * Caller must be Owner/Founder, or a Manager with both
+     * MAP_DEFINITION and INVENTORY_MGMT permissions.
+     */
+    public UUID createEvent(String token, CreateEventRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+        UUID memberId = authenticateMember(token);
+        Company company = loadActiveCompany(request.companyName());
+        StaffAppointment appointment = loadAppointment(memberId, company.getName());
+        authorize(appointment);
+
+        log.info("Creating event: companyName={}, memberId={}, name={}",
+                company.getName(), memberId, request.name());
+        //TODO : in V2 add to here support for choosing type of policies
+        Event event = new Event(
+                UUID.randomUUID(),
+                company.getName(),
+                request.name(),
+                request.description(),
+                request.category(),
+                request.schedule(),
+                request.lockTimerDuration(),
+                new AlwaysAllowPolicy(),
+                new NoDiscountPolicy(),
+                request.saleMethod(),
+                request.lotteryWindow());
+
+        Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
+        for (CreateEventRequest.ZoneSpec spec : request.zones()) {
+            InventoryZone zone = buildZone(spec);
+            if (zoneIdsByName.put(spec.name(), zone.getId()) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate zone name in request: " + spec.name());
+            }
+            event.addZone(zone);
+        }
+
+        VenueMap venueMap = buildVenueMap(request.sectionToZoneName(), zoneIdsByName);
+        event.setVenueMap(venueMap);
+
+        eventRepository.save(event);
+        log.info("Event created: eventId={}, companyName={}, status=DRAFT",
+                event.getId(), company.getName());
+        return event.getId();
+    }
+
+    /**
+     * UC-II.3.6 — Register a member for an event's purchase-right lottery.
+     * Validates: event supports lottery, registration window is open, member not already registered.
+     */
+    public LotteryRegistrationResponse registerForLottery(String token, LotteryRegistrationRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(request.eventId())
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
+
+        if (!event.isLottery()) {
+            log.warn("Lottery registration denied: event {} does not support lottery", request.eventId());
+            return LotteryRegistrationResponse.failure("Event does not support lottery sale method.");
+        }
+
+        Instant now = clock.instant();
+        if (!event.isLotteryRegistrationOpen(now)) {
+            log.warn("Lottery registration denied: registration window closed for event {}", request.eventId());
+            return LotteryRegistrationResponse.failure("Lottery registration window is closed.");
+        }
+
+        if (lotteryRepository.findByEventAndMember(request.eventId(), memberId).isPresent()) {
+            log.warn("Lottery registration denied: member {} already registered for event {}", memberId, request.eventId());
+            return LotteryRegistrationResponse.failure("Member is already registered for this lottery.");
+        }
+
+        // Validate zone exists in event
+        event.findZone(request.zoneId());
+
+        LotteryEntry entry = new LotteryEntry(
+                UUID.randomUUID(),
+                request.eventId(),
+                memberId,
+                request.zoneId(),
+                request.quantity(),
+                now
+        );
+        lotteryRepository.save(entry);
+
+        log.info("Lottery registration successful: memberId={}, eventId={}, entryId={}",
+                memberId, request.eventId(), entry.id());
+        return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
+    }
+
+    public void cancelEvent(String token, UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId is required");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("No event with id " + eventId));
+
+        // company is looked up but we don't require it to be active — cancellation
+        // can happen as cleanup even on a suspended company.
+        Company company = companyRepository.findByName(event.getCompanyName())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Company not found: " + event.getCompanyName()));
+
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {
+            throw new SecurityException("Insufficient permissions to cancel events");
+        }
+
+        log.info("Cancelling event: eventId={}, companyName={}", eventId, company.getName());
+        event.cancel();
+        eventRepository.save(event);
+        // TODO: refund completed purchases once that pipeline lands
+    }
+
+    /**
+     * Edits core event details (name, description, artist, schedule). Same auth
+     * as createEvent (Owner OR Manager with MAP_DEFINITION + INVENTORY_MGMT).
+     * Rejected if the event has any active reservations.
+     */
+    public EventDetailsDTO editEvent(String token, EditEventRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(request.eventId())
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
+
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorize(appt);
+
+        if (hasActiveReservations(event.getId())) {
+            throw new IllegalStateException("Cannot edit event with active reservations");
+        }
+
+        if (!request.hasAnyChange()) {
+            // nothing to do — return the current snapshot, no log spam
+            return EventDetailsDTO.from(event);
+        }
+
+        // apply each provided field; null = leave alone
+        if (request.name() != null) {
+            log.info("editEvent: eventId={} name '{}' -> '{}'", event.getId(), event.getName(), request.name());
+            event.setName(request.name());
+        }
+        if (request.description() != null) {
+            log.info("editEvent: eventId={} description updated", event.getId());
+            event.setDescription(request.description());
+        }
+        if (request.artist() != null) {
+            log.info("editEvent: eventId={} artist '{}' -> '{}'", event.getId(), event.getArtist(), request.artist());
+            event.setArtist(request.artist());
+        }
+        if (request.schedule() != null) {
+            log.info("editEvent: eventId={} schedule updated to start={}",
+                    event.getId(), request.schedule().getStartTime());
+            event.setSchedule(request.schedule());
+        }
+
+        eventRepository.save(event);
+        log.info("Event edited: eventId={}, companyName={}, by={}",
+                event.getId(), company.getName(), memberId);
+        return EventDetailsDTO.from(event);
+    }
+
+    private boolean hasActiveReservations(UUID eventId) {
+        return !orderRepository.findActiveByEventId(eventId).isEmpty();
+    }
+
+    // --- UC-C.1: layout & inventory ---
+    // Permission: INVENTORY_MGMT OR MAP_DEFINITION (per spec — not both, unlike createEvent).
+    // Each method serialises only on its target event id, so unrelated events
+    // can be edited in parallel.
+
+    public void addSeatsToZone(String token, UUID eventId, UUID zoneId,
+                               java.util.List<CreateEventRequest.SeatSpec> seats) {
+        if (seats == null || seats.isEmpty()) {
+            throw new IllegalArgumentException("seats list is required");
+        }
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            InventoryZone zone = event.findZone(zoneId);
+            for (CreateEventRequest.SeatSpec spec : seats) {
+                zone.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.seatNumber()));
+            }
+            eventRepository.save(event);
+            log.info("Inventory: added {} seats to zone={} event={}", seats.size(), zoneId, eventId);
+        }
+    }
+
+    public void removeSeats(String token, UUID eventId, UUID zoneId,
+                            java.util.List<UUID> seatIds) {
+        if (seatIds == null || seatIds.isEmpty()) {
+            throw new IllegalArgumentException("seatIds list is required");
+        }
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            InventoryZone zone = event.findZone(zoneId);
+            for (UUID seatId : seatIds) {
+                zone.removeSeat(seatId);
+            }
+            eventRepository.save(event);
+            log.info("Inventory: removed {} seats from zone={} event={}", seatIds.size(), zoneId, eventId);
+        }
+    }
+
+    public void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            event.findZone(zoneId).increaseCapacity(delta);
+            eventRepository.save(event);
+            log.info("Inventory: GA capacity +{} on zone={} event={}", delta, zoneId, eventId);
+        }
+    }
+
+    public void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            event.findZone(zoneId).decreaseCapacity(delta);
+            eventRepository.save(event);
+            log.info("Inventory: GA capacity -{} on zone={} event={}", delta, zoneId, eventId);
+        }
+    }
+
+    public void setZonePrice(String token, UUID eventId, UUID zoneId,
+                             java.math.BigDecimal newPrice) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(token, eventId);
+            event.findZone(zoneId).setPricePerTicket(newPrice);
+            eventRepository.save(event);
+            log.info("Inventory: price={} on zone={} event={}", newPrice, zoneId, eventId);
+        }
+    }
+
+    private Event loadEventForInventoryEdit(String token, UUID eventId) {
+        UUID memberId = authenticateMember(token);
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        if (event.isCancelled()) {
+            throw new IllegalStateException("Cannot edit inventory on a cancelled event");
+        }
+        if (event.getStatus() == com.ticketing.domain.event.EventStatus.SOLD_OUT) {
+            throw new IllegalStateException("Cannot edit inventory on a sold-out event");
+        }
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizeInventory(appt);
+        return event;
+    }
+
+    private void authorizeInventory(StaffAppointment appt) {
+        boolean allowed = appt.isOwner()
+                || (appt.isManager()
+                    && (appt.hasPermission(ManagerPermission.INVENTORY_MGMT)
+                        || appt.hasPermission(ManagerPermission.MAP_DEFINITION)));
+        if (!allowed) {
+            throw new SecurityException(
+                    "Inventory edits require INVENTORY_MGMT or MAP_DEFINITION permission");
+        }
+    }
+
+    private UUID authenticateMember(String token) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Authentication token is required");
+        }
+        if (!sessionTokenService.isValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired authentication token");
+        }
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests cannot perform this action");
+        }
+        return memberId;
+    }
+
+    private Company loadActiveCompany(String companyName) {
+        Company company = companyRepository.findByName(companyName)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Company not found: " + companyName));
+        if (!company.isActive()) {
+            throw new IllegalStateException(
+                    "Cannot create events in a suspended or closed company: " + companyName);
+        }
+        return company;
+    }
+
+    private StaffAppointment loadAppointment(UUID memberId, String companyName) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Member not found: " + memberId));
+        StaffAppointment appointment = member.getStaffAppointment(companyName);
+        if (appointment == null) {
+            throw new SecurityException(
+                    "Caller is not a staff member of company: " + companyName);
+        }
+        return appointment;
+    }
+
+    private void authorize(StaffAppointment appointment) {
+        boolean allowed = appointment.isOwner()
+                || (appointment.isManager()
+                    && appointment.hasPermission(ManagerPermission.MAP_DEFINITION)
+                    && appointment.hasPermission(ManagerPermission.INVENTORY_MGMT));
+        if (!allowed) {
+            throw new SecurityException(
+                    "Insufficient permissions to create events");
+        }
+    }
+
+    private InventoryZone buildZone(CreateEventRequest.ZoneSpec spec) {
+        return switch (spec) {
+            case CreateEventRequest.GAZoneSpec ga -> InventoryZone.createGA(
+                    UUID.randomUUID(), ga.name(), ga.pricePerTicket(), ga.maxCapacity());
+            case CreateEventRequest.AssignedZoneSpec a -> {
+                InventoryZone zone = InventoryZone.createAssigned(
+                        UUID.randomUUID(), a.name(), a.pricePerTicket());
+                for (CreateEventRequest.SeatSpec seatSpec : a.seats()) {
+                    zone.addSeat(new Seat(UUID.randomUUID(),
+                            seatSpec.row(), seatSpec.seatNumber()));
+                }
+                yield zone;
+            }
+        };
+    }
+
+    private VenueMap buildVenueMap(Map<String, String> sectionToZoneName,
+                                   Map<String, UUID> zoneIdsByName) {
+        Map<String, UUID> sectionToZoneId = new HashMap<>(sectionToZoneName.size());
+        for (Map.Entry<String, String> e : sectionToZoneName.entrySet()) {
+            String zoneName = e.getValue();
+            UUID zoneId = zoneIdsByName.get(zoneName);
+            if (zoneId == null) {
+                throw new IllegalArgumentException(
+                        "Venue map section '" + e.getKey()
+                        + "' references unknown zone: " + zoneName);
+            }
+            sectionToZoneId.put(e.getKey(), zoneId);
+        }
+        return new VenueMap(sectionToZoneId);
+    }
+
+}
