@@ -4,8 +4,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import com.ticketing.application.PurchaseRecordDTO;
-
 /**
  * Sales report for a company's hierarchical subtree.
  * Shows all completed purchases made by the requester and their subordinates.

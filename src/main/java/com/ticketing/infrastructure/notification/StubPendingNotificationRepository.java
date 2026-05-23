@@ -1,6 +1,6 @@
 package  com.ticketing.infrastructure.notification;
 
-import com.ticketing.infrastructure.Interface.*;
+import com.ticketing.domain.notification.IPendingNotificationRepository;
 
 import java.util.Collections;
 import java.util.List;

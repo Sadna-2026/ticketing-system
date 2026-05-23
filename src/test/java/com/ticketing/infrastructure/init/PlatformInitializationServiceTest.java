@@ -10,9 +10,12 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.services.PlatformInitializationService;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.gateway.PaymentDetails;
 import com.ticketing.domain.gateway.PaymentResult;
 import com.ticketing.domain.gateway.RefundResult;
@@ -20,8 +23,6 @@ import com.ticketing.domain.gateway.SupplyResult;
 import com.ticketing.domain.gateway.TicketRequest;
 import com.ticketing.domain.system.StartupConfiguration;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
-import com.ticketing.infrastructure.Interface.IPaymentGateway;
-import com.ticketing.infrastructure.Interface.ITicketSupplyGateway;
 
 class PlatformInitializationServiceTest {
 

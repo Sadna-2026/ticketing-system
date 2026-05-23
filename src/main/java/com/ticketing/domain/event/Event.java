@@ -8,9 +8,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.ticketing.infrastructure.Interface.IDiscountPolicy;
-import com.ticketing.infrastructure.Interface.IPurchasePolicy;
-
 public class Event{
 
     /**

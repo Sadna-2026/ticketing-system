@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import com.ticketing.application.VirtualQueueDto;
+import com.ticketing.application.dto.VirtualQueueDto;
 
 /**
  * Aggregate Root: VirtualQueue

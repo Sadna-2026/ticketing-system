@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.ticketing.application.QueueEntryDto;
+import com.ticketing.application.dto.QueueEntryDto;
 
 /**
  * Entity within the VirtualQueue aggregate.

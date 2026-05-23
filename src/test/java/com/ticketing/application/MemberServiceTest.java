@@ -1,15 +1,5 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -25,13 +15,27 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
+import com.ticketing.application.dto.OrgNodeDTO;
+import com.ticketing.application.services.MemberService;
+import com.ticketing.application.services.OrderService;
+import com.ticketing.domain.auth.ISessionTokenRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -50,7 +54,6 @@ import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
-import com.ticketing.infrastructure.Interface.ISessionTokenRepository;
 
 @DisplayName("MemberService")
 class MemberServiceTest {
@@ -1250,6 +1253,36 @@ class MemberServiceTest {
             OrgNodeDTO juniorNode = managerNode.subordinates().get(0);
             assertEquals(juniorId, juniorNode.memberId());
             assertTrue(juniorNode.subordinates().isEmpty());
+            assertFalse(managerNode.revoked());
+        }
+
+        @Test
+        void GivenRevokedManagerWithSubordinate_WhenGetOrganizationChart_ThenRevokedNodeMarkedWithSubtree() {
+            Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
+            owner.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+
+            UUID managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "m@test.com", "pass");
+            StaffAppointment managerAppt = new StaffAppointment(
+                    COMPANY_NAME, ownerId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+            managerAppt.revoke();
+            manager.addStaffAppointment(COMPANY_NAME, managerAppt);
+
+            UUID juniorId = UUID.randomUUID();
+            Member junior = new Member(juniorId, "junior", "j@test.com", "pass");
+            junior.addStaffAppointment(COMPANY_NAME, new StaffAppointment(
+                    COMPANY_NAME, managerId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet()));
+
+            when(memberRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+            when(memberRepository.findByCompanyAppointment(COMPANY_NAME)).thenReturn(List.of(owner, manager, junior));
+
+            List<OrgNodeDTO> chart = memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME);
+
+            OrgNodeDTO managerNode = chart.get(0).subordinates().get(0);
+            assertTrue(managerNode.revoked());
+            assertEquals(1, managerNode.subordinates().size());
+            assertEquals(juniorId, managerNode.subordinates().get(0).memberId());
+            assertFalse(managerNode.subordinates().get(0).revoked());
         }
 
         @Test
