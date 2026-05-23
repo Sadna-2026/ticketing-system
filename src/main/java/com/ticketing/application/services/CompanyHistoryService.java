@@ -6,8 +6,8 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;

@@ -23,10 +23,10 @@ import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.application.services.EventService;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.Event;

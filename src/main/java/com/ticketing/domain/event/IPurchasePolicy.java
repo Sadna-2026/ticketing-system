@@ -1,8 +1,7 @@
-package com.ticketing.infrastructure.Interface;
+package com.ticketing.domain.event;
 
 import java.util.UUID;
 
-import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.order.ActiveOrder;
 
 public interface IPurchasePolicy {

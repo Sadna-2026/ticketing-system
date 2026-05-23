@@ -1,9 +1,4 @@
-package com.ticketing.domain.auth;
-
-import com.ticketing.domain.gateway.TicketRequest;
-import com.ticketing.domain.gateway.CustomerInfo;
-import com.ticketing.domain.gateway.SupplyResult;
-import com.ticketing.domain.gateway.CancelResult;
+package com.ticketing.domain.gateway;
 
 import java.util.List;
 

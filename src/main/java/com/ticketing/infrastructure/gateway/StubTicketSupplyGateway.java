@@ -1,9 +1,8 @@
 package  com.ticketing.infrastructure.gateway;
 
-import com.ticketing.infrastructure.Interface.*;
-import com.ticketing.domain.auth.ITicketSupplyGateway;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
+import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.gateway.SupplyResult;
 import com.ticketing.domain.gateway.TicketRequest;
 

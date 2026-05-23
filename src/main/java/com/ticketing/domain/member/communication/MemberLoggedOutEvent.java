@@ -1,4 +1,4 @@
-package com.ticketing.domain.member.commiunication;
+package com.ticketing.domain.member.communication;
 
 import java.time.Instant;
 import java.util.UUID;

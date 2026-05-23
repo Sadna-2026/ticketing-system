@@ -1,10 +1,6 @@
-package com.ticketing.infrastructure.Interface;
+package com.ticketing.domain.gateway;
 
 import java.math.BigDecimal;
-
-import com.ticketing.domain.gateway.PaymentDetails;
-import com.ticketing.domain.gateway.PaymentResult;
-import com.ticketing.domain.gateway.RefundResult;
 
 public interface IPaymentGateway {
     /**

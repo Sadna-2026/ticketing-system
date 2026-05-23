@@ -1,4 +1,4 @@
-package com.ticketing.infrastructure.Interface;
+package com.ticketing.domain.event;
 
 import java.math.BigDecimal;
 

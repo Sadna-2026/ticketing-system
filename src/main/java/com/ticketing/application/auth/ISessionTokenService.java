@@ -1,7 +1,9 @@
 
-package com.ticketing.domain.auth;
+package com.ticketing.application.auth;
 import java.util.Set;
 import java.util.UUID;
+
+import com.ticketing.domain.auth.SessionTokenData;
 
 public interface ISessionTokenService {
 

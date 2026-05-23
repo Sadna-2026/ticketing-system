@@ -10,8 +10,8 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.OrgNodeDTO;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.auth.SessionTokenData;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;

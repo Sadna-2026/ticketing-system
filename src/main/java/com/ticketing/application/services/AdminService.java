@@ -7,9 +7,9 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.domain.admin.IAdminRepository;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;

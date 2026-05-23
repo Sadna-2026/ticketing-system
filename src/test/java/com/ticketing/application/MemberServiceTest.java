@@ -29,13 +29,13 @@ import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.application.services.SessionTokenService;
 import com.ticketing.domain.auth.ISessionTokenRepository;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;

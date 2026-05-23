@@ -17,11 +17,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.application.services.MemberService;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.request.RegisterRequest;

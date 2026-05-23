@@ -8,9 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.ISystemClock;
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.queue.IQueueRepository;

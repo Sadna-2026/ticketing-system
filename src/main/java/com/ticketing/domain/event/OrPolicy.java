@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.UUID;
 
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.infrastructure.Interface.IPurchasePolicy;
 
 public class OrPolicy implements IPurchasePolicy {
     private final List<IPurchasePolicy> policies;

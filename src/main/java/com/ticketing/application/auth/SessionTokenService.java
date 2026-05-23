@@ -1,4 +1,4 @@
-package com.ticketing.application.services;
+package com.ticketing.application.auth;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.domain.auth.ISessionTokenRepository;
-import com.ticketing.domain.auth.ISessionTokenService;
 import com.ticketing.domain.auth.SessionToken;
 import com.ticketing.domain.auth.SessionTokenData;
 
