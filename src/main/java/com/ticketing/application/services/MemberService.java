@@ -1,5 +1,6 @@
 package com.ticketing.application.services;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +35,7 @@ public class MemberService {
     private final PasswordEncryptionUtils passwordEncryptionUtils;
     private final ISessionTokenService sessionTokenService;
     private final ConcurrentHashMap<String, Object> loginLocksByUsername = new ConcurrentHashMap<>();
-    private static final System.Logger logger = System.getLogger(MemberService.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(MemberService.class);
 
     public MemberService(
             IMemberRepository memberRepository,
@@ -82,12 +83,12 @@ public class MemberService {
         String email = normalizeEmail(request.email());
 
         if (memberRepository.existsByUsername(username)) {
-            logger.log(System.Logger.Level.WARNING, "Failed to save new member: " + username);
+            logger.warn("Failed to save new member: " + username);
             return RegisterResponse.failure("Username already in use.");
         }
 
         if (memberRepository.existsByEmail(email)) {
-            logger.log(System.Logger.Level.WARNING, "Failed to save new member: " + username);
+            logger.warn( "Failed to save new member: " + username);
             return RegisterResponse.failure("Email already in use.");
         }
 
@@ -108,7 +109,7 @@ public class MemberService {
         boolean saved = memberRepository.saveIfUsernameAndEmailAvailable(member);
 
         if (!saved) {
-            logger.log(System.Logger.Level.WARNING, "Failed to save new member: " + username);
+            logger.warn("Failed to save new member: " + username);
             return RegisterResponse.failure("Registration details already in use.");
         }
 
@@ -119,25 +120,25 @@ public class MemberService {
         );
        
 
-        logger.log(System.Logger.Level.INFO, "New member registered: " + username );
+        logger.info("New member registered: " + username );
         return RegisterResponse.success(MemberMapper.toDto(member), memberToken);
     }
 
     public LoginResponse login(LoginRequest request, String guestToken) {
         if (!sessionTokenService.isValid(guestToken)) {
-            logger.log(System.Logger.Level.WARNING, "Failed login: invalid session token");
+            logger.warn("Failed login: invalid session token");
             return LoginResponse.failure("Invalid session token.");
         }
 
         UUID tokenMemberId = sessionTokenService.extractMemberId(guestToken);
 
         if (tokenMemberId != null) {
-            logger.log(System.Logger.Level.WARNING, "Failed login: session is already member-bound " + tokenMemberId);
+            logger.warn("Failed login: session is already member-bound " + tokenMemberId);
             return LoginResponse.failure("Only guests can log in.");
         }
 
         if (!isValidLoginRequest(request)) {
-            logger.log(System.Logger.Level.WARNING, "Failed login: invalid credentials format");
+            logger.warn("Failed login: invalid credentials format");
             return LoginResponse.failure("Invalid credentials.");
         }
 
@@ -149,19 +150,19 @@ public class MemberService {
 
     private LoginResponse loginAuthenticatedGuest(String username, String password, String guestToken) {
         if (!sessionTokenService.isValid(guestToken)) {
-            logger.log(System.Logger.Level.WARNING, "Failed login: guest session was already upgraded");
+            logger.warn("Failed login: guest session was already upgraded");
             return LoginResponse.failure("Invalid session token.");
         }
 
         Member member = memberRepository.findByUsername(username).orElse(null);
 
         if (member == null) {
-            logger.log(System.Logger.Level.WARNING, "Failed login: nonexistent username " + username);
+            logger.warn("Failed login: nonexistent username " + username);
             return LoginResponse.failure("Invalid username or password.");
         }
 
         if (!passwordEncryptionUtils.matches(password, member.getEncryptedPassword())) {
-            logger.log(System.Logger.Level.WARNING, "Failed login: wrong password for username " + username);
+            logger.warn("Failed login: wrong password for username " + username);
             return LoginResponse.failure("Invalid username or password.");
         }
 
@@ -172,7 +173,7 @@ public class MemberService {
                 Set.of()
         );
 
-        logger.log(System.Logger.Level.INFO, "Member logged in: " + member.getId());
+        logger.info("Member logged in: " + member.getId());
         return LoginResponse.success(MemberMapper.toDto(member), memberToken);
     }
 
@@ -186,19 +187,18 @@ public class MemberService {
             UpdateMemberDetailsRequest request
     ) {
         if (!sessionTokenService.isValid(sessionToken)) {
-            logger.log(System.Logger.Level.WARNING, "Failed to update member details: invalid session token");
+            logger.warn("Failed to update member details: invalid session token");
             return UpdateMemberDetailsResponse.failure("No authenticated member session exists.");
         }
 
         UUID authenticatedMemberId = sessionTokenService.extractMemberId(sessionToken);
         if (authenticatedMemberId == null) {
-            logger.log(System.Logger.Level.WARNING, "Failed to update member details: guest session cannot update member details");
+            logger.warn("Failed to update member details: guest session cannot update member details");
             return UpdateMemberDetailsResponse.failure("No authenticated member session exists.");
         }
 
         if (memberId == null || !authenticatedMemberId.equals(memberId)) {
-            logger.log(
-                    System.Logger.Level.WARNING,
+            logger.warn(
                     "Failed to update member details: member " + authenticatedMemberId
                             + " attempted to update member " + memberId
             );
@@ -206,14 +206,14 @@ public class MemberService {
         }
 
         if (!isValidUpdateMemberDetailsRequest(request)) {
-            logger.log(System.Logger.Level.WARNING, "Failed to update member details: invalid details for member " + memberId);
+            logger.warn("Failed to update member details: invalid details for member " + memberId);
             return UpdateMemberDetailsResponse.failure("Invalid member details.");
         }
 
         Member member = memberRepository.findById(memberId).orElse(null);
 
         if (member == null) {
-            logger.log(System.Logger.Level.WARNING, "Failed to update member details: member not found " + memberId);
+            logger.warn("Failed to update member details: member not found " + memberId);
             return UpdateMemberDetailsResponse.failure("Member not found.");
         }
 
@@ -222,7 +222,7 @@ public class MemberService {
 
         boolean updated = memberRepository.updateIfUsernameAndEmailAvailable(member, username, email);
         if (!updated) {
-            logger.log(System.Logger.Level.WARNING, "Failed to update member details: duplicate username or email for member " + memberId);
+            logger.warn("Failed to update member details: duplicate username or email for member " + memberId);
             return UpdateMemberDetailsResponse.failure("Username or email already in use.");
         }
 
@@ -234,7 +234,7 @@ public class MemberService {
         }
         memberRepository.save(member);
 
-        logger.log(System.Logger.Level.INFO, "Member details updated: " + memberId);
+        logger.info("Member details updated: " + memberId);
         return UpdateMemberDetailsResponse.success(MemberMapper.toDto(member));
     }
 
@@ -256,7 +256,7 @@ public class MemberService {
 
         String guestToken = sessionTokenService.logout(sessionToken);
 
-        logger.log(System.Logger.Level.INFO, "Member logged out: " + memberId);
+        logger.info("Member logged out: " + memberId);
 
         return LogoutResponse.success(guestToken);
     }
@@ -279,7 +279,7 @@ public class MemberService {
 
         sessionTokenService.revokeToken(sessionToken);
 
-        logger.log(System.Logger.Level.INFO, "exited platform: " + tokenData.getUsername());
+        logger.info("exited platform: " + tokenData.getUsername());
 
         return MemberExitResponse.successResponse(tokenData.getUsername());
     }
@@ -330,7 +330,7 @@ public class MemberService {
                 .toList();
 
         if (roots.isEmpty()) {
-            logger.log(System.Logger.Level.ERROR, "Data inconsistency: Company " + companyName + " has members but no hierarchy roots.");
+            logger.error("Data inconsistency: Company " + companyName + " has members but no hierarchy roots.");
             throw new IllegalStateException("Organization hierarchy is corrupted: no roots found.");
         }
 
