@@ -7,11 +7,11 @@ import java.util.UUID;
 
 import com.ticketing.application.ISystemClock;
 import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
-import com.ticketing.infrastructure.Interface.IEventRepository;
 
 public class LotteryDrawDomainService {
 

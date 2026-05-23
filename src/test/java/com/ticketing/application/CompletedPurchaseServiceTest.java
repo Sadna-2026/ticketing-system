@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.SalesReportDTO;
+import com.ticketing.application.services.CompletedPurchaseService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;

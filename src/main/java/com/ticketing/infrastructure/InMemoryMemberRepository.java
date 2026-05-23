@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Repository;
 
-import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
 
 @Repository
 public class InMemoryMemberRepository implements IMemberRepository {

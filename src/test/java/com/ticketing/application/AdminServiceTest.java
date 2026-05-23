@@ -1,15 +1,5 @@
 package com.ticketing.application;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
@@ -17,10 +7,21 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.services.AdminService;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;

@@ -29,6 +29,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.EventDetailsDTO;
+import com.ticketing.application.dto.EventMapDTO;
+import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.services.EventQueryService;
+import com.ticketing.application.services.EventSearchService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -36,6 +42,7 @@ import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
+import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.Seat;
@@ -49,7 +56,6 @@ import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
-import com.ticketing.infrastructure.Interface.IEventRepository;
 
 @DisplayName("EventService")
 class EventServiceTest {

@@ -4,6 +4,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.auth.SessionTokenService;
+import com.ticketing.application.dto.QueueEntryDto;
+import com.ticketing.application.dto.VirtualQueueDto;
+import com.ticketing.application.services.QueueManagementService;
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.event.Event;

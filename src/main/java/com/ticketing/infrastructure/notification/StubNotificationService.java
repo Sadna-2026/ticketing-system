@@ -1,7 +1,8 @@
 package com.ticketing.infrastructure.notification;
 
-import com.ticketing.application.INotificationService;
 import java.util.logging.Logger;
+
+import com.ticketing.application.services.INotificationService;
 
 /**
  * No-op stub implementation for V1.

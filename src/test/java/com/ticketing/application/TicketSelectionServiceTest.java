@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.services.TicketSelectionService;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;

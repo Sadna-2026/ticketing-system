@@ -12,6 +12,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.auth.SessionTokenService;
+import com.ticketing.application.services.MarketInitializationService;
+import com.ticketing.application.services.PlatformInitializationService;
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.system.StartupConfiguration;
@@ -19,7 +22,6 @@ import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
-import com.ticketing.infrastructure.init.PlatformInitializationService;
 
 class MarketInitializationServiceTest {
 

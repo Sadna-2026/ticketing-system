@@ -1,7 +1,6 @@
 package  com.ticketing.infrastructure.gateway;
 
-import com.ticketing.infrastructure.Interface.*;
-
+import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.PaymentDetails;
 import com.ticketing.domain.gateway.PaymentResult;
 import com.ticketing.domain.gateway.RefundResult;

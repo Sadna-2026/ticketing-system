@@ -35,7 +35,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.initialization.InitializationService;
+import com.ticketing.application.services.CompanyHistoryService;
+import com.ticketing.application.services.CompanyLifecycleService;
+import com.ticketing.application.services.CompanyQueryService;
+import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -46,6 +53,7 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventPublisher;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
@@ -59,7 +67,6 @@ import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
-import com.ticketing.infrastructure.Interface.IPaymentGateway;
 
 
 @DisplayName("CompanyService")

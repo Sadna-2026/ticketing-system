@@ -3,6 +3,7 @@ package com.ticketing.application;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+import com.ticketing.application.services.EventSearchService;
 import com.ticketing.domain.event.EventCategory;
 
 /**

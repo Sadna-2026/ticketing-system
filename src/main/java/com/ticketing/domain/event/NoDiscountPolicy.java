@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.infrastructure.Interface.IDiscountPolicy;
 
 public class NoDiscountPolicy implements IDiscountPolicy {
     @Override
