@@ -12,6 +12,7 @@ import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 
+@org.springframework.stereotype.Component
 public class InMemoryOrderRepository implements IOrderRepository {
 
     private final ConcurrentHashMap<UUID, VersionedActiveOrder> activeOrders = new ConcurrentHashMap<>();
@@ -121,3 +122,4 @@ public class InMemoryOrderRepository implements IOrderRepository {
         }
     }
 }
+
