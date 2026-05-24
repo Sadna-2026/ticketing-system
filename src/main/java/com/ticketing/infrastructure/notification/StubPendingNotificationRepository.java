@@ -8,6 +8,7 @@ import java.util.logging.Logger;
 
 
 /**
+ * 
  * No-op stub implementation for V1.
  * Satisfies DI requirements without implementing persistence.
  */
