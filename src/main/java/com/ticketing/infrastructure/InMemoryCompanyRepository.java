@@ -14,6 +14,7 @@ import com.ticketing.domain.exception.OptimisticLockException;
  * Uses a version counter alongside the entity to detect concurrent modifications.
  * Stored aggregates are detached from callers: reads return copies and saves persist copies.
  */
+@org.springframework.stereotype.Component
 public class InMemoryCompanyRepository implements ICompanyRepository {
 
     private final ConcurrentHashMap<String, VersionedEntry<Company>> companies;
@@ -96,3 +97,4 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
         }
     }
 }
+

@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@org.springframework.stereotype.Service
 public class PlatformInitializationService {
 
     private static final Logger log = LoggerFactory.getLogger(PlatformInitializationService.class);
@@ -132,3 +133,4 @@ public class PlatformInitializationService {
         }
     }
 }
+

@@ -19,6 +19,7 @@ import com.ticketing.domain.member.communication.RevokePersonnelEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferResponseEvent;
 
+@org.springframework.stereotype.Service
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
 
@@ -200,3 +201,4 @@ public class CompanyService {
         return sessionTokenService.extractMemberId(token);
     }
 }
+
