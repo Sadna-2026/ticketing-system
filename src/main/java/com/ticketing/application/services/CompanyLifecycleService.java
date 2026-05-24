@@ -27,7 +27,6 @@ import com.ticketing.domain.order.IOrderRepository;
  * Suspend / reopen / permanent-close operations for production companies.
  * Founder OR System Admin actor (the latter only for adminClose).
  */
-@org.springframework.stereotype.Service
 public class CompanyLifecycleService {
 
     private static final Logger log = LoggerFactory.getLogger(CompanyLifecycleService.class);
@@ -243,4 +242,3 @@ public class CompanyLifecycleService {
 
     private record RefundJob(String transactionId, java.math.BigDecimal amount) {}
 }
-

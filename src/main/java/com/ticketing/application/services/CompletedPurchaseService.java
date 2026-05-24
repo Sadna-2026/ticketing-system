@@ -26,7 +26,6 @@ import com.ticketing.domain.order.IOrderRepository;
  * Application service for completed purchases (paid orders).
  * Provides hierarchical sales reports scoped by org chart authority.
  */
-@org.springframework.stereotype.Service
 public class CompletedPurchaseService {
 
     private static final Logger log = LoggerFactory.getLogger(CompletedPurchaseService.class);
@@ -192,4 +191,3 @@ public class CompletedPurchaseService {
         return memberId;
     }
 }
-

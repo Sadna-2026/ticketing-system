@@ -7,4 +7,3 @@ package com.ticketing.application.services;
 public interface INotificationService {
     void notify(String memberId, String message);
 }
-

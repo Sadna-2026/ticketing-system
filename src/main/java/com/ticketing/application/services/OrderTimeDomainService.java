@@ -14,7 +14,6 @@ import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 
-@org.springframework.stereotype.Service
 public class OrderTimeDomainService {
     private static final Logger log = LoggerFactory.getLogger(OrderTimeDomainService.class);
 
@@ -90,5 +89,4 @@ public class OrderTimeDomainService {
         // log.info("Order expired: orderId={}, eventId={}", order.getId(), order.getEventId());
     }
 }
-
 

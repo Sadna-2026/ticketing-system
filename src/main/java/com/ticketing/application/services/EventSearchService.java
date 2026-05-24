@@ -23,7 +23,6 @@ import com.ticketing.domain.event.InventoryZone;
  * whose company is ACTIVE and whose status is PUBLISHED or SOLD_OUT — never
  * DRAFT, CANCELLED, or events from suspended/closed companies.
  */
-@org.springframework.stereotype.Service
 public class EventSearchService {
 
     private static final Logger log = LoggerFactory.getLogger(EventSearchService.class);
@@ -117,4 +116,3 @@ public class EventSearchService {
         return true;
     }
 }
-

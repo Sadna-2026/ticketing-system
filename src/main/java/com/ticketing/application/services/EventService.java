@@ -29,7 +29,6 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.IOrderRepository;
 
-@org.springframework.stereotype.Service
 public class EventService {
 
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
@@ -388,4 +387,3 @@ public class EventService {
     }
 
 }
-

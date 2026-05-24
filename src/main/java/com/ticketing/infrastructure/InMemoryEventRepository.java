@@ -16,7 +16,6 @@ import com.ticketing.domain.exception.OptimisticLockException;
  * On save, if the entity's version does not match the stored version, an
  * OptimisticLockException is thrown, signaling the caller to retry.
  */
-@org.springframework.stereotype.Component
 public class InMemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<UUID, VersionedEntry<Event>> store = new ConcurrentHashMap<>();
@@ -75,6 +74,5 @@ public class InMemoryEventRepository implements IEventRepository {
         }
     }
 }
-
 
 

@@ -18,7 +18,6 @@ import com.ticketing.domain.event.IEventRepository;
  * Public read queries against companies. Guest-callable (no token required).
  * Closed/suspended/pending-closure companies are NOT visible to non-staff.
  */
-@org.springframework.stereotype.Service
 public class CompanyQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(CompanyQueryService.class);
@@ -57,4 +56,3 @@ public class CompanyQueryService {
         return e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT;
     }
 }
-
