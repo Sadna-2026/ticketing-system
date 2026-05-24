@@ -39,11 +39,7 @@ public class OrderCheckoutDomainService {
     public CompletedPurchase processCheckout(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact, String couponCode) {
         validatePurchasePolicy(event, order, order.getMemberId());
 
-        BigDecimal discountAmount = event.getEventDiscountPolicy().applyTo(order, couponCode, systemClock.now());
-        BigDecimal finalAmount = order.getTotalPrice().subtract(discountAmount);
-        if (finalAmount.compareTo(BigDecimal.ZERO) < 0) {
-            finalAmount = BigDecimal.ZERO;
-        }
+        BigDecimal finalAmount = event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
 
         order.startCheckout();
 
