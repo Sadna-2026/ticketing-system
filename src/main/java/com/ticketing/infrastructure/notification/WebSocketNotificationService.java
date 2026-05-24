@@ -112,3 +112,4 @@ public class WebSocketNotificationService implements INotificationService {
         pendingRepository.clearPendingNotifications(memberId);
     }
 }
+

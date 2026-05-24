@@ -8,3 +8,4 @@ package com.ticketing.infrastructure.notification;
 public interface NotificationListener {
     void onMessage(String message);
 }
+
