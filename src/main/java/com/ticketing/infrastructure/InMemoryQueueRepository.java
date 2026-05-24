@@ -9,47 +9,60 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Repository;
 
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.queue.IQueueRepository;
 import com.ticketing.domain.queue.VirtualQueue;
 
+/**
+ * In-memory implementation of IQueueRepository with CAS-style optimistic locking.
+ * Uses a version counter alongside the entity to detect concurrent modifications.
+ * On save, if the entity's version does not match the stored version, an
+ * OptimisticLockException is thrown, signaling the caller to retry.
+ */
 @Repository
 public class InMemoryQueueRepository implements IQueueRepository {
 
-    private final ConcurrentHashMap<UUID, VirtualQueue> store = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, VersionedEntry<VirtualQueue>> store = new ConcurrentHashMap<>();
+
+    @Override
+    public void save(VirtualQueue queue) {
+        if (queue == null) throw new IllegalArgumentException("queue is required");
+        store.compute(queue.getId(), (id, existing) -> {
+            if (existing == null) {
+                queue.incrementVersion();
+                return new VersionedEntry<>(queue, queue.getVersion());
+            }
+            if (queue.getVersion() != existing.version) {
+                throw new OptimisticLockException("VirtualQueue", id);
+            }
+            queue.incrementVersion();
+            return new VersionedEntry<>(queue, queue.getVersion());
+        });
+    }
 
     @Override
     public Optional<VirtualQueue> findById(UUID id) {
         if (id == null) return Optional.empty();
-        return Optional.ofNullable(store.get(id));
+        VersionedEntry<VirtualQueue> entry = store.get(id);
+        return entry != null ? Optional.of(entry.entity) : Optional.empty();
     }
-
-    // @Override
-    // public Optional<VirtualQueue> findBySessionId(UUID sessionId) {
-    //     if (sessionId == null) return Optional.empty();
-    //     for (VirtualQueue q : store.values()) {
-    //         if (sessionId.equals(q.getSessionId())) return Optional.of(q);
-    //     }
-    //     return Optional.empty();
-    // }
 
     @Override
     public List<VirtualQueue> findAll() {
-        return new ArrayList<>(store.values());
+        List<VirtualQueue> all = new ArrayList<>(store.size());
+        for (VersionedEntry<VirtualQueue> entry : store.values()) {
+            all.add(entry.entity);
+        }
+        return all;
     }
 
     @Override
     public Optional<VirtualQueue> findByEventId(UUID eventId) {
         if (eventId == null) return Optional.empty();
-        for (VirtualQueue q : store.values()) {
-            if (eventId.equals(q.getEventId())) return Optional.of(q);
+        for (VersionedEntry<VirtualQueue> entry : store.values()) {
+            if (eventId.equals(entry.entity.getEventId())) return Optional.of(entry.entity);
         }
         return Optional.empty();
-    }
-
-    @Override
-    public void save(VirtualQueue queue) {
-        if (queue == null) throw new IllegalArgumentException("queue is required");
-        store.put(queue.getId(), queue);
     }
 
     @Override
@@ -61,7 +74,18 @@ public class InMemoryQueueRepository implements IQueueRepository {
     @Override
     public List<VirtualQueue> findAllActive() {
         return store.values().stream()
+                .map(entry -> entry.entity)
                 .filter(VirtualQueue::isActive)
                 .collect(Collectors.toList());
+    }
+
+    private static class VersionedEntry<T> {
+        final T entity;
+        final int version;
+
+        VersionedEntry(T entity, int version) {
+            this.entity = entity;
+            this.version = version;
+        }
     }
 }
