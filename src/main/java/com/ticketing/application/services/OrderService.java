@@ -3,6 +3,7 @@ package com.ticketing.application.services;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,8 @@ import com.ticketing.application.SelectionRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.dto.QueueEntryDto;
+import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.gateway.IPaymentGateway;
@@ -25,6 +28,10 @@ import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.order.TicketReservationDomainService;
+import com.ticketing.domain.queue.IQueueRepository;
+import com.ticketing.domain.queue.QueueConfig;
+import com.ticketing.domain.queue.QueueEntry;
+import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
 
@@ -35,6 +42,7 @@ public class OrderService {
     private final ISessionTokenService sessionTokenService;
     private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
+    private final IQueueRepository queueRepository;
     private final ISystemClock systemClock;
     private final IMemberRepository memberRepository;
     private final TicketSelectionService ticketSelectionService;
@@ -47,7 +55,7 @@ public class OrderService {
                         IEventRepository eventRepository,
                         ISystemClock systemClock) {
         this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                null, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()),
+                null, null, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()),
                 new TicketSelectionService(eventRepository));
     }
 
@@ -59,7 +67,7 @@ public class OrderService {
                         List<IPaymentGateway> paymentGateways,
                         ITicketSupplyGateway ticketSupplyGateway) {
         this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                memberRepository, paymentGateways, List.of(ticketSupplyGateway),
+                memberRepository, null, paymentGateways, List.of(ticketSupplyGateway),
                 new TicketSelectionService(eventRepository));
     }
 
@@ -68,6 +76,20 @@ public class OrderService {
                         IEventRepository eventRepository,
                         ISystemClock systemClock,
                         IMemberRepository memberRepository,
+                        List<IPaymentGateway> paymentGateways,
+                        List<ITicketSupplyGateway> ticketSupplyGateways,
+                        TicketSelectionService ticketSelectionService) {
+        this(orderRepository, sessionTokenService, eventRepository, systemClock,
+                memberRepository, null, paymentGateways, ticketSupplyGateways,
+                ticketSelectionService);
+    }
+
+    public OrderService(IOrderRepository orderRepository,
+                        ISessionTokenService sessionTokenService,
+                        IEventRepository eventRepository,
+                        ISystemClock systemClock,
+                        IMemberRepository memberRepository,
+                        IQueueRepository queueRepository,
                         List<IPaymentGateway> paymentGateways,
                         List<ITicketSupplyGateway> ticketSupplyGateways,
                         TicketSelectionService ticketSelectionService) {
@@ -82,10 +104,11 @@ public class OrderService {
         this.orderRepository = orderRepository;
         this.sessionTokenService = sessionTokenService;
         this.eventRepository = eventRepository;
+        this.queueRepository = queueRepository;
         this.systemClock = systemClock;
         this.memberRepository = memberRepository;
         this.ticketSelectionService = ticketSelectionService;
-        
+
         this.orderCheckoutService = new OrderCheckoutDomainService(paymentGateways, ticketSupplyGateways, systemClock);
         this.ticketReservationService = new TicketReservationDomainService();
     }
@@ -341,12 +364,150 @@ public class OrderService {
         }
 
         List<CompletedPurchase> purchases = orderRepository.findCompletedByMemberId(memberId);
-        
+
         List<PurchaseRecordDTO> result = new ArrayList<>();
         for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));
         }
-        
+
         return result;
+    }
+
+    // ── Queue management ─────────────────────────────────────────────────
+
+    /**
+     * Creates a virtual queue for an event (Admin action).
+     */
+    public UUID createQueue(String token, UUID eventId, int threshold, int flowRate) {
+        UUID adminId = validateAdmin(token);
+        log.info("Creating queue: adminId={}, eventId={}, threshold={}, flowRate={}", adminId, eventId, threshold, flowRate);
+
+        eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+
+        queueRepository.findByEventId(eventId).ifPresent(existing -> {
+            throw new IllegalStateException("A virtual queue already exists for this event");
+        });
+
+        QueueConfig config = new QueueConfig(threshold, flowRate);
+        VirtualQueue queue = new VirtualQueue(UUID.randomUUID(), eventId, config);
+        queueRepository.save(queue);
+        log.info("Queue created: queueId={}, eventId={}", queue.getId(), eventId);
+        return queue.getId();
+    }
+
+    /**
+     * Determines if a user should be queued, and if so, adds them.
+     * No authentication required (guests can be queued).
+     *
+     * @return a QueueEntryDto if queued, null if user can enter directly
+     */
+    public QueueEntryDto tryEnterOrQueue(UUID eventId, UUID sessionId) {
+        log.info("Try enter or queue: eventId={}, sessionId={}", eventId, sessionId);
+
+        VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
+        if (queue == null || !queue.isActive()) {
+            return null;
+        }
+
+        if (queue.shouldQueue()) {
+            QueueEntry entry = queue.enqueue(sessionId, systemClock.now());
+            queueRepository.save(queue);
+            log.info("User queued: sessionId={}, eventId={}", sessionId, eventId);
+            return entry.toQueueDto();
+        } else {
+            queue.userEnteredDirectly();
+            queueRepository.save(queue);
+            return null;
+        }
+    }
+
+    /**
+     * Admits the next batch of users from the queue.
+     */
+    public List<QueueEntryDto> admitNextBatch(String token, UUID eventId) {
+        validateAdmin(token);
+        log.info("Admitting next batch: eventId={}", eventId);
+
+        VirtualQueue queue = findQueueByEvent(eventId);
+        List<QueueEntry> admitted = queue.admitNextBatch();
+        queueRepository.save(queue);
+        log.info("Admitted {} users from queue for eventId={}", admitted.size(), eventId);
+        return admitted.stream()
+                .map(QueueEntry::toQueueDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Records that a user has left the active purchasing phase.
+     */
+    public void userLeft(UUID eventId) {
+        VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
+        if (queue != null) {
+            queue.userLeft();
+            queueRepository.save(queue);
+        }
+    }
+
+    /**
+     * Updates queue configuration (Admin action).
+     */
+    public void updateQueueConfig(String token, UUID eventId, int threshold, int flowRate) {
+        UUID adminId = validateAdmin(token);
+        log.info("Updating queue config: adminId={}, eventId={}, threshold={}, flowRate={}", adminId, eventId, threshold, flowRate);
+
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queue.updateConfig(new QueueConfig(threshold, flowRate));
+        queueRepository.save(queue);
+        log.info("Queue config updated: eventId={}", eventId);
+    }
+
+    /**
+     * Flushes/clears a queue (Admin emergency action).
+     */
+    public void flushQueue(String token, UUID eventId) {
+        UUID adminId = validateAdmin(token);
+        log.info("Flushing queue: adminId={}, eventId={}", adminId, eventId);
+
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queue.flush();
+        queueRepository.save(queue);
+        log.info("Queue flushed: eventId={}", eventId);
+    }
+
+    /**
+     * Gets all active virtual queues (Admin monitoring).
+     */
+    public List<VirtualQueueDto> getAllActiveQueues(String token) {
+        validateAdmin(token);
+        log.info("Getting all active queues");
+        return queueRepository.findAllActive().stream()
+                .map(VirtualQueue::toVirtualQueueDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Gets the queue for a specific event.
+     */
+    public VirtualQueueDto getQueueForEvent(UUID eventId) {
+        return findQueueByEvent(eventId).toVirtualQueueDto();
+    }
+
+    private VirtualQueue findQueueByEvent(UUID eventId) {
+        return queueRepository.findByEventId(eventId)
+                .orElseThrow(() -> new IllegalStateException("No virtual queue for event: " + eventId));
+    }
+
+    private UUID validateAdmin(String token) {
+        UUID adminId = validateTokenAndExtractMemberId(token);
+        if (!sessionTokenService.extractPermissions(token).contains("Admin")) {
+            throw new IllegalStateException("Only System Admins can perform this action");
+        }
+        return adminId;
+    }
+
+    private UUID validateTokenAndExtractMemberId(String token) {
+        validateToken(token);
+        return sessionTokenService.extractMemberId(token);
     }
 }
