@@ -11,6 +11,7 @@ import java.util.logging.Logger;
  * No-op stub implementation for V1.
  * Satisfies DI requirements without implementing persistence.
  */
+@org.springframework.stereotype.Component
 public class StubPendingNotificationRepository implements IPendingNotificationRepository {
     
     private static final Logger logger = Logger.getLogger(StubPendingNotificationRepository.class.getName());
@@ -30,5 +31,6 @@ public class StubPendingNotificationRepository implements IPendingNotificationRe
         // No-op for V1
     }
 }
+
 
 
