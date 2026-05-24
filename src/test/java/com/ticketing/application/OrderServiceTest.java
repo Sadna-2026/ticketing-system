@@ -295,7 +295,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 (order, memberId) -> PolicyResult.failure("DENIED", "No tickets for you"),
-                (order, coupon, now) -> BigDecimal.ZERO);
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
@@ -317,7 +317,7 @@ public class OrderServiceTest {
         Event event = new Event(discountEventId, companyName, "Discount Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 (order, memberId) -> PolicyResult.success(),
-                (order, coupon, now) -> new BigDecimal("20.00"));
+                (order, coupon, now) -> order.getTotalPrice().subtract(new BigDecimal("20.00")).max(BigDecimal.ZERO));
         event.addZone(InventoryZone.createGA(discountZoneId, "Floor", new BigDecimal("50.00"), 10));
         event.publish();
         eventRepo.save(event);
