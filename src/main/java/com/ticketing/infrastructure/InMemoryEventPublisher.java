@@ -12,6 +12,7 @@ import com.ticketing.domain.event.IEventPublisher;
  * In-memory implementation of IEventPublisher.
  * Maintains a registry of listeners by event type and publishes events to them.
  */
+@org.springframework.stereotype.Component
 public class InMemoryEventPublisher implements IEventPublisher {
     private final ConcurrentHashMap<String, List<IEventListener>> listeners = new ConcurrentHashMap<>();
 
@@ -42,3 +43,4 @@ public class InMemoryEventPublisher implements IEventPublisher {
         listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(listener);
     }
 }
+

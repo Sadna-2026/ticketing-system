@@ -35,6 +35,7 @@ import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
 
+@org.springframework.stereotype.Service
 public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
@@ -511,3 +512,4 @@ public class OrderService {
         return sessionTokenService.extractMemberId(token);
     }
 }
+
