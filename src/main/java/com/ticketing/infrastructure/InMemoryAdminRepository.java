@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
+import com.ticketing.domain.exception.OptimisticLockException;
 
 @Repository
 public class InMemoryAdminRepository implements IAdminRepository {
@@ -20,7 +21,8 @@ public class InMemoryAdminRepository implements IAdminRepository {
     @Override
     public Optional<Admin> findById(UUID id) {
         if (id == null) return Optional.empty();
-        return Optional.ofNullable(byId.get(id));
+        Admin admin = byId.get(id);
+        return admin != null ? Optional.of(admin.detachedCopy()) : Optional.empty();
     }
 
     @Override
@@ -32,26 +34,48 @@ public class InMemoryAdminRepository implements IAdminRepository {
 
     @Override
     public List<Admin> findAll() {
-        return new ArrayList<>(byId.values());
-    }
-
-    @Override
-    public synchronized void save(Admin admin) {
-        if (admin == null) throw new IllegalArgumentException("admin is required");
-        Admin existing = byId.get(admin.getId());
-        if (existing != null && !existing.getUsername().equalsIgnoreCase(admin.getUsername())) {
-            idByUsername.remove(normalize(existing.getUsername()));
+        List<Admin> admins = new ArrayList<>(byId.size());
+        for (Admin admin : byId.values()) {
+            admins.add(admin.detachedCopy());
         }
-        byId.put(admin.getId(), admin);
-        idByUsername.put(normalize(admin.getUsername()), admin.getId());
+        return admins;
     }
 
     @Override
-    public synchronized void delete(UUID id) {
+    public void save(Admin admin) {
+        if (admin == null) throw new IllegalArgumentException("admin is required");
+        String newUsername = normalize(admin.getUsername());
+        byId.compute(admin.getId(), (id, existing) -> {
+            UUID usernameOwner = idByUsername.get(newUsername);
+            if (usernameOwner != null && !usernameOwner.equals(id)) {
+                throw new IllegalArgumentException("An admin with this username already exists.");
+            }
+            if (existing == null) {
+                admin.incrementVersion();
+                Admin stored = admin.detachedCopy();
+                idByUsername.put(newUsername, id);
+                return stored;
+            }
+            if (admin.getVersion() != existing.getVersion()) {
+                throw new OptimisticLockException("Admin", id);
+            }
+            String oldUsername = normalize(existing.getUsername());
+            if (!oldUsername.equals(newUsername)) {
+                idByUsername.remove(oldUsername, id);
+            }
+            admin.incrementVersion();
+            Admin stored = admin.detachedCopy();
+            idByUsername.put(newUsername, id);
+            return stored;
+        });
+    }
+
+    @Override
+    public void delete(UUID id) {
         if (id == null) return;
         Admin removed = byId.remove(id);
         if (removed != null) {
-            idByUsername.remove(normalize(removed.getUsername()));
+            idByUsername.remove(normalize(removed.getUsername()), id);
         }
     }
 

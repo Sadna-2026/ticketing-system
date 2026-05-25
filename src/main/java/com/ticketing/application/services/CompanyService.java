@@ -11,6 +11,7 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEventPublisher;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
@@ -63,6 +64,9 @@ public class CompanyService {
         Company company = new Company(name, description, founderId);
         try {
             companyRepository.save(company);
+        } catch (OptimisticLockException ex) {
+            log.warn("Company creation conflict: companyName={}", name);
+            throw new IllegalStateException("Company changed concurrently. Please retry.", ex);
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("A production company with this name already exists.");
         }
