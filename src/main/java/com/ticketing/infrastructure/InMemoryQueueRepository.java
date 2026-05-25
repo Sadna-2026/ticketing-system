@@ -15,43 +15,28 @@ import com.ticketing.domain.queue.VirtualQueue;
 
 /**
  * In-memory implementation of IQueueRepository with CAS-style optimistic locking.
- * Uses a version counter alongside the entity to detect concurrent modifications.
+ * Uses the aggregate version counter to detect concurrent modifications.
  * On save, if the entity's version does not match the stored version, an
  * OptimisticLockException is thrown, signaling the caller to retry.
  */
 @Repository
 public class InMemoryQueueRepository implements IQueueRepository {
 
-    private final ConcurrentHashMap<UUID, VersionedEntry<VirtualQueue>> store = new ConcurrentHashMap<>();
-
-    @Override
-    public void save(VirtualQueue queue) {
-        if (queue == null) throw new IllegalArgumentException("queue is required");
-        store.compute(queue.getId(), (id, existing) -> {
-            if (existing == null) {
-                queue.incrementVersion();
-                return new VersionedEntry<>(queue, queue.getVersion());
-            }
-            if (queue.getVersion() != existing.version) {
-                throw new OptimisticLockException("VirtualQueue", id);
-            }
-            queue.incrementVersion();
-            return new VersionedEntry<>(queue, queue.getVersion());
-        });
-    }
+    private final ConcurrentHashMap<UUID, VirtualQueue> store = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, UUID> idsByEventId = new ConcurrentHashMap<>();
 
     @Override
     public Optional<VirtualQueue> findById(UUID id) {
         if (id == null) return Optional.empty();
-        VersionedEntry<VirtualQueue> entry = store.get(id);
-        return entry != null ? Optional.of(entry.entity) : Optional.empty();
+        VirtualQueue queue = store.get(id);
+        return queue != null ? Optional.of(queue.detachedCopy()) : Optional.empty();
     }
 
     @Override
     public List<VirtualQueue> findAll() {
         List<VirtualQueue> all = new ArrayList<>(store.size());
-        for (VersionedEntry<VirtualQueue> entry : store.values()) {
-            all.add(entry.entity);
+        for (VirtualQueue queue : store.values()) {
+            all.add(queue.detachedCopy());
         }
         return all;
     }
@@ -59,33 +44,46 @@ public class InMemoryQueueRepository implements IQueueRepository {
     @Override
     public Optional<VirtualQueue> findByEventId(UUID eventId) {
         if (eventId == null) return Optional.empty();
-        for (VersionedEntry<VirtualQueue> entry : store.values()) {
-            if (eventId.equals(entry.entity.getEventId())) return Optional.of(entry.entity);
+        UUID queueId = idsByEventId.get(eventId);
+        return queueId == null ? Optional.empty() : findById(queueId);
+    }
+
+    @Override
+    public void save(VirtualQueue queue) {
+        if (queue == null) throw new IllegalArgumentException("queue is required");
+        UUID reservedQueueId = idsByEventId.putIfAbsent(queue.getEventId(), queue.getId());
+        if (reservedQueueId != null && !reservedQueueId.equals(queue.getId())) {
+            throw new IllegalStateException("A virtual queue already exists for this event");
         }
-        return Optional.empty();
+        store.compute(queue.getId(), (id, existing) -> {
+            if (existing == null) {
+                queue.incrementVersion();
+                VirtualQueue stored = queue.detachedCopy();
+                return stored;
+            }
+            if (queue.getVersion() != existing.getVersion()) {
+                throw new OptimisticLockException("VirtualQueue", id);
+            }
+            queue.incrementVersion();
+            VirtualQueue stored = queue.detachedCopy();
+            return stored;
+        });
     }
 
     @Override
     public void delete(UUID id) {
         if (id == null) return;
-        store.remove(id);
+        VirtualQueue removed = store.remove(id);
+        if (removed != null) {
+            idsByEventId.remove(removed.getEventId(), id);
+        }
     }
 
     @Override
     public List<VirtualQueue> findAllActive() {
         return store.values().stream()
-                .map(entry -> entry.entity)
+                .map(VirtualQueue::detachedCopy)
                 .filter(VirtualQueue::isActive)
                 .collect(Collectors.toList());
-    }
-
-    private static class VersionedEntry<T> {
-        final T entity;
-        final int version;
-
-        VersionedEntry(T entity, int version) {
-            this.entity = entity;
-            this.version = version;
-        }
     }
 }

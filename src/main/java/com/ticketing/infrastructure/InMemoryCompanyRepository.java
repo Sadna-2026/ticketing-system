@@ -11,13 +11,13 @@ import com.ticketing.domain.exception.OptimisticLockException;
 
 /**
  * In-memory implementation of ICompanyRepository with CAS-style optimistic locking.
- * Uses a version counter alongside the entity to detect concurrent modifications.
+ * Uses the aggregate version counter to detect concurrent modifications.
  * Stored aggregates are detached from callers: reads return copies and saves persist copies.
  */
 @org.springframework.stereotype.Component
 public class InMemoryCompanyRepository implements ICompanyRepository {
 
-    private final ConcurrentHashMap<String, VersionedEntry<Company>> companies;
+    private final ConcurrentHashMap<String, Company> companies;
 
     public InMemoryCompanyRepository() {
         this.companies = new ConcurrentHashMap<>();
@@ -25,8 +25,8 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
 
     @Override
     public Optional<Company> findById(String id) {
-        VersionedEntry<Company> entry = companies.get(normalizeKey(id));
-        return entry != null ? Optional.of(entry.entity.detachedCopy()) : Optional.empty();
+        Company company = companies.get(normalizeKey(id));
+        return company != null ? Optional.of(company.detachedCopy()) : Optional.empty();
     }
 
     public boolean existsById(String id) {
@@ -40,15 +40,15 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
 
     @Override
     public Optional<Company> findByName(String name) {
-        VersionedEntry<Company> entry = companies.get(normalizeKey(name));
-        return entry != null ? Optional.of(entry.entity.detachedCopy()) : Optional.empty();
+        Company company = companies.get(normalizeKey(name));
+        return company != null ? Optional.of(company.detachedCopy()) : Optional.empty();
     }
 
     @Override
     public List<Company> getAll() {
         List<Company> all = new ArrayList<>(companies.size());
-        for (VersionedEntry<Company> entry : companies.values()) {
-            all.add(entry.entity.detachedCopy());
+        for (Company company : companies.values()) {
+            all.add(company.detachedCopy());
         }
         return all;
     }
@@ -63,18 +63,18 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
             if (existing == null) {
                 company.incrementVersion();
                 Company stored = company.detachedCopy();
-                return new VersionedEntry<>(stored, stored.getVersion());
+                return stored;
             }
             if (company.getVersion() == 0) {
                 throw new IllegalArgumentException(
                         "A production company with this name already exists.");
             }
-            if (company.getVersion() != existing.version) {
+            if (company.getVersion() != existing.getVersion()) {
                 throw new OptimisticLockException("Company", k);
             }
             company.incrementVersion();
             Company stored = company.detachedCopy();
-            return new VersionedEntry<>(stored, stored.getVersion());
+            return stored;
         });
     }
 
@@ -87,14 +87,5 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
         return name.toLowerCase().trim();
     }
 
-    private static class VersionedEntry<T> {
-        final T entity;
-        final int version;
-
-        VersionedEntry(T entity, int version) {
-            this.entity = entity;
-            this.version = version;
-        }
-    }
 }
 

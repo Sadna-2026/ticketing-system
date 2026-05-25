@@ -12,14 +12,14 @@ import com.ticketing.domain.exception.OptimisticLockException;
 
 /**
  * In-memory implementation of IEventRepository with CAS-style optimistic locking.
- * Uses a version counter alongside the entity to detect concurrent modifications.
+ * Uses the aggregate version counter to detect concurrent modifications.
  * On save, if the entity's version does not match the stored version, an
  * OptimisticLockException is thrown, signaling the caller to retry.
  */
 @org.springframework.stereotype.Component
 public class InMemoryEventRepository implements IEventRepository {
 
-    private final ConcurrentHashMap<UUID, VersionedEntry<Event>> store = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Event> store = new ConcurrentHashMap<>();
 
     @Override
     public void save(Event event) {
@@ -27,30 +27,29 @@ public class InMemoryEventRepository implements IEventRepository {
             if (existing == null) {
                 // New entity - first save
                 event.incrementVersion();
-                return new VersionedEntry<>(event, event.getVersion());
+                return event;
             }
             // Existing entity - check version for CAS
-            if (event.getVersion() != existing.version) {
+            if (event.getVersion() != existing.getVersion()) {
                 throw new OptimisticLockException("Event", id);
             }
             event.incrementVersion();
-            return new VersionedEntry<>(event, event.getVersion());
+            return event;
         });
     }
 
     @Override
     public Optional<Event> findById(UUID id) {
-        VersionedEntry<Event> entry = store.get(id);
-        return entry != null ? Optional.of(entry.entity) : Optional.empty();
+        return Optional.ofNullable(store.get(id));
     }
 
     @Override
     public List<Event> findByCompanyName(String companyName) {
         if (companyName == null) return List.of();
         List<Event> hits = new ArrayList<>();
-        for (VersionedEntry<Event> entry : store.values()) {
-            if (companyName.equals(entry.entity.getCompanyName())) {
-                hits.add(entry.entity);
+        for (Event event : store.values()) {
+            if (companyName.equals(event.getCompanyName())) {
+                hits.add(event);
             }
         }
         return hits;
@@ -58,21 +57,7 @@ public class InMemoryEventRepository implements IEventRepository {
 
     @Override
     public List<Event> findAll() {
-        List<Event> all = new ArrayList<>(store.size());
-        for (VersionedEntry<Event> entry : store.values()) {
-            all.add(entry.entity);
-        }
-        return all;
-    }
-
-    private static class VersionedEntry<T> {
-        final T entity;
-        final int version;
-
-        VersionedEntry(T entity, int version) {
-            this.entity = entity;
-            this.version = version;
-        }
+        return new ArrayList<>(store.values());
     }
 }
 
