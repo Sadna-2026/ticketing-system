@@ -225,7 +225,7 @@ public class MemberService {
         try {
             updated = memberRepository.updateIfUsernameAndEmailAvailable(member, username, email);
         } catch (OptimisticLockException ex) {
-            logger.log(System.Logger.Level.WARNING, "Concurrent member details update conflict for member " + memberId);
+            logger.warn( "Concurrent member details update conflict for member " + memberId);
             return UpdateMemberDetailsResponse.failure("Member details changed concurrently. Please retry.");
         }
         if (!updated) {
@@ -242,7 +242,7 @@ public class MemberService {
         try {
             memberRepository.save(member);
         } catch (OptimisticLockException ex) {
-            logger.log(System.Logger.Level.WARNING, "Concurrent member details update conflict for member " + memberId);
+            logger.warn("Concurrent member details update conflict for member " + memberId);
             return UpdateMemberDetailsResponse.failure("Member details changed concurrently. Please retry.");
         }
 
