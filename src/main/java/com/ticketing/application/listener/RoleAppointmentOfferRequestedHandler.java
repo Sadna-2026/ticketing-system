@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -13,6 +14,8 @@ import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 
 public class RoleAppointmentOfferRequestedHandler implements IEventListener {
+
+    private static final int MAX_SAVE_RETRIES = 100;
 
     private final IMemberRepository memberRepository;
 
@@ -24,7 +27,14 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
     public void handle(IEvent event) {
         if (event instanceof RoleAppointmentOfferRequestedEvent) {
             RoleAppointmentOfferRequestedEvent reqEvent = (RoleAppointmentOfferRequestedEvent) event;
-            
+
+            addOfferWithOptimisticRetry(reqEvent);
+        }
+    }
+
+    private void addOfferWithOptimisticRetry(RoleAppointmentOfferRequestedEvent reqEvent) {
+        OptimisticLockException lastConflict = null;
+        for (int attempt = 0; attempt < MAX_SAVE_RETRIES; attempt++) {
             Member appointer = memberRepository.findById(reqEvent.getAppointerId())
                 .orElseThrow(() -> new IllegalArgumentException("Appointer not found"));
             
@@ -48,9 +58,15 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
                 LocalDateTime.now().plusDays(7)
             );
             target.addPendingOffer(offer);
-            
-            memberRepository.save(target);
+
+            try {
+                memberRepository.save(target);
+                return;
+            } catch (OptimisticLockException ex) {
+                lastConflict = ex;
+            }
         }
+        throw lastConflict;
     }
 
     private void checkPermission(Member member, String companyName, ManagerPermission permission) {

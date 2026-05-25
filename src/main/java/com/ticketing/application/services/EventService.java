@@ -20,6 +20,7 @@ import com.ticketing.domain.event.EventCreationDomainService;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
 import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.lottery.LotteryRegistrationDomainService;
@@ -124,7 +125,7 @@ public class EventService {
         
         Event event = eventCreationService.createEventFromRequest(company, request);
 
-        eventRepository.save(event);
+        saveEvent(event);
         log.info("Event created: eventId={}, companyName={}, status=DRAFT",
                 event.getId(), company.getName());
         return event.getId();
@@ -152,6 +153,9 @@ public class EventService {
         } catch (IllegalStateException e) {
             log.warn("Lottery registration denied: {}", e.getMessage());
             return LotteryRegistrationResponse.failure(e.getMessage());
+        } catch (OptimisticLockException e) {
+            log.warn("Lottery registration conflict: eventId={}, memberId={}", request.eventId(), memberId);
+            return LotteryRegistrationResponse.failure("Lottery registration changed concurrently. Please retry.");
         }
 
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
@@ -179,7 +183,7 @@ public class EventService {
 
         log.info("Cancelling event: eventId={}, companyName={}", eventId, company.getName());
         event.cancel();
-        eventRepository.save(event);
+        saveEvent(event);
         
         if (orderService != null) {
             orderService.refundEventPurchases(eventId);
@@ -232,7 +236,7 @@ public class EventService {
             event.setSchedule(request.schedule());
         }
 
-        eventRepository.save(event);
+        saveEvent(event);
         log.info("Event edited: eventId={}, companyName={}, by={}",
                 event.getId(), company.getName(), memberId);
         return EventDetailsDTO.from(event);
@@ -240,6 +244,15 @@ public class EventService {
 
     private boolean hasActiveReservations(UUID eventId) {
         return !orderRepository.findActiveByEventId(eventId).isEmpty();
+    }
+
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict: eventId={}", event.getId());
+            throw new IllegalStateException("Event changed concurrently. Please retry.", ex);
+        }
     }
 
     // --- UC-C.1: layout & inventory ---
@@ -259,7 +272,7 @@ public class EventService {
             for (CreateEventRequest.SeatSpec spec : seats) {
                 zone.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.seatNumber()));
             }
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: added {} seats to zone={} event={}", seats.size(), zoneId, eventId);
         }
     }
@@ -276,7 +289,7 @@ public class EventService {
             for (UUID seatId : seatIds) {
                 zone.removeSeat(seatId);
             }
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: removed {} seats from zone={} event={}", seatIds.size(), zoneId, eventId);
         }
     }
@@ -286,7 +299,7 @@ public class EventService {
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).increaseCapacity(delta);
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: GA capacity +{} on zone={} event={}", delta, zoneId, eventId);
         }
     }
@@ -296,7 +309,7 @@ public class EventService {
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).decreaseCapacity(delta);
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: GA capacity -{} on zone={} event={}", delta, zoneId, eventId);
         }
     }
@@ -307,7 +320,7 @@ public class EventService {
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).setPricePerTicket(newPrice);
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: price={} on zone={} event={}", newPrice, zoneId, eventId);
         }
     }

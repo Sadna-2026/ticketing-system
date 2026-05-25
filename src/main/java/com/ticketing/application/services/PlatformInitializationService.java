@@ -2,6 +2,7 @@ package com.ticketing.application.services;
 
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.system.StartupConfiguration;
@@ -55,7 +56,11 @@ public class PlatformInitializationService {
             return halt("Unable to connect to supply service");
         }
 
-        registerSystemAdmin();
+        try {
+            registerSystemAdmin();
+        } catch (OptimisticLockException ex) {
+            return halt("System admin changed concurrently. Please retry initialization.");
+        }
         startupConfiguration.activate();
         recordEvent("Platform initialization succeeded");
         log.info("Platform initialized successfully");

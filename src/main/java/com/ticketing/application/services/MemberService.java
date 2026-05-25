@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.domain.auth.SessionTokenData;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberMapper;
@@ -220,7 +221,13 @@ public class MemberService {
         String username = request.username() == null ? member.getUsername() : request.username();
         String email = request.email() == null ? member.getEmail() : request.email();
 
-        boolean updated = memberRepository.updateIfUsernameAndEmailAvailable(member, username, email);
+        boolean updated;
+        try {
+            updated = memberRepository.updateIfUsernameAndEmailAvailable(member, username, email);
+        } catch (OptimisticLockException ex) {
+            logger.log(System.Logger.Level.WARNING, "Concurrent member details update conflict for member " + memberId);
+            return UpdateMemberDetailsResponse.failure("Member details changed concurrently. Please retry.");
+        }
         if (!updated) {
             logger.log(System.Logger.Level.WARNING, "Failed to update member details: duplicate username or email for member " + memberId);
             return UpdateMemberDetailsResponse.failure("Username or email already in use.");
@@ -232,7 +239,12 @@ public class MemberService {
         if (request.dateOfBirth() != null) {
             member.updateDateOfBirth(request.dateOfBirth());
         }
-        memberRepository.save(member);
+        try {
+            memberRepository.save(member);
+        } catch (OptimisticLockException ex) {
+            logger.log(System.Logger.Level.WARNING, "Concurrent member details update conflict for member " + memberId);
+            return UpdateMemberDetailsResponse.failure("Member details changed concurrently. Please retry.");
+        }
 
         logger.log(System.Logger.Level.INFO, "Member details updated: " + memberId);
         return UpdateMemberDetailsResponse.success(MemberMapper.toDto(member));

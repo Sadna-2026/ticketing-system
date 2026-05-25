@@ -17,6 +17,7 @@ import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.member.IMemberRepository;
@@ -129,7 +130,7 @@ public class OrderService {
         }
 
         ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
-        orderRepository.save(order);
+        saveOrder(order);
 
         log.info("Order created: orderId={}, sessionId={}, eventId={}", order.getId(), sessionId, eventId);
         return order.getId();
@@ -172,8 +173,8 @@ public class OrderService {
             itemIds.add(ticketReservationService.lockGA(order, event, pick.zoneId(), pick.quantity()));
         }
 
-        eventRepository.save(event);
-        orderRepository.save(order);
+        saveEvent(event);
+        saveOrder(order);
         checkAndPublishSoldOut(event);
         return itemIds;
     }
@@ -196,17 +197,17 @@ public class OrderService {
         try {
             purchase = orderCheckoutService.processCheckout(order, event, buyerContact, couponCode);
         } catch (IllegalStateException e) {
-            orderRepository.save(order);
+            saveOrder(order);
             if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
                 ticketReservationService.releaseAllInventory(event, order);
-                eventRepository.save(event);
+                saveEvent(event);
             }
             throw e;
         }
 
         ticketReservationService.sellAllInventory(event, order);
-        eventRepository.save(event);
-        orderRepository.save(order);
+        saveEvent(event);
+        saveOrder(order);
         orderRepository.save(purchase);
 
         checkAndPublishSoldOut(event);
@@ -243,6 +244,33 @@ public class OrderService {
         return order;
     }
 
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict during order flow: eventId={}", event.getId());
+            throw new IllegalStateException("Event inventory changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveOrder(ActiveOrder order) {
+        try {
+            orderRepository.save(order);
+        } catch (OptimisticLockException ex) {
+            log.warn("Order save conflict: orderId={}", order.getId());
+            throw new IllegalStateException("Order changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveQueue(VirtualQueue queue) {
+        try {
+            queueRepository.save(queue);
+        } catch (OptimisticLockException ex) {
+            log.warn("Queue save conflict: queueId={}", queue.getId());
+            throw ex;
+        }
+    }
+
     private void validateOrderNotExpired(ActiveOrder order, Event event) {
         if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
             throw new IllegalStateException("Order has expired");
@@ -271,7 +299,7 @@ public class OrderService {
     private void checkAndPublishSoldOut(Event event) {
         if (!event.hasAvailableTickets() && event.isPublished()) {
             event.markSoldOut();
-            eventRepository.save(event);
+            saveEvent(event);
         }
     }
 
@@ -288,10 +316,10 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException("Item not found: " + itemId));
 
         ticketReservationService.releaseInventoryForItem(event, item);
-        eventRepository.save(event);
+        saveEvent(event);
 
         order.removeItem(itemId);
-        orderRepository.save(order);
+        saveOrder(order);
         log.info("Item removed from order: orderId={}, itemId={}", orderId, itemId);
     }
 
@@ -321,9 +349,9 @@ public class OrderService {
         validateOrderNotExpired(order, event);
 
         ticketReservationService.updateGAQuantity(order, event, zoneId, newQuantity);
-        eventRepository.save(event);
+        saveEvent(event);
 
-        orderRepository.save(order);
+        saveOrder(order);
         log.info("GA quantity updated: orderId={}, zoneId={}", orderId, zoneId);
     }
 
@@ -340,10 +368,10 @@ public class OrderService {
 
         Event event = findEvent(order.getEventId());
         ticketReservationService.releaseAllInventory(event, order);
-        eventRepository.save(event);
+        saveEvent(event);
 
         order.cancel();
-        orderRepository.save(order);
+        saveOrder(order);
         log.info("Order cancelled: orderId={}", orderId);
     }
 
@@ -392,7 +420,7 @@ public class OrderService {
 
         QueueConfig config = new QueueConfig(threshold, flowRate);
         VirtualQueue queue = new VirtualQueue(UUID.randomUUID(), eventId, config);
-        queueRepository.save(queue);
+        saveQueue(queue);
         log.info("Queue created: queueId={}, eventId={}", queue.getId(), eventId);
         return queue.getId();
     }
@@ -413,12 +441,12 @@ public class OrderService {
 
         if (queue.shouldQueue()) {
             QueueEntry entry = queue.enqueue(sessionId, systemClock.now());
-            queueRepository.save(queue);
+            saveQueue(queue);
             log.info("User queued: sessionId={}, eventId={}", sessionId, eventId);
             return entry.toQueueDto();
         } else {
             queue.userEnteredDirectly();
-            queueRepository.save(queue);
+            saveQueue(queue);
             return null;
         }
     }
@@ -432,7 +460,7 @@ public class OrderService {
 
         VirtualQueue queue = findQueueByEvent(eventId);
         List<QueueEntry> admitted = queue.admitNextBatch();
-        queueRepository.save(queue);
+        saveQueue(queue);
         log.info("Admitted {} users from queue for eventId={}", admitted.size(), eventId);
         return admitted.stream()
                 .map(QueueEntry::toQueueDto)
@@ -446,7 +474,7 @@ public class OrderService {
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue != null) {
             queue.userLeft();
-            queueRepository.save(queue);
+            saveQueue(queue);
         }
     }
 
@@ -459,7 +487,7 @@ public class OrderService {
 
         VirtualQueue queue = findQueueByEvent(eventId);
         queue.updateConfig(new QueueConfig(threshold, flowRate));
-        queueRepository.save(queue);
+        saveQueue(queue);
         log.info("Queue config updated: eventId={}", eventId);
     }
 
@@ -472,7 +500,7 @@ public class OrderService {
 
         VirtualQueue queue = findQueueByEvent(eventId);
         queue.flush();
-        queueRepository.save(queue);
+        saveQueue(queue);
         log.info("Queue flushed: eventId={}", eventId);
     }
 
