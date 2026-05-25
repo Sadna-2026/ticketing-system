@@ -20,6 +20,7 @@ import com.ticketing.domain.order.IOrderRepository;
  * Read-side history queries for a company's completed purchases.
  * Caller must be Owner/Founder, or a Manager holding VIEW_REPORTS.
  */
+@org.springframework.stereotype.Service
 public class CompanyHistoryService {
 
     private static final Logger log = LoggerFactory.getLogger(CompanyHistoryService.class);
@@ -73,3 +74,4 @@ public class CompanyHistoryService {
         return id;
     }
 }
+

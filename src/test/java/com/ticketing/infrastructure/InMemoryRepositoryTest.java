@@ -78,10 +78,13 @@ class InMemoryRepositoryTest {
         }
 
         @Test
-        public void GivenAdmin_WhenSavedTwice_ThenLatestWins() {
+        public void GivenFetchedAdmin_WhenSavedTwice_ThenLatestWins() {
             UUID id = UUID.randomUUID();
             repo.save(new Admin(id, "first", "a@x.com"));
-            repo.save(new Admin(id, "second", "b@x.com"));
+            Admin admin = repo.findById(id).orElseThrow();
+            admin.setUsername("second");
+            admin.setEmail("b@x.com");
+            repo.save(admin);
 
             Admin found = repo.findById(id).orElseThrow();
             assertEquals("second", found.getUsername());

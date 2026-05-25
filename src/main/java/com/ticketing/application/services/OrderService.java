@@ -1,42 +1,42 @@
 package com.ticketing.application.services;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.ISystemClock;
 import com.ticketing.application.SelectionRequest;
-import com.ticketing.application.SelectionRequest.GAPick;
-import com.ticketing.application.SelectionRequest.SeatPick;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.dto.QueueEntryDto;
+import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
-import com.ticketing.domain.event.InventoryZone;
-import com.ticketing.domain.event.PolicyResult;
-import com.ticketing.domain.gateway.CustomerInfo;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
-import com.ticketing.domain.gateway.PaymentDetails;
-import com.ticketing.domain.gateway.PaymentResult;
-import com.ticketing.domain.gateway.RefundResult;
-import com.ticketing.domain.gateway.SupplyResult;
-import com.ticketing.domain.gateway.TicketRequest;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.BuyerContactSnapshot;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.domain.order.OrderStatus;
+import com.ticketing.domain.order.TicketReservationDomainService;
+import com.ticketing.domain.queue.IQueueRepository;
+import com.ticketing.domain.queue.QueueConfig;
+import com.ticketing.domain.queue.QueueEntry;
+import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
 
+@org.springframework.stereotype.Service
 public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
@@ -44,18 +44,20 @@ public class OrderService {
     private final ISessionTokenService sessionTokenService;
     private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
+    private final IQueueRepository queueRepository;
     private final ISystemClock systemClock;
     private final IMemberRepository memberRepository;
-    private final List<IPaymentGateway> paymentGateways;
-    private final List<ITicketSupplyGateway> ticketSupplyGateways;
     private final TicketSelectionService ticketSelectionService;
+
+    private final OrderCheckoutDomainService orderCheckoutService;
+    private final TicketReservationDomainService ticketReservationService;
 
     public OrderService(IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService,
                         IEventRepository eventRepository,
                         ISystemClock systemClock) {
         this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                null, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()),
+                null, null, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()),
                 new TicketSelectionService(eventRepository));
     }
 
@@ -67,7 +69,7 @@ public class OrderService {
                         List<IPaymentGateway> paymentGateways,
                         ITicketSupplyGateway ticketSupplyGateway) {
         this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                memberRepository, paymentGateways, List.of(ticketSupplyGateway),
+                memberRepository, null, paymentGateways, List.of(ticketSupplyGateway),
                 new TicketSelectionService(eventRepository));
     }
 
@@ -76,6 +78,20 @@ public class OrderService {
                         IEventRepository eventRepository,
                         ISystemClock systemClock,
                         IMemberRepository memberRepository,
+                        List<IPaymentGateway> paymentGateways,
+                        List<ITicketSupplyGateway> ticketSupplyGateways,
+                        TicketSelectionService ticketSelectionService) {
+        this(orderRepository, sessionTokenService, eventRepository, systemClock,
+                memberRepository, null, paymentGateways, ticketSupplyGateways,
+                ticketSelectionService);
+    }
+
+    public OrderService(IOrderRepository orderRepository,
+                        ISessionTokenService sessionTokenService,
+                        IEventRepository eventRepository,
+                        ISystemClock systemClock,
+                        IMemberRepository memberRepository,
+                        IQueueRepository queueRepository,
                         List<IPaymentGateway> paymentGateways,
                         List<ITicketSupplyGateway> ticketSupplyGateways,
                         TicketSelectionService ticketSelectionService) {
@@ -90,11 +106,13 @@ public class OrderService {
         this.orderRepository = orderRepository;
         this.sessionTokenService = sessionTokenService;
         this.eventRepository = eventRepository;
+        this.queueRepository = queueRepository;
         this.systemClock = systemClock;
         this.memberRepository = memberRepository;
-        this.paymentGateways = paymentGateways;
-        this.ticketSupplyGateways = ticketSupplyGateways;
         this.ticketSelectionService = ticketSelectionService;
+
+        this.orderCheckoutService = new OrderCheckoutDomainService(paymentGateways, ticketSupplyGateways, systemClock);
+        this.ticketReservationService = new TicketReservationDomainService();
     }
 
     public UUID createOrder(String token, UUID eventId) {
@@ -112,7 +130,7 @@ public class OrderService {
         }
 
         ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
-        orderRepository.save(order);
+        saveOrder(order);
 
         log.info("Order created: orderId={}, sessionId={}, eventId={}", order.getId(), sessionId, eventId);
         return order.getId();
@@ -149,14 +167,14 @@ public class OrderService {
 
         List<UUID> itemIds = new ArrayList<>();
         for (SelectionRequest.SeatPick pick : request.seats()) {
-            itemIds.add(lockSeat(order, event, pick.zoneId(), pick.seatId()));
+            itemIds.add(ticketReservationService.lockSeat(order, event, pick.zoneId(), pick.seatId()));
         }
         for (SelectionRequest.GAPick pick : request.gaQuantities()) {
-            itemIds.add(lockGA(order, event, pick.zoneId(), pick.quantity()));
+            itemIds.add(ticketReservationService.lockGA(order, event, pick.zoneId(), pick.quantity()));
         }
 
-        eventRepository.save(event);
-        orderRepository.save(order);
+        saveEvent(event);
+        saveOrder(order);
         checkAndPublishSoldOut(event);
         return itemIds;
     }
@@ -174,112 +192,33 @@ public class OrderService {
         }
 
         BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
-        validatePurchasePolicy(event, order, memberId);
-
-        BigDecimal discountAmount = event.getEventDiscountPolicy().applyTo(order, couponCode, systemClock.now());
-        BigDecimal finalAmount = order.getTotalPrice().subtract(discountAmount);
-        if (finalAmount.compareTo(BigDecimal.ZERO) < 0) {
-            finalAmount = BigDecimal.ZERO;
-        }
-
-        order.startCheckout();
-        orderRepository.save(order);
-
-        PaymentResult payment = null;
-        for (IPaymentGateway gateway : paymentGateways) {
-            try {
-                payment = gateway.charge(finalAmount,
-                        new PaymentDetails(order.getId(), event.getId(), memberId, buyerContact.getEmail()));
-                if (payment != null && payment.success()) {
-                    break;
-                }
-            } catch (Exception e) {
-                log.error("Payment Gateway failed with exception", e);
+        
+        CompletedPurchase purchase;
+        try {
+            purchase = orderCheckoutService.processCheckout(order, event, buyerContact, couponCode);
+        } catch (IllegalStateException e) {
+            saveOrder(order);
+            if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
+                ticketReservationService.releaseAllInventory(event, order);
+                saveEvent(event);
             }
+            throw e;
         }
 
-        if (payment == null || !payment.success()) {
-            order.revertToActive();
-            orderRepository.save(order);
-            throw new IllegalStateException("Payment failed: " + (payment != null ? payment.errorMessage() : "All gateways failed"));
-        }
-
-        SupplyResult supply = null;
-        for (ITicketSupplyGateway gateway : ticketSupplyGateways) {
-            try {
-                supply = gateway.issueTickets(ticketRequests(order, event),
-                        new CustomerInfo(memberId == null ? null : memberId.toString(),
-                                buyerContact.getEmail(), buyerContact.getUsername()));
-                if (supply != null && supply.success()) {
-                    break;
-                } else if (supply != null && supply.issuedTicketCodes() != null && !supply.issuedTicketCodes().isEmpty()) {
-                    gateway.cancelTickets(supply.issuedTicketCodes());
-                }
-            } catch (Exception e) {
-                log.error("Gateway failed with exception", e);
-            }
-        }
-
-        if (supply == null || !supply.success()) {
-            refundPayment(payment.transactionId(), finalAmount);
-            releaseAllInventory(event, order);
-            eventRepository.save(event);
-            order.cancel();
-            orderRepository.save(order);
-            throw new IllegalStateException("Ticket generation failed. Payment has been refunded: "
-                    + (supply != null ? supply.errorMessage() : "All gateways failed"));
-        }
-
-        sellAllInventory(event, order);
-        eventRepository.save(event);
-
-        order.complete();
-        orderRepository.save(order);
-
-        CompletedPurchase purchase = new CompletedPurchase(
-                UUID.randomUUID(),
-                event.getId(),
-                event.getName(),
-                event.getCompanyName(),
-                memberId,
-                payment.transactionId(),
-                finalAmount,
-                systemClock.now());
+        ticketReservationService.sellAllInventory(event, order);
+        saveEvent(event);
+        saveOrder(order);
         orderRepository.save(purchase);
 
         checkAndPublishSoldOut(event);
         log.info("Checkout complete: orderId={}, purchaseId={}, amount={}",
-                orderId, purchase.purchaseId(), finalAmount);
+                orderId, purchase.purchaseId(), purchase.amount());
         return purchase.purchaseId();
     }
 
     public CompletedPurchase getCompletedPurchase(UUID purchaseId) {
         return orderRepository.findCompletedById(purchaseId)
                 .orElseThrow(() -> new IllegalArgumentException("Completed purchase not found: " + purchaseId));
-    }
-
-    private UUID lockSeat(ActiveOrder order, Event event, UUID zoneId, UUID seatId) {
-        InventoryZone zone = event.findZone(zoneId);
-        zone.lockSeat(seatId);
-        OrderItem item = OrderItem.forSeat(UUID.randomUUID(), zoneId, seatId, zone.getPricePerTicket());
-        order.addItem(item);
-        log.info("Seat added to order: orderId={}, seatId={}", order.getId(), seatId);
-        return item.getId();
-    }
-
-    private UUID lockGA(ActiveOrder order, Event event, UUID zoneId, int quantity) {
-        InventoryZone zone = event.findZone(zoneId);
-        OrderItem item = order.findItemByZoneId(zoneId).orElse(null);
-        if (item == null) {
-            zone.lockGA(quantity);
-            item = OrderItem.forGA(UUID.randomUUID(), zoneId, quantity, zone.getPricePerTicket());
-            order.addItem(item);
-        } else {
-            zone.lockGA(quantity);
-            item.updateQuantity(item.getQuantity() + quantity);
-        }
-        log.info("GA tickets added: orderId={}, zoneId={}, quantity={}", order.getId(), zoneId, quantity);
-        return item.getId();
     }
 
     private void validateToken(String token) {
@@ -305,17 +244,36 @@ public class OrderService {
         return order;
     }
 
-    private void validateOrderNotExpired(ActiveOrder order, Event event) {
-        if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
-            throw new IllegalStateException("Order has expired");
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict during order flow: eventId={}", event.getId());
+            throw new IllegalStateException("Event inventory changed concurrently. Please retry.", ex);
         }
     }
 
-    private void validatePurchasePolicy(Event event, ActiveOrder order, UUID memberId) {
-        PolicyResult validation = event.getEventPurchasePolicy().isAllowed(order, memberId);
-        if (!validation.allowed()) {
-            throw new IllegalStateException("Purchase policy violation: "
-                    + validation.errorCode() + " " + validation.reason());
+    private void saveOrder(ActiveOrder order) {
+        try {
+            orderRepository.save(order);
+        } catch (OptimisticLockException ex) {
+            log.warn("Order save conflict: orderId={}", order.getId());
+            throw new IllegalStateException("Order changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveQueue(VirtualQueue queue) {
+        try {
+            queueRepository.save(queue);
+        } catch (OptimisticLockException ex) {
+            log.warn("Queue save conflict: queueId={}", queue.getId());
+            throw ex;
+        }
+    }
+
+    private void validateOrderNotExpired(ActiveOrder order, Event event) {
+        if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
+            throw new IllegalStateException("Order has expired");
         }
     }
 
@@ -331,64 +289,17 @@ public class OrderService {
                 .orElseGet(BuyerContactSnapshot::empty);
     }
 
-    private List<TicketRequest> ticketRequests(ActiveOrder order, Event event) {
-        List<TicketRequest> tickets = new ArrayList<>();
-        for (OrderItem item : order.getItems()) {
-            if (item.isAssignedSeat()) {
-                tickets.add(new TicketRequest(event.getId().toString(),
-                        item.getId().toString(), item.getSeatId().toString()));
-            } else {
-                for (int i = 0; i < item.getQuantity(); i++) {
-                    tickets.add(new TicketRequest(event.getId().toString(),
-                            item.getId() + "-" + (i + 1), null));
-                }
-            }
-        }
-        return tickets;
-    }
-
     public void refundEventPurchases(UUID eventId) {
         List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
         for (CompletedPurchase purchase : purchases) {
-            refundPayment(purchase.transactionId(), purchase.amount());
-        }
-    }
-
-    private void refundPayment(String transactionId, BigDecimal amount) {
-        RefundResult refund = null;
-        for (IPaymentGateway gateway : paymentGateways) {
-            try {
-                refund = gateway.refund(transactionId, amount.doubleValue());
-                if (refund != null && refund.success()) {
-                    break;
-                }
-            } catch (Exception e) {
-                log.error("Refund Gateway failed with exception", e);
-            }
-        }
-        if (refund == null || !refund.success()) {
-            log.error("ESCALATION: Refund failed after ticket supply failure: transactionId={}, reason={}",
-                    transactionId, refund != null ? refund.errorMessage() : "All gateways failed");
-        }
-    }
-
-    
-
-    private void sellAllInventory(Event event, ActiveOrder order) {
-        for (OrderItem item : order.getItems()) {
-            InventoryZone zone = event.findZone(item.getZoneId());
-            if (item.isAssignedSeat()) {
-                zone.sellSeat(item.getSeatId());
-            } else {
-                zone.sellGA(item.getQuantity());
-            }
+            orderCheckoutService.refundPayment(purchase.transactionId(), purchase.amount());
         }
     }
 
     private void checkAndPublishSoldOut(Event event) {
         if (!event.hasAvailableTickets() && event.isPublished()) {
             event.markSoldOut();
-            eventRepository.save(event);
+            saveEvent(event);
         }
     }
 
@@ -404,11 +315,11 @@ public class OrderService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Item not found: " + itemId));
 
-        releaseInventoryForItem(event, item);
-        eventRepository.save(event);
+        ticketReservationService.releaseInventoryForItem(event, item);
+        saveEvent(event);
 
         order.removeItem(itemId);
-        orderRepository.save(order);
+        saveOrder(order);
         log.info("Item removed from order: orderId={}, itemId={}", orderId, itemId);
     }
 
@@ -437,33 +348,11 @@ public class OrderService {
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
 
-        OrderItem item = order.findItemByZoneId(zoneId)
-                .orElseThrow(() -> new IllegalArgumentException("No GA item found for zone: " + zoneId));
+        ticketReservationService.updateGAQuantity(order, event, zoneId, newQuantity);
+        saveEvent(event);
 
-        InventoryZone zone = event.findZone(zoneId);
-        int oldQuantity = item.getQuantity();
-        int diff = newQuantity - oldQuantity;
-
-        if (diff > 0) {
-            zone.lockGA(diff);
-        } else if (diff < 0) {
-            zone.releaseGA(-diff);
-        }
-        eventRepository.save(event);
-
-        item.updateQuantity(newQuantity);
-        orderRepository.save(order);
+        saveOrder(order);
         log.info("GA quantity updated: orderId={}, zoneId={}", orderId, zoneId);
-    }
-    
-    private void releaseAllInventory(Event event, ActiveOrder order) {
-        for (OrderItem item : order.getItems()) {
-            try {
-                releaseInventoryForItem(event, item);
-            } catch (Exception e) {
-                log.error("Failed to release inventory for item: {}", item.getId(), e);
-            }
-        }
     }
 
     public void cancelOrder(String token, UUID orderId) {
@@ -478,11 +367,11 @@ public class OrderService {
         }
 
         Event event = findEvent(order.getEventId());
-        releaseAllInventory(event, order);
-        eventRepository.save(event);
+        ticketReservationService.releaseAllInventory(event, order);
+        saveEvent(event);
 
         order.cancel();
-        orderRepository.save(order);
+        saveOrder(order);
         log.info("Order cancelled: orderId={}", orderId);
     }
 
@@ -496,15 +385,6 @@ public class OrderService {
         }
     }
 
-    private void releaseInventoryForItem(Event event, OrderItem item) {
-        InventoryZone zone = event.findZone(item.getZoneId());
-        if (item.isAssignedSeat()) {
-            zone.releaseSeat(item.getSeatId());
-        } else {
-            zone.releaseGA(item.getQuantity());
-        }
-    }
-
     public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
@@ -513,12 +393,151 @@ public class OrderService {
         }
 
         List<CompletedPurchase> purchases = orderRepository.findCompletedByMemberId(memberId);
-        
+
         List<PurchaseRecordDTO> result = new ArrayList<>();
         for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));
         }
-        
+
         return result;
     }
+
+    // ── Queue management ─────────────────────────────────────────────────
+
+    /**
+     * Creates a virtual queue for an event (Admin action).
+     */
+    public UUID createQueue(String token, UUID eventId, int threshold, int flowRate) {
+        UUID adminId = validateAdmin(token);
+        log.info("Creating queue: adminId={}, eventId={}, threshold={}, flowRate={}", adminId, eventId, threshold, flowRate);
+
+        eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+
+        queueRepository.findByEventId(eventId).ifPresent(existing -> {
+            throw new IllegalStateException("A virtual queue already exists for this event");
+        });
+
+        QueueConfig config = new QueueConfig(threshold, flowRate);
+        VirtualQueue queue = new VirtualQueue(UUID.randomUUID(), eventId, config);
+        saveQueue(queue);
+        log.info("Queue created: queueId={}, eventId={}", queue.getId(), eventId);
+        return queue.getId();
+    }
+
+    /**
+     * Determines if a user should be queued, and if so, adds them.
+     * No authentication required (guests can be queued).
+     *
+     * @return a QueueEntryDto if queued, null if user can enter directly
+     */
+    public QueueEntryDto tryEnterOrQueue(UUID eventId, UUID sessionId) {
+        log.info("Try enter or queue: eventId={}, sessionId={}", eventId, sessionId);
+
+        VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
+        if (queue == null || !queue.isActive()) {
+            return null;
+        }
+
+        if (queue.shouldQueue()) {
+            QueueEntry entry = queue.enqueue(sessionId, systemClock.now());
+            saveQueue(queue);
+            log.info("User queued: sessionId={}, eventId={}", sessionId, eventId);
+            return entry.toQueueDto();
+        } else {
+            queue.userEnteredDirectly();
+            saveQueue(queue);
+            return null;
+        }
+    }
+
+    /**
+     * Admits the next batch of users from the queue.
+     */
+    public List<QueueEntryDto> admitNextBatch(String token, UUID eventId) {
+        validateAdmin(token);
+        log.info("Admitting next batch: eventId={}", eventId);
+
+        VirtualQueue queue = findQueueByEvent(eventId);
+        List<QueueEntry> admitted = queue.admitNextBatch();
+        saveQueue(queue);
+        log.info("Admitted {} users from queue for eventId={}", admitted.size(), eventId);
+        return admitted.stream()
+                .map(QueueEntry::toQueueDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Records that a user has left the active purchasing phase.
+     */
+    public void userLeft(UUID eventId) {
+        VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
+        if (queue != null) {
+            queue.userLeft();
+            saveQueue(queue);
+        }
+    }
+
+    /**
+     * Updates queue configuration (Admin action).
+     */
+    public void updateQueueConfig(String token, UUID eventId, int threshold, int flowRate) {
+        UUID adminId = validateAdmin(token);
+        log.info("Updating queue config: adminId={}, eventId={}, threshold={}, flowRate={}", adminId, eventId, threshold, flowRate);
+
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queue.updateConfig(new QueueConfig(threshold, flowRate));
+        saveQueue(queue);
+        log.info("Queue config updated: eventId={}", eventId);
+    }
+
+    /**
+     * Flushes/clears a queue (Admin emergency action).
+     */
+    public void flushQueue(String token, UUID eventId) {
+        UUID adminId = validateAdmin(token);
+        log.info("Flushing queue: adminId={}, eventId={}", adminId, eventId);
+
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queue.flush();
+        saveQueue(queue);
+        log.info("Queue flushed: eventId={}", eventId);
+    }
+
+    /**
+     * Gets all active virtual queues (Admin monitoring).
+     */
+    public List<VirtualQueueDto> getAllActiveQueues(String token) {
+        validateAdmin(token);
+        log.info("Getting all active queues");
+        return queueRepository.findAllActive().stream()
+                .map(VirtualQueue::toVirtualQueueDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Gets the queue for a specific event.
+     */
+    public VirtualQueueDto getQueueForEvent(UUID eventId) {
+        return findQueueByEvent(eventId).toVirtualQueueDto();
+    }
+
+    private VirtualQueue findQueueByEvent(UUID eventId) {
+        return queueRepository.findByEventId(eventId)
+                .orElseThrow(() -> new IllegalStateException("No virtual queue for event: " + eventId));
+    }
+
+    private UUID validateAdmin(String token) {
+        UUID adminId = validateTokenAndExtractMemberId(token);
+        if (!sessionTokenService.extractPermissions(token).contains("Admin")) {
+            throw new IllegalStateException("Only System Admins can perform this action");
+        }
+        return adminId;
+    }
+
+    private UUID validateTokenAndExtractMemberId(String token) {
+        validateToken(token);
+        return sessionTokenService.extractMemberId(token);
+    }
 }
+

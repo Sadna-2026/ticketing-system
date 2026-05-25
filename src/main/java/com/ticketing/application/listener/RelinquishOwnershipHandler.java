@@ -7,6 +7,7 @@ import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
@@ -71,7 +72,7 @@ public class RelinquishOwnershipHandler implements IEventListener {
                     .orElseThrow(() -> new IllegalArgumentException("Appointed member not found"));
 
                 appointedMember.getStaffAppointment(companyName).updateAppointedBy(appointerId);
-                memberRepository.save(appointedMember);
+                saveMember(appointedMember);
 
                 notificationService.notify(childId.toString(), "Your previous owner has relinquished ownership. You now report to the higher-level appointer.");
             }
@@ -80,12 +81,20 @@ public class RelinquishOwnershipHandler implements IEventListener {
         }
 
         appointerAppointment.removeAppointedStaffMember(ownerId);
-        memberRepository.save(appointer);
+        saveMember(appointer);
 
         owner.removeStaffAppointment(companyName);
-        memberRepository.save(owner);
+        saveMember(owner);
 
         notificationService.notify(ownerId.toString(), "You have successfully relinquished ownership of the company.");
+    }
+
+    private void saveMember(Member member) {
+        try {
+            memberRepository.save(member);
+        } catch (OptimisticLockException ex) {
+            throw new IllegalStateException("Ownership relinquishment changed concurrently. Please retry.", ex);
+        }
     }
 
     private int countOwnersInCompany(String companyName) {

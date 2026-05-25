@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Repository;
 
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
 import com.ticketing.domain.lottery.LotteryEntry;
 
@@ -61,7 +62,17 @@ public class InMemoryLotteryRepository implements ILotteryRepository {
     @Override
     public void save(LotteryEntry entry) {
         if (entry == null) throw new IllegalArgumentException("entry is required");
-        store.put(entry.id(), entry);
+        store.compute(entry.id(), (id, existing) -> {
+            if (existing == null) {
+                LotteryEntry stored = entry.incrementedVersionCopy();
+                return stored;
+            }
+            if (entry.version() != existing.version()) {
+                throw new OptimisticLockException("LotteryEntry", id);
+            }
+            LotteryEntry stored = entry.incrementedVersionCopy();
+            return stored;
+        });
     }
 
     @Override

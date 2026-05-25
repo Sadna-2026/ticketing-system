@@ -6,7 +6,7 @@ import com.ticketing.domain.order.ActiveOrder;
 
 
 public interface IDiscountPolicy {
-    BigDecimal applyTo(ActiveOrder order, 
+    BigDecimal priceAfterDiscount(ActiveOrder order, 
                     String couponCode, 
                     java.time.Instant systemClock);
 }

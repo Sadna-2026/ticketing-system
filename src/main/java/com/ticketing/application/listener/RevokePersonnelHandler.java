@@ -6,6 +6,7 @@ import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
@@ -69,11 +70,19 @@ public class RevokePersonnelHandler implements IEventListener {
         appointerAppointment.removeAppointedStaffMember(targetMemberId);
         targetAppointment.revoke();
 
-        memberRepository.save(revokerMember);
-        memberRepository.save(targetMember);
+        saveMember(revokerMember);
+        saveMember(targetMember);
 
         notificationService.notify(
                 targetMemberId.toString(),
                 "You have been revoked from the company.");
+    }
+
+    private void saveMember(Member member) {
+        try {
+            memberRepository.save(member);
+        } catch (OptimisticLockException ex) {
+            throw new IllegalStateException("Personnel revocation changed concurrently. Please retry.", ex);
+        }
     }
 }

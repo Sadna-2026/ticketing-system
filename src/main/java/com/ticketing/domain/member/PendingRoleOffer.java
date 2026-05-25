@@ -17,18 +17,36 @@ public class PendingRoleOffer {
     private final LocalDateTime dueDate;
 
     public PendingRoleOffer(UUID offeredByMemberId, String companyName, StaffRole role, Set<ManagerPermission> permissions, LocalDateTime dueDate) {
+        this(UUID.randomUUID(), offeredByMemberId, companyName, role, permissions, LocalDateTime.now(), dueDate);
+    }
+
+    private PendingRoleOffer(
+            UUID offerId,
+            UUID offeredByMemberId,
+            String companyName,
+            StaffRole role,
+            Set<ManagerPermission> permissions,
+            LocalDateTime createdAt,
+            LocalDateTime dueDate
+    ) {
+        if (offerId == null) {
+            throw new IllegalArgumentException("offerId cannot be null");
+        }
         if (offeredByMemberId == null) {
             throw new IllegalArgumentException("offeredByMemberId cannot be null");
+        }
+        if (createdAt == null) {
+            throw new IllegalArgumentException("createdAt cannot be null");
         }
         if (dueDate == null) {
             throw new IllegalArgumentException("dueDate cannot be null");
         }
-        this.offerId = UUID.randomUUID();
+        this.offerId = offerId;
         this.offeredByMemberId = offeredByMemberId;
         this.companyName = companyName;
         this.role = role;
         this.permissions = permissions != null ? Collections.unmodifiableSet(permissions) : Collections.emptySet();
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = createdAt;
         this.dueDate = dueDate;
     }
 
@@ -42,5 +60,9 @@ public class PendingRoleOffer {
 
     public boolean isExpired() {
         return LocalDateTime.now().isAfter(dueDate);
+    }
+
+    public PendingRoleOffer detachedCopy() {
+        return new PendingRoleOffer(offerId, offeredByMemberId, companyName, role, permissions, createdAt, dueDate);
     }
 }

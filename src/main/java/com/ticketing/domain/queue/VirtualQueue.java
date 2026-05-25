@@ -41,6 +41,22 @@ public class VirtualQueue {
         this.version = 0;
     }
 
+    private VirtualQueue(
+            UUID id,
+            UUID eventId,
+            QueueConfig config,
+            List<QueueEntry> entries,
+            boolean active,
+            int currentActiveUsers,
+            int version
+    ) {
+        this(id, eventId, config);
+        this.entries.addAll(entries.stream().map(QueueEntry::detachedCopy).toList());
+        this.active = active;
+        this.currentActiveUsers = currentActiveUsers;
+        this.version = version;
+    }
+
     public UUID getId() { return id; }
     public UUID getEventId() { return eventId; }
     public QueueConfig getConfig() { return config; }
@@ -135,5 +151,9 @@ public class VirtualQueue {
 
     public VirtualQueueDto toVirtualQueueDto(){
         return new VirtualQueueDto(id, eventId, config.getThreshold(), config.getFlowRate(), active, currentActiveUsers, getWaitingCount(), entries.stream().map(QueueEntry::toQueueDto).toList());
+    }
+
+    public VirtualQueue detachedCopy() {
+        return new VirtualQueue(id, eventId, config, entries, active, currentActiveUsers, version);
     }
 }
