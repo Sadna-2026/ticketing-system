@@ -93,6 +93,7 @@ public class CompanyLifecycleService {
     public void permanentCloseByAdmin(String token, String companyName) {
         requireMember(token);
         if (!isAdmin(token)) {
+            log.warn("Permanent close by admin ignored: insufficient permissions");
             throw new SecurityException("System admin permission required");
         }
         synchronized (companyLock(companyName)) {
@@ -105,6 +106,7 @@ public class CompanyLifecycleService {
         synchronized (companyLock(companyName)) {
             Company company = loadCompany(companyName);
             if (company.getStatus() != com.ticketing.domain.company.CompanyStatus.PENDING_CLOSURE) {
+                log.warn("Retry pending refunds ignored: company is not pending closure");
                 throw new IllegalStateException("Company is not pending closure");
             }
 
@@ -127,8 +129,7 @@ public class CompanyLifecycleService {
                 RefundJob job = queue.peek();
                 RefundResult r = paymentGateway.refund(job.transactionId, job.amount.doubleValue());
                 if (!r.success()) {
-                    log.warn("Retry refund still failing for company={}, transactionId={}",
-                            companyName, job.transactionId);
+                    log.warn("Retry refund still failing for company={}", companyName);
                     pendingRefunds.put(key, queue);
                     return;
                 }
@@ -163,7 +164,7 @@ public class CompanyLifecycleService {
             try {
                 result = paymentGateway.refund(p.transactionId(), p.amount().doubleValue());
             } catch (RuntimeException ex) {
-                log.warn("Refund threw for txn={} ({}): {}", p.transactionId(), p.companyName(), ex.getMessage());
+                log.warn("Refund threw for company={}: {}", p.companyName(), ex.getMessage());
                 result = RefundResult.failed(ex.getMessage());
             }
             if (!result.success()) {
@@ -192,6 +193,7 @@ public class CompanyLifecycleService {
     }
 
     private void revokeAllAppointments(String companyName) {
+        log.info("Revoking all staff appointments for company: {}", companyName);
         for (Member m : memberRepository.findByCompanyAppointment(companyName)) {
             m.removeStaffAppointment(companyName);
             saveMember(m);

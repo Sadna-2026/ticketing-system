@@ -36,6 +36,7 @@ public class CompanyQueryService {
      * Empty for: unknown, suspended, pending-closure, or closed companies.
      */
     public Optional<CompanyPublicDTO> getCompanyInfo(String companyName) {
+        log.info("Company info requested: name={}", companyName);
         if (companyName == null || companyName.isBlank()) {
             return Optional.empty();
         }
@@ -50,6 +51,7 @@ public class CompanyQueryService {
                 .filter(CompanyQueryService::isPubliclyVisible)
                 .map(EventSummaryDTO::from)
                 .toList();
+        log.info("Company info provided: name={}", company.getName());
         return Optional.of(new CompanyPublicDTO(company.getName(), company.getDescription(), active));
     }
 

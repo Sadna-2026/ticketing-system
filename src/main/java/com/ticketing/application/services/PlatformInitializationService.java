@@ -120,7 +120,7 @@ public class PlatformInitializationService {
 
     private InitializationResult halt(String message) {
         recordEvent("Platform initialization failed: " + message);
-        log.warn("Platform initialization failed: {}", message);
+        log.error("Platform initialization failed: {}", message);
         return InitializationResult.failure(message);
     }
 

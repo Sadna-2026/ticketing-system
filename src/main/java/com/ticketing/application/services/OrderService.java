@@ -121,11 +121,13 @@ public class OrderService {
         UUID memberId = sessionTokenService.extractMemberId(token);
 
         orderRepository.findActiveBySessionId(sessionId).ifPresent(existing -> {
+            log.warn("Failed to create order: session {} already has an active order {}", sessionId, existing.getId());
             throw new IllegalStateException("Session already has an active order");
         });
 
         Event event = findEvent(eventId);
         if (!event.isPublished()) {
+            log.warn("Failed to create order: event {} is not available for purchase", eventId);
             throw new IllegalStateException("Event is not available for purchase");
         }
 
@@ -158,6 +160,7 @@ public class OrderService {
         ActiveOrder order = findActiveOrder(orderId);
         validateOrderOwnership(token, order);
         if (!order.getEventId().equals(request.eventId())) {
+            log.warn("Failed to add selection to order: selection event {} does not match order event {}", request.eventId(), order.getEventId());
             throw new IllegalArgumentException("Selection event does not match order event");
         }
 
@@ -188,6 +191,7 @@ public class OrderService {
         validateOrderNotExpired(order, event);
 
         if (order.getItems().isEmpty()) {
+            log.warn("Failed to checkout order {}: no items in order", orderId);
             throw new IllegalStateException("Cannot checkout an empty order");
         }
 
@@ -202,6 +206,7 @@ public class OrderService {
                 ticketReservationService.releaseAllInventory(event, order);
                 saveEvent(event);
             }
+            log.warn("Failed to checkout order {}: {}", orderId, e.getMessage());
             throw e;
         }
 
@@ -218,27 +223,37 @@ public class OrderService {
 
     public CompletedPurchase getCompletedPurchase(UUID purchaseId) {
         return orderRepository.findCompletedById(purchaseId)
-                .orElseThrow(() -> new IllegalArgumentException("Completed purchase not found: " + purchaseId));
+                .orElseThrow(() -> { log.warn("Completed purchase not found: purchaseId={}", purchaseId);
+                    return new IllegalArgumentException("Completed purchase not found: " + purchaseId); });
     }
 
     private void validateToken(String token) {
         if (token == null || token.isBlank()) {
+                log.warn("Failed to validate token: token is null or blank");
             throw new IllegalArgumentException("Authentication token is required");
         }
         if (!sessionTokenService.isValid(token)) {
+            log.warn("Failed to validate token: token is invalid or expired");
             throw new IllegalArgumentException("Invalid or expired authentication token");
         }
     }
 
     private Event findEvent(UUID eventId) {
         return eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
     }
 
     private ActiveOrder findActiveOrder(UUID orderId) {
         ActiveOrder order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+                .orElseThrow(() -> {
+                    log.warn("Order not found: orderId={}", orderId);
+                    return new IllegalArgumentException("Order not found: " + orderId);
+                });
         if (!order.isActive()) {
+            log.warn("Order is not active: orderId={}", orderId);
             throw new IllegalStateException("Order is not active (status: " + order.getStatus() + ")");
         }
         return order;
@@ -273,6 +288,7 @@ public class OrderService {
 
     private void validateOrderNotExpired(ActiveOrder order, Event event) {
         if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
+            log.warn("Order has expired: orderId={}, eventId={}", order.getId(), event.getId());
             throw new IllegalStateException("Order has expired");
         }
     }
@@ -313,7 +329,10 @@ public class OrderService {
         OrderItem item = order.getItems().stream()
                 .filter(i -> i.getId().equals(itemId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Item not found: " + itemId));
+                .orElseThrow(() -> {
+                    log.warn("Item not found: itemId={}", itemId);
+                    return new IllegalArgumentException("Item not found: " + itemId);
+                });
 
         ticketReservationService.releaseInventoryForItem(event, item);
         saveEvent(event);
@@ -325,7 +344,10 @@ public class OrderService {
 
     public ActiveOrderDto getActiveOrder(String token, UUID orderId) {
         ActiveOrder order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+                .orElseThrow(() -> {
+                    log.warn("Order not found: orderId={}", orderId);
+                    return new IllegalArgumentException("Order not found: " + orderId);
+                });
         validateOrderOwnership(token, order);
         return new ActiveOrderDto(
                 order.getId(),
@@ -359,7 +381,10 @@ public class OrderService {
         validateToken(token);
 
         ActiveOrder order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+                .orElseThrow(() -> {
+                    log.warn("Order not found: orderId={}", orderId);
+                    return new IllegalArgumentException("Order not found: " + orderId);
+                });
 
         validateOrderOwnership(token, order);
         if (order.getStatus() == OrderStatus.COMPLETED) {
@@ -412,9 +437,13 @@ public class OrderService {
         log.info("Creating queue: adminId={}, eventId={}, threshold={}, flowRate={}", adminId, eventId, threshold, flowRate);
 
         eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
 
         queueRepository.findByEventId(eventId).ifPresent(existing -> {
+            log.warn("A virtual queue already exists for this event: eventId={}", eventId);
             throw new IllegalStateException("A virtual queue already exists for this event");
         });
 

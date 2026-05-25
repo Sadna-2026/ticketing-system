@@ -1,5 +1,6 @@
 package com.ticketing.application;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
@@ -35,6 +36,7 @@ import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 public class AdminServiceTest {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminService.class);
     private IMemberRepository memberRepository;
     private ICompanyRepository companyRepository;
     private ISessionTokenService sessionTokenService;

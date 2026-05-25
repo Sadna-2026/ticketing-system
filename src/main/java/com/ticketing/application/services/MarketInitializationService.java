@@ -34,6 +34,7 @@ public class MarketInitializationService {
     ) {
         if (adminRepository == null || sessionTokenService == null
                 || paymentGateway == null || supplyGateway == null || startupConfiguration == null) {
+            log.error("Market initialization failed: one or more dependencies are null");
             throw new IllegalArgumentException("All dependencies are required");
         }
         this.adminRepository = adminRepository;
@@ -48,19 +49,23 @@ public class MarketInitializationService {
      */
     public synchronized MarketInitializationResponse openMarket(String adminToken) {
         if (!startupConfiguration.isActive()) {
+            log.error("Market initialization failed: platform is not initialized.");
             return fail("Platform is not initialized.");
         }
 
         Admin admin = authenticateSystemAdmin(adminToken);
         if (admin == null) {
+            log.error("Market initialization failed: system admin permission required.");
             return fail("System admin permission required.");
         }
 
         if (!startupConfiguration.clearingServiceConfigured() || !isPaymentGatewayReachable()) {
+            log.error("Market initialization failed: payment service unavailable.");
             return fail("Payment service unavailable.");
         }
 
         if (!startupConfiguration.supplyServiceConfigured() || !isSupplyGatewayReachable()) {
+            log.error("Market initialization failed: supply service unavailable.");
             return fail("Supply service unavailable.");
         }
 

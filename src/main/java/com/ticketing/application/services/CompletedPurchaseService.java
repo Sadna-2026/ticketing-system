@@ -70,14 +70,21 @@ public class CompletedPurchaseService {
 
         // Step 2: Find company
         Company company = companyRepository.findByName(companyName)
-                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
+                .orElseThrow(() -> {
+                    log.warn("Sales report request denied: company={}, by={}", companyName, requesterId);
+                    return new IllegalArgumentException("Company not found: " + companyName);
+                });
 
         // Step 3: Load caller's StaffAppointment and check authorization
         Member requester = memberRepository.findById(requesterId)
-                .orElseThrow(() -> new IllegalArgumentException("Member not found: " + requesterId));
+                .orElseThrow(() -> {
+                    log.warn("Sales report request denied: company={}, by={}", companyName, requesterId);
+                    return new IllegalArgumentException("Member not found: " + requesterId);
+                });
 
         StaffAppointment requesterAppt = requester.getStaffAppointment(company.getName());
         if (requesterAppt == null) {
+            log.warn("Sales report request denied: company={}, by={}", companyName, requesterId);
             throw new SecurityException(
                     "Member is not appointed to company: " + company.getName());
         }
@@ -86,6 +93,7 @@ public class CompletedPurchaseService {
                 (requesterAppt.isManager() && requesterAppt.hasPermission(ManagerPermission.VIEW_REPORTS));
 
         if (!authorized) {
+            log.warn("Sales report request denied: company={}, by={}", companyName, requesterId);
             throw new SecurityException(
                     "Viewing sales report requires Owner role or (Manager + VIEW_REPORTS permission)");
         }
