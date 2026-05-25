@@ -88,6 +88,7 @@ public class OrderTimeDomainService {
         // eventPublisher.publish(new OrderExpiredEvent(
         //         order.getId(), order.getSessionId(), order.getEventId(), systemClock.now()));
         // log.info("Order expired: orderId={}, eventId={}", order.getId(), order.getEventId());
+        log.warn("Reservation expired: orderId={}, eventId={}", order.getId(), order.getEventId());
     }
 }
 

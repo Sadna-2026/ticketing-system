@@ -23,6 +23,7 @@ import com.ticketing.domain.order.IOrderRepository;
 public class AdminService {
 
     private static final String ADMIN_PERMISSION = "SYSTEM_ADMIN";
+    private static final Logger log = LoggerFactory.getLogger(AdminService.class);
 
     private final IMemberRepository memberRepository;
     private final ICompanyRepository companyRepository;
@@ -48,9 +49,12 @@ public class AdminService {
     }
 
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {
+        log.info("Admin remove member requested: targetMemberId={}", targetMemberId);
         // 1. Validate Admin
         if (!isAdmin(adminToken)) {
+            log.warn("Admin remove member denied: missing system admin permission targetMemberId={}", targetMemberId);
             throw new SecurityException("System admin permission required");
+            
         }
 
         // 2. Validate Target
@@ -59,6 +63,7 @@ public class AdminService {
 
         // 3. Sole Admin Check (Real)
         if (isSoleAdmin(targetMemberId)) {
+            log.warn("Admin remove member denied: target is sole system admin targetMemberId={}", targetMemberId);
             throw new IllegalStateException("SoleAdminProtection: Cannot remove the last system admin");
         }
 
@@ -72,6 +77,8 @@ public class AdminService {
                         .count();
                 
                 if (ownerCount <= 1) {
+                    log.warn("Admin remove member denied: target is only owner targetMemberId={}, company={}",
+        targetMemberId, company.getName());
                     throw new IllegalStateException("CompanyIntegrityBlock: Cannot remove the only owner of active company: " + company.getName());
                 }
             }
@@ -82,6 +89,7 @@ public class AdminService {
 
         // 6. Terminate Sessions
         sessionTokenService.revokeMemberSessions(targetMemberId);
+        log.info("Admin remove member completed: targetMemberId={}", targetMemberId);
     }
 
     private boolean isAdmin(String token) {
@@ -104,8 +112,10 @@ public class AdminService {
     }
 
     public List<PurchaseRecordDTO> getGlobalPurchaseHistory(String adminToken, UUID buyerId, String companyName) {
+        log.info("Admin global purchase history requested: buyerId={}, companyName={}", buyerId, companyName);
         // 1. Authorization
         if (!isAdmin(adminToken)) {
+            log.warn("Admin global purchase history denied: missing system admin permission");
             throw new SecurityException("System admin permission required");
         }
 
@@ -118,6 +128,7 @@ public class AdminService {
         } else {
             purchases = orderRepository.findAllCompleted();
         }
+        log.info("Admin global purchase history completed: resultCount={}", purchases.size());
 
         // 3. Map to DTOs
         return purchases.stream()

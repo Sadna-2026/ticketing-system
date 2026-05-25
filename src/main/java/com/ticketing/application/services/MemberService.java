@@ -62,21 +62,30 @@ public class MemberService {
     }
 
     public RegisterResponse register(RegisterRequest request, String guestToken) {
+        if (request == null) {
+            logger.warn("Registration attempt with null request");
+            return RegisterResponse.failure("Invalid registration details.");
+        }
+        logger.info("Registration attempt: username={}, email={}", request.username(), request.email());
         if (guestToken == null || guestToken.isBlank()) {
+            logger.warn("Failed to register member: invalid session token");
             return RegisterResponse.failure("Invalid session token.");
         }
 
         if (!sessionTokenService.isValid(guestToken)) {
+            logger.warn("Failed to register member: invalid session token");
             return RegisterResponse.failure("Invalid session token.");
         }
 
         UUID tokenMemberId = sessionTokenService.extractMemberId(guestToken);
 
         if (tokenMemberId != null) {
+            logger.warn("Failed to register member: session is already member-bound");
             return RegisterResponse.failure("Only guests can register.");
         }
 
         if (!isValidRegisterRequest(request)) {
+            logger.warn("Failed to register member: invalid registration details");
             return RegisterResponse.failure("Invalid registration details.");
         }
 
@@ -126,6 +135,12 @@ public class MemberService {
     }
 
     public LoginResponse login(LoginRequest request, String guestToken) {
+
+        logger.info("Register requested: username={}", request == null ? null : request.username());
+        if (guestToken == null || guestToken.isBlank()) {
+             logger.warn("Failed login: invalid session token");
+             return LoginResponse.failure("Invalid session token.");
+         }
         if (!sessionTokenService.isValid(guestToken)) {
             logger.warn("Failed login: invalid session token");
             return LoginResponse.failure("Invalid session token.");

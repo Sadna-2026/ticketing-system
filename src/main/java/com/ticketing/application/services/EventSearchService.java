@@ -37,6 +37,8 @@ public class EventSearchService {
     }
 
     public List<EventSummaryDTO> searchEvents(SearchEventsRequest req) {
+        log.info("Event search requested: text={}, category={}, company={}",
+                req == null ? null : req.text(), req == null ? null : req.category(), req == null ? null : req.companyName());
         SearchEventsRequest q = req == null ? SearchEventsRequest.empty() : req;
         Set<String> activeCompanyNames = activeCompanyNames();
 

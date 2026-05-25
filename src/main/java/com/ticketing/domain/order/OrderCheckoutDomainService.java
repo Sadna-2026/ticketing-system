@@ -83,8 +83,8 @@ public class OrderCheckoutDomainService {
             }
         }
         if (refund == null || !refund.success()) {
-            log.error("ESCALATION: Refund failed after ticket supply failure: transactionId={}, reason={}",
-                    transactionId, refund != null ? refund.errorMessage() : "All gateways failed");
+            log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
+            refund != null ? refund.errorMessage() : "All gateways failed");
         }
     }
 

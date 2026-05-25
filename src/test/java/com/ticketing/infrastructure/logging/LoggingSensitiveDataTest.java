@@ -20,12 +20,12 @@ class LoggingSensitiveDataTest {
             "\\b(?:log\\.(?:info|warn|error)|logger\\.log)\\s*\\(",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern UNSAFE_IDENTIFIER = Pattern.compile(
-            "\\b(?:password|guestToken|sessionToken|adminToken|token|paymentDetails|customerInfo|card|cvv)\\b",
+            "\\b(?:password|guestToken|sessionToken|adminToken|token|paymentDetails|customerInfo|card|cvv|transactionId)\\b",
             Pattern.CASE_INSENSITIVE);
 
     @Test
     void GivenApplicationSource_WhenLoggingStatementsAreAudited_ThenNoSensitiveVariablesAreLogged() throws Exception {
-        Path applicationRoot = Path.of("src", "main", "java", "com", "ticketing", "application");
+        Path applicationRoot = Path.of("src", "main", "java", "com", "ticketing");
         assertTrue(Files.isDirectory(applicationRoot), "application source directory must exist");
 
         List<String> violations = Files.walk(applicationRoot)

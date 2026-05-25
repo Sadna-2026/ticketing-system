@@ -163,18 +163,25 @@ public class EventService {
 
     public void cancelEvent(String token, UUID eventId) {
         if (eventId == null) {
+            log.warn("Event cancellation denied: missing eventId");
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
 
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("No event with id " + eventId));
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("No event with id " + eventId);
+                });
 
         // company is looked up but we don't require it to be active — cancellation
         // can happen as cleanup even on a suspended company.
         Company company = companyRepository.findByName(event.getCompanyName())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Company not found: " + event.getCompanyName()));
+                .orElseThrow(() ->{
+                    log.warn("Company not found: companyName={}", event.getCompanyName());
+                    return new IllegalArgumentException(
+                            "Company not found: " + event.getCompanyName());
+                });
 
         StaffAppointment appt = loadAppointment(memberId, company.getName());
         if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {
@@ -202,7 +209,10 @@ public class EventService {
         UUID memberId = authenticateMember(token);
 
         Event event = eventRepository.findById(request.eventId())
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", request.eventId());
+                    return new IllegalArgumentException("Event not found: " + request.eventId());
+                });
 
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
@@ -265,7 +275,10 @@ public class EventService {
         if (seats == null || seats.isEmpty()) {
             throw new IllegalArgumentException("seats list is required");
         }
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null) {
+            log.warn("Invalid eventId: {}", eventId);
+            throw new IllegalArgumentException("eventId is required");
+        }
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             InventoryZone zone = event.findZone(zoneId);
@@ -280,6 +293,7 @@ public class EventService {
     public void removeSeats(String token, UUID eventId, UUID zoneId,
                             java.util.List<UUID> seatIds) {
         if (seatIds == null || seatIds.isEmpty()) {
+            log.warn("Invalid seatIds list: {}", seatIds);
             throw new IllegalArgumentException("seatIds list is required");
         }
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
@@ -295,7 +309,10 @@ public class EventService {
     }
 
     public void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null) {
+            log.warn("Invalid eventId: {}", eventId);
+            throw new IllegalArgumentException("eventId is required");
+        }
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).increaseCapacity(delta);
@@ -305,7 +322,10 @@ public class EventService {
     }
 
     public void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null) {
+            log.warn("Invalid eventId: {}", eventId);
+            throw new IllegalArgumentException("eventId is required");
+        }
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).decreaseCapacity(delta);
@@ -316,7 +336,10 @@ public class EventService {
 
     public void setZonePrice(String token, UUID eventId, UUID zoneId,
                              java.math.BigDecimal newPrice) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null) {
+            log.warn("Invalid eventId: {}", eventId);
+            throw new IllegalArgumentException("eventId is required");
+        }
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).setPricePerTicket(newPrice);
@@ -328,11 +351,16 @@ public class EventService {
     private Event loadEventForInventoryEdit(String token, UUID eventId) {
         UUID memberId = authenticateMember(token);
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
         if (event.isCancelled()) {
+            log.warn("Cannot edit inventory on a cancelled event: eventId={}", eventId);
             throw new IllegalStateException("Cannot edit inventory on a cancelled event");
         }
         if (event.getStatus() == com.ticketing.domain.event.EventStatus.SOLD_OUT) {
+            log.warn("Cannot edit inventory on a sold-out event: eventId={}", eventId);
             throw new IllegalStateException("Cannot edit inventory on a sold-out event");
         }
         Company company = loadActiveCompany(event.getCompanyName());
@@ -347,6 +375,7 @@ public class EventService {
                     && (appt.hasPermission(ManagerPermission.INVENTORY_MGMT)
                         || appt.hasPermission(ManagerPermission.MAP_DEFINITION)));
         if (!allowed) {
+            log.warn("Insufficient permissions to edit inventory");
             throw new SecurityException(
                     "Inventory edits require INVENTORY_MGMT or MAP_DEFINITION permission");
         }
@@ -354,6 +383,7 @@ public class EventService {
 
     private UUID authenticateMember(String token) {
         if (token == null || token.isBlank()) {
+            log.warn("Authentication token is required");
             throw new IllegalArgumentException("Authentication token is required");
         }
         if (!sessionTokenService.isValid(token)) {

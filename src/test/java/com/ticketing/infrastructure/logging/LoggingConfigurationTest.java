@@ -28,6 +28,8 @@ class LoggingConfigurationTest {
 
         assertTrue(waitForFileToContain(EVENT_LOG, marker, Duration.ofSeconds(3)),
                 "WARN message should be persisted to logs/event.log");
+        assertTrue(fileContainsLineWith(EVENT_LOG, marker, "WARN"),
+            "WARN message should be written with WARN level in logs/event.log");
         assertFalse(fileContains(ERROR_LOG, marker),
                 "WARN message must not be persisted to logs/error.log");
     }
@@ -58,5 +60,11 @@ class LoggingConfigurationTest {
 
     private static boolean fileContains(Path path, String marker) throws Exception {
         return Files.exists(path) && Files.readString(path).contains(marker);
+    }
+
+    private static boolean fileContainsLineWith(Path path, String marker, String level) throws Exception {
+    return Files.exists(path)
+            && Files.readAllLines(path).stream()
+                    .anyMatch(line -> line.contains(marker) && line.contains(level));
     }
 }

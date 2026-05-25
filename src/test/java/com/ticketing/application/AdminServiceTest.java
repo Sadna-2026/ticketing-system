@@ -36,6 +36,7 @@ import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 public class AdminServiceTest {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminService.class);
     private IMemberRepository memberRepository;
     private ICompanyRepository companyRepository;
     private ISessionTokenService sessionTokenService;

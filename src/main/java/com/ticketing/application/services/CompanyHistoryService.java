@@ -50,6 +50,7 @@ public class CompanyHistoryService {
         boolean allowed = appt != null
                 && (appt.isOwner() || appt.hasPermission(ManagerPermission.VIEW_REPORTS));
         if (!allowed) {
+            log.warn("Purchase history request denied: company={}, by={}", company.getName(), memberId);
             throw new SecurityException(
                     "Viewing purchase history requires Owner role or VIEW_REPORTS permission");
         }
@@ -62,13 +63,16 @@ public class CompanyHistoryService {
 
     private UUID requireMember(String token) {
         if (token == null || token.isBlank()) {
+            log.warn("Purchase history request denied: missing token");
             throw new IllegalArgumentException("Authentication token is required");
         }
         if (!sessionTokenService.isValid(token)) {
+            log.warn("Purchase history request denied: invalid token");
             throw new IllegalArgumentException("Invalid or expired authentication token");
         }
         UUID id = sessionTokenService.extractMemberId(token);
         if (id == null) {
+            log.warn("Purchase history request denied: guest token used");
             throw new SecurityException("Guests cannot view purchase history");
         }
         return id;
