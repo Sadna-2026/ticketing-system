@@ -12,16 +12,16 @@ import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 
+@org.springframework.stereotype.Component
 public class InMemoryOrderRepository implements IOrderRepository {
 
-    private final ConcurrentHashMap<UUID, VersionedActiveOrder> activeOrders = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, ActiveOrder> activeOrders = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, CompletedPurchase> completedPurchases = new ConcurrentHashMap<>();
 
     @Override
     public Optional<ActiveOrder> findActiveBySessionId(UUID sessionId) {
         if (sessionId == null) return Optional.empty();
         return activeOrders.values().stream()
-                .map(e -> e.entity)
                 .filter(o -> sessionId.equals(o.getSessionId()) && o.isActive())
                 .findFirst();
     }
@@ -32,26 +32,24 @@ public class InMemoryOrderRepository implements IOrderRepository {
         activeOrders.compute(order.getId(), (id, existing) -> {
             if (existing == null) {
                 order.incrementVersion();
-                return new VersionedActiveOrder(order, order.getVersion());
+                return order;
             }
-            if (order.getVersion() != existing.version) {
+            if (order.getVersion() != existing.getVersion()) {
                 throw new OptimisticLockException("ActiveOrder", id);
             }
             order.incrementVersion();
-            return new VersionedActiveOrder(order, order.getVersion());
+            return order;
         });
     }
 
     @Override
     public Optional<ActiveOrder> findById(UUID orderId) {
-        VersionedActiveOrder entry = activeOrders.get(orderId);
-        return entry != null ? Optional.of(entry.entity) : Optional.empty();
+        return Optional.ofNullable(activeOrders.get(orderId));
     }
 
     @Override
     public List<ActiveOrder> findAllActive() {
         return activeOrders.values().stream()
-                .map(e -> e.entity)
                 .filter(ActiveOrder::isActive)
                 .collect(Collectors.toList());
     }
@@ -60,7 +58,6 @@ public class InMemoryOrderRepository implements IOrderRepository {
     public List<ActiveOrder> findActiveByEventId(UUID eventId) {
         if (eventId == null) return List.of();
         return activeOrders.values().stream()
-                .map(e -> e.entity)
                 .filter(o -> o.isActive() && eventId.equals(o.getEventId()))
                 .collect(Collectors.toList());
     }
@@ -111,13 +108,5 @@ public class InMemoryOrderRepository implements IOrderRepository {
         return new ArrayList<>(completedPurchases.values());
     }
 
-    private static class VersionedActiveOrder {
-        final ActiveOrder entity;
-        final int version;
-
-        VersionedActiveOrder(ActiveOrder entity, int version) {
-            this.entity = entity;
-            this.version = version;
-        }
-    }
 }
+

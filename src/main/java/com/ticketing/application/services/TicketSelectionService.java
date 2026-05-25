@@ -18,6 +18,7 @@ import com.ticketing.domain.event.Seat;
  * selection is currently locked or sold. Does NOT mutate state — actual
  * locking is done by UC-II.9-10.
  */
+@org.springframework.stereotype.Service
 public class TicketSelectionService {
 
     private static final Logger log = LoggerFactory.getLogger(TicketSelectionService.class);
@@ -101,3 +102,4 @@ public class TicketSelectionService {
         }
     }
 }
+

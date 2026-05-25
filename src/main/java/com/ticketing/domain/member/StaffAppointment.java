@@ -31,6 +31,17 @@ public class StaffAppointment {
             Set<ManagerPermission> permissions,
             Set<UUID> appointedStaffMemberIds
     ) {
+        this(companyId, appointedByMemberId, role, permissions, appointedStaffMemberIds, false);
+    }
+
+    private StaffAppointment(
+            String companyId,
+            UUID appointedByMemberId,
+            StaffRole role,
+            Set<ManagerPermission> permissions,
+            Set<UUID> appointedStaffMemberIds,
+            boolean revoked
+    ) {
         if (companyId == null || companyId.isBlank()) {
             throw new IllegalArgumentException("companyId cannot be null or blank");
         }
@@ -43,6 +54,7 @@ public class StaffAppointment {
         this.role = role;
         this.managerPermissions = copyManagerPermissions(permissions);
         this.appointedStaffMemberIds = copyAppointedStaffIds(appointedStaffMemberIds);
+        this.revoked = revoked;
     }
 
     public String getCompanyId() {
@@ -144,6 +156,16 @@ public class StaffAppointment {
 
     public void updateAppointedBy(UUID newAppointerId) {
         this.appointedByMemberId = newAppointerId;
+    }
+
+    public StaffAppointment detachedCopy() {
+        return new StaffAppointment(
+                companyId,
+                appointedByMemberId,
+                role,
+                managerPermissions,
+                appointedStaffMemberIds,
+                revoked);
     }
 
     private static Set<ManagerPermission> copyManagerPermissions(Set<ManagerPermission> permissions) {

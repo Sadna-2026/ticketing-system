@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@org.springframework.stereotype.Component
 public class StubTicketSupplyGateway implements ITicketSupplyGateway {
 
     private boolean shouldFail = false;
@@ -44,5 +45,6 @@ public class StubTicketSupplyGateway implements ITicketSupplyGateway {
         return CancelResult.successful();
     }
 }
+
 
 

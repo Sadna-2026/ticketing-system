@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.ticketing.domain.auth.ISessionTokenRepository;
 import com.ticketing.domain.auth.SessionToken;
 import com.ticketing.domain.auth.SessionTokenData;
+import com.ticketing.domain.exception.OptimisticLockException;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
@@ -197,7 +198,11 @@ public class SessionTokenService implements ISessionTokenService {
                 expiration
         );
 
-        sessionTokenRepository.save(sessionToken);
+        try {
+            sessionTokenRepository.save(sessionToken);
+        } catch (OptimisticLockException ex) {
+            throw new IllegalStateException("Session token changed concurrently. Please retry.", ex);
+        }
 
         return jwt;
     }

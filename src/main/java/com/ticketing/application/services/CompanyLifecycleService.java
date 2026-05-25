@@ -15,6 +15,7 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.member.IMemberRepository;
@@ -27,6 +28,7 @@ import com.ticketing.domain.order.IOrderRepository;
  * Suspend / reopen / permanent-close operations for production companies.
  * Founder OR System Admin actor (the latter only for adminClose).
  */
+@org.springframework.stereotype.Service
 public class CompanyLifecycleService {
 
     private static final Logger log = LoggerFactory.getLogger(CompanyLifecycleService.class);
@@ -65,7 +67,7 @@ public class CompanyLifecycleService {
         requireFounder(memberId, company);
 
         company.suspend();
-        companyRepository.save(company);
+        saveCompany(company);
         log.info("Company suspended: name={}, by={}", companyName, memberId);
     }
 
@@ -75,7 +77,7 @@ public class CompanyLifecycleService {
         requireFounder(memberId, company);
 
         company.reopen();
-        companyRepository.save(company);
+        saveCompany(company);
         log.info("Company reopened: name={}, by={}", companyName, memberId);
     }
 
@@ -135,7 +137,7 @@ public class CompanyLifecycleService {
 
             pendingRefunds.remove(key);
             company.completeClosure();
-            companyRepository.save(company);
+            saveCompany(company);
             log.info("Pending closure completed: company={}", companyName);
         }
     }
@@ -150,7 +152,7 @@ public class CompanyLifecycleService {
             // we treat any non-cancelled event as something to wind down, regardless of date —
             // simpler than threading a clock through here, and past events being marked cancelled is harmless
             e.cancel();
-            eventRepository.save(e);
+            saveEvent(e);
         }
 
         // 2) refund completed purchases
@@ -172,7 +174,7 @@ public class CompanyLifecycleService {
         if (!failed.isEmpty()) {
             pendingRefunds.put(normalizeCompanyKey(company.getName()), failed);
             company.markPendingClosure();
-            companyRepository.save(company);
+            saveCompany(company);
             log.warn("Closure pending due to refund failures: company={}, failed={}",
                     company.getName(), failed.size());
             return;
@@ -185,14 +187,14 @@ public class CompanyLifecycleService {
 
         // 4) finalise close
         company.close();
-        companyRepository.save(company);
+        saveCompany(company);
         log.info("Company permanently closed: name={}, revokedRoles={}", company.getName(), revokeRoles);
     }
 
     private void revokeAllAppointments(String companyName) {
         for (Member m : memberRepository.findByCompanyAppointment(companyName)) {
             m.removeStaffAppointment(companyName);
-            memberRepository.save(m);
+            saveMember(m);
         }
     }
 
@@ -220,6 +222,33 @@ public class CompanyLifecycleService {
                 .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
     }
 
+    private void saveCompany(Company company) {
+        try {
+            companyRepository.save(company);
+        } catch (OptimisticLockException ex) {
+            log.warn("Company save conflict: company={}", company.getName());
+            throw new IllegalStateException("Company changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict during company lifecycle: eventId={}", event.getId());
+            throw new IllegalStateException("Event changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveMember(Member member) {
+        try {
+            memberRepository.save(member);
+        } catch (OptimisticLockException ex) {
+            log.warn("Member save conflict during company lifecycle: memberId={}", member.getId());
+            throw new IllegalStateException("Member changed concurrently. Please retry.", ex);
+        }
+    }
+
     private Object companyLock(String companyName) {
         return companyLocks.computeIfAbsent(normalizeCompanyKey(companyName), k -> new Object());
     }
@@ -242,3 +271,4 @@ public class CompanyLifecycleService {
 
     private record RefundJob(String transactionId, java.math.BigDecimal amount) {}
 }
+

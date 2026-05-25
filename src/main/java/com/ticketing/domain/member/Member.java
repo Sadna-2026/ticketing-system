@@ -18,6 +18,7 @@ public class Member {
     private String phoneNumber;
     private LocalDate dateOfBirth;
     private List<PendingRoleOffer> pendingOffers;
+    private int version;
 
     public Member(UUID memberId, String username, String email, String encryptedPassword) {
         this(memberId, username, email, encryptedPassword, null, null);
@@ -62,6 +63,14 @@ public class Member {
 
     public String getEmail() {
         return email;
+    }
+
+    public int getVersion() {
+        return version;
+    }
+
+    public void incrementVersion() {
+        this.version++;
     }
 
     public String getEncryptedPassword() {
@@ -180,5 +189,17 @@ public class Member {
             throw new IllegalArgumentException("offer cannot be null");
         }
         pendingOffers.add(offer);
+    }
+
+    public synchronized Member detachedCopy() {
+        Member copy = new Member(memberId, username, email, encryptedPassword, phoneNumber, dateOfBirth);
+        copy.version = this.version;
+        for (String companyId : staffAppointments.keySet()) {
+            copy.staffAppointments.put(companyId, staffAppointments.get(companyId).detachedCopy());
+        }
+        copy.pendingOffers = pendingOffers.stream()
+                .map(PendingRoleOffer::detachedCopy)
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        return copy;
     }
 }

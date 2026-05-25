@@ -20,6 +20,7 @@ import com.ticketing.domain.event.Seat;
  * Returns the venue map + live availability for events that can be browsed
  * (PUBLISHED or SOLD_OUT). DRAFT, CANCELLED, and unknown events return empty.
  */
+@org.springframework.stereotype.Service
 public class EventQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(EventQueryService.class);
@@ -87,3 +88,4 @@ public class EventQueryService {
                 seats);
     }
 }
+

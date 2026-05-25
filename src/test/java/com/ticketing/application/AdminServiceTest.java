@@ -131,6 +131,7 @@ public class AdminServiceTest {
         companyRepository.save(company);
 
         target.addStaffAppointment("SoleComp", new StaffAppointment("SoleComp", targetId, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+        memberRepository.save(target);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
             adminService.removeMember(adminToken, targetId);

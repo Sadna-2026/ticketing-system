@@ -82,6 +82,7 @@ public class CompletedPurchaseServiceTest {
         // Add manager as subordinate to owner's appointment
         StaffAppointment ownerAppt = owner.getStaffAppointment(COMPANY);
         ownerAppt.addAppointedStaffMember(managerId);
+        memberRepo.save(owner);
 
         // Setup subordinates under manager
         subordinate1Id = UUID.randomUUID();
@@ -102,6 +103,7 @@ public class CompletedPurchaseServiceTest {
         StaffAppointment managerAppt = manager.getStaffAppointment(COMPANY);
         managerAppt.addAppointedStaffMember(subordinate1Id);
         managerAppt.addAppointedStaffMember(subordinate2Id);
+        memberRepo.save(manager);
 
         // Setup company
         companyRepo.save(new Company(COMPANY, "desc", ownerId));
@@ -254,6 +256,7 @@ public class CompletedPurchaseServiceTest {
         // Add subordinate1_1 to subordinate1's subordinate list
         StaffAppointment sub1Appt = subordinate1.getStaffAppointment(COMPANY);
         sub1Appt.addAppointedStaffMember(subordinate1_1Id);
+        memberRepo.save(subordinate1);
 
         // Add purchases at various levels
         addPurchase(ownerId, "Level 0", new BigDecimal("100.00"));
@@ -279,6 +282,7 @@ public class CompletedPurchaseServiceTest {
 
         StaffAppointment sub1Appt = subordinate1.getStaffAppointment(COMPANY);
         sub1Appt.addAppointedStaffMember(subordinate1_1Id);
+        memberRepo.save(subordinate1);
 
         // Add purchases at all levels under manager
         addPurchase(managerId, "Manager Level", new BigDecimal("100.00"));

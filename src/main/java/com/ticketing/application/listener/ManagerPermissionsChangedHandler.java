@@ -4,6 +4,7 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
@@ -68,6 +69,10 @@ public class ManagerPermissionsChangedHandler implements IEventListener {
         }
 
         targetAppt.updateManagerPermissions(changeEvent.getNewPermissions());
-        memberRepository.save(targetMember);
+        try {
+            memberRepository.save(targetMember);
+        } catch (OptimisticLockException ex) {
+            throw new IllegalStateException("Manager permissions changed concurrently. Please retry.", ex);
+        }
     }
 }

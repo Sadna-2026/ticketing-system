@@ -8,6 +8,7 @@ import com.ticketing.domain.gateway.RefundResult;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+@org.springframework.stereotype.Component
 public class StubPaymentGateway implements IPaymentGateway {
     
     private boolean shouldFail = false;
@@ -37,5 +38,6 @@ public class StubPaymentGateway implements IPaymentGateway {
         return RefundResult.successful("REF-" + UUID.randomUUID().toString().substring(0, 8));
     }
 }
+
 
 

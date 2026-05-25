@@ -2,9 +2,6 @@ package com.ticketing.application.services;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -12,31 +9,28 @@ import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
-import com.ticketing.application.CreateEventRequest.AssignedZoneSpec;
-import com.ticketing.application.CreateEventRequest.GAZoneSpec;
-import com.ticketing.application.CreateEventRequest.SeatSpec;
-import com.ticketing.application.CreateEventRequest.ZoneSpec;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
-import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.EventCreationDomainService;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
-import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.Seat;
-import com.ticketing.domain.event.VenueMap;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
 import com.ticketing.domain.lottery.LotteryEntry;
+import com.ticketing.domain.lottery.LotteryRegistrationDomainService;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.IOrderRepository;
 
+@org.springframework.stereotype.Service
 public class EventService {
 
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
@@ -48,6 +42,10 @@ public class EventService {
     private final ISessionTokenService sessionTokenService;
     private final ILotteryRepository lotteryRepository;
     private final Clock clock;
+    
+    private final EventCreationDomainService eventCreationService;
+    private final LotteryRegistrationDomainService lotteryRegistrationService;
+    private final OrderService orderService;
 
     // Per-event lock so inventory edits on Event A don't block Event B.
     private final java.util.concurrent.ConcurrentHashMap<UUID, Object> eventLocks =
@@ -63,7 +61,8 @@ public class EventService {
                         IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService,
                         ILotteryRepository lotteryRepository,
-                        Clock clock) {
+                        Clock clock,
+                        OrderService orderService) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
@@ -71,6 +70,31 @@ public class EventService {
         this.sessionTokenService = sessionTokenService;
         this.lotteryRepository = lotteryRepository;
         this.clock = clock;
+        this.orderService = orderService;
+        
+        this.eventCreationService = new EventCreationDomainService();
+        this.lotteryRegistrationService = new LotteryRegistrationDomainService(this.lotteryRepository);
+    }
+
+    public EventService(IEventRepository eventRepository,
+                        ICompanyRepository companyRepository,
+                        IMemberRepository memberRepository,
+                        IOrderRepository orderRepository,
+                        ISessionTokenService sessionTokenService,
+                        ILotteryRepository lotteryRepository,
+                        Clock clock) {
+        this(eventRepository, companyRepository, memberRepository, orderRepository,
+                sessionTokenService, lotteryRepository, clock, null);
+    }
+
+    public EventService(IEventRepository eventRepository,
+                        ICompanyRepository companyRepository,
+                        IMemberRepository memberRepository,
+                        IOrderRepository orderRepository,
+                        ISessionTokenService sessionTokenService,
+                        OrderService orderService) {
+        this(eventRepository, companyRepository, memberRepository, orderRepository,
+                sessionTokenService, null, Clock.systemUTC(), orderService);
     }
 
     public EventService(IEventRepository eventRepository,
@@ -79,7 +103,7 @@ public class EventService {
                         IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
-                sessionTokenService, null, Clock.systemUTC());
+                sessionTokenService, null, Clock.systemUTC(), null);
     }
 
     /**
@@ -98,34 +122,10 @@ public class EventService {
 
         log.info("Creating event: companyName={}, memberId={}, name={}",
                 company.getName(), memberId, request.name());
-        //TODO : in V2 add to here support for choosing type of policies
-        Event event = new Event(
-                UUID.randomUUID(),
-                company.getName(),
-                request.name(),
-                request.description(),
-                request.category(),
-                request.schedule(),
-                request.lockTimerDuration(),
-                new AlwaysAllowPolicy(),
-                new NoDiscountPolicy(),
-                request.saleMethod(),
-                request.lotteryWindow());
+        
+        Event event = eventCreationService.createEventFromRequest(company, request);
 
-        Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
-        for (CreateEventRequest.ZoneSpec spec : request.zones()) {
-            InventoryZone zone = buildZone(spec);
-            if (zoneIdsByName.put(spec.name(), zone.getId()) != null) {
-                throw new IllegalArgumentException(
-                        "Duplicate zone name in request: " + spec.name());
-            }
-            event.addZone(zone);
-        }
-
-        VenueMap venueMap = buildVenueMap(request.sectionToZoneName(), zoneIdsByName);
-        event.setVenueMap(venueMap);
-
-        eventRepository.save(event);
+        saveEvent(event);
         log.info("Event created: eventId={}, companyName={}, status=DRAFT",
                 event.getId(), company.getName());
         return event.getId();
@@ -145,37 +145,19 @@ public class EventService {
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
 
-        if (!event.isLottery()) {
-            log.warn("Lottery registration denied: event {} does not support lottery", request.eventId());
-            return LotteryRegistrationResponse.failure("Event does not support lottery sale method.");
-        }
-
         Instant now = clock.instant();
-        if (!event.isLotteryRegistrationOpen(now)) {
-            log.warn("Lottery registration denied: registration window closed for event {}", request.eventId());
-            return LotteryRegistrationResponse.failure("Lottery registration window is closed.");
+
+        LotteryEntry entry;
+        try {
+            entry = lotteryRegistrationService.registerMember(event, memberId, request.zoneId(), request.quantity(), now);
+        } catch (IllegalStateException e) {
+            log.warn("Lottery registration denied: {}", e.getMessage());
+            return LotteryRegistrationResponse.failure(e.getMessage());
+        } catch (OptimisticLockException e) {
+            log.warn("Lottery registration conflict: eventId={}, memberId={}", request.eventId(), memberId);
+            return LotteryRegistrationResponse.failure("Lottery registration changed concurrently. Please retry.");
         }
 
-        if (lotteryRepository.findByEventAndMember(request.eventId(), memberId).isPresent()) {
-            log.warn("Lottery registration denied: member {} already registered for event {}", memberId, request.eventId());
-            return LotteryRegistrationResponse.failure("Member is already registered for this lottery.");
-        }
-
-        // Validate zone exists in event
-        event.findZone(request.zoneId());
-
-        LotteryEntry entry = new LotteryEntry(
-                UUID.randomUUID(),
-                request.eventId(),
-                memberId,
-                request.zoneId(),
-                request.quantity(),
-                now
-        );
-        lotteryRepository.save(entry);
-
-        log.info("Lottery registration successful: memberId={}, eventId={}, entryId={}",
-                memberId, request.eventId(), entry.id());
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
@@ -201,8 +183,11 @@ public class EventService {
 
         log.info("Cancelling event: eventId={}, companyName={}", eventId, company.getName());
         event.cancel();
-        eventRepository.save(event);
-        // TODO: refund completed purchases once that pipeline lands
+        saveEvent(event);
+        
+        if (orderService != null) {
+            orderService.refundEventPurchases(eventId);
+        }
     }
 
     /**
@@ -251,7 +236,7 @@ public class EventService {
             event.setSchedule(request.schedule());
         }
 
-        eventRepository.save(event);
+        saveEvent(event);
         log.info("Event edited: eventId={}, companyName={}, by={}",
                 event.getId(), company.getName(), memberId);
         return EventDetailsDTO.from(event);
@@ -259,6 +244,15 @@ public class EventService {
 
     private boolean hasActiveReservations(UUID eventId) {
         return !orderRepository.findActiveByEventId(eventId).isEmpty();
+    }
+
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict: eventId={}", event.getId());
+            throw new IllegalStateException("Event changed concurrently. Please retry.", ex);
+        }
     }
 
     // --- UC-C.1: layout & inventory ---
@@ -278,7 +272,7 @@ public class EventService {
             for (CreateEventRequest.SeatSpec spec : seats) {
                 zone.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.seatNumber()));
             }
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: added {} seats to zone={} event={}", seats.size(), zoneId, eventId);
         }
     }
@@ -295,7 +289,7 @@ public class EventService {
             for (UUID seatId : seatIds) {
                 zone.removeSeat(seatId);
             }
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: removed {} seats from zone={} event={}", seatIds.size(), zoneId, eventId);
         }
     }
@@ -305,7 +299,7 @@ public class EventService {
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).increaseCapacity(delta);
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: GA capacity +{} on zone={} event={}", delta, zoneId, eventId);
         }
     }
@@ -315,7 +309,7 @@ public class EventService {
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).decreaseCapacity(delta);
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: GA capacity -{} on zone={} event={}", delta, zoneId, eventId);
         }
     }
@@ -326,7 +320,7 @@ public class EventService {
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(token, eventId);
             event.findZone(zoneId).setPricePerTicket(newPrice);
-            eventRepository.save(event);
+            saveEvent(event);
             log.info("Inventory: price={} on zone={} event={}", newPrice, zoneId, eventId);
         }
     }
@@ -406,36 +400,5 @@ public class EventService {
         }
     }
 
-    private InventoryZone buildZone(CreateEventRequest.ZoneSpec spec) {
-        return switch (spec) {
-            case CreateEventRequest.GAZoneSpec ga -> InventoryZone.createGA(
-                    UUID.randomUUID(), ga.name(), ga.pricePerTicket(), ga.maxCapacity());
-            case CreateEventRequest.AssignedZoneSpec a -> {
-                InventoryZone zone = InventoryZone.createAssigned(
-                        UUID.randomUUID(), a.name(), a.pricePerTicket());
-                for (CreateEventRequest.SeatSpec seatSpec : a.seats()) {
-                    zone.addSeat(new Seat(UUID.randomUUID(),
-                            seatSpec.row(), seatSpec.seatNumber()));
-                }
-                yield zone;
-            }
-        };
-    }
-
-    private VenueMap buildVenueMap(Map<String, String> sectionToZoneName,
-                                   Map<String, UUID> zoneIdsByName) {
-        Map<String, UUID> sectionToZoneId = new HashMap<>(sectionToZoneName.size());
-        for (Map.Entry<String, String> e : sectionToZoneName.entrySet()) {
-            String zoneName = e.getValue();
-            UUID zoneId = zoneIdsByName.get(zoneName);
-            if (zoneId == null) {
-                throw new IllegalArgumentException(
-                        "Venue map section '" + e.getKey()
-                        + "' references unknown zone: " + zoneName);
-            }
-            sectionToZoneId.put(e.getKey(), zoneId);
-        }
-        return new VenueMap(sectionToZoneId);
-    }
-
 }
+

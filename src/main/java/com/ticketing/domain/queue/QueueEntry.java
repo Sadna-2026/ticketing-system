@@ -29,6 +29,11 @@ public class QueueEntry {
         this.status = QueueEntryStatus.WAITING;
     }
 
+    private QueueEntry(UUID id, UUID sessionId, Instant joinedAt, QueueEntryStatus status) {
+        this(id, sessionId, joinedAt);
+        this.status = status;
+    }
+
     public UUID getId() { return id; }
     public UUID getSessionId() { return sessionId; }
     public Instant getJoinedAt() { return joinedAt; }
@@ -60,5 +65,9 @@ public class QueueEntry {
 
     public QueueEntryDto toQueueDto() {
         return new QueueEntryDto(id, sessionId, joinedAt, status.name());
+    }
+
+    public QueueEntry detachedCopy() {
+        return new QueueEntry(id, sessionId, joinedAt, status);
     }
 }
