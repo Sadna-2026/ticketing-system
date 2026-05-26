@@ -3,7 +3,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -98,15 +97,9 @@ public class AdminService {
 
     /**
      * UC-II.6.7 — System admin suspends a user.
-     *
-     * @param adminToken  valid admin session token
-     * @param targetMemberId  the member to suspend
-     * @param duration  suspension length, or null for permanent
-     * @param reason  human-readable reason shown to the user
-     * @return the created Suspension
      */
-    public synchronized Suspension suspendUser(String adminToken, UUID targetMemberId,
-                                                Duration duration, String reason) {
+    public Suspension suspendUser(String adminToken, UUID targetMemberId,
+                                   Duration duration, String reason) {
         log.info("Admin suspend user requested: targetMemberId={}, permanent={}",
                 targetMemberId, duration == null);
 
@@ -125,19 +118,15 @@ public class AdminService {
                     return new IllegalArgumentException("Target member not found: " + targetMemberId);
                 });
 
-        // Don't allow suspending the sole system admin
         if (isSoleAdmin(targetMemberId)) {
             log.warn("Suspend user denied: target is sole system admin id={}", targetMemberId);
             throw new IllegalStateException("Cannot suspend the last system admin");
         }
 
         UUID adminId = sessionTokenService.extractMemberId(adminToken);
-        Instant now = Instant.now();
-        Suspension suspension = new Suspension(
+        Suspension suspension = target.suspend(
                 adminId != null ? adminId : UUID.randomUUID(),
-                now, duration, reason);
-
-        target.addSuspension(suspension);
+                duration, reason);
         memberRepository.save(target);
 
         log.info("User suspended: targetMemberId={}, suspensionId={}, permanent={}, duration={}",
