@@ -3,7 +3,10 @@ package com.ticketing.presentation.vaadin.views;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
+import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
@@ -94,6 +98,33 @@ class NotificationsViewTest {
 
         assertTrue(hasText(view, "Your role appointment was approved."));
         assertTrue(hasText(view, "Showing 1 notification(s)."));
+    }
+
+    @Test
+    void GivenViewAttached_WhenRealtimeRegistrationSucceeds_ThenPendingNotificationsAreNotReloadedOverFlush() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        when(presenter.registerRealtimeListener(any()))
+                .thenReturn(RegistrationResult.success("member-1", "listener-1"));
+        NotificationsView view = new NotificationsView(presenter);
+
+        UI.getCurrent().add(view);
+
+        assertTrue(hasText(view, "Real-time notifications connected."));
+        assertTrue(hasText(view, "No pending notifications."));
+        verify(presenter, never()).loadPendingNotifications();
+    }
+
+    @Test
+    void GivenRegisteredView_WhenDetached_ThenOnlyOwnRealtimeRegistrationIsRemoved() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        when(presenter.registerRealtimeListener(any()))
+                .thenReturn(RegistrationResult.success("member-1", "listener-1"));
+        NotificationsView view = new NotificationsView(presenter);
+        UI.getCurrent().add(view);
+
+        UI.getCurrent().remove(view);
+
+        verify(presenter).unregisterRealtimeListener("member-1", "listener-1");
     }
 
     private boolean hasButton(Component root, String text) {

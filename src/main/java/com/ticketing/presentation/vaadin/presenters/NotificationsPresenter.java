@@ -69,24 +69,24 @@ public class NotificationsPresenter {
     public RegistrationResult registerRealtimeListener(NotificationListener listener) {
         String memberId = currentMemberId();
         if (memberId == null) {
-            return RegistrationResult.failure(LOGIN_REQUIRED_MESSAGE, null);
+            return RegistrationResult.failure(LOGIN_REQUIRED_MESSAGE, null, null);
         }
 
         try {
-            realtimeNotificationService.registerListener(memberId, listener);
-            return RegistrationResult.success(memberId);
+            String registrationId = realtimeNotificationService.registerListener(memberId, listener);
+            return RegistrationResult.success(memberId, registrationId);
         } catch (RuntimeException ex) {
             logger.warn(REALTIME_FAILURE_MESSAGE, ex);
-            return RegistrationResult.failure(REALTIME_FAILURE_MESSAGE, memberId);
+            return RegistrationResult.failure(REALTIME_FAILURE_MESSAGE, memberId, null);
         }
     }
 
-    public void unregisterRealtimeListener(String memberId) {
-        if (memberId == null || memberId.isBlank()) {
+    public void unregisterRealtimeListener(String memberId, String registrationId) {
+        if (memberId == null || memberId.isBlank() || registrationId == null || registrationId.isBlank()) {
             return;
         }
 
-        realtimeNotificationService.removeListener(memberId);
+        realtimeNotificationService.removeListener(memberId, registrationId);
     }
 
     public String currentMemberId() {
@@ -113,14 +113,14 @@ public class NotificationsPresenter {
         }
     }
 
-    public record RegistrationResult(boolean success, String message, String memberId) {
+    public record RegistrationResult(boolean success, String message, String memberId, String registrationId) {
 
-        public static RegistrationResult success(String memberId) {
-            return new RegistrationResult(true, "Real-time notifications connected.", memberId);
+        public static RegistrationResult success(String memberId, String registrationId) {
+            return new RegistrationResult(true, "Real-time notifications connected.", memberId, registrationId);
         }
 
-        public static RegistrationResult failure(String message, String memberId) {
-            return new RegistrationResult(false, message, memberId);
+        public static RegistrationResult failure(String message, String memberId, String registrationId) {
+            return new RegistrationResult(false, message, memberId, registrationId);
         }
     }
 }

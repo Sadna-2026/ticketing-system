@@ -175,6 +175,48 @@ class WebSocketNotificationServiceTest {
         }
 
         @Test
+        void GivenTwoListenersForMember_WhenOneRegistrationIsRemoved_ThenOtherListenerRemainsActive() throws Exception {
+            List<String> first = Collections.synchronizedList(new ArrayList<>());
+            List<String> second = Collections.synchronizedList(new ArrayList<>());
+            CountDownLatch delivered = new CountDownLatch(1);
+            String firstRegistration = service.registerListener("user-5", first::add);
+            service.registerListener("user-5", message -> {
+                second.add(message);
+                delivered.countDown();
+            });
+
+            service.removeListener("user-5", firstRegistration);
+            service.notify("user-5", "Still connected");
+
+            assertTrue(delivered.await(2, TimeUnit.SECONDS));
+            assertTrue(first.isEmpty());
+            assertEquals(List.of("Still connected"), second);
+            assertTrue(service.hasListener("user-5"));
+            assertTrue(pendingRepo.getPendingNotifications("user-5").isEmpty());
+        }
+
+        @Test
+        void GivenTwoListenersForMember_WhenNotify_ThenBothListenersReceiveMessage() throws Exception {
+            List<String> first = Collections.synchronizedList(new ArrayList<>());
+            List<String> second = Collections.synchronizedList(new ArrayList<>());
+            CountDownLatch delivered = new CountDownLatch(2);
+            service.registerListener("user-6", message -> {
+                first.add(message);
+                delivered.countDown();
+            });
+            service.registerListener("user-6", message -> {
+                second.add(message);
+                delivered.countDown();
+            });
+
+            service.notify("user-6", "Broadcast");
+
+            assertTrue(delivered.await(2, TimeUnit.SECONDS));
+            assertEquals(List.of("Broadcast"), first);
+            assertEquals(List.of("Broadcast"), second);
+        }
+
+        @Test
         void GivenNoListener_WhenHasListener_ThenReturnsFalse() {
             assertFalse(service.hasListener("nobody"));
         }

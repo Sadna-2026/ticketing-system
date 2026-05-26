@@ -119,11 +119,14 @@ class NotificationsPresenterTest {
         UUID memberId = UUID.randomUUID();
         SessionContext.setMemberId(memberId);
         NotificationListener listener = message -> { };
+        when(realtimeNotificationService.registerListener(eq(memberId.toString()), eq(listener)))
+                .thenReturn("listener-1");
 
         RegistrationResult result = presenter.registerRealtimeListener(listener);
 
         assertTrue(result.success());
         assertEquals(memberId.toString(), result.memberId());
+        assertEquals("listener-1", result.registrationId());
         verify(realtimeNotificationService).registerListener(eq(memberId.toString()), eq(listener));
     }
 
@@ -139,10 +142,11 @@ class NotificationsPresenterTest {
     @Test
     void GivenMemberId_WhenUnregisteringRealtimeListener_ThenListenerIsRemoved() {
         String memberId = UUID.randomUUID().toString();
+        String registrationId = UUID.randomUUID().toString();
 
-        presenter.unregisterRealtimeListener(memberId);
+        presenter.unregisterRealtimeListener(memberId, registrationId);
 
-        verify(realtimeNotificationService).removeListener(memberId);
+        verify(realtimeNotificationService).removeListener(memberId, registrationId);
     }
 
     private void installVaadinSession() {

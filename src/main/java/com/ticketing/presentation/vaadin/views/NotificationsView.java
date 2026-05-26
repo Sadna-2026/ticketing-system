@@ -29,6 +29,7 @@ public class NotificationsView extends VerticalLayout {
     private final Button clear = new Button("Clear notifications");
 
     private String registeredMemberId;
+    private String registeredListenerId;
     private int visibleNotificationCount;
 
     public NotificationsView(NotificationsPresenter presenter) {
@@ -54,7 +55,6 @@ public class NotificationsView extends VerticalLayout {
 
         addAttachListener(event -> {
             registerRealtimeNotifications(event.getUI());
-            loadPendingNotifications(false);
         });
         addDetachListener(event -> unregisterRealtimeNotifications());
     }
@@ -78,22 +78,27 @@ public class NotificationsView extends VerticalLayout {
         );
         if (!result.success()) {
             registeredMemberId = null;
+            registeredListenerId = null;
             connectionStatus.setText(result.message());
+            notificationsStatus.setText(result.message());
             UiMessages.info(result.message());
             return;
         }
 
         registeredMemberId = result.memberId();
+        registeredListenerId = result.registrationId();
         connectionStatus.setText(result.message());
+        notificationsStatus.setText("No pending notifications.");
     }
 
     private void unregisterRealtimeNotifications() {
-        if (registeredMemberId == null) {
+        if (registeredMemberId == null || registeredListenerId == null) {
             return;
         }
 
-        presenter.unregisterRealtimeListener(registeredMemberId);
+        presenter.unregisterRealtimeListener(registeredMemberId, registeredListenerId);
         registeredMemberId = null;
+        registeredListenerId = null;
     }
 
     private void loadPendingNotifications(boolean showToast) {

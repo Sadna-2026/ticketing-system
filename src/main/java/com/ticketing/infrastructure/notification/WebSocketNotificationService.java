@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +31,7 @@ public class WebSocketNotificationService implements INotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(WebSocketNotificationService.class);
 
-    private final ConcurrentHashMap<String, NotificationListener> listeners = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConcurrentHashMap<String, NotificationListener>> listeners = new ConcurrentHashMap<>();
     private final IPendingNotificationRepository pendingRepository;
     private final ExecutorService executor;
 
@@ -54,21 +55,29 @@ public class WebSocketNotificationService implements INotificationService {
             return;
         }
 
-        NotificationListener listener = listeners.get(memberId);
-        if (listener != null) {
-            executor.submit(() -> {
-                try {
-                    listener.onMessage(message);
-                    log.info("Notification pushed to connected user: memberId={}", memberId);
-                } catch (Exception e) {
-                    log.error("Failed to push notification to memberId={}, saving as pending", memberId, e);
-                    pendingRepository.savePendingNotification(memberId, message);
-                }
-            });
-        } else {
+        ConcurrentHashMap<String, NotificationListener> memberListeners = listeners.get(memberId);
+        if (memberListeners == null || memberListeners.isEmpty()) {
             pendingRepository.savePendingNotification(memberId, message);
             log.info("User offline, notification saved as pending: memberId={}", memberId);
+            return;
         }
+
+        executor.submit(() -> {
+            boolean delivered = false;
+            for (NotificationListener listener : memberListeners.values()) {
+                try {
+                    listener.onMessage(message);
+                    delivered = true;
+                    log.info("Notification pushed to connected user: memberId={}", memberId);
+                } catch (Exception e) {
+                    log.error("Failed to push notification to memberId={}", memberId, e);
+                }
+            }
+            if (!delivered) {
+                pendingRepository.savePendingNotification(memberId, message);
+                log.info("No active listener accepted notification, saved as pending: memberId={}", memberId);
+            }
+        });
     }
 
     /**
@@ -76,30 +85,49 @@ public class WebSocketNotificationService implements INotificationService {
      * Any pending notifications accumulated while the user was offline are
      * flushed immediately to the new listener.
      */
-    public void registerListener(String memberId, NotificationListener listener) {
+    public String registerListener(String memberId, NotificationListener listener) {
         if (memberId == null || listener == null) {
             throw new IllegalArgumentException("memberId and listener must not be null");
         }
-        listeners.put(memberId, listener);
-        log.info("Listener registered for memberId={}", memberId);
+        String registrationId = UUID.randomUUID().toString();
+        listeners.computeIfAbsent(memberId, key -> new ConcurrentHashMap<>())
+                .put(registrationId, listener);
+        log.info("Listener registered for memberId={}, registrationId={}", memberId, registrationId);
 
         flushPendingNotifications(memberId, listener);
+        return registrationId;
     }
 
     /**
-     * Removes the listener for a user (e.g. when a WebSocket session closes).
+     * Removes all listeners for a user.
      */
     public void removeListener(String memberId) {
         if (memberId == null) return;
         listeners.remove(memberId);
-        log.info("Listener removed for memberId={}", memberId);
+        log.info("Listeners removed for memberId={}", memberId);
+    }
+
+    /**
+     * Removes a specific listener registration for a user.
+     */
+    public void removeListener(String memberId, String registrationId) {
+        if (memberId == null || registrationId == null) return;
+        ConcurrentHashMap<String, NotificationListener> memberListeners = listeners.get(memberId);
+        if (memberListeners == null) return;
+
+        memberListeners.remove(registrationId);
+        if (memberListeners.isEmpty()) {
+            listeners.remove(memberId, memberListeners);
+        }
+        log.info("Listener removed for memberId={}, registrationId={}", memberId, registrationId);
     }
 
     /**
      * Returns true if a listener is currently registered for the given memberId.
      */
     public boolean hasListener(String memberId) {
-        return memberId != null && listeners.containsKey(memberId);
+        ConcurrentHashMap<String, NotificationListener> memberListeners = memberId == null ? null : listeners.get(memberId);
+        return memberListeners != null && !memberListeners.isEmpty();
     }
 
     @PreDestroy
