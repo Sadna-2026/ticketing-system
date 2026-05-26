@@ -7,9 +7,13 @@ import java.util.concurrent.Executors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.notification.IPendingNotificationRepository;
+
+import jakarta.annotation.PreDestroy;
 
 /**
  * Real notification service backed by per-user listeners (e.g. WebSocket sessions).
@@ -21,6 +25,7 @@ import com.ticketing.domain.notification.IPendingNotificationRepository;
  * Application and domain layers remain unaware of WebSockets — they only see
  * INotificationService.notify(memberId, message).
  */
+@Component
 public class WebSocketNotificationService implements INotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(WebSocketNotificationService.class);
@@ -29,6 +34,7 @@ public class WebSocketNotificationService implements INotificationService {
     private final IPendingNotificationRepository pendingRepository;
     private final ExecutorService executor;
 
+    @Autowired
     public WebSocketNotificationService(IPendingNotificationRepository pendingRepository) {
         this(pendingRepository, Executors.newCachedThreadPool());
     }
@@ -94,6 +100,11 @@ public class WebSocketNotificationService implements INotificationService {
      */
     public boolean hasListener(String memberId) {
         return memberId != null && listeners.containsKey(memberId);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdownNow();
     }
 
     private void flushPendingNotifications(String memberId, NotificationListener listener) {

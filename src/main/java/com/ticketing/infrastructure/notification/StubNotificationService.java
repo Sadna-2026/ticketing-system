@@ -8,7 +8,6 @@ import com.ticketing.application.services.INotificationService;
  * No-op stub implementation for V1.
  * Safely sinks notification calls without attempting external delivery.
  */
-@org.springframework.stereotype.Component
 public class StubNotificationService implements INotificationService {
     
     private static final Logger logger = Logger.getLogger(StubNotificationService.class.getName());

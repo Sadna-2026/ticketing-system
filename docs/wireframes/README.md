@@ -19,6 +19,10 @@ Each screen lives here as a `.png` or `.pdf` file alongside this README.
 | 11 | `11-queue-waiting.png` | Queue waiting screen | Guest / Member |
 | 12 | `12-lottery-registration.png` | Lottery registration | Member |
 
+## V2 implementation note
+
+The Vaadin `/notifications` route added in V2 is intentionally outside the V1 wireframe set above. It presents a member notification panel with refresh/clear actions and real-time toast delivery for connected users.
+
 ## What each screen needs to show
 
 Detailed layout briefs — use these as the spec when drawing.
