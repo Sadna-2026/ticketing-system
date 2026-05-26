@@ -3,6 +3,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -166,6 +169,37 @@ public class AdminService {
 
         log.info("Suspension cancelled: targetMemberId={}, suspensionId={}",
                 targetMemberId, suspensionId);
+    }
+
+    /**
+     * UC-II.6.9 — System admin views user suspensions.
+     * Returns suspension records across all members, mapped to DTOs.
+     *
+     * @param activeOnly if true, only currently-active suspensions are returned
+     */
+    public List<SuspensionDTO> listSuspensions(String adminToken, boolean activeOnly) {
+        log.info("Admin list suspensions requested: activeOnly={}", activeOnly);
+
+        if (!isAdmin(adminToken)) {
+            log.warn("List suspensions denied: caller is not a system admin");
+            throw new SecurityException("System admin permission required");
+        }
+
+        Instant now = Instant.now();
+        List<Member> allMembers = memberRepository.findAll();
+        List<SuspensionDTO> result = new ArrayList<>();
+
+        for (Member member : allMembers) {
+            for (Suspension suspension : member.getSuspensions()) {
+                if (!activeOnly || suspension.isActive(now)) {
+                    result.add(SuspensionDTO.from(
+                            suspension, member.getId(), member.getUsername(), now));
+                }
+            }
+        }
+
+        log.info("Admin list suspensions completed: resultCount={}", result.size());
+        return result;
     }
 
     private boolean isAdmin(String token) {
