@@ -8,9 +8,12 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDate;
+
 import com.ticketing.application.ISystemClock;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.PolicyResult;
+import com.ticketing.domain.event.PurchaseContext;
 import com.ticketing.domain.gateway.CustomerInfo;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
@@ -36,8 +39,10 @@ public class OrderCheckoutDomainService {
         this.systemClock = systemClock;
     }
 
-    public CompletedPurchase processCheckout(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact, String couponCode) {
-        validatePurchasePolicy(event, order, order.getMemberId());
+    public CompletedPurchase processCheckout(ActiveOrder order, Event event,
+                                               BuyerContactSnapshot buyerContact, String couponCode,
+                                               LocalDate buyerDateOfBirth) {
+        validatePurchasePolicy(event, order, order.getMemberId(), buyerDateOfBirth);
 
         BigDecimal finalAmount = event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
 
@@ -123,11 +128,12 @@ public class OrderCheckoutDomainService {
         return supply;
     }
 
-    private void validatePurchasePolicy(Event event, ActiveOrder order, UUID memberId) {
-        PolicyResult validation = event.getEventPurchasePolicy().isAllowed(order, memberId);
+    private void validatePurchasePolicy(Event event, ActiveOrder order, UUID memberId, LocalDate buyerDateOfBirth) {
+        PurchaseContext ctx = new PurchaseContext(order, memberId, buyerDateOfBirth);
+        PolicyResult validation = event.getEventPurchasePolicy().isAllowed(ctx);
         if (!validation.allowed()) {
             throw new IllegalStateException("Purchase policy violation: "
-                    + validation.errorCode() + " " + validation.reason());
+                    + validation.errorCode() + " — " + validation.reason());
         }
     }
 

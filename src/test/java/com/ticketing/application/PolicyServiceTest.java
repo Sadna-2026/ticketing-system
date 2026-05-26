@@ -38,6 +38,7 @@ import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.PolicyResult;
+import com.ticketing.domain.event.PurchaseContext;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -113,7 +114,7 @@ class PolicyServiceTest {
 
     /** Custom purchase policy for testing — rejects everything. */
     private static IPurchasePolicy rejectAllPolicy() {
-        return (order, mid) -> PolicyResult.failure("REJECTED", "test rejection");
+        return (ctx) -> PolicyResult.failure("REJECTED", "test rejection");
     }
 
     /** Custom discount policy for testing — 50 % off. */
@@ -141,7 +142,7 @@ class PolicyServiceTest {
             policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, custom);
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
-            PolicyResult result = saved.getEventPurchasePolicy().isAllowed(null, null);
+            PolicyResult result = saved.getEventPurchasePolicy().isAllowed(new PurchaseContext(null, null, null));
             assertEquals("REJECTED", result.errorCode());
         }
 
@@ -239,7 +240,7 @@ class PolicyServiceTest {
             policyService.setCompanyPurchasePolicy(VALID_TOKEN, COMPANY_NAME, rejectAllPolicy());
 
             Company saved = companyRepository.findByName(COMPANY_NAME).orElseThrow();
-            PolicyResult result = saved.getPurchasePolicy().isAllowed(null, null);
+            PolicyResult result = saved.getPurchasePolicy().isAllowed(new PurchaseContext(null, null, null));
             assertEquals("REJECTED", result.errorCode());
         }
 
@@ -412,7 +413,7 @@ class PolicyServiceTest {
             policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
 
             IPurchasePolicy policy = policyService.getEventPurchasePolicy(VALID_TOKEN, eventId);
-            PolicyResult result = policy.isAllowed(null, null);
+            PolicyResult result = policy.isAllowed(new PurchaseContext(null, null, null));
             assertEquals("REJECTED", result.errorCode());
         }
     }
