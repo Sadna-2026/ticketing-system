@@ -3,10 +3,10 @@ package com.ticketing.domain.company;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.ticketing.domain.event.IDiscountPolicy;
-import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
+import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
+import com.ticketing.domain.event.NoDiscountPolicy;
 
 public class Company {
     private String name; // also the unique identifier for the company
