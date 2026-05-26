@@ -1,9 +1,9 @@
 package com.ticketing.presentation.vaadin.util;
 
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.Notification.Position;
 import com.vaadin.flow.component.notification.NotificationVariant;
-import com.vaadin.flow.component.UI;
 
 public final class UiMessages {
 
