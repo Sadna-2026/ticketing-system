@@ -15,6 +15,7 @@ public class Company {
     private CompanyStatus status;
     private IPurchasePolicy purchasePolicy;
     private IDiscountPolicy discountPolicy;
+    private boolean allowDiscountStacking;  // true = company + event discounts both apply
     private int version;
 
     public Company(String name, String description, UUID founderId) {
@@ -31,6 +32,7 @@ public class Company {
         this.status = CompanyStatus.ACTIVE;
         this.purchasePolicy = new AlwaysAllowPolicy();
         this.discountPolicy = new NoDiscountPolicy();
+        this.allowDiscountStacking = false;
     }
 
     // --- Getters ---
@@ -43,6 +45,12 @@ public class Company {
 
     public IPurchasePolicy getPurchasePolicy() { return purchasePolicy; }
     public IDiscountPolicy getDiscountPolicy() { return discountPolicy; }
+
+    public boolean isAllowDiscountStacking() { return allowDiscountStacking; }
+
+    public void setAllowDiscountStacking(boolean allow) {
+        this.allowDiscountStacking = allow;
+    }
 
     public void setPurchasePolicy(IPurchasePolicy policy) {
         if (policy == null) throw new IllegalArgumentException("Purchase policy cannot be null");
@@ -67,6 +75,7 @@ public class Company {
         copy.status = this.status;
         copy.purchasePolicy = this.purchasePolicy;
         copy.discountPolicy = this.discountPolicy;
+        copy.allowDiscountStacking = this.allowDiscountStacking;
         copy.version = this.version;
         return copy;
     }

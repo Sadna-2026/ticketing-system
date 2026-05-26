@@ -1,6 +1,7 @@
 package com.ticketing.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -247,6 +248,58 @@ class CompanyServicePolicyTest {
 
             IDiscountPolicy policy = companyService.getCompanyDiscountPolicy(VALID_TOKEN, COMPANY_NAME);
             assertTrue(!(policy instanceof NoDiscountPolicy));
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Discount stacking
+    // ══════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Discount stacking")
+    class DiscountStacking {
+
+        @Test
+        void GivenNewCompany_WhenCheckStacking_ThenDefaultIsFalse() {
+            assertFalse(companyService.isDiscountStackingAllowed(VALID_TOKEN, COMPANY_NAME));
+        }
+
+        @Test
+        void GivenOwner_WhenEnableStacking_ThenStackingIsTrue() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+
+            companyService.setDiscountStacking(VALID_TOKEN, COMPANY_NAME, true);
+
+            assertTrue(companyService.isDiscountStackingAllowed(VALID_TOKEN, COMPANY_NAME));
+        }
+
+        @Test
+        void GivenOwner_WhenDisableStacking_ThenStackingIsFalse() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+
+            companyService.setDiscountStacking(VALID_TOKEN, COMPANY_NAME, true);
+            companyService.setDiscountStacking(VALID_TOKEN, COMPANY_NAME, false);
+
+            assertFalse(companyService.isDiscountStackingAllowed(VALID_TOKEN, COMPANY_NAME));
+        }
+
+        @Test
+        void GivenManagerWithPolicyMod_WhenSetStacking_ThenSuccess() {
+            appointAs(StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.POLICY_MODIFICATION));
+
+            companyService.setDiscountStacking(VALID_TOKEN, COMPANY_NAME, true);
+
+            assertTrue(companyService.isDiscountStackingAllowed(VALID_TOKEN, COMPANY_NAME));
+        }
+
+        @Test
+        void GivenManagerWithoutPolicyMod_WhenSetStacking_ThenDenied() {
+            appointAs(StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.INVENTORY_MGMT));
+
+            assertThrows(SecurityException.class,
+                    () -> companyService.setDiscountStacking(VALID_TOKEN, COMPANY_NAME, true));
         }
     }
 }

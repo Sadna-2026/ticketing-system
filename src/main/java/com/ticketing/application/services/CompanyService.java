@@ -258,6 +258,25 @@ public class CompanyService {
         log.info("Company discount policy reset to default: company={}, by={}", companyName, memberId);
     }
 
+    // ── Discount stacking ────────────────────────────────────────────
+
+    public void setDiscountStacking(String token, String companyName, boolean allow) {
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
+
+        UUID memberId = authenticateMember(token);
+        Company company = loadActiveCompany(companyName);
+        authorizePolicy(memberId, company.getName());
+
+        company.setAllowDiscountStacking(allow);
+        saveCompany(company);
+        log.info("Company discount stacking set to {}: company={}, by={}", allow, companyName, memberId);
+    }
+
+    public boolean isDiscountStackingAllowed(String token, String companyName) {
+        authenticateMember(token);
+        return loadCompany(companyName).isAllowDiscountStacking();
+    }
+
     // ── Read helpers (company policy queries) ───────────────────────
 
     public IPurchasePolicy getCompanyPurchasePolicy(String token, String companyName) {
