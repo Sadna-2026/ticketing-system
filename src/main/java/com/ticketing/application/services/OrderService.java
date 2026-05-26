@@ -85,7 +85,8 @@ public class OrderService {
                 memberRepository, null, paymentGateways, ticketSupplyGateways,
                 ticketSelectionService);
     }
-
+    
+    @org.springframework.beans.factory.annotation.Autowired
     public OrderService(IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService,
                         IEventRepository eventRepository,
