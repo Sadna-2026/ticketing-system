@@ -146,6 +146,58 @@ public class AdminService {
         return suspension;
     }
 
+    /**
+     * UC-II.6.8 — System admin cancels (lifts) an active suspension.
+     *
+     * @param adminToken     valid admin session token
+     * @param targetMemberId the suspended member
+     * @param suspensionId   the specific suspension to cancel
+     */
+    public synchronized void cancelSuspension(String adminToken, UUID targetMemberId,
+                                               UUID suspensionId) {
+        log.info("Admin cancel suspension requested: targetMemberId={}, suspensionId={}",
+                targetMemberId, suspensionId);
+
+        if (!isAdmin(adminToken)) {
+            log.warn("Cancel suspension denied: caller is not a system admin");
+            throw new SecurityException("System admin permission required");
+        }
+
+        if (targetMemberId == null) {
+            throw new IllegalArgumentException("targetMemberId is required");
+        }
+        if (suspensionId == null) {
+            throw new IllegalArgumentException("suspensionId is required");
+        }
+
+        Member target = memberRepository.findById(targetMemberId)
+                .orElseThrow(() -> {
+                    log.warn("Cancel suspension denied: member not found id={}", targetMemberId);
+                    return new IllegalArgumentException("Target member not found: " + targetMemberId);
+                });
+
+        // Find the suspension by ID
+        Suspension suspension = target.getSuspensions().stream()
+                .filter(s -> s.getSuspensionId().equals(suspensionId))
+                .findFirst()
+                .orElseThrow(() -> {
+                    log.warn("Cancel suspension denied: suspension not found id={}", suspensionId);
+                    return new IllegalArgumentException("Suspension not found: " + suspensionId);
+                });
+
+        // Must be currently active to cancel
+        if (!suspension.isActive(Instant.now())) {
+            log.warn("Cancel suspension denied: suspension is not active id={}", suspensionId);
+            throw new IllegalStateException("Suspension is not currently active");
+        }
+
+        suspension.cancel();
+        memberRepository.save(target);
+
+        log.info("Suspension cancelled: targetMemberId={}, suspensionId={}",
+                targetMemberId, suspensionId);
+    }
+
     private boolean isAdmin(String token) {
         if (!sessionTokenService.isValid(token)) {
             return false;
