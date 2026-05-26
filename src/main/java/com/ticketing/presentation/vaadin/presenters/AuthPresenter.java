@@ -37,6 +37,10 @@ public class AuthPresenter {
     }
 
     public AuthResult startGuestSession() {
+        if (SessionContext.isLoggedInMember()) {
+            return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
+        }
+
         try {
             String guestToken = sessionTokenService.generateGuestToken();
             storeGuestSession(guestToken);

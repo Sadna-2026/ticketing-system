@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
@@ -69,6 +70,25 @@ class AuthPresenterTest {
         assertEquals(sessionId, SessionContext.getSessionId());
         assertEquals("Guest", SessionContext.getRole());
         assertNull(SessionContext.getMemberId());
+    }
+
+    @Test
+    void GivenMemberSession_WhenStartGuestSession_ThenUserIsToldToLogoutFirstAndMemberSessionRemains() {
+        UUID memberId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(memberId);
+        SessionContext.setUsername("alice");
+        SessionContext.setRole("Member");
+
+        AuthResult result = presenter.startGuestSession();
+
+        assertFalse(result.success());
+        assertEquals("You are already logged in as a member. Log out before switching accounts.", result.message());
+        assertEquals("member-token", SessionContext.getSessionToken());
+        assertEquals(memberId, SessionContext.getMemberId());
+        assertEquals("alice", SessionContext.getUsername());
+        assertEquals("Member", SessionContext.getRole());
+        verifyNoMoreInteractions(sessionTokenService);
     }
 
     @Test
