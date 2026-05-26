@@ -159,6 +159,9 @@ class OrdersViewTest {
         clickButton(view, "Checkout");
 
         assertTrue(hasText(view, "Checkout complete. Purchase ID: " + purchaseId));
+        assertEquals("", findTextField(view, "Order ID").getValue());
+        assertTrue(findOrderItemsGrid(view).getDataProvider().fetch(new Query<>()).toList().isEmpty());
+        assertTrue(hasText(view, "Create or load an order to see active order details."));
         verify(presenter).checkout(orderId, "SAVE20");
     }
 
