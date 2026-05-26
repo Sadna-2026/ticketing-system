@@ -173,7 +173,7 @@ class CompanyPresenterTest {
     }
 
     @Test
-    void GivenEventInputs_WhenCreatingEditingAndCancellingEvents_ThenEventServiceIsCalledDirectly() {
+    void GivenEventInputs_WhenCreatingEditingPublishingAndCancellingEvents_ThenEventServiceIsCalledDirectly() {
         memberSession();
         UUID eventId = UUID.randomUUID();
         Instant start = Instant.parse("2026-06-01T19:00:00Z");
@@ -187,12 +187,14 @@ class CompanyPresenterTest {
         EventActionResult created = presenter.createEvent(" Acme ", " Show ", "desc", EventCategory.CONCERT,
                 start, end, doors, 15, " Floor ", new BigDecimal("50.00"), 100, " Main Hall ");
         EventActionResult edit = presenter.editEvent(eventId, "New name", "desc", "artist", start, end, doors);
+        ActionResult publish = presenter.publishEvent(eventId);
         ActionResult cancel = presenter.cancelEvent(eventId);
 
         ArgumentCaptor<CreateEventRequest> createRequest = ArgumentCaptor.forClass(CreateEventRequest.class);
         ArgumentCaptor<EditEventRequest> editRequest = ArgumentCaptor.forClass(EditEventRequest.class);
         verify(eventService).createEvent(eq("member-token"), createRequest.capture());
         verify(eventService).editEvent(eq("member-token"), editRequest.capture());
+        verify(eventService).publishEvent("member-token", eventId);
         verify(eventService).cancelEvent("member-token", eventId);
         assertTrue(created.success());
         assertEquals(eventId, created.eventId());
@@ -203,6 +205,7 @@ class CompanyPresenterTest {
         assertTrue(edit.success());
         assertSame(edited, edit.eventDetails());
         assertEquals(eventId, editRequest.getValue().eventId());
+        assertTrue(publish.success());
         assertTrue(cancel.success());
     }
 

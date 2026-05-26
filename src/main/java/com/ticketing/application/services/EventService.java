@@ -199,6 +199,30 @@ public class EventService {
         }
     }
 
+    public void publishEvent(String token, UUID eventId) {
+        if (eventId == null) {
+            log.warn("Event publishing denied: missing eventId");
+            throw new IllegalArgumentException("eventId is required");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
+
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {
+            throw new SecurityException("Insufficient permissions to publish events");
+        }
+
+        log.info("Publishing event: eventId={}, companyName={}", eventId, company.getName());
+        event.publish();
+        saveEvent(event);
+    }
+
     /**
      * Edits core event details (name, description, artist, schedule). Same auth
      * as createEvent (Owner OR Manager with MAP_DEFINITION + INVENTORY_MGMT).
@@ -404,7 +428,7 @@ public class EventService {
                         "Company not found: " + companyName));
         if (!company.isActive()) {
             throw new IllegalStateException(
-                    "Cannot create events in a suspended or closed company: " + companyName);
+                    "Company is suspended or closed: " + companyName);
         }
         return company;
     }

@@ -253,6 +253,9 @@ public class OrdersView extends VerticalLayout {
         }
 
         checkoutStatus.setText(result.message() + " Purchase ID: " + result.purchaseId());
+        currentOrder = null;
+        orderId.clear();
+        refreshOrderDisplay();
         UiMessages.success(result.message());
     }
 
