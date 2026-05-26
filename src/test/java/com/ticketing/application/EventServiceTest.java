@@ -145,6 +145,30 @@ class EventServiceTest {
         }
 
         @Test
+        public void GivenPublishedEvent_WhenPublishEventAgain_ThenThrowIllegalStateException() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            eventService.publishEvent(VALID_TOKEN, eventId);
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
+
+            assertEquals("Can only publish a DRAFT event", ex.getMessage());
+        }
+
+        @Test
+        public void GivenSuspendedCompany_WhenPublishEvent_ThenThrowOperationNeutralMessage() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            useMockedCompanyRepoReturning(stubCompany(COMPANY_NAME, CompanyStatus.SUSPENDED));
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
+
+            assertEquals("Company is suspended or closed: " + COMPANY_NAME, ex.getMessage());
+        }
+
+        @Test
         public void GivenManagerWithoutLifecyclePermission_WhenPublishEvent_ThenThrowSecurityException() {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());

@@ -428,7 +428,7 @@ public class EventService {
                         "Company not found: " + companyName));
         if (!company.isActive()) {
             throw new IllegalStateException(
-                    "Cannot create events in a suspended or closed company: " + companyName);
+                    "Company is suspended or closed: " + companyName);
         }
         return company;
     }
