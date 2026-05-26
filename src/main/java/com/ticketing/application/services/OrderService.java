@@ -17,6 +17,7 @@ import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.member.Member;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
@@ -196,10 +197,13 @@ public class OrderService {
         }
 
         BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
-        
+        java.time.LocalDate buyerDob = memberId != null
+                ? memberRepository.findById(memberId).map(Member::getDateOfBirth).orElse(null)
+                : null;
+
         CompletedPurchase purchase;
         try {
-            purchase = orderCheckoutService.processCheckout(order, event, buyerContact, couponCode);
+            purchase = orderCheckoutService.processCheckout(order, event, buyerContact, couponCode, buyerDob);
         } catch (IllegalStateException e) {
             saveOrder(order);
             if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
