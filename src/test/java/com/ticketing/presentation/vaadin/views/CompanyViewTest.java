@@ -78,28 +78,37 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Application services still enforce authorization for every action and their responses are shown here."));
         assertTrue(hasText(view, "Manager action visibility is grouped by capability, but the frontend cannot pre-check company-specific ManagerPermission values from the current session."));
         assertTrue(hasText(view, "Policy management is a company-management capability, not a system-admin action. Policy CRUD and attach/edit controls are hidden until backend/application support is available."));
-        assertTrue(hasButton(view, "Open company"));
-        assertTrue(hasButton(view, "Load company info"));
-        assertTrue(hasButton(view, "Offer role appointment"));
-        assertTrue(hasButton(view, "Accept role offer"));
-        assertTrue(hasButton(view, "Reject role offer"));
-        assertTrue(hasButton(view, "Revoke personnel"));
-        assertTrue(hasButton(view, "Change manager permissions"));
-        assertTrue(hasButton(view, "Create company event"));
-        assertTrue(hasButton(view, "Edit event details"));
-        assertTrue(hasButton(view, "Publish event"));
-        assertTrue(hasButton(view, "Cancel event"));
-        assertTrue(hasButton(view, "Load event map"));
-        assertTrue(hasButton(view, "Add seat"));
-        assertTrue(hasButton(view, "Remove seat"));
-        assertTrue(hasButton(view, "Increase GA capacity"));
-        assertTrue(hasButton(view, "Decrease GA capacity"));
-        assertTrue(hasButton(view, "Set zone price"));
-        assertTrue(hasButton(view, "Suspend company"));
-        assertTrue(hasButton(view, "Reopen company"));
-        assertTrue(hasButton(view, "Close company"));
-        assertTrue(hasButton(view, "Load company purchase history"));
-        assertTrue(hasButton(view, "Load sales report"));
+        Component publicGroup = sectionWithHeading(view, "Public company lookup");
+        Component ownerFounderGroup = sectionWithHeading(view, "Owner and founder actions");
+        Component managerGroup = sectionWithHeading(view, "Manager actions");
+
+        assertTrue(hasButton(publicGroup, "Load company info"));
+        assertFalse(hasButton(publicGroup, "Open company"));
+
+        assertTrue(hasButton(ownerFounderGroup, "Open company"));
+        assertTrue(hasButton(ownerFounderGroup, "Offer role appointment"));
+        assertTrue(hasButton(ownerFounderGroup, "Accept role offer"));
+        assertTrue(hasButton(ownerFounderGroup, "Reject role offer"));
+        assertTrue(hasButton(ownerFounderGroup, "Revoke personnel"));
+        assertTrue(hasButton(ownerFounderGroup, "Change manager permissions"));
+        assertTrue(hasButton(ownerFounderGroup, "Suspend company"));
+        assertTrue(hasButton(ownerFounderGroup, "Reopen company"));
+        assertTrue(hasButton(ownerFounderGroup, "Close company"));
+        assertFalse(hasButton(ownerFounderGroup, "Load global purchase history"));
+
+        assertTrue(hasButton(managerGroup, "Create company event"));
+        assertTrue(hasButton(managerGroup, "Edit event details"));
+        assertTrue(hasButton(managerGroup, "Publish event"));
+        assertTrue(hasButton(managerGroup, "Cancel event"));
+        assertTrue(hasButton(managerGroup, "Load event map"));
+        assertTrue(hasButton(managerGroup, "Add seat"));
+        assertTrue(hasButton(managerGroup, "Remove seat"));
+        assertTrue(hasButton(managerGroup, "Increase GA capacity"));
+        assertTrue(hasButton(managerGroup, "Decrease GA capacity"));
+        assertTrue(hasButton(managerGroup, "Set zone price"));
+        assertTrue(hasButton(managerGroup, "Load company purchase history"));
+        assertTrue(hasButton(managerGroup, "Load sales report"));
+        assertFalse(hasButton(managerGroup, "Remove member"));
         assertNotNull(findTextField(view, "New company name"));
         assertNotNull(findTextField(view, "Target member ID"));
         assertNotNull(findTextField(view, "Event ID"));
@@ -134,6 +143,24 @@ class CompanyViewTest {
         Grid<EventSummaryDTO> grid = findEventGrid(view);
         assertEquals(List.of(event), grid.getDataProvider().fetch(new Query<>()).toList());
         verify(presenter).loadCompanyInfo("Acme");
+    }
+
+    @Test
+    void GivenOpenCompanyResult_WhenDisplayed_ThenMessageStaysInOwnerFounderGroup() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.openCompany("Acme", "desc")).thenReturn(ActionResult.failure("Only members can open companies."));
+        CompanyView view = new CompanyView(presenter);
+        UI.getCurrent().add(view);
+        Component publicGroup = sectionWithHeading(view, "Public company lookup");
+        Component ownerFounderGroup = sectionWithHeading(view, "Owner and founder actions");
+        findTextField(view, "New company name").setValue("Acme");
+        findTextArea(view, "New company description").setValue("desc");
+
+        clickButton(view, "Open company");
+
+        verify(presenter).openCompany("Acme", "desc");
+        assertTrue(hasText(ownerFounderGroup, "Only members can open companies."));
+        assertFalse(hasText(publicGroup, "Only members can open companies."));
     }
 
     @Test
@@ -418,6 +445,15 @@ class CompanyViewTest {
                 .filter(HasText.class::isInstance)
                 .map(HasText.class::cast)
                 .anyMatch(component -> expected.equals(component.getText()));
+    }
+
+    private static Component sectionWithHeading(Component root, String heading) {
+        return components(root).stream()
+                .filter(HasText.class::isInstance)
+                .filter(component -> heading.equals(((HasText) component).getText()))
+                .findFirst()
+                .flatMap(Component::getParent)
+                .orElseThrow(() -> new AssertionError("Section not found: " + heading));
     }
 
     private static List<Component> components(Component root) {

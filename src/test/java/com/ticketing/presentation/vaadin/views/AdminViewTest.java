@@ -59,11 +59,14 @@ class AdminViewTest {
         assertTrue(hasText(view, "System admin actions"));
         assertTrue(hasText(view, "Admin-only controls are kept separate from company owner and manager workflows."));
         assertTrue(hasText(view, "Application services still enforce system-admin authorization for every action and their responses are shown here."));
-        assertTrue(hasButton(view, "Remove member"));
-        assertTrue(hasButton(view, "Load global purchase history"));
-        assertTrue(hasButton(view, "Suspend member"));
-        assertTrue(hasButton(view, "Cancel suspension"));
-        assertTrue(hasButton(view, "Load suspensions"));
+        Component adminGroup = sectionWithHeading(view, "System admin actions");
+        assertTrue(hasButton(adminGroup, "Remove member"));
+        assertTrue(hasButton(adminGroup, "Load global purchase history"));
+        assertTrue(hasButton(adminGroup, "Suspend member"));
+        assertTrue(hasButton(adminGroup, "Cancel suspension"));
+        assertTrue(hasButton(adminGroup, "Load suspensions"));
+        assertFalse(hasButton(adminGroup, "Open company"));
+        assertFalse(hasButton(adminGroup, "Offer role appointment"));
         assertNotNull(findTextField(view, "Target member ID"));
         assertNotNull(findTextField(view, "Buyer member ID"));
         assertNotNull(findTextField(view, "Company name"));
@@ -291,6 +294,15 @@ class AdminViewTest {
                 .filter(HasText.class::isInstance)
                 .map(HasText.class::cast)
                 .anyMatch(component -> expected.equals(component.getText()));
+    }
+
+    private static Component sectionWithHeading(Component root, String heading) {
+        return components(root).stream()
+                .filter(HasText.class::isInstance)
+                .filter(component -> heading.equals(((HasText) component).getText()))
+                .findFirst()
+                .flatMap(Component::getParent)
+                .orElseThrow(() -> new AssertionError("Section not found: " + heading));
     }
 
     private static List<Component> components(Component root) {

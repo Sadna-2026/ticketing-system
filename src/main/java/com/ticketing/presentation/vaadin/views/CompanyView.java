@@ -63,6 +63,7 @@ public class CompanyView extends VerticalLayout {
 
     private final TextField openCompanyName = new TextField("New company name");
     private final TextArea openCompanyDescription = new TextArea("New company description");
+    private final Span openCompanyStatus = new Span("Open a company as a logged-in member.");
     private final TextField infoCompanyName = new TextField("Company info name");
     private final Span companyInfoStatus = new Span("Load company information to view public details.");
     private final Grid<EventSummaryDTO> companyEventsGrid = new Grid<>(EventSummaryDTO.class, false);
@@ -226,7 +227,8 @@ public class CompanyView extends VerticalLayout {
         VerticalLayout section = new VerticalLayout(
                 new H4("Founder company setup"),
                 form,
-                openCompany
+                openCompany,
+                openCompanyStatus
         );
         section.setPadding(false);
         return section;
@@ -518,7 +520,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void handleCompanyAction(ActionResult result) {
-        companyInfoStatus.setText(result.message());
+        openCompanyStatus.setText(result.message());
         notify(result);
     }
 
