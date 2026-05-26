@@ -188,6 +188,20 @@ class OrdersViewTest {
     }
 
     @Test
+    void GivenPurchaseHistoryFails_WhenLoadingPurchaseHistory_ThenFailureMessageIsShownInline() {
+        OrdersPresenter presenter = mockPresenter();
+        when(presenter.loadPurchaseHistory())
+                .thenReturn(HistoryResult.failure("Could not load purchase history. Please try again."));
+        OrdersView view = new OrdersView(presenter);
+
+        clickButton(view, "Load purchase history");
+
+        assertTrue(hasText(view, "Could not load purchase history. Please try again."));
+        assertTrue(findHistoryGrid(view).getDataProvider().fetch(new Query<>()).toList().isEmpty());
+        verify(presenter).loadPurchaseHistory();
+    }
+
+    @Test
     void GivenInvalidEventId_WhenCreatingOrder_ThenInlineValidationMessageIsShown() {
         OrdersPresenter presenter = mockPresenter();
         OrdersView view = new OrdersView(presenter);
@@ -253,6 +267,37 @@ class OrdersViewTest {
 
         assertTrue(hasText(view, policyMessage));
         verify(presenter).checkout(orderId, "");
+    }
+
+    @Test
+    void GivenSelectedOrderItem_WhenRemovingAndUpdatingFail_ThenFailureMessagesAreShownInline() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        OrderItemDto item = gaItem(itemId, zoneId, 2);
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
+        when(presenter.loadActiveOrder(orderId)).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.updateGAQuantity(orderId, zoneId, 4))
+                .thenReturn(OrderMutationResult.failure("GA quantity exceeds remaining availability."));
+        when(presenter.removeItem(orderId, itemId))
+                .thenReturn(OrderMutationResult.failure("Order item could not be removed."));
+        OrdersView view = new OrdersView(presenter);
+        findTextField(view, "Order ID").setValue(orderId.toString());
+
+        clickButton(view, "Load active order");
+        findOrderItemsGrid(view).asSingleSelect().setValue(item);
+        findIntegerField(view, "New GA quantity").setValue(4);
+        clickButton(view, "Update selected GA quantity");
+        assertTrue(hasText(view, "GA quantity exceeds remaining availability."));
+
+        findOrderItemsGrid(view).asSingleSelect().setValue(item);
+        clickButton(view, "Remove selected item");
+
+        assertTrue(hasText(view, "Order item could not be removed."));
+        verify(presenter).updateGAQuantity(orderId, zoneId, 4);
+        verify(presenter).removeItem(orderId, itemId);
     }
 
     @Test
