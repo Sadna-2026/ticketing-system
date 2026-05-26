@@ -315,6 +315,23 @@ public class CompanyPresenter {
         }
     }
 
+    public ActionResult publishEvent(UUID eventId) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+
+        try {
+            eventService.publishEvent(token, eventId);
+            return ActionResult.success("Event published.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
     public EventMapResult loadEventMap(UUID eventId) {
         if (eventId == null) {
             return EventMapResult.failure("Event ID is required.");

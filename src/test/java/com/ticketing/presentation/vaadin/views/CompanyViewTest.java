@@ -80,6 +80,7 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Change manager permissions"));
         assertTrue(hasButton(view, "Create company event"));
         assertTrue(hasButton(view, "Edit event details"));
+        assertTrue(hasButton(view, "Publish event"));
         assertTrue(hasButton(view, "Cancel event"));
         assertTrue(hasButton(view, "Load event map"));
         assertTrue(hasButton(view, "Add seat"));
@@ -158,6 +159,7 @@ class CompanyViewTest {
         when(presenter.createEvent(eq("Acme"), eq("Show"), eq("desc"), eq(EventCategory.CONCERT),
                 any(), any(), any(), eq(15), eq("Floor"), eq(new BigDecimal("50.00")), eq(100), eq("Main Hall")))
                 .thenReturn(EventActionResult.created("Event created.", eventId));
+        when(presenter.publishEvent(eventId)).thenReturn(ActionResult.success("Event published."));
         when(presenter.cancelEvent(eventId)).thenReturn(ActionResult.success("Event cancelled."));
         when(presenter.loadEventMap(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId)));
         when(presenter.addSeat(eventId, zoneId, "A", "1")).thenReturn(ActionResult.success("Seat added."));
@@ -179,6 +181,7 @@ class CompanyViewTest {
         findIntegerField(view, "Capacity delta").setValue(5);
         findBigDecimalField(view, "Zone price update").setValue(new BigDecimal("75.00"));
 
+        clickButton(view, "Publish event");
         clickButton(view, "Cancel event");
         clickButton(view, "Load event map");
         clickButton(view, "Add seat");
@@ -187,6 +190,7 @@ class CompanyViewTest {
         clickButton(view, "Decrease GA capacity");
         clickButton(view, "Set zone price");
 
+        verify(presenter).publishEvent(eventId);
         verify(presenter).cancelEvent(eventId);
         verify(presenter).loadEventMap(eventId);
         verify(presenter).addSeat(eventId, zoneId, "A", "1");

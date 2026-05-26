@@ -245,6 +245,7 @@ public class CompanyView extends VerticalLayout {
     private VerticalLayout eventManagementSection() {
         Button createEvent = new Button("Create company event", event -> createEvent());
         Button editEvent = new Button("Edit event details", event -> editEvent());
+        Button publishEvent = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(parseUuid(eventId, "event"))));
         Button cancelEvent = new Button("Cancel event", event -> handleEventAction(presenter.cancelEvent(parseUuid(eventId, "event"))));
 
         FormLayout createForm = new FormLayout(
@@ -266,7 +267,7 @@ public class CompanyView extends VerticalLayout {
         FormLayout editForm = new FormLayout(eventId, newEventName, newEventDescription, newArtist, newStartTime, newEndTime, newDoorsOpenTime);
         editForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
-        HorizontalLayout actions = new HorizontalLayout(createEvent, editEvent, cancelEvent);
+        HorizontalLayout actions = new HorizontalLayout(createEvent, editEvent, publishEvent, cancelEvent);
         actions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(new H3("Event management"), createForm, editForm, actions, eventStatus);

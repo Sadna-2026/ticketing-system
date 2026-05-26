@@ -122,6 +122,28 @@ class EventServiceTest {
         }
 
         @Test
+        public void GivenOwnerAndDraftEvent_WhenPublishEvent_ThenEventBecomesPublished() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+
+            eventService.publishEvent(VALID_TOKEN, eventId);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertEquals(EventStatus.PUBLISHED, saved.getStatus());
+        }
+
+        @Test
+        public void GivenManagerWithoutLifecyclePermission_WhenPublishEvent_ThenThrowSecurityException() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            appointAs(StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
+
+            assertThrows(SecurityException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
+        }
+
+        @Test
         public void GivenManagerWithBothPermissions_WhenCreateEvent_ThenSucceed() {
             appointAs(StaffAppointment.StaffRole.MANAGER,
                     Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
