@@ -1,9 +1,6 @@
 package com.ticketing.domain.event;
 
 import java.util.List;
-import java.util.UUID;
-
-import com.ticketing.domain.order.ActiveOrder;
 
 public class OrPolicy implements IPurchasePolicy {
     private final List<IPurchasePolicy> policies;
@@ -12,14 +9,16 @@ public class OrPolicy implements IPurchasePolicy {
         this.policies = policies == null ? List.of() : List.copyOf(policies);
     }
 
+    public List<IPurchasePolicy> getPolicies() { return policies; }
+
     @Override
-    public PolicyResult isAllowed(ActiveOrder order, UUID memberId) {
+    public PolicyResult isAllowed(PurchaseContext context) {
         if (policies.isEmpty()) {
             return PolicyResult.success();
         }
 
         for (IPurchasePolicy policy : policies) {
-            PolicyResult result = policy.isAllowed(order, memberId);
+            PolicyResult result = policy.isAllowed(context);
             if (result.allowed()) {
                 return PolicyResult.success();
             }
