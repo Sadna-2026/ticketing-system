@@ -46,6 +46,8 @@ public class Company {
     public void setDiscountPolicy(IDiscountPolicy policy) {
         if (policy == null) throw new IllegalArgumentException("Discount policy cannot be null");
         this.discountPolicy = policy;
+    }
+
     public IPurchasePolicy getPurchasePolicy() { return purchasePolicy; }
 
     public void setPurchasePolicy(IPurchasePolicy policy) {

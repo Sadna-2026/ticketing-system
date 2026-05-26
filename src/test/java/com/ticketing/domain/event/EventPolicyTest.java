@@ -249,6 +249,9 @@ class EventPolicyTest {
 
             assertEquals(new BigDecimal("80.00"),
                     discount.priceAfterDiscount(order, "save20", Instant.now()));
+        }
+    }
+
     @Nested
     @DisplayName("AgeRestrictionPolicy")
     class AgeRestriction {
@@ -444,6 +447,8 @@ class EventPolicyTest {
                     UUID.randomUUID(), priceEach));
         }
         return order;
+    }
+
     @DisplayName("Composition")
     class Composition {
 
