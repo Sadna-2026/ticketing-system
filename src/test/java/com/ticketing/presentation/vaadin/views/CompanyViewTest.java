@@ -1,6 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -68,9 +69,15 @@ class CompanyViewTest {
     }
 
     @Test
-    void GivenCompanyView_WhenRendered_ThenOwnerManagerCompanyEventLifecycleAndReportingControlsExist() {
+    void GivenCompanyView_WhenRendered_ThenPublicOwnerFounderAndManagerGroupsExist() {
         CompanyView view = new CompanyView(mockPresenter());
 
+        assertTrue(hasText(view, "Public company lookup"));
+        assertTrue(hasText(view, "Owner and founder actions"));
+        assertTrue(hasText(view, "Manager actions"));
+        assertTrue(hasText(view, "Application services still enforce authorization for every action and their responses are shown here."));
+        assertTrue(hasText(view, "Manager action visibility is grouped by capability, but the frontend cannot pre-check company-specific ManagerPermission values from the current session."));
+        assertTrue(hasText(view, "Policy management is a company-management capability, not a system-admin action. Policy CRUD and attach/edit controls are hidden until backend/application support is available."));
         assertTrue(hasButton(view, "Open company"));
         assertTrue(hasButton(view, "Load company info"));
         assertTrue(hasButton(view, "Offer role appointment"));
@@ -97,6 +104,18 @@ class CompanyViewTest {
         assertNotNull(findTextField(view, "Target member ID"));
         assertNotNull(findTextField(view, "Event ID"));
         assertEquals(2, findGrids(view).size());
+    }
+
+    @Test
+    void GivenCompanyView_WhenRendered_ThenAdminOnlyControlsAreHidden() {
+        CompanyView view = new CompanyView(mockPresenter());
+
+        assertFalse(hasButton(view, "Remove member"));
+        assertFalse(hasButton(view, "Load global purchase history"));
+        assertFalse(hasButton(view, "Suspend member"));
+        assertFalse(hasButton(view, "Cancel suspension"));
+        assertFalse(hasButton(view, "Load suspensions"));
+        assertFalse(hasButton(view, "Check policy backend support"));
     }
 
     @Test
@@ -226,6 +245,20 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Total purchases: 1"));
         assertTrue(hasText(view, "Total revenue: 80.00"));
         assertEquals(List.of(purchase), findPurchasesGrid(view).getDataProvider().fetch(new Query<>()).toList());
+    }
+
+    @Test
+    void GivenUnauthorizedApplicationResponse_WhenManagerActionClicked_ThenMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        when(presenter.publishEvent(eventId)).thenReturn(ActionResult.failure("Insufficient permissions to publish events"));
+        CompanyView view = new CompanyView(presenter);
+        findTextField(view, "Event ID").setValue(eventId.toString());
+
+        clickButton(view, "Publish event");
+
+        verify(presenter).publishEvent(eventId);
+        assertTrue(hasText(view, "Insufficient permissions to publish events"));
     }
 
     private CompanyPresenter mockPresenter() {

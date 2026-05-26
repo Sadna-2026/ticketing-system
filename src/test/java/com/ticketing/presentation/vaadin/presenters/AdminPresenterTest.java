@@ -26,7 +26,6 @@ import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
-import com.ticketing.presentation.vaadin.presenters.AdminPresenter.Feedback;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -143,18 +142,6 @@ class AdminPresenterTest {
         verify(adminService).suspendUser("admin-token", targetId, Duration.ofDays(7), "Spam");
         verify(adminService).cancelSuspension("admin-token", targetId, suspensionId);
         verify(adminService).listSuspensions("admin-token", true);
-    }
-
-    @Test
-    void GivenPolicyPlaceholder_WhenCheckingSupport_ThenInfoMessageReferencesOpenBackendIssue() {
-        adminSession();
-
-        ActionResult result = presenter.policySupportStatus();
-
-        assertTrue(result.success());
-        assertEquals(Feedback.INFO, result.feedback());
-        assertEquals("Waiting for backend/application support: #149.", result.message());
-        verifyNoInteractions(adminService);
     }
 
     private void adminSession() {
