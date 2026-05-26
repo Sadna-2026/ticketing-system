@@ -25,9 +25,17 @@ public class AuthView extends VerticalLayout {
 
     private final AuthPresenter presenter;
     private final Span sessionStatus = new Span();
+    private final HorizontalLayout guestActions;
+    private final VerticalLayout loginForm;
+    private final VerticalLayout registerForm;
+    private final HorizontalLayout logoutActions;
 
     public AuthView(AuthPresenter presenter) {
         this.presenter = presenter;
+        this.guestActions = guestSection();
+        this.loginForm = loginSection();
+        this.registerForm = registerSection();
+        this.logoutActions = logoutSection();
 
         setPadding(true);
         setSpacing(true);
@@ -36,10 +44,10 @@ public class AuthView extends VerticalLayout {
                 new H2("Authentication"),
                 new Paragraph("Start as a guest, then log in or register to continue as a member."),
                 sessionStatus,
-                guestSection(),
-                loginSection(),
-                registerSection(),
-                logoutSection()
+                guestActions,
+                loginForm,
+                registerForm,
+                logoutActions
         );
         refreshSessionStatus();
     }
@@ -61,6 +69,7 @@ public class AuthView extends VerticalLayout {
         Button login = new Button("Log in", event -> {
             handle(presenter.login(username.getValue(), password.getValue()));
             refreshSessionStatus();
+            MainLayout.refreshCurrentNavigation();
         });
 
         FormLayout form = new FormLayout(username, password);
@@ -84,6 +93,7 @@ public class AuthView extends VerticalLayout {
                     dateOfBirth.getValue()
             ));
             refreshSessionStatus();
+            MainLayout.refreshCurrentNavigation();
         });
 
         FormLayout form = new FormLayout(username, email, password, phoneNumber, dateOfBirth);
@@ -96,6 +106,7 @@ public class AuthView extends VerticalLayout {
         Button logout = new Button("Log out", event -> {
             handle(presenter.logout());
             refreshSessionStatus();
+            MainLayout.refreshCurrentNavigation();
         });
 
         HorizontalLayout layout = new HorizontalLayout(logout);
@@ -113,5 +124,10 @@ public class AuthView extends VerticalLayout {
 
     private void refreshSessionStatus() {
         sessionStatus.setText(presenter.currentSessionLabel());
+        var session = presenter.currentSessionState();
+        guestActions.setVisible(session.noSession());
+        loginForm.setVisible(session.guest());
+        registerForm.setVisible(session.guest());
+        logoutActions.setVisible(session.loggedInMember());
     }
 }

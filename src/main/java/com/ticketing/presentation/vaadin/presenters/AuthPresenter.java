@@ -121,19 +121,11 @@ public class AuthPresenter {
     }
 
     public String currentSessionLabel() {
-        if (SessionContext.isLoggedInMember()) {
-            String username = SessionContext.getUsername();
-            if (username != null && !username.isBlank()) {
-                return "Current session: Member (" + username + ")";
-            }
-            return "Current session: Member";
-        }
+        return SessionContext.currentSessionLabel();
+    }
 
-        if (SessionContext.hasSessionToken()) {
-            return "Current session: Guest";
-        }
-
-        return "Current session: none";
+    public SessionContext.UiState currentSessionState() {
+        return SessionContext.currentUiState();
     }
 
     private void storeGuestSession(String guestToken) {
@@ -141,12 +133,14 @@ public class AuthPresenter {
         SessionContext.setSessionToken(guestToken);
         SessionContext.setSessionId(extractSessionId(guestToken));
         SessionContext.setRole(GUEST_ROLE);
+        SessionContext.setPermissions(null);
     }
 
     private void storeMemberSession(String memberToken, MemberDto member) {
         SessionContext.clear();
         SessionContext.setSessionToken(memberToken);
         SessionContext.setSessionId(extractSessionId(memberToken));
+        SessionContext.setPermissions(sessionTokenService.extractPermissions(memberToken));
         if (member != null) {
             SessionContext.setMemberId(member.memberId());
             SessionContext.setUsername(member.username());

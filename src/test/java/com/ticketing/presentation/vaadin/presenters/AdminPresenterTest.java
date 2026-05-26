@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -58,6 +59,30 @@ class AdminPresenterTest {
         UUID targetId = UUID.randomUUID();
 
         ActionResult result = presenter.removeMember(targetId);
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        verifyNoInteractions(adminService);
+    }
+
+    @Test
+    void GivenGuestSession_WhenRemovingMember_ThenNoServiceIsCalledAndAdminSessionMessageIsReturned() {
+        SessionContext.setSessionToken("guest-token");
+
+        ActionResult result = presenter.removeMember(UUID.randomUUID());
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        verifyNoInteractions(adminService);
+    }
+
+    @Test
+    void GivenRegularMemberSession_WhenRemovingMember_ThenNoServiceIsCalledAndAdminSessionMessageIsReturned() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setUsername("alice");
+
+        ActionResult result = presenter.removeMember(UUID.randomUUID());
 
         assertFalse(result.success());
         assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
@@ -148,6 +173,7 @@ class AdminPresenterTest {
         SessionContext.setSessionToken("admin-token");
         SessionContext.setMemberId(UUID.randomUUID());
         SessionContext.setUsername("root");
+        SessionContext.setPermissions(Set.of("SYSTEM_ADMIN"));
     }
 
     private void installVaadinSession() {

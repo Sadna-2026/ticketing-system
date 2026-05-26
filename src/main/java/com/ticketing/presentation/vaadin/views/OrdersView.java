@@ -60,7 +60,9 @@ public class OrdersView extends VerticalLayout {
     private final TextField couponCode = new TextField("Coupon code");
     private final Span checkoutStatus = new Span("Checkout is available once the active order has tickets.");
     private final Span historyStatus = new Span("Members can load purchase history.");
+    private final Paragraph memberOnlyHistoryHint = new Paragraph("Log in as a member to view purchase history.");
     private final Grid<PurchaseRecordDTO> historyGrid = new Grid<>(PurchaseRecordDTO.class, false);
+    private final VerticalLayout historySection;
 
     private ActiveOrderDto currentOrder;
     private EventMapDTO currentEventMap;
@@ -78,6 +80,7 @@ public class OrdersView extends VerticalLayout {
         configureInventoryDisplay();
         configureOrderItemsGrid();
         configureHistoryGrid();
+        this.historySection = historySection();
 
         add(
                 new H2("Orders"),
@@ -87,7 +90,8 @@ public class OrdersView extends VerticalLayout {
                 inventorySection(),
                 activeOrderSection(),
                 checkoutSection(),
-                historySection()
+                memberOnlyHistoryHint,
+                historySection
         );
         refreshSessionStatus();
         refreshOrderDisplay();
@@ -422,6 +426,9 @@ public class OrdersView extends VerticalLayout {
 
     private void refreshSessionStatus() {
         sessionStatus.setText(presenter.currentSessionLabel());
+        boolean member = presenter.currentSessionState().loggedInMember();
+        memberOnlyHistoryHint.setVisible(!member);
+        historySection.setVisible(member);
     }
 
     private UUID currentOrderId() {

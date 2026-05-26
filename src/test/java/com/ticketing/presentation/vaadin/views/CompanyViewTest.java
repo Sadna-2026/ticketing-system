@@ -42,6 +42,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventAction
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
@@ -104,6 +105,25 @@ class CompanyViewTest {
         assertNotNull(findTextField(view, "Target member ID"));
         assertNotNull(findTextField(view, "Event ID"));
         assertEquals(2, findGrids(view).size());
+    }
+
+    @Test
+    void GivenGuestSession_WhenRendered_ThenPublicCompanyInfoAndMapRemainVisibleButMemberActionsAreHidden() {
+        CompanyPresenter presenter = mock(CompanyPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
+
+        CompanyView view = new CompanyView(presenter);
+
+        assertTrue(hasVisibleButton(view, "Load company info"));
+        assertTrue(hasVisibleButton(view, "Load event map"));
+        assertFalse(hasVisibleButton(view, "Open company"));
+        assertFalse(hasVisibleButton(view, "Offer role appointment"));
+        assertFalse(hasVisibleButton(view, "Create company event"));
+        assertFalse(hasVisibleButton(view, "Add seat"));
+        assertFalse(hasVisibleButton(view, "Suspend company"));
+        assertFalse(hasVisibleButton(view, "Load company purchase history"));
+        assertTrue(hasText(view, "Log in as a member to use company owner and manager actions."));
     }
 
     @Test
@@ -264,6 +284,7 @@ class CompanyViewTest {
     private CompanyPresenter mockPresenter() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
         return presenter;
     }
 
@@ -322,6 +343,14 @@ class CompanyViewTest {
                 .filter(Button.class::isInstance)
                 .map(Button.class::cast)
                 .anyMatch(button -> text.equals(button.getText()));
+    }
+
+    private static boolean hasVisibleButton(Component root, String text) {
+        return components(root).stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> text.equals(button.getText()))
+                .anyMatch(CompanyViewTest::isEffectivelyVisible);
     }
 
     private static void clickButton(Component root, String text) {
@@ -426,8 +455,25 @@ class CompanyViewTest {
         return result;
     }
 
+    private static boolean isEffectivelyVisible(Component component) {
+        if (!component.isVisible()) {
+            return false;
+        }
+        return component.getParent()
+                .map(CompanyViewTest::isEffectivelyVisible)
+                .orElse(true);
+    }
+
     private static void collect(Component component, List<Component> result) {
         result.add(component);
         component.getChildren().forEach(child -> collect(child, result));
+    }
+
+    private static SessionContext.UiState guest() {
+        return new SessionContext.UiState(true, true, false, false, null, "Guest");
+    }
+
+    private static SessionContext.UiState member() {
+        return new SessionContext.UiState(true, false, true, false, "alice", "Member");
     }
 }
