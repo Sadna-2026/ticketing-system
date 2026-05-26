@@ -173,7 +173,7 @@ class CompanyPresenterTest {
     }
 
     @Test
-    void GivenEventInputs_WhenCreatingEditingAndCancellingEvents_ThenEventServiceIsCalledDirectly() {
+    void GivenEventInputs_WhenCreatingEditingPublishingAndCancellingEvents_ThenEventServiceIsCalledDirectly() {
         memberSession();
         UUID eventId = UUID.randomUUID();
         Instant start = Instant.parse("2026-06-01T19:00:00Z");
