@@ -295,7 +295,7 @@ public class OrderServiceTest {
         UUID policyZoneId = UUID.randomUUID();
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (order, memberId) -> PolicyResult.failure("DENIED", "No tickets for you"),
+                (ctx) -> PolicyResult.failure("DENIED", "No tickets for you"),
                 (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
@@ -317,7 +317,7 @@ public class OrderServiceTest {
         UUID discountZoneId = UUID.randomUUID();
         Event event = new Event(discountEventId, companyName, "Discount Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (order, memberId) -> PolicyResult.success(),
+                (ctx) -> PolicyResult.success(),
                 (order, coupon, now) -> order.getTotalPrice().subtract(new BigDecimal("20.00")).max(BigDecimal.ZERO));
         event.addZone(InventoryZone.createGA(discountZoneId, "Floor", new BigDecimal("50.00"), 10));
         event.publish();

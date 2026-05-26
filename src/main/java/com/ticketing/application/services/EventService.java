@@ -55,6 +55,7 @@ public class EventService {
         return eventLocks.computeIfAbsent(eventId, k -> new Object());
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
     public EventService(IEventRepository eventRepository,
                         ICompanyRepository companyRepository,
                         IMemberRepository memberRepository,
@@ -75,6 +76,7 @@ public class EventService {
         this.eventCreationService = new EventCreationDomainService();
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(this.lotteryRepository);
     }
+
 
     public EventService(IEventRepository eventRepository,
                         ICompanyRepository companyRepository,

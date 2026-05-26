@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
+import com.ticketing.domain.event.AlwaysAllowPolicy;
+import com.ticketing.domain.event.IPurchasePolicy;
 
 public class Company {
     private String name; // also the unique identifier for the company
@@ -12,6 +14,7 @@ public class Company {
     private final UUID founderId;
     private CompanyStatus status;
     private IDiscountPolicy discountPolicy;
+    private IPurchasePolicy purchasePolicy;
     private int version;
 
     public Company(String name, String description, UUID founderId) {
@@ -27,6 +30,7 @@ public class Company {
         this.founderId = founderId;
         this.status = CompanyStatus.ACTIVE;
         this.discountPolicy = new NoDiscountPolicy();
+        this.purchasePolicy = new AlwaysAllowPolicy();
     }
 
     // --- Getters ---
@@ -42,6 +46,11 @@ public class Company {
     public void setDiscountPolicy(IDiscountPolicy policy) {
         if (policy == null) throw new IllegalArgumentException("Discount policy cannot be null");
         this.discountPolicy = policy;
+    public IPurchasePolicy getPurchasePolicy() { return purchasePolicy; }
+
+    public void setPurchasePolicy(IPurchasePolicy policy) {
+        if (policy == null) throw new IllegalArgumentException("Purchase policy cannot be null");
+        this.purchasePolicy = policy;
     }
 
     public int getVersion() { return version; }
@@ -56,6 +65,7 @@ public class Company {
         Company copy = new Company(name, description, founderId);
         copy.status = this.status;
         copy.discountPolicy = this.discountPolicy;
+        copy.purchasePolicy = this.purchasePolicy;
         copy.version = this.version;
         return copy;
     }
