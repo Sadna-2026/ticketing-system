@@ -19,6 +19,7 @@ import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.order.SelectionRequest;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 
 public class TicketSelectionServiceTest {

@@ -22,7 +22,6 @@ import com.ticketing.application.TestClock;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.application.services.TicketSelectionService;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -68,7 +67,7 @@ class QueueConcurrencyTest {
         tokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
         orderService = new OrderService(orderRepo, tokenService, eventRepo, clock,
                 memberRepo, queueRepo, List.of(new StubPaymentGateway()),
-                List.of(new StubTicketSupplyGateway()), new TicketSelectionService(eventRepo));
+                List.of(new StubTicketSupplyGateway()));
 
         adminToken = tokenService.generateMemberToken(UUID.randomUUID(), UUID.randomUUID(), Set.of("Admin"));
 

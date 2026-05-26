@@ -1,16 +1,20 @@
 package com.ticketing.domain.services;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.ISystemClock;
-import com.ticketing.application.SelectionRequest;
 import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
@@ -23,6 +27,7 @@ import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.domain.order.OrderStatus;
+import com.ticketing.domain.order.SelectionRequest;
 import com.ticketing.domain.order.TicketReservationDomainService;
 
 @org.springframework.stereotype.Service
@@ -37,20 +42,17 @@ public class OrderDomainService {
 
     private final OrderCheckoutDomainService orderCheckoutService;
     private final TicketReservationDomainService ticketReservationService;
-    private final com.ticketing.application.services.TicketSelectionService ticketSelectionService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                                   IEventRepository eventRepository,
                                   IMemberRepository memberRepository,
                                   ISystemClock systemClock,
                                   List<IPaymentGateway> paymentGateways,
-                                  List<ITicketSupplyGateway> ticketSupplyGateways,
-                                  com.ticketing.application.services.TicketSelectionService ticketSelectionService) {
+                                  List<ITicketSupplyGateway> ticketSupplyGateways) {
         this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
         this.memberRepository = memberRepository;
         this.systemClock = systemClock;
-        this.ticketSelectionService = ticketSelectionService;
 
         this.orderCheckoutService = new OrderCheckoutDomainService(paymentGateways, ticketSupplyGateways, systemClock);
         this.ticketReservationService = new TicketReservationDomainService();
@@ -103,7 +105,7 @@ public class OrderDomainService {
 
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
-        ticketSelectionService.validateSelection(request);
+        validateSelection(request, event);
 
         List<UUID> itemIds = new ArrayList<>();
         for (SelectionRequest.SeatPick pick : request.seats()) {
@@ -216,28 +218,14 @@ public class OrderDomainService {
         }
     }
 
-    public com.ticketing.application.dto.ActiveOrderDto getActiveOrderDto(UUID sessionId, UUID orderId) {
+    public ActiveOrder getActiveOrder(UUID sessionId, UUID orderId) {
         ActiveOrder order = findActiveOrder(orderId);
         validateOrderOwnership(sessionId, order);
-        return new com.ticketing.application.dto.ActiveOrderDto(
-                order.getId(),
-                order.getSessionId(),
-                order.getMemberId(),
-                order.getEventId(),
-                order.getCreatedAt(),
-                order.getStatus().name(),
-                order.getItemsDto(),
-                order.getTotalPrice()
-        );
+        return order;
     }
 
-    public List<com.ticketing.application.dto.PurchaseRecordDTO> getPurchaseHistory(UUID memberId) {
-        List<CompletedPurchase> purchases = orderRepository.findCompletedByMemberId(memberId);
-        List<com.ticketing.application.dto.PurchaseRecordDTO> result = new ArrayList<>();
-        for (CompletedPurchase p : purchases) {
-            result.add(com.ticketing.application.dto.PurchaseRecordDTO.from(p));
-        }
-        return result;
+    public List<CompletedPurchase> getPurchaseHistory(UUID memberId) {
+        return orderRepository.findCompletedByMemberId(memberId);
     }
 
     public ActiveOrder findActiveOrder(UUID orderId) {
@@ -252,6 +240,68 @@ public class OrderDomainService {
         }
         return order;
     }
+
+    // ── Selection validation (domain logic, previously in application TicketSelectionService) ──
+
+    private void validateSelection(SelectionRequest request, Event event) {
+        if (request == null) throw new IllegalArgumentException("request is required");
+        if (request.isEmpty()) {
+            throw new IllegalArgumentException("selection must include at least one seat or quantity");
+        }
+
+        if (event.getStatus() != EventStatus.PUBLISHED) {
+            throw new IllegalStateException("Event is not selectable in status: " + event.getStatus());
+        }
+
+        for (SelectionRequest.SeatPick pick : request.seats()) {
+            InventoryZone zone = findZone(event, pick.zoneId());
+            if (!zone.isAssigned()) {
+                throw new IllegalArgumentException(
+                        "Zone " + zone.getName() + " is GA — use a quantity, not a seat id");
+            }
+            Seat seat;
+            try {
+                seat = zone.findSeat(pick.seatId());
+            } catch (IllegalArgumentException notFound) {
+                throw new IllegalArgumentException(
+                        "Seat " + pick.seatId() + " not found in zone " + zone.getName());
+            }
+            if (!seat.isAvailable()) {
+                throw new IllegalStateException(
+                        "Seat " + seat.getRow() + "-" + seat.getSeatNumber()
+                        + " is not available (status=" + seat.getStatus() + ")");
+            }
+        }
+
+        Map<UUID, Integer> totalsByZone = new HashMap<>();
+        for (SelectionRequest.GAPick pick : request.gaQuantities()) {
+            totalsByZone.merge(pick.zoneId(), pick.quantity(), Integer::sum);
+        }
+        for (var entry : totalsByZone.entrySet()) {
+            InventoryZone zone = findZone(event, entry.getKey());
+            int requested = entry.getValue();
+            if (!zone.isGA()) {
+                throw new IllegalArgumentException(
+                        "Zone " + zone.getName() + " is assigned-seating — pick specific seats, not a quantity");
+            }
+            if (zone.getAvailableCount() < requested) {
+                throw new IllegalStateException(
+                        "Not enough tickets in zone " + zone.getName()
+                        + " (requested " + requested + ", available " + zone.getAvailableCount() + ")");
+            }
+        }
+    }
+
+    private static InventoryZone findZone(Event event, UUID zoneId) {
+        try {
+            return event.findZone(zoneId);
+        } catch (IllegalArgumentException notFound) {
+            throw new IllegalArgumentException(
+                    "Zone " + zoneId + " is not part of event " + event.getId());
+        }
+    }
+
+    // ── Private helpers ──
 
     private Event findEvent(UUID eventId) {
         return eventRepository.findById(eventId)

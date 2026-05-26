@@ -9,7 +9,6 @@ import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.application.services.TicketSelectionService;
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.event.Event;
@@ -72,7 +71,7 @@ class QueueServiceTest {
         tokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
         orderService = new OrderService(orderRepo, tokenService, eventRepo, clock,
                 memberRepo, queueRepo, List.of(new StubPaymentGateway()),
-                List.of(new StubTicketSupplyGateway()), new TicketSelectionService(eventRepo));
+                List.of(new StubTicketSupplyGateway()));
 
         // Admin
         adminId = UUID.randomUUID();

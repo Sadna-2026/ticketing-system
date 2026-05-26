@@ -33,9 +33,10 @@ public class OrderService {
                         ISessionTokenService sessionTokenService,
                         IEventRepository eventRepository,
                         ISystemClock systemClock) {
-        this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                null, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()),
-                new TicketSelectionService(eventRepository));
+        this(sessionTokenService,
+             new OrderDomainService(orderRepository, eventRepository, null, systemClock,
+                     List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway())),
+             null);
     }
 
     public OrderService(IOrderRepository orderRepository,
@@ -45,9 +46,10 @@ public class OrderService {
                         IMemberRepository memberRepository,
                         List<IPaymentGateway> paymentGateways,
                         ITicketSupplyGateway ticketSupplyGateway) {
-        this(orderRepository, sessionTokenService, eventRepository, systemClock,
-                memberRepository, paymentGateways, List.of(ticketSupplyGateway),
-                new TicketSelectionService(eventRepository));
+        this(sessionTokenService,
+             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
+                     paymentGateways, List.of(ticketSupplyGateway)),
+             null);
     }
 
     public OrderService(IOrderRepository orderRepository,
@@ -56,10 +58,10 @@ public class OrderService {
                         ISystemClock systemClock,
                         IMemberRepository memberRepository,
                         List<IPaymentGateway> paymentGateways,
-                        List<ITicketSupplyGateway> ticketSupplyGateways,
-                        TicketSelectionService ticketSelectionService) {
-        this(sessionTokenService, 
-             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock, paymentGateways, ticketSupplyGateways, ticketSelectionService),
+                        List<ITicketSupplyGateway> ticketSupplyGateways) {
+        this(sessionTokenService,
+             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
+                     paymentGateways, ticketSupplyGateways),
              null);
     }
 
@@ -70,10 +72,10 @@ public class OrderService {
                         IMemberRepository memberRepository,
                         IQueueRepository queueRepository,
                         List<IPaymentGateway> paymentGateways,
-                        List<ITicketSupplyGateway> ticketSupplyGateways,
-                        TicketSelectionService ticketSelectionService) {
+                        List<ITicketSupplyGateway> ticketSupplyGateways) {
         this(sessionTokenService,
-             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock, paymentGateways, ticketSupplyGateways, ticketSelectionService),
+             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
+                     paymentGateways, ticketSupplyGateways),
              new QueueDomainService(queueRepository, eventRepository, systemClock));
     }
 
@@ -112,7 +114,16 @@ public class OrderService {
         validateToken(token);
         if (request == null) throw new IllegalArgumentException("request is required");
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        return domainService.addSelectionToOrder(sessionId, orderId, request);
+        com.ticketing.domain.order.SelectionRequest domainRequest = new com.ticketing.domain.order.SelectionRequest(
+                request.eventId(),
+                request.seats().stream()
+                        .map(s -> new com.ticketing.domain.order.SelectionRequest.SeatPick(s.zoneId(), s.seatId()))
+                        .toList(),
+                request.gaQuantities().stream()
+                        .map(g -> new com.ticketing.domain.order.SelectionRequest.GAPick(g.zoneId(), g.quantity()))
+                        .toList()
+        );
+        return domainService.addSelectionToOrder(sessionId, orderId, domainRequest);
     }
 
     public UUID checkout(String token, UUID orderId, String couponCode) {
@@ -147,7 +158,17 @@ public class OrderService {
     public ActiveOrderDto getActiveOrder(String token, UUID orderId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        return domainService.getActiveOrderDto(sessionId, orderId);
+        com.ticketing.domain.order.ActiveOrder order = domainService.getActiveOrder(sessionId, orderId);
+        return new ActiveOrderDto(
+                order.getId(),
+                order.getSessionId(),
+                order.getMemberId(),
+                order.getEventId(),
+                order.getCreatedAt(),
+                order.getStatus().name(),
+                order.getItemsDto(),
+                order.getTotalPrice()
+        );
     }
 
     public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
@@ -156,7 +177,12 @@ public class OrderService {
         if (memberId == null) {
             throw new SecurityException("User must be logged in to view purchase history");
         }
-        return domainService.getPurchaseHistory(memberId);
+        List<com.ticketing.domain.order.CompletedPurchase> purchases = domainService.getPurchaseHistory(memberId);
+        List<PurchaseRecordDTO> result = new java.util.ArrayList<>();
+        for (com.ticketing.domain.order.CompletedPurchase p : purchases) {
+            result.add(PurchaseRecordDTO.from(p));
+        }
+        return result;
     }
 
     // Virtual Queue methods
