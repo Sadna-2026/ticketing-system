@@ -13,16 +13,15 @@ import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
-import com.ticketing.presentation.vaadin.presenters.AdminPresenter.Feedback;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.Checkbox;
-import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -62,12 +61,6 @@ public class AdminView extends VerticalLayout {
     private final Checkbox activeSuspensionsOnly = new Checkbox("Active suspensions only");
     private final Grid<SuspensionDTO> suspensionsGrid = new Grid<>(SuspensionDTO.class, false);
 
-    private final Span policyStatus = new Span("Policy UI placeholders are waiting for backend/application support: #149.");
-    private final TextField policyCompanyName = new TextField("Policy company name");
-    private final TextField policyEventId = new TextField("Policy event ID");
-    private final ComboBox<String> purchasePolicyType = new ComboBox<>("Purchase policy placeholder");
-    private final ComboBox<String> discountPolicyType = new ComboBox<>("Discount policy placeholder");
-
     public AdminView(AdminPresenter presenter) {
         this.presenter = presenter;
 
@@ -82,11 +75,9 @@ public class AdminView extends VerticalLayout {
         add(
                 new H2("Admin"),
                 new Paragraph("Use system admin actions backed directly by application services."),
+                new Paragraph("Application services still enforce system-admin authorization for every action and their responses are shown here."),
                 sessionStatus,
-                memberSection(),
-                purchaseHistorySection(),
-                suspensionSection(),
-                policySection()
+                adminActionsSection()
         );
         refreshSessionStatus();
     }
@@ -101,11 +92,6 @@ public class AdminView extends VerticalLayout {
         suspensionReason.setPlaceholder("Reason shown in application error/status flows");
         suspensionId.setPlaceholder("Suspension UUID");
         activeSuspensionsOnly.setValue(true);
-
-        purchasePolicyType.setItems("Age restriction", "Minimum quantity", "Maximum quantity", "AND composition", "OR composition");
-        purchasePolicyType.setValue("Maximum quantity");
-        discountPolicyType.setItems("Simple discount", "Coupon discount", "Conditional discount", "Maximum composite", "Sum composite");
-        discountPolicyType.setValue("Simple discount");
     }
 
     private void configurePurchaseHistoryGrid() {
@@ -132,12 +118,25 @@ public class AdminView extends VerticalLayout {
         suspensionsGrid.setMinHeight("180px");
     }
 
+    private VerticalLayout adminActionsSection() {
+        VerticalLayout section = new VerticalLayout(
+                new H3("System admin actions"),
+                new Paragraph("Admin-only controls are kept separate from company owner and manager workflows."),
+                memberSection(),
+                purchaseHistorySection(),
+                suspensionSection()
+        );
+        section.setPadding(false);
+        section.setSpacing(true);
+        return section;
+    }
+
     private VerticalLayout memberSection() {
         Button removeMember = new Button("Remove member", event -> removeMember());
 
         FormLayout form = new FormLayout(removeTargetMemberId);
         VerticalLayout section = new VerticalLayout(
-                new H3("Member administration"),
+                new H4("Member administration"),
                 form,
                 removeMember,
                 memberStatus
@@ -152,7 +151,7 @@ public class AdminView extends VerticalLayout {
         FormLayout form = new FormLayout(historyBuyerId, historyCompanyName);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
         VerticalLayout section = new VerticalLayout(
-                new H3("Global purchase history"),
+                new H4("Global purchase history"),
                 form,
                 loadHistory,
                 historyStatus,
@@ -180,28 +179,11 @@ public class AdminView extends VerticalLayout {
         actions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
-                new H3("Suspensions"),
+                new H4("Suspensions"),
                 form,
                 actions,
                 suspensionStatus,
                 suspensionsGrid
-        );
-        section.setPadding(false);
-        return section;
-    }
-
-    private VerticalLayout policySection() {
-        Button showSupportStatus = new Button("Check policy backend support", event -> handlePolicyResult(
-                presenter.policySupportStatus()));
-
-        FormLayout form = new FormLayout(policyCompanyName, policyEventId, purchasePolicyType, discountPolicyType);
-        form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
-        VerticalLayout section = new VerticalLayout(
-                new H3("Purchase and discount policies"),
-                new Paragraph("Supported domain concepts are visible here, but policy CRUD and attach/edit actions require application support from #149."),
-                form,
-                showSupportStatus,
-                policyStatus
         );
         section.setPadding(false);
         return section;
@@ -289,15 +271,8 @@ public class AdminView extends VerticalLayout {
         notify(result);
     }
 
-    private void handlePolicyResult(ActionResult result) {
-        policyStatus.setText(result.message());
-        notify(result);
-    }
-
     private void notify(ActionResult result) {
-        if (result.feedback() == Feedback.INFO) {
-            UiMessages.info(result.message());
-        } else if (result.success()) {
+        if (result.success()) {
             UiMessages.success(result.message());
         } else {
             UiMessages.error(result.message());
