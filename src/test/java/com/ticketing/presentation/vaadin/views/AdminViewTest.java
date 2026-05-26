@@ -3,6 +3,7 @@ package com.ticketing.presentation.vaadin.views;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -53,23 +54,36 @@ class AdminViewTest {
     }
 
     @Test
-    void GivenAdminView_WhenRendered_ThenAdminHistorySuspensionAndPolicyControlsExist() {
+    void GivenAdminView_WhenRendered_ThenSystemAdminGroupsExist() {
         AdminView view = new AdminView(mockPresenter());
 
+        assertTrue(hasText(view, "System admin actions"));
+        assertTrue(hasText(view, "Admin-only controls are kept separate from company owner and manager workflows."));
+        assertTrue(hasText(view, "Application services still enforce system-admin authorization for every action and their responses are shown here."));
         assertTrue(hasButton(view, "Remove member"));
         assertTrue(hasButton(view, "Load global purchase history"));
         assertTrue(hasButton(view, "Suspend member"));
         assertTrue(hasButton(view, "Cancel suspension"));
         assertTrue(hasButton(view, "Load suspensions"));
-        assertTrue(hasButton(view, "Check policy backend support"));
         assertNotNull(findTextField(view, "Target member ID"));
         assertNotNull(findTextField(view, "Buyer member ID"));
         assertNotNull(findTextField(view, "Company name"));
         assertNotNull(findTextField(view, "Suspension target member ID"));
         assertNotNull(findTextField(view, "Suspension ID"));
-        assertNotNull(findTextField(view, "Policy company name"));
         assertEquals(2, findGrids(view).size());
-        assertTrue(hasText(view, "Policy UI placeholders are waiting for backend/application support: #149."));
+    }
+
+    @Test
+    void GivenAdminView_WhenRendered_ThenCompanyManagementControlsAreHidden() {
+        AdminView view = new AdminView(mockPresenter());
+
+        assertFalse(hasButton(view, "Open company"));
+        assertFalse(hasButton(view, "Offer role appointment"));
+        assertFalse(hasButton(view, "Create company event"));
+        assertFalse(hasButton(view, "Load company purchase history"));
+        assertFalse(hasButton(view, "Check policy backend support"));
+        assertNull(findTextField(view, "Policy company name"));
+        assertFalse(hasText(view, "Policy UI placeholders are waiting for backend/application support: #149."));
     }
 
     @Test
@@ -172,18 +186,6 @@ class AdminViewTest {
         verify(presenter).listSuspensions(true);
         assertTrue(hasText(view, "Loaded 1 suspension(s)."));
         assertEquals(List.of(suspension), findSuspensionsGrid(view).getDataProvider().fetch(new Query<>()).toList());
-    }
-
-    @Test
-    void GivenPolicyPlaceholder_WhenSupportButtonClicked_ThenOpenBackendIssueMessageIsDisplayed() {
-        AdminPresenter presenter = mockPresenter();
-        when(presenter.policySupportStatus()).thenReturn(ActionResult.info("Waiting for backend/application support: #149."));
-        AdminView view = new AdminView(presenter);
-
-        clickButton(view, "Check policy backend support");
-
-        verify(presenter).policySupportStatus();
-        assertTrue(hasText(view, "Waiting for backend/application support: #149."));
     }
 
     private AdminPresenter mockPresenter() {

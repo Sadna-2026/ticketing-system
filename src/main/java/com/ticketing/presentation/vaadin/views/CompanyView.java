@@ -62,6 +62,8 @@ public class CompanyView extends VerticalLayout {
     private final Span sessionStatus = new Span();
     private final Paragraph memberOnlyCompanyHint = new Paragraph("Log in as a member to use company owner and manager actions.");
     private VerticalLayout openCompanyControls;
+    private VerticalLayout ownerFounderControls;
+    private VerticalLayout managerControls;
     private VerticalLayout personnelControls;
     private VerticalLayout eventManagementControls;
     private VerticalLayout inventoryManagementControls;
@@ -136,15 +138,14 @@ public class CompanyView extends VerticalLayout {
 
         add(
                 new H2("Company"),
-                new Paragraph("Use member company owner and manager actions backed directly by application services."),
+                new Paragraph("Use company actions grouped by owner/founder and manager responsibilities."),
+                new Paragraph("Application services still enforce authorization for every action and their responses are shown here."),
                 sessionStatus,
                 memberOnlyCompanyHint,
-                companySection(),
-                personnelSection(),
-                eventManagementSection(),
+                publicCompanySection(),
                 inventorySection(),
-                lifecycleSection(),
-                reportingSection()
+                ownerFounderSection(),
+                managerActionsSection()
         );
         refreshSessionStatus();
     }
@@ -200,24 +201,63 @@ public class CompanyView extends VerticalLayout {
         salesReportDisplay.add(new Paragraph("Load a sales report to see totals."));
     }
 
-    private VerticalLayout companySection() {
-        Button openCompany = new Button("Open company", event -> openCompany());
+    private VerticalLayout publicCompanySection() {
         Button loadInfo = new Button("Load company info", event -> loadCompanyInfo());
 
-        FormLayout openForm = new FormLayout(openCompanyName, openCompanyDescription);
         FormLayout infoForm = new FormLayout(infoCompanyName);
-        openCompanyControls = new VerticalLayout(openForm, openCompany);
-        openCompanyControls.setPadding(false);
 
         VerticalLayout section = new VerticalLayout(
-                new H3("Company"),
-                openCompanyControls,
+                new H3("Public company lookup"),
+                new Paragraph("Public company details and published events are visible without company-management permissions."),
                 infoForm,
                 loadInfo,
                 companyInfoStatus,
                 companyEventsGrid
         );
         section.setPadding(false);
+        return section;
+    }
+
+    private VerticalLayout ownerFounderSection() {
+        VerticalLayout section = new VerticalLayout(
+                new H3("Owner and founder actions"),
+                new Paragraph("Owners manage company staff. Founders manage company lifecycle actions."),
+                openCompanySection(),
+                personnelSection(),
+                lifecycleSection()
+        );
+        section.setPadding(false);
+        section.setSpacing(true);
+        ownerFounderControls = section;
+        return section;
+    }
+
+    private VerticalLayout openCompanySection() {
+        Button openCompany = new Button("Open company", event -> openCompany());
+
+        FormLayout form = new FormLayout(openCompanyName, openCompanyDescription);
+        VerticalLayout section = new VerticalLayout(
+                new H4("Founder company setup"),
+                form,
+                openCompany
+        );
+        section.setPadding(false);
+        openCompanyControls = section;
+        return section;
+    }
+
+    private VerticalLayout managerActionsSection() {
+        VerticalLayout section = new VerticalLayout(
+                new H3("Manager actions"),
+                new Paragraph("Manager action visibility is grouped by capability, but the frontend cannot pre-check company-specific ManagerPermission values from the current session."),
+                new Paragraph("Use the controls that match the role assigned by the company; unauthorized application responses will be shown in the relevant status area."),
+                eventManagementSection(),
+                reportingSection(),
+                policyLimitationSection()
+        );
+        section.setPadding(false);
+        section.setSpacing(true);
+        managerControls = section;
         return section;
     }
 
@@ -247,7 +287,7 @@ public class CompanyView extends VerticalLayout {
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
 
-        VerticalLayout section = new VerticalLayout(new H3("Role appointment and personnel"), form, actions, personnelStatus, orgChartDisplay);
+        VerticalLayout section = new VerticalLayout(new H4("Role appointment and personnel"), form, actions, personnelStatus, orgChartDisplay);
         section.setPadding(false);
         personnelControls = section;
         return section;
@@ -281,7 +321,7 @@ public class CompanyView extends VerticalLayout {
         HorizontalLayout actions = new HorizontalLayout(createEvent, editEvent, publishEvent, cancelEvent);
         actions.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H3("Event management"), createForm, editForm, actions, eventStatus);
+        VerticalLayout section = new VerticalLayout(new H4("Event management"), createForm, editForm, actions, eventStatus);
         section.setPadding(false);
         eventManagementControls = section;
         return section;
@@ -329,7 +369,7 @@ public class CompanyView extends VerticalLayout {
         inventoryManagementControls.setPadding(false);
 
         VerticalLayout section = new VerticalLayout(
-                new H3("Inventory and map"),
+                new H4("Inventory and map"),
                 mapForm,
                 mapActions,
                 inventoryManagementControls,
@@ -347,7 +387,7 @@ public class CompanyView extends VerticalLayout {
         HorizontalLayout actions = new HorizontalLayout(suspend, reopen, close);
         actions.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H3("Company lifecycle"), lifecycleCompanyName, actions, lifecycleStatus);
+        VerticalLayout section = new VerticalLayout(new H4("Company lifecycle"), lifecycleCompanyName, actions, lifecycleStatus);
         section.setPadding(false);
         lifecycleControls = section;
         return section;
@@ -360,7 +400,7 @@ public class CompanyView extends VerticalLayout {
         actions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
-                new H3("History and reporting"),
+                new H4("History and reporting"),
                 reportingCompanyName,
                 actions,
                 reportingStatus,
@@ -369,6 +409,15 @@ public class CompanyView extends VerticalLayout {
         );
         section.setPadding(false);
         reportingControls = section;
+        return section;
+    }
+
+    private VerticalLayout policyLimitationSection() {
+        VerticalLayout section = new VerticalLayout(
+                new H4("Purchase and discount policies"),
+                new Paragraph("Policy management is a company-management capability, not a system-admin action. Policy CRUD and attach/edit controls are hidden until backend/application support is available.")
+        );
+        section.setPadding(false);
         return section;
     }
 
@@ -615,6 +664,8 @@ public class CompanyView extends VerticalLayout {
         sessionStatus.setText(presenter.currentSessionLabel());
         boolean member = presenter.currentSessionState().loggedInMember();
         memberOnlyCompanyHint.setVisible(!member);
+        ownerFounderControls.setVisible(member);
+        managerControls.setVisible(member);
         openCompanyControls.setVisible(member);
         personnelControls.setVisible(member);
         eventManagementControls.setVisible(member);

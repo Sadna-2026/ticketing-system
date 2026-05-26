@@ -27,8 +27,6 @@ public class AdminPresenter {
             "Could not load global purchase history. Please try again.";
     private static final String ADMIN_SUSPENSION_FAILURE_MESSAGE =
             "Could not complete suspension action. Please try again.";
-    private static final String POLICY_SUPPORT_MESSAGE =
-            "Waiting for backend/application support: #149.";
 
     private final AdminService adminService;
 
@@ -131,10 +129,6 @@ public class AdminPresenter {
         }
     }
 
-    public ActionResult policySupportStatus() {
-        return ActionResult.info(POLICY_SUPPORT_MESSAGE);
-    }
-
     public String currentSessionLabel() {
         return SessionContext.currentSessionLabel();
     }
@@ -186,8 +180,7 @@ public class AdminPresenter {
 
     public enum Feedback {
         SUCCESS,
-        ERROR,
-        INFO
+        ERROR
     }
 
     public record ActionResult(boolean success, String message, Feedback feedback) {
@@ -199,9 +192,6 @@ public class AdminPresenter {
             return new ActionResult(false, message, Feedback.ERROR);
         }
 
-        public static ActionResult info(String message) {
-            return new ActionResult(true, message, Feedback.INFO);
-        }
     }
 
     public record PurchaseHistoryResult(boolean success, String message, List<PurchaseRecordDTO> purchases) {
