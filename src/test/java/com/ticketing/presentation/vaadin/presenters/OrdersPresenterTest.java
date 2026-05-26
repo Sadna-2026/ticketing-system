@@ -146,6 +146,22 @@ class OrdersPresenterTest {
     }
 
     @Test
+    void GivenPolicyViolation_WhenCheckingOut_ThenDomainPolicyMessageIsPreserved() {
+        UUID orderId = UUID.randomUUID();
+        String policyMessage = "Purchase policy violation: AGE_RESTRICTED - Buyer does not meet age policy";
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.checkout("guest-token", orderId, null))
+                .thenThrow(new IllegalStateException(policyMessage));
+
+        CheckoutResult result = presenter.checkout(orderId, null);
+
+        assertFalse(result.success());
+        assertEquals(policyMessage, result.message());
+        assertNull(result.purchaseId());
+        verify(orderService).checkout("guest-token", orderId, null);
+    }
+
+    @Test
     void GivenMemberSession_WhenLoadingPurchaseHistory_ThenPurchaseRecordsAreDisplayed() {
         UUID memberId = UUID.randomUUID();
         PurchaseRecordDTO purchase = new PurchaseRecordDTO(

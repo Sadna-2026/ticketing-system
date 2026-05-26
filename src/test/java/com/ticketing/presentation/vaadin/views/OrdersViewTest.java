@@ -87,6 +87,7 @@ class OrdersViewTest {
         clickButton(view, "Create active order");
 
         assertEquals(orderId.toString(), findTextField(view, "Order ID").getValue());
+        assertTrue(hasText(view, "Active order created."));
         assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 0 | total 0"));
         verify(presenter).createOrder(eventId);
     }
@@ -118,9 +119,12 @@ class OrdersViewTest {
 
         clickButton(view, "Create active order");
         clickButton(view, "Load event inventory");
+        assertTrue(hasText(view, "Event inventory loaded."));
         clickButton(view, "Add GA tickets");
+        assertTrue(hasText(view, "GA tickets added."));
         clickButton(view, "Add A-1");
 
+        assertTrue(hasText(view, "Assigned seat added."));
         assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 3 | total 250.00"));
         verify(presenter).addGATickets(orderId, gaZoneId, 1);
         verify(presenter).addAssignedSeat(orderId, seatZoneId, seatId);
@@ -142,6 +146,7 @@ class OrdersViewTest {
         Grid<OrderItemDto> grid = findOrderItemsGrid(view);
         List<OrderItemDto> rows = grid.getDataProvider().fetch(new Query<>()).toList();
         assertEquals(List.of(item), rows);
+        assertTrue(hasText(view, "Active order loaded."));
         assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 3 | total 150.00"));
     }
 
@@ -161,6 +166,7 @@ class OrdersViewTest {
         clickButton(view, "Create active order");
         clickButton(view, "Checkout");
 
+        assertTrue(hasText(view, "Checkout complete."));
         assertTrue(hasText(view, "Checkout complete. Purchase ID: " + purchaseId));
         assertEquals("", findTextField(view, "Order ID").getValue());
         assertTrue(findOrderItemsGrid(view).getDataProvider().fetch(new Query<>()).toList().isEmpty());
@@ -186,6 +192,31 @@ class OrdersViewTest {
     }
 
     @Test
+    void GivenPurchaseHistoryFails_WhenLoadingPurchaseHistory_ThenFailureMessageIsShownInline() {
+        OrdersPresenter presenter = mockPresenter();
+        when(presenter.loadPurchaseHistory())
+                .thenReturn(HistoryResult.failure("Could not load purchase history. Please try again."));
+        OrdersView view = new OrdersView(presenter);
+
+        clickButton(view, "Load purchase history");
+
+        assertTrue(hasText(view, "Could not load purchase history. Please try again."));
+        assertTrue(findHistoryGrid(view).getDataProvider().fetch(new Query<>()).toList().isEmpty());
+        verify(presenter).loadPurchaseHistory();
+    }
+
+    @Test
+    void GivenInvalidEventId_WhenCreatingOrder_ThenInlineValidationMessageIsShown() {
+        OrdersPresenter presenter = mockPresenter();
+        OrdersView view = new OrdersView(presenter);
+        findTextField(view, "Event ID").setValue("not-a-uuid");
+
+        clickButton(view, "Create active order");
+
+        assertTrue(hasText(view, "Enter a valid event ID."));
+    }
+
+    @Test
     void GivenApplicationServiceThrows_WhenOrderActionRuns_ThenUserFacingErrorIsShown() {
         OrdersPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
@@ -196,6 +227,81 @@ class OrdersViewTest {
         clickButton(view, "Create active order");
 
         assertTrue(hasText(view, "Session already has an active order"));
+    }
+
+    @Test
+    void GivenActiveOrderAndTicketSelectionFails_WhenAddingGaTickets_ThenFailureMessageIsShownInline() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID gaZoneId = UUID.randomUUID();
+        UUID seatZoneId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        EventMapDTO eventMap = eventMap(eventId, gaZoneId, seatZoneId, seatId);
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of());
+        when(presenter.createOrder(eventId)).thenReturn(OrderResult.success("Active order created.", orderId, order));
+        when(presenter.loadEventInventory(eventId)).thenReturn(InventoryResult.success("Event inventory loaded.", eventMap));
+        when(presenter.addGATickets(orderId, gaZoneId, 1))
+                .thenReturn(OrderMutationResult.failure("Only 0 ticket(s) remain available in this zone"));
+        OrdersView view = new OrdersView(presenter);
+        findTextField(view, "Event ID").setValue(eventId.toString());
+
+        clickButton(view, "Create active order");
+        clickButton(view, "Load event inventory");
+        clickButton(view, "Add GA tickets");
+
+        assertTrue(hasText(view, "Only 0 ticket(s) remain available in this zone"));
+        verify(presenter).addGATickets(orderId, gaZoneId, 1);
+    }
+
+    @Test
+    void GivenPolicyFailure_WhenCheckoutClicked_ThenPolicyMessageIsShownInline() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        String policyMessage = "Purchase policy violation: AGE_RESTRICTED - Buyer does not meet age policy";
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.createOrder(eventId)).thenReturn(OrderResult.success("Active order created.", orderId, order));
+        when(presenter.checkout(orderId, "")).thenReturn(CheckoutResult.failure(policyMessage));
+        OrdersView view = new OrdersView(presenter);
+        findTextField(view, "Event ID").setValue(eventId.toString());
+
+        clickButton(view, "Create active order");
+        clickButton(view, "Checkout");
+
+        assertTrue(hasText(view, policyMessage));
+        verify(presenter).checkout(orderId, "");
+    }
+
+    @Test
+    void GivenSelectedOrderItem_WhenRemovingAndUpdatingFail_ThenFailureMessagesAreShownInline() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        OrderItemDto item = gaItem(itemId, zoneId, 2);
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
+        when(presenter.loadActiveOrder(orderId)).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.updateGAQuantity(orderId, zoneId, 4))
+                .thenReturn(OrderMutationResult.failure("GA quantity exceeds remaining availability."));
+        when(presenter.removeItem(orderId, itemId))
+                .thenReturn(OrderMutationResult.failure("Order item could not be removed."));
+        OrdersView view = new OrdersView(presenter);
+        findTextField(view, "Order ID").setValue(orderId.toString());
+
+        clickButton(view, "Load active order");
+        findOrderItemsGrid(view).asSingleSelect().setValue(item);
+        findIntegerField(view, "New GA quantity").setValue(4);
+        clickButton(view, "Update selected GA quantity");
+        assertTrue(hasText(view, "GA quantity exceeds remaining availability."));
+
+        findOrderItemsGrid(view).asSingleSelect().setValue(item);
+        clickButton(view, "Remove selected item");
+
+        assertTrue(hasText(view, "Order item could not be removed."));
+        verify(presenter).updateGAQuantity(orderId, zoneId, 4);
+        verify(presenter).removeItem(orderId, itemId);
     }
 
     @Test
@@ -221,9 +327,11 @@ class OrdersViewTest {
         findOrderItemsGrid(view).asSingleSelect().setValue(item);
         findIntegerField(view, "New GA quantity").setValue(4);
         clickButton(view, "Update selected GA quantity");
+        assertTrue(hasText(view, "GA quantity updated."));
         findOrderItemsGrid(view).asSingleSelect().setValue(updatedOrder.getItems().get(0));
         clickButton(view, "Remove selected item");
 
+        assertTrue(hasText(view, "Order item removed."));
         assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 0 | total 0"));
         verify(presenter).updateGAQuantity(orderId, zoneId, 4);
         verify(presenter).removeItem(orderId, itemId);

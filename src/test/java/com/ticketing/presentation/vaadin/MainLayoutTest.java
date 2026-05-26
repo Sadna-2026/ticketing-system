@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,6 +44,6 @@ class MainLayoutTest {
     private static List<String> labelsFor(SessionContext.UiState state) {
         return MainLayout.navigationItems(state).stream()
                 .map(MainLayout.NavigationItem::label)
-                .collect(Collectors.toList());
+                .toList();
     }
 }

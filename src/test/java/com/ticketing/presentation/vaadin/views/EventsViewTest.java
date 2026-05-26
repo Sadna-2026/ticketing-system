@@ -111,9 +111,25 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
 
+        assertTrue(hasText(view, "Event map loaded."));
         assertTrue(hasText(view, "Company: Acme"));
         assertTrue(hasText(view, "Available: 10"));
         assertTrue(hasText(view, "A-2 unavailable"));
+    }
+
+    @Test
+    void GivenSelectedEventMapFails_WhenViewMapClicked_ThenFailureMessageIsShownInline() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        EventSummaryDTO event = eventSummary("Spring Concert");
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.failure("Event map not found."));
+        EventsView view = new EventsView(presenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        assertTrue(hasText(view, "Event map not found."));
     }
 
     @Test

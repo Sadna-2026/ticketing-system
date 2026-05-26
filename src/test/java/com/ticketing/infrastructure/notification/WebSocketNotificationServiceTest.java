@@ -12,6 +12,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -29,6 +30,11 @@ class WebSocketNotificationServiceTest {
         // Use a single-thread executor for deterministic test behavior
         service = new WebSocketNotificationService(pendingRepo,
                 Executors.newSingleThreadExecutor());
+    }
+
+    @AfterEach
+    void tearDown() {
+        service.shutdown();
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -166,6 +172,48 @@ class WebSocketNotificationServiceTest {
             service.notify("user-4", "After disconnect");
             List<String> pending = pendingRepo.getPendingNotifications("user-4");
             assertEquals(1, pending.size());
+        }
+
+        @Test
+        void GivenTwoListenersForMember_WhenOneRegistrationIsRemoved_ThenOtherListenerRemainsActive() throws Exception {
+            List<String> first = Collections.synchronizedList(new ArrayList<>());
+            List<String> second = Collections.synchronizedList(new ArrayList<>());
+            CountDownLatch delivered = new CountDownLatch(1);
+            String firstRegistration = service.registerListener("user-5", first::add);
+            service.registerListener("user-5", message -> {
+                second.add(message);
+                delivered.countDown();
+            });
+
+            service.removeListener("user-5", firstRegistration);
+            service.notify("user-5", "Still connected");
+
+            assertTrue(delivered.await(2, TimeUnit.SECONDS));
+            assertTrue(first.isEmpty());
+            assertEquals(List.of("Still connected"), second);
+            assertTrue(service.hasListener("user-5"));
+            assertTrue(pendingRepo.getPendingNotifications("user-5").isEmpty());
+        }
+
+        @Test
+        void GivenTwoListenersForMember_WhenNotify_ThenBothListenersReceiveMessage() throws Exception {
+            List<String> first = Collections.synchronizedList(new ArrayList<>());
+            List<String> second = Collections.synchronizedList(new ArrayList<>());
+            CountDownLatch delivered = new CountDownLatch(2);
+            service.registerListener("user-6", message -> {
+                first.add(message);
+                delivered.countDown();
+            });
+            service.registerListener("user-6", message -> {
+                second.add(message);
+                delivered.countDown();
+            });
+
+            service.notify("user-6", "Broadcast");
+
+            assertTrue(delivered.await(2, TimeUnit.SECONDS));
+            assertEquals(List.of("Broadcast"), first);
+            assertEquals(List.of("Broadcast"), second);
         }
 
         @Test

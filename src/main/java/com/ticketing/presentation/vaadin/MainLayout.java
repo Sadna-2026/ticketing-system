@@ -38,7 +38,7 @@ public class MainLayout extends AppLayout {
     public void refreshNavigation() {
         navigation.removeAll();
         for (NavigationItem item : navigationItems(SessionContext.currentUiState())) {
-            navigation.add(tab(item.label(), item.target()));
+            navigation.add(tab(item));
         }
     }
 
@@ -70,8 +70,8 @@ public class MainLayout extends AppLayout {
         return List.copyOf(items);
     }
 
-    private Tab tab(String label, Class<? extends Component> target) {
-        RouterLink link = new RouterLink(label, target);
+    private Tab tab(NavigationItem item) {
+        RouterLink link = new RouterLink(item.label(), item.target());
         return new Tab(link);
     }
 
