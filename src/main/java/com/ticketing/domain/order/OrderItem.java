@@ -51,7 +51,7 @@ public class OrderItem {
     }
 
     public OrderItemDto getOrderItemDto(){
-        return new OrderItemDto(id, zoneId, seatId, quantity, pricePerTicket, pricePerTicket, isAssignedSeat());
+        return new OrderItemDto(id, zoneId, seatId, quantity, pricePerTicket, getTotalPrice(), isAssignedSeat());
     }
 
     public UUID getId() { return id; }
