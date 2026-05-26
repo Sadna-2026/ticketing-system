@@ -60,6 +60,13 @@ public class CompanyView extends VerticalLayout {
     private final CompanyPresenter presenter;
 
     private final Span sessionStatus = new Span();
+    private final Paragraph memberOnlyCompanyHint = new Paragraph("Log in as a member to use company owner and manager actions.");
+    private VerticalLayout openCompanyControls;
+    private VerticalLayout personnelControls;
+    private VerticalLayout eventManagementControls;
+    private VerticalLayout inventoryManagementControls;
+    private VerticalLayout lifecycleControls;
+    private VerticalLayout reportingControls;
 
     private final TextField openCompanyName = new TextField("New company name");
     private final TextArea openCompanyDescription = new TextArea("New company description");
@@ -131,6 +138,7 @@ public class CompanyView extends VerticalLayout {
                 new H2("Company"),
                 new Paragraph("Use member company owner and manager actions backed directly by application services."),
                 sessionStatus,
+                memberOnlyCompanyHint,
                 companySection(),
                 personnelSection(),
                 eventManagementSection(),
@@ -198,10 +206,12 @@ public class CompanyView extends VerticalLayout {
 
         FormLayout openForm = new FormLayout(openCompanyName, openCompanyDescription);
         FormLayout infoForm = new FormLayout(infoCompanyName);
+        openCompanyControls = new VerticalLayout(openForm, openCompany);
+        openCompanyControls.setPadding(false);
+
         VerticalLayout section = new VerticalLayout(
                 new H3("Company"),
-                openForm,
-                openCompany,
+                openCompanyControls,
                 infoForm,
                 loadInfo,
                 companyInfoStatus,
@@ -239,6 +249,7 @@ public class CompanyView extends VerticalLayout {
 
         VerticalLayout section = new VerticalLayout(new H3("Role appointment and personnel"), form, actions, personnelStatus, orgChartDisplay);
         section.setPadding(false);
+        personnelControls = section;
         return section;
     }
 
@@ -272,6 +283,7 @@ public class CompanyView extends VerticalLayout {
 
         VerticalLayout section = new VerticalLayout(new H3("Event management"), createForm, editForm, actions, eventStatus);
         section.setPadding(false);
+        eventManagementControls = section;
         return section;
     }
 
@@ -304,13 +316,26 @@ public class CompanyView extends VerticalLayout {
                 zonePriceUpdate.getValue()
         )));
 
-        FormLayout form = new FormLayout(inventoryEventId, inventoryZoneId, seatRow, seatNumber, seatId, capacityDelta, zonePriceUpdate);
+        FormLayout mapForm = new FormLayout(inventoryEventId);
+        HorizontalLayout mapActions = new HorizontalLayout(loadMap);
+        mapActions.setAlignItems(Alignment.BASELINE);
+
+        FormLayout form = new FormLayout(inventoryZoneId, seatRow, seatNumber, seatId, capacityDelta, zonePriceUpdate);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
-        HorizontalLayout actions = new HorizontalLayout(loadMap, addSeat, removeSeat, increaseCapacity, decreaseCapacity, setPrice);
+        HorizontalLayout actions = new HorizontalLayout(addSeat, removeSeat, increaseCapacity, decreaseCapacity, setPrice);
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
+        inventoryManagementControls = new VerticalLayout(form, actions);
+        inventoryManagementControls.setPadding(false);
 
-        VerticalLayout section = new VerticalLayout(new H3("Inventory and map"), form, actions, inventoryStatus, eventMapDisplay);
+        VerticalLayout section = new VerticalLayout(
+                new H3("Inventory and map"),
+                mapForm,
+                mapActions,
+                inventoryManagementControls,
+                inventoryStatus,
+                eventMapDisplay
+        );
         section.setPadding(false);
         return section;
     }
@@ -324,6 +349,7 @@ public class CompanyView extends VerticalLayout {
 
         VerticalLayout section = new VerticalLayout(new H3("Company lifecycle"), lifecycleCompanyName, actions, lifecycleStatus);
         section.setPadding(false);
+        lifecycleControls = section;
         return section;
     }
 
@@ -342,6 +368,7 @@ public class CompanyView extends VerticalLayout {
                 salesReportDisplay
         );
         section.setPadding(false);
+        reportingControls = section;
         return section;
     }
 
@@ -586,6 +613,14 @@ public class CompanyView extends VerticalLayout {
 
     private void refreshSessionStatus() {
         sessionStatus.setText(presenter.currentSessionLabel());
+        boolean member = presenter.currentSessionState().loggedInMember();
+        memberOnlyCompanyHint.setVisible(!member);
+        openCompanyControls.setVisible(member);
+        personnelControls.setVisible(member);
+        eventManagementControls.setVisible(member);
+        inventoryManagementControls.setVisible(member);
+        lifecycleControls.setVisible(member);
+        reportingControls.setVisible(member);
     }
 
     private String formatInstant(Instant instant) {

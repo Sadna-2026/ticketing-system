@@ -1,6 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -26,6 +27,7 @@ import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
@@ -71,6 +73,21 @@ class AdminViewTest {
     }
 
     @Test
+    void GivenRegularMemberSession_WhenRendered_ThenAdminControlsAreHiddenWithExplanation() {
+        AdminPresenter presenter = mock(AdminPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
+
+        AdminView view = new AdminView(presenter);
+
+        assertFalse(hasVisibleButton(view, "Remove member"));
+        assertFalse(hasVisibleButton(view, "Load global purchase history"));
+        assertFalse(hasVisibleButton(view, "Suspend member"));
+        assertFalse(hasVisibleButton(view, "Check policy backend support"));
+        assertTrue(hasText(view, "Log in with system admin permissions to use admin actions."));
+    }
+
+    @Test
     void GivenTargetMember_WhenRemoveClicked_ThenPresenterIsCalledAndStatusIsDisplayed() {
         AdminPresenter presenter = mockPresenter();
         UUID targetId = UUID.randomUUID();
@@ -94,6 +111,7 @@ class AdminViewTest {
 
         assertTrue(hasText(view, "Enter a valid target member ID."));
         verify(presenter).currentSessionLabel();
+        verify(presenter).currentSessionState();
         verifyNoMoreInteractions(presenter);
     }
 
@@ -171,6 +189,7 @@ class AdminViewTest {
     private AdminPresenter mockPresenter() {
         AdminPresenter presenter = mock(AdminPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (root)");
+        when(presenter.currentSessionState()).thenReturn(admin());
         return presenter;
     }
 
@@ -208,6 +227,14 @@ class AdminViewTest {
                 .filter(Button.class::isInstance)
                 .map(Button.class::cast)
                 .anyMatch(button -> text.equals(button.getText()));
+    }
+
+    private static boolean hasVisibleButton(Component root, String text) {
+        return components(root).stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> text.equals(button.getText()))
+                .anyMatch(AdminViewTest::isEffectivelyVisible);
     }
 
     private static void clickButton(Component root, String text) {
@@ -296,8 +323,25 @@ class AdminViewTest {
         return result;
     }
 
+    private static boolean isEffectivelyVisible(Component component) {
+        if (!component.isVisible()) {
+            return false;
+        }
+        return component.getParent()
+                .map(AdminViewTest::isEffectivelyVisible)
+                .orElse(true);
+    }
+
     private static void collect(Component component, List<Component> result) {
         result.add(component);
         component.getChildren().forEach(child -> collect(child, result));
+    }
+
+    private static SessionContext.UiState member() {
+        return new SessionContext.UiState(true, false, true, false, "alice", "Member");
+    }
+
+    private static SessionContext.UiState admin() {
+        return new SessionContext.UiState(true, false, true, true, "root", "Member");
     }
 }

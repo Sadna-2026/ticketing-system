@@ -1,6 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -31,6 +32,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResul
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.InventoryResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
@@ -54,16 +56,17 @@ class OrdersViewTest {
     }
 
     @Test
-    void GivenOrdersView_WhenRendered_ThenOrderCheckoutAndHistoryControlsAreAvailable() {
+    void GivenGuestSession_WhenRendered_ThenOrderCheckoutControlsAreVisibleAndHistoryIsHidden() {
         OrdersPresenter presenter = mockPresenter();
 
         OrdersView view = new OrdersView(presenter);
 
-        assertTrue(hasButton(view, "Create active order"));
-        assertTrue(hasButton(view, "Load event inventory"));
-        assertTrue(hasButton(view, "Load active order"));
-        assertTrue(hasButton(view, "Checkout"));
-        assertTrue(hasButton(view, "Load purchase history"));
+        assertTrue(hasVisibleButton(view, "Create active order"));
+        assertTrue(hasVisibleButton(view, "Load event inventory"));
+        assertTrue(hasVisibleButton(view, "Load active order"));
+        assertTrue(hasVisibleButton(view, "Checkout"));
+        assertFalse(hasVisibleButton(view, "Load purchase history"));
+        assertTrue(hasText(view, "Log in as a member to view purchase history."));
         assertNotNull(findTextField(view, "Event ID"));
         assertNotNull(findTextField(view, "Order ID"));
         assertNotNull(findTextField(view, "Coupon code"));
@@ -170,6 +173,7 @@ class OrdersViewTest {
         OrdersPresenter presenter = mockPresenter();
         PurchaseRecordDTO purchase = purchase();
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
         when(presenter.loadPurchaseHistory()).thenReturn(HistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
         OrdersView view = new OrdersView(presenter);
 
@@ -228,14 +232,13 @@ class OrdersViewTest {
     private OrdersPresenter mockPresenter() {
         OrdersPresenter presenter = mock(OrdersPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
         return presenter;
     }
 
-    private boolean hasButton(Component root, String text) {
-        if (root instanceof Button button && text.equals(button.getText())) {
-            return true;
-        }
-        return root.getChildren().anyMatch(child -> hasButton(child, text));
+    private boolean hasVisibleButton(Component root, String text) {
+        Button button = findButton(root, text);
+        return button != null && isEffectivelyVisible(button);
     }
 
     private void clickButton(Component root, String text) {
@@ -282,6 +285,23 @@ class OrdersViewTest {
             return true;
         }
         return root.getChildren().anyMatch(child -> hasText(child, text));
+    }
+
+    private boolean isEffectivelyVisible(Component component) {
+        if (!component.isVisible()) {
+            return false;
+        }
+        return component.getParent()
+                .map(this::isEffectivelyVisible)
+                .orElse(true);
+    }
+
+    private static SessionContext.UiState guest() {
+        return new SessionContext.UiState(true, true, false, false, null, "Guest");
+    }
+
+    private static SessionContext.UiState member() {
+        return new SessionContext.UiState(true, false, true, false, "alice", "Member");
     }
 
     @SuppressWarnings("unchecked")

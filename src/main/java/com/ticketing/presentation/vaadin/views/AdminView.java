@@ -45,6 +45,12 @@ public class AdminView extends VerticalLayout {
     private final AdminPresenter presenter;
 
     private final Span sessionStatus = new Span();
+    private final Paragraph adminOnlyHint = new Paragraph("Log in with system admin permissions to use admin actions.");
+    private VerticalLayout memberControls;
+    private VerticalLayout purchaseHistoryControls;
+    private VerticalLayout suspensionControls;
+    private VerticalLayout policyControls;
+
     private final Span memberStatus = new Span("Remove members using system admin authorization.");
     private final TextField removeTargetMemberId = new TextField("Target member ID");
 
@@ -83,6 +89,7 @@ public class AdminView extends VerticalLayout {
                 new H2("Admin"),
                 new Paragraph("Use system admin actions backed directly by application services."),
                 sessionStatus,
+                adminOnlyHint,
                 memberSection(),
                 purchaseHistorySection(),
                 suspensionSection(),
@@ -143,6 +150,7 @@ public class AdminView extends VerticalLayout {
                 memberStatus
         );
         section.setPadding(false);
+        memberControls = section;
         return section;
     }
 
@@ -159,6 +167,7 @@ public class AdminView extends VerticalLayout {
                 purchaseHistoryGrid
         );
         section.setPadding(false);
+        purchaseHistoryControls = section;
         return section;
     }
 
@@ -187,6 +196,7 @@ public class AdminView extends VerticalLayout {
                 suspensionsGrid
         );
         section.setPadding(false);
+        suspensionControls = section;
         return section;
     }
 
@@ -204,6 +214,7 @@ public class AdminView extends VerticalLayout {
                 policyStatus
         );
         section.setPadding(false);
+        policyControls = section;
         return section;
     }
 
@@ -326,6 +337,12 @@ public class AdminView extends VerticalLayout {
 
     private void refreshSessionStatus() {
         sessionStatus.setText(presenter.currentSessionLabel());
+        boolean admin = presenter.currentSessionState().systemAdmin();
+        adminOnlyHint.setVisible(!admin);
+        memberControls.setVisible(admin);
+        purchaseHistoryControls.setVisible(admin);
+        suspensionControls.setVisible(admin);
+        policyControls.setVisible(admin);
     }
 
     private String formatInstant(Instant instant) {
