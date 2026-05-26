@@ -3,11 +3,15 @@ package com.ticketing.domain.company;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.ticketing.domain.event.IDiscountPolicy;
+import com.ticketing.domain.event.NoDiscountPolicy;
+
 public class Company {
     private String name; // also the unique identifier for the company
     private String description;
     private final UUID founderId;
     private CompanyStatus status;
+    private IDiscountPolicy discountPolicy;
     private int version;
 
     public Company(String name, String description, UUID founderId) {
@@ -22,6 +26,7 @@ public class Company {
         this.description = description;
         this.founderId = founderId;
         this.status = CompanyStatus.ACTIVE;
+        this.discountPolicy = new NoDiscountPolicy();
     }
 
     // --- Getters ---
@@ -31,6 +36,13 @@ public class Company {
     public CompanyStatus getStatus() { return status; }
 
     public boolean isActive() { return status == CompanyStatus.ACTIVE; }
+
+    public IDiscountPolicy getDiscountPolicy() { return discountPolicy; }
+
+    public void setDiscountPolicy(IDiscountPolicy policy) {
+        if (policy == null) throw new IllegalArgumentException("Discount policy cannot be null");
+        this.discountPolicy = policy;
+    }
 
     public int getVersion() { return version; }
 
@@ -43,6 +55,7 @@ public class Company {
     public Company detachedCopy() {
         Company copy = new Company(name, description, founderId);
         copy.status = this.status;
+        copy.discountPolicy = this.discountPolicy;
         copy.version = this.version;
         return copy;
     }

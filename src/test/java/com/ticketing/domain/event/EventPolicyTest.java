@@ -9,11 +9,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+
+import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.OrderItem;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
@@ -147,5 +151,238 @@ class EventPolicyTest {
             assertFalse(result.allowed());
             assertEquals("ALL_OR_CONDITIONS_FAILED", result.errorCode());
         }
+    }
+
+    // -------- Discount policy tests (V2-UC-2 / #148) --------
+
+    @Nested
+    @DisplayName("SimpleDiscount")
+    class SimpleDiscountTests {
+
+        @Test
+        void GivenSimpleDiscount_WhenApply_ThenPriceReducedByPercentage() {
+            SimpleDiscount discount = new SimpleDiscount(new BigDecimal("10"));
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            BigDecimal result = discount.priceAfterDiscount(order, null, Instant.now());
+
+            assertEquals(new BigDecimal("90.00"), result);
+        }
+
+        @Test
+        void GivenSimpleDiscount50Percent_WhenApply_ThenHalfPrice() {
+            SimpleDiscount discount = new SimpleDiscount(new BigDecimal("50"));
+            ActiveOrder order = orderWithTotal(new BigDecimal("200.00"));
+
+            assertEquals(new BigDecimal("100.00"), discount.priceAfterDiscount(order, null, Instant.now()));
+        }
+    }
+
+    @Nested
+    @DisplayName("ConditionalDiscount")
+    class ConditionalDiscountTests {
+
+        @Test
+        void GivenMinQuantityConditionMet_WhenApply_ThenDiscountApplied() {
+            ConditionalDiscount discount = new ConditionalDiscount(
+                    new BigDecimal("10"), new MinQuantityCondition(2));
+            ActiveOrder order = orderWithItems(3, new BigDecimal("50.00"));
+
+            BigDecimal result = discount.priceAfterDiscount(order, null, Instant.now());
+
+            // 3 * 50 = 150, 10% off = 135
+            assertEquals(new BigDecimal("135.00"), result);
+        }
+
+        @Test
+        void GivenMinQuantityConditionNotMet_WhenApply_ThenOriginalPrice() {
+            ConditionalDiscount discount = new ConditionalDiscount(
+                    new BigDecimal("10"), new MinQuantityCondition(5));
+            ActiveOrder order = orderWithItems(2, new BigDecimal("50.00"));
+
+            BigDecimal result = discount.priceAfterDiscount(order, null, Instant.now());
+
+            assertEquals(new BigDecimal("100.00"), result);
+        }
+
+        @Test
+        void GivenDateRangeConditionMet_WhenApply_ThenDiscountApplied() {
+            Instant now = Instant.now();
+            DateRangeCondition inRange = new DateRangeCondition(
+                    now.minus(1, ChronoUnit.DAYS), now.plus(1, ChronoUnit.DAYS));
+            ConditionalDiscount discount = new ConditionalDiscount(new BigDecimal("15"), inRange);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("85.00"), discount.priceAfterDiscount(order, null, now));
+        }
+
+        @Test
+        void GivenDateRangeConditionExpired_WhenApply_ThenOriginalPrice() {
+            Instant now = Instant.now();
+            DateRangeCondition expired = new DateRangeCondition(
+                    now.minus(10, ChronoUnit.DAYS), now.minus(1, ChronoUnit.DAYS));
+            ConditionalDiscount discount = new ConditionalDiscount(new BigDecimal("15"), expired);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("100.00"), discount.priceAfterDiscount(order, null, now));
+        }
+
+        @Test
+        void GivenNewConditionType_WhenAddToConditional_ThenNoChangesToExistingCode() {
+            // demonstrates extensibility: custom condition plugs in without changing anything
+            IDiscountCondition weekendOnly = (order, now) -> true; // always met for test
+            ConditionalDiscount discount = new ConditionalDiscount(new BigDecimal("5"), weekendOnly);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("95.00"), discount.priceAfterDiscount(order, null, Instant.now()));
+        }
+    }
+
+    @Nested
+    @DisplayName("CouponDiscount")
+    class CouponDiscountTests {
+
+        @Test
+        void GivenCorrectCodeBeforeExpiry_WhenApply_ThenDiscountApplied() {
+            Instant expiry = Instant.now().plus(30, ChronoUnit.DAYS);
+            CouponDiscount discount = new CouponDiscount(new BigDecimal("20"), "SAVE20", expiry);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("80.00"),
+                    discount.priceAfterDiscount(order, "SAVE20", Instant.now()));
+        }
+
+        @Test
+        void GivenWrongCode_WhenApply_ThenOriginalPrice() {
+            Instant expiry = Instant.now().plus(30, ChronoUnit.DAYS);
+            CouponDiscount discount = new CouponDiscount(new BigDecimal("20"), "SAVE20", expiry);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("100.00"),
+                    discount.priceAfterDiscount(order, "WRONGCODE", Instant.now()));
+        }
+
+        @Test
+        void GivenNullCode_WhenApply_ThenOriginalPrice() {
+            Instant expiry = Instant.now().plus(30, ChronoUnit.DAYS);
+            CouponDiscount discount = new CouponDiscount(new BigDecimal("20"), "SAVE20", expiry);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("100.00"),
+                    discount.priceAfterDiscount(order, null, Instant.now()));
+        }
+
+        @Test
+        void GivenExpiredCoupon_WhenApply_ThenOriginalPrice() {
+            Instant expiry = Instant.now().minus(1, ChronoUnit.DAYS);
+            CouponDiscount discount = new CouponDiscount(new BigDecimal("20"), "SAVE20", expiry);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("100.00"),
+                    discount.priceAfterDiscount(order, "SAVE20", Instant.now()));
+        }
+
+        @Test
+        void GivenCodeCaseInsensitive_WhenApply_ThenDiscountApplied() {
+            Instant expiry = Instant.now().plus(30, ChronoUnit.DAYS);
+            CouponDiscount discount = new CouponDiscount(new BigDecimal("20"), "SAVE20", expiry);
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+
+            assertEquals(new BigDecimal("80.00"),
+                    discount.priceAfterDiscount(order, "save20", Instant.now()));
+        }
+    }
+
+    @Nested
+    @DisplayName("DiscountComposition")
+    class DiscountCompositionTests {
+
+        @Test
+        void GivenMaxComposite_WhenMultipleDiscounts_ThenBiggestDiscountWins() {
+            IDiscountPolicy tenOff = new SimpleDiscount(new BigDecimal("10"));
+            IDiscountPolicy twentyOff = new SimpleDiscount(new BigDecimal("20"));
+            MaxCompositeDiscount max = new MaxCompositeDiscount(List.of(tenOff, twentyOff));
+
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+            // 20% is bigger discount → final price 80
+            assertEquals(new BigDecimal("80.00"),
+                    max.priceAfterDiscount(order, null, Instant.now()));
+        }
+
+        @Test
+        void GivenSumComposite_WhenMultipleDiscounts_ThenDiscountsStack() {
+            IDiscountPolicy tenOff = new SimpleDiscount(new BigDecimal("10"));
+            IDiscountPolicy twentyOff = new SimpleDiscount(new BigDecimal("20"));
+            SumCompositeDiscount sum = new SumCompositeDiscount(List.of(tenOff, twentyOff));
+
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+            // 10% + 20% = 30% off → final price 70
+            assertEquals(new BigDecimal("70.00"),
+                    sum.priceAfterDiscount(order, null, Instant.now()));
+        }
+
+        @Test
+        void GivenSumComposite_WhenDiscountsExceed100Percent_ThenClampedToZero() {
+            IDiscountPolicy sixtyOff = new SimpleDiscount(new BigDecimal("60"));
+            IDiscountPolicy fiftyOff = new SimpleDiscount(new BigDecimal("50"));
+            SumCompositeDiscount sum = new SumCompositeDiscount(List.of(sixtyOff, fiftyOff));
+
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+            // 60% + 50% = 110% off → clamped to 0
+            assertEquals(new BigDecimal("0.00"),
+                    sum.priceAfterDiscount(order, null, Instant.now()).setScale(2));
+        }
+
+        @Test
+        void GivenMaxComposite_WhenConditionalNotMet_ThenOnlyMetDiscountApplied() {
+            IDiscountPolicy tenOff = new SimpleDiscount(new BigDecimal("10"));
+            // 30% off only if 5+ tickets — won't be met
+            IDiscountPolicy conditional = new ConditionalDiscount(
+                    new BigDecimal("30"), new MinQuantityCondition(5));
+            MaxCompositeDiscount max = new MaxCompositeDiscount(List.of(tenOff, conditional));
+
+            ActiveOrder order = orderWithItems(2, new BigDecimal("50.00"));
+            // only 10% applies → 100 * 0.9 = 90
+            assertEquals(new BigDecimal("90.00"),
+                    max.priceAfterDiscount(order, null, Instant.now()));
+        }
+
+        @Test
+        void GivenNestedComposition_WhenEvaluate_ThenWorksAtArbitraryDepth() {
+            // sum(10% simple, max(20% simple, 5% simple))
+            // inner max: 20% wins → discount 20
+            // outer sum: 10 + 20 = 30 discount → price 70
+            IDiscountPolicy tenOff = new SimpleDiscount(new BigDecimal("10"));
+            IDiscountPolicy twentyOff = new SimpleDiscount(new BigDecimal("20"));
+            IDiscountPolicy fiveOff = new SimpleDiscount(new BigDecimal("5"));
+
+            IDiscountPolicy innerMax = new MaxCompositeDiscount(List.of(twentyOff, fiveOff));
+            IDiscountPolicy outerSum = new SumCompositeDiscount(List.of(tenOff, innerMax));
+
+            ActiveOrder order = orderWithTotal(new BigDecimal("100.00"));
+            assertEquals(new BigDecimal("70.00"),
+                    outerSum.priceAfterDiscount(order, null, Instant.now()));
+        }
+    }
+
+    // ---- helpers ----
+
+    private static ActiveOrder orderWithTotal(BigDecimal total) {
+        ActiveOrder order = new ActiveOrder(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), Instant.now());
+        // single GA item with the desired total
+        order.addItem(OrderItem.forGA(UUID.randomUUID(), UUID.randomUUID(), 1, total));
+        return order;
+    }
+
+    private static ActiveOrder orderWithItems(int count, BigDecimal priceEach) {
+        ActiveOrder order = new ActiveOrder(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), Instant.now());
+        UUID zoneId = UUID.randomUUID();
+        for (int i = 0; i < count; i++) {
+            order.addItem(OrderItem.forSeat(UUID.randomUUID(), zoneId,
+                    UUID.randomUUID(), priceEach));
+        }
+        return order;
     }
 }
