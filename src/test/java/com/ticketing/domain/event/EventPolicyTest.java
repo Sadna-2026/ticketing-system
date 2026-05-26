@@ -17,10 +17,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
-import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.order.OrderItem;
-
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -249,6 +245,9 @@ class EventPolicyTest {
 
             assertEquals(new BigDecimal("80.00"),
                     discount.priceAfterDiscount(order, "save20", Instant.now()));
+        }
+    }
+
     @Nested
     @DisplayName("AgeRestrictionPolicy")
     class AgeRestriction {
@@ -444,6 +443,8 @@ class EventPolicyTest {
                     UUID.randomUUID(), priceEach));
         }
         return order;
+    }
+
     @DisplayName("Composition")
     class Composition {
 
