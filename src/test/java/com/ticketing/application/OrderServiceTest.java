@@ -30,8 +30,7 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.application.services.OrderTimeDomainService;
-import com.ticketing.application.services.TicketSelectionService;
+import com.ticketing.domain.services.OrderTimeDomainService;
 import com.ticketing.domain.auth.SessionTokenData;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
@@ -557,8 +556,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
         
         OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
-                new TicketSelectionService(eventRepo));
+                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway));
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 2);
@@ -581,8 +579,7 @@ public class OrderServiceTest {
         secondaryGateway.failIssue = true;
         
         OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
-                new TicketSelectionService(eventRepo));
+                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway));
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
@@ -606,8 +603,7 @@ public class OrderServiceTest {
         primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success 
         
         OrderService partialService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(paymentGateway), List.of(primaryGateway),
-                new TicketSelectionService(eventRepo));
+                memberRepo, List.of(paymentGateway), List.of(primaryGateway));
 
         UUID orderId = partialService.createOrder(guestToken, eventId);
         partialService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
@@ -696,8 +692,7 @@ public class OrderServiceTest {
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
         
         OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
-                new TicketSelectionService(eventRepo));
+                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway));
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
@@ -718,8 +713,7 @@ public class OrderServiceTest {
         secondaryPayment.failCharges = true;
         
         OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
-                new TicketSelectionService(eventRepo));
+                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway));
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);

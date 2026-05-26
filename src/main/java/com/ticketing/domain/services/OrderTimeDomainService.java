@@ -1,4 +1,4 @@
-package  com.ticketing.application.services;
+package com.ticketing.domain.services;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,23 +20,16 @@ public class OrderTimeDomainService {
 
     private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
-    //private final IDomainEventPublisher eventPublisher;
     private final ISystemClock systemClock;
 
     public OrderTimeDomainService(IOrderRepository orderRepository,
                                   IEventRepository eventRepository,
-                                  //IDomainEventPublisher eventPublisher,
                                   ISystemClock systemClock) {
         this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
-        //this.eventPublisher = eventPublisher;
         this.systemClock = systemClock;
     }
 
-    /**
-     * Sweeps all active orders and expires any that have exceeded their
-     * event's lock timer duration. Releases inventory for expired orders.
-     */
     public void expireOrders() {
         Instant now = systemClock.now();
         List<ActiveOrder> activeOrders = orderRepository.findAllActive();
@@ -85,11 +78,6 @@ public class OrderTimeDomainService {
         order.expire();
         orderRepository.save(order);
 
-        // eventPublisher.publish(new OrderExpiredEvent(
-        //         order.getId(), order.getSessionId(), order.getEventId(), systemClock.now()));
-        // log.info("Order expired: orderId={}, eventId={}", order.getId(), order.getEventId());
         log.warn("Reservation expired: orderId={}, eventId={}", order.getId(), order.getEventId());
     }
 }
-
-

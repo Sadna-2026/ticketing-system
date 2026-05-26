@@ -314,3 +314,12 @@ Output received (short description):
 - Modifications made: renames only, then organized imports on the files I'd touched.
 - Initial gaps in understanding (if any): Tests should be GWT.
 - Final understanding (brief explanation in your own words): Tests should be GWT format. AI is great for monotonic tasks like renaming test functions that are never called from anywhere else.
+
+## Feature / Component: Move logic to domain services
+- Purpose of LLM use: Help me move code around so the application services are smaller.
+- Summary of prompt(s): Move the logic that checks multiple things into domain services. Make sure the application services only orchestrate things.
+- Output received (short description): Made new domain services like EventDomainService and moved the heavy code there.
+- Files / components affected: EventService, OrderService and their new domain services.
+- Modifications made: Took out the extra repositories from the application services and put them in the domain services instead.
+- Initial gaps in understanding (if any): Just wanted to save some typing time.
+- Final understanding (brief explanation in your own words): The domain services should do the real work and hold the repositories. The application layer is just the entry point now.

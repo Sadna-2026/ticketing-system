@@ -491,6 +491,7 @@ class EventPolicyTest {
         return order;
     }
 
+    @Nested
     @DisplayName("Composition")
     class Composition {
 

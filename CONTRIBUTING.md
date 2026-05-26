@@ -15,19 +15,22 @@ As per V1 specifications (#UC-I.5 and #UC-I.6), full real-time and delayed notif
 *   **Real-Time:** Services should use the INotificationService interface in the application layer. In V1, this is bound to a no-op StubNotificationService that simply logs the intent.
 *   **Delayed/Pending:** Services should reference IPendingNotificationRepository if they need to queue a message for an offline user. In V1, the StubPendingNotificationRepository sinks these calls. In V2, this will be replaced with a database-backed repository to deliver messages upon the user's next login.
 
-## Notifications Architecture (V1 vs V2)
-As per V1 specifications (#UC-I.5 and #UC-I.6), full real-time and delayed notification delivery is **deferred to V2**.
-*   **Real-Time:** Services should use the INotificationService interface in the application layer. In V1, this is bound to a no-op StubNotificationService that simply logs the intent.
-*   **Delayed/Pending:** Services should reference IPendingNotificationRepository if they need to queue a message for an offline user. In V1, the StubPendingNotificationRepository sinks these calls. In V2, this will be replaced with a database-backed repository to deliver messages upon the user's next login.
-
-## Notifications Architecture (V1 vs V2)
-As per V1 specifications (#UC-I.5 and #UC-I.6), full real-time and delayed notification delivery is **deferred to V2**.
-*   **Real-Time:** Services should use the INotificationService interface in the application layer. In V1, this is bound to a no-op StubNotificationService that simply logs the intent.
-*   **Delayed/Pending:** Services should reference IPendingNotificationRepository if they need to queue a message for an offline user. In V1, the StubPendingNotificationRepository sinks these calls. In V2, this will be replaced with a database-backed repository to deliver messages upon the user's next login.
-
 ## Policy Editing Architecture (V1 vs V2)
 Per V1 spec (UC-II.4.3 / UC-C.2), the **full purchase/discount policy edit API is deferred to V2**. V1 ships only:
 *   `IPurchasePolicy` + `IDiscountPolicy` abstractions (delivered by INF-9).
 *   `AlwaysAllowPolicy` (purchase) and `NoDiscountPolicy` (discount) defaults wired into every `Event` at construction time.
 *   No setter on `Event` for the policy fields — callers cannot edit them in V1.
 The V0 acceptance tests for policy editing (`SuccessfulDefaultPolicyEdit`, etc.) are present in the test suite under `@Disabled("V1 spec defers UC-II.4.3 — full policy edit lands in V2")`.
+
+## Service Architecture (Application vs Domain)
+Following strict Domain-Driven Design (DDD) principles, the architecture enforces a strict separation between Application Services and Domain Services:
+
+1.  **Application Services** (e.g. `OrderService`, `EventService`, `CompanyLifecycleService`) act purely as orchestrators. 
+    *   They handle session validation, extract IDs from tokens, and manage transaction boundaries.
+    *   They delegate all complex state modifications and cross-aggregate coordination to Domain Services.
+    *   They should **not** hold an excessive number of repositories (an audit reduced their dependency footprint significantly).
+    *   **Acceptance Tests:** All existing acceptance tests still go through the Application layer, treating it as the stable API entry point for the system.
+
+2.  **Domain Services** (e.g. `OrderDomainService`, `QueueDomainService`, `EventDomainService`, `OrderTimeDomainService`, `LotteryDrawDomainService`) hold the core domain logic.
+    *   They perform cross-aggregate logic (e.g., coordinating between events, queues, and orders).
+    *   They interact directly with multiple repositories and infrastructure components to fulfill complex domain operations without leaking that complexity up to the orchestrators.

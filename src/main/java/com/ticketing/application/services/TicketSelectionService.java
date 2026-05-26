@@ -3,9 +3,7 @@ package com.ticketing.application.services;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.ticketing.application.SelectionRequest;
-import com.ticketing.application.SelectionRequest.GAPick;
-import com.ticketing.application.SelectionRequest.SeatPick;
+import com.ticketing.domain.order.SelectionRequest;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
