@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -46,6 +47,51 @@ class EventPolicyTest {
         @Test
         public void GivenDefaultCurrencyConstant_WhenInspect_ThenIsExposedAtClassLevel() {
             assertNotNull(Event.DEFAULT_CURRENCY, "Event.DEFAULT_CURRENCY must be defined");
+        }
+
+        @Test
+        public void GivenEvent_WhenInspectClass_ThenPolicySettersExist() throws Exception {
+            // V2: policy editing is now supported (UC-II.4.3).
+            boolean hasPurchaseSetter = false;
+            boolean hasDiscountSetter = false;
+            for (var m : Event.class.getMethods()) {
+                String name = m.getName();
+                if (name.equals("setPurchasePolicy")) hasPurchaseSetter = true;
+                if (name.equals("setDiscountPolicy")) hasDiscountSetter = true;
+            }
+            assertTrue(hasPurchaseSetter, "Event must expose setPurchasePolicy in V2");
+            assertTrue(hasDiscountSetter, "Event must expose setDiscountPolicy in V2");
+        }
+
+        @Test
+        public void GivenEvent_WhenSetPurchasePolicy_ThenPolicyUpdated() {
+            Event e = newEvent();
+            IPurchasePolicy custom = new AndPolicy(List.of(new AlwaysAllowPolicy()));
+            e.setPurchasePolicy(custom);
+            assertEquals(custom, e.getPurchasePolicy());
+        }
+
+        @Test
+        public void GivenEvent_WhenSetDiscountPolicy_ThenPolicyUpdated() {
+            Event e = newEvent();
+            IDiscountPolicy custom = new NoDiscountPolicy();
+            e.setDiscountPolicy(custom);
+            assertEquals(custom, e.getDiscountPolicy());
+        }
+
+        @Test
+        public void GivenCancelledEvent_WhenSetPurchasePolicy_ThenThrows() {
+            Event e = newEvent();
+            e.cancel();
+            assertThrows(IllegalStateException.class,
+                    () -> e.setPurchasePolicy(new AlwaysAllowPolicy()));
+        }
+
+        @Test
+        public void GivenNullPolicy_WhenSetPurchasePolicy_ThenThrows() {
+            Event e = newEvent();
+            assertThrows(IllegalArgumentException.class,
+                    () -> e.setPurchasePolicy(null));
         }
 
         private static Event newEvent() {

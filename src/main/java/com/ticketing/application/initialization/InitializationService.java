@@ -51,7 +51,7 @@ public class InitializationService {
      */
     public CompanyService initializeCompanyService() {
         log.info("Initializing CompanyService");
-        return new CompanyService(companyRepository, eventPublisher, sessionTokenService);
+        return new CompanyService(companyRepository, eventPublisher, sessionTokenService, memberRepository);
     }
 
     /**

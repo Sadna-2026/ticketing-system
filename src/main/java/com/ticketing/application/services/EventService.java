@@ -15,10 +15,14 @@ import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCreationDomainService;
+import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
@@ -291,6 +295,76 @@ public class EventService {
         }
     }
 
+    // ── Event-scoped purchase policy ────────────────────────────────
+
+    public void setEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+
+        UUID memberId = authenticateMember(token);
+        Event event = loadEvent(eventId);
+        Company company = loadActiveCompany(event.getCompanyName());
+        authorizePolicy(memberId, company.getName());
+
+        event.setPurchasePolicy(policy);
+        saveEvent(event);
+        log.info("Event purchase policy updated: eventId={}, by={}", eventId, memberId);
+    }
+
+    public void removeEventPurchasePolicy(String token, UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+
+        UUID memberId = authenticateMember(token);
+        Event event = loadEvent(eventId);
+        Company company = loadActiveCompany(event.getCompanyName());
+        authorizePolicy(memberId, company.getName());
+
+        event.setPurchasePolicy(new AlwaysAllowPolicy());
+        saveEvent(event);
+        log.info("Event purchase policy reset to default: eventId={}, by={}", eventId, memberId);
+    }
+
+    // ── Event-scoped discount policy ────────────────────────────────
+
+    public void setEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+
+        UUID memberId = authenticateMember(token);
+        Event event = loadEvent(eventId);
+        Company company = loadActiveCompany(event.getCompanyName());
+        authorizePolicy(memberId, company.getName());
+
+        event.setDiscountPolicy(policy);
+        saveEvent(event);
+        log.info("Event discount policy updated: eventId={}, by={}", eventId, memberId);
+    }
+
+    public void removeEventDiscountPolicy(String token, UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+
+        UUID memberId = authenticateMember(token);
+        Event event = loadEvent(eventId);
+        Company company = loadActiveCompany(event.getCompanyName());
+        authorizePolicy(memberId, company.getName());
+
+        event.setDiscountPolicy(new NoDiscountPolicy());
+        saveEvent(event);
+        log.info("Event discount policy reset to default: eventId={}, by={}", eventId, memberId);
+    }
+
+    // ── Read helpers (event policy queries) ─────────────────────────
+
+    public IPurchasePolicy getEventPurchasePolicy(String token, UUID eventId) {
+        authenticateMember(token);
+        return loadEvent(eventId).getEventPurchasePolicy();
+    }
+
+    public IDiscountPolicy getEventDiscountPolicy(String token, UUID eventId) {
+        authenticateMember(token);
+        return loadEvent(eventId).getEventDiscountPolicy();
+    }
+
     // --- UC-C.1: layout & inventory ---
     // Permission: INVENTORY_MGMT OR MAP_DEFINITION (per spec — not both, unlike createEvent).
     // Each method serialises only on its target event id, so unrelated events
@@ -454,6 +528,25 @@ public class EventService {
             throw new SecurityException(
                     "Insufficient permissions to create events");
         }
+    }
+
+    private void authorizePolicy(UUID memberId, String companyName) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("Member not found: " + memberId));
+        StaffAppointment appt = member.getStaffAppointment(companyName);
+        if (appt == null) {
+            throw new SecurityException("Caller is not a staff member of company: " + companyName);
+        }
+        boolean allowed = appt.isOwner()
+                || (appt.isManager() && appt.hasPermission(ManagerPermission.POLICY_MODIFICATION));
+        if (!allowed) {
+            throw new SecurityException("Insufficient permissions: POLICY_MODIFICATION required");
+        }
+    }
+
+    private Event loadEvent(UUID eventId) {
+        return eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
     }
 
 }

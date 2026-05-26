@@ -406,6 +406,7 @@ class CompanyServiceTest {
         private ICompanyRepository companyRepository;
         private IEventPublisher eventPublisher;
         private ISessionTokenService sessionTokenService;
+        private IMemberRepository memberRepository;
         private CompanyService companyService;
 
         private final String COMPANY_NAME = "TestCompany";
@@ -418,7 +419,8 @@ class CompanyServiceTest {
             companyRepository = mock(ICompanyRepository.class);
             eventPublisher = mock(IEventPublisher.class);
             sessionTokenService = mock(ISessionTokenService.class);
-            companyService = new CompanyService(companyRepository, eventPublisher, sessionTokenService);
+            memberRepository = mock(IMemberRepository.class);
+            companyService = new CompanyService(companyRepository, eventPublisher, sessionTokenService, memberRepository);
         }
 
         @Test
