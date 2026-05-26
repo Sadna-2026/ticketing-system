@@ -200,6 +200,81 @@ class AuthPresenterTest {
     }
 
     @Test
+    void GivenMemberSession_WhenLoginOrRegisterRequested_ThenUserIsToldToLogoutFirst() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+
+        AuthResult loginResult = presenter.login("alice", "secret1");
+        AuthResult registerResult = presenter.register(
+                "alice",
+                "alice@example.com",
+                "secret1",
+                "0500000000",
+                LocalDate.of(2000, 1, 1)
+        );
+
+        assertFalse(loginResult.success());
+        assertEquals("You are already logged in as a member. Log out before switching accounts.", loginResult.message());
+        assertFalse(registerResult.success());
+        assertEquals("You are already logged in as a member. Log out before switching accounts.", registerResult.message());
+        verifyNoInteractions(memberService);
+    }
+
+    @Test
+    void GivenTokenGenerationFails_WhenStartGuestSession_ThenGenericFailureMessageIsReturned() {
+        when(sessionTokenService.generateGuestToken())
+                .thenThrow(new IllegalStateException("database password leaked"));
+
+        AuthResult result = presenter.startGuestSession();
+
+        assertFalse(result.success());
+        assertEquals("Could not start guest session.", result.message());
+    }
+
+    @Test
+    void GivenLoginThrowsRuntimeException_WhenLogin_ThenGenericFailureMessageIsReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(memberService.login(any(LoginRequest.class), eq("guest-token")))
+                .thenThrow(new IllegalStateException("internal login stack detail"));
+
+        AuthResult result = presenter.login("alice", "secret1");
+
+        assertFalse(result.success());
+        assertEquals("Login failed. Please try again.", result.message());
+    }
+
+    @Test
+    void GivenRegisterThrowsRuntimeException_WhenRegister_ThenGenericFailureMessageIsReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(memberService.register(any(RegisterRequest.class), eq("guest-token")))
+                .thenThrow(new IllegalStateException("internal register stack detail"));
+
+        AuthResult result = presenter.register(
+                "alice",
+                "alice@example.com",
+                "secret1",
+                "0500000000",
+                LocalDate.of(2000, 1, 1)
+        );
+
+        assertFalse(result.success());
+        assertEquals("Registration failed. Please try again.", result.message());
+    }
+
+    @Test
+    void GivenLogoutThrowsRuntimeException_WhenLogout_ThenGenericFailureMessageIsReturned() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(memberService.logout("member-token"))
+                .thenThrow(new IllegalStateException("internal logout stack detail"));
+
+        AuthResult result = presenter.logout();
+
+        assertFalse(result.success());
+        assertEquals("Logout failed. Please try again.", result.message());
+    }
+
+    @Test
     void GivenMemberSession_WhenCurrentSessionLabelRequested_ThenShowsMemberMode() {
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(UUID.randomUUID());

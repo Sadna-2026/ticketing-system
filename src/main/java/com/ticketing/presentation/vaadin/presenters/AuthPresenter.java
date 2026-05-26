@@ -3,6 +3,8 @@ package com.ticketing.presentation.vaadin.presenters;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.auth.ISessionTokenService;
@@ -18,9 +20,12 @@ import com.ticketing.presentation.vaadin.util.SessionContext;
 @Component
 public class AuthPresenter {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthPresenter.class);
+
     private static final String GUEST_ROLE = "Guest";
     private static final String MEMBER_ROLE = "Member";
     private static final String START_GUEST_SESSION_MESSAGE = "Start a guest session before logging in or registering.";
+    private static final String ALREADY_MEMBER_SESSION_MESSAGE = "You are already logged in as a member. Log out before switching accounts.";
     private static final String NO_MEMBER_SESSION_MESSAGE = "No authenticated member session exists.";
 
     private final MemberService memberService;
@@ -37,23 +42,30 @@ public class AuthPresenter {
             storeGuestSession(guestToken);
             return AuthResult.success("Guest session started.");
         } catch (RuntimeException ex) {
-            return AuthResult.failure(messageOrFallback(ex, "Could not start guest session."));
+            return safeFailure("Could not start guest session.", ex);
         }
     }
 
     public AuthResult login(String username, String password) {
         String guestToken = SessionContext.getSessionToken();
-        if (guestToken == null || guestToken.isBlank() || SessionContext.isLoggedInMember()) {
+        if (guestToken == null || guestToken.isBlank()) {
             return AuthResult.failure(START_GUEST_SESSION_MESSAGE);
         }
-
-        LoginResponse response = memberService.login(new LoginRequest(username, password), guestToken);
-        if (!response.success()) {
-            return AuthResult.failure(response.message());
+        if (SessionContext.isLoggedInMember()) {
+            return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
 
-        storeMemberSession(response.sessionToken(), response.member());
-        return AuthResult.success(response.message());
+        try {
+            LoginResponse response = memberService.login(new LoginRequest(username, password), guestToken);
+            if (!response.success()) {
+                return AuthResult.failure(response.message());
+            }
+
+            storeMemberSession(response.sessionToken(), response.member());
+            return AuthResult.success(response.message());
+        } catch (RuntimeException ex) {
+            return safeFailure("Login failed. Please try again.", ex);
+        }
     }
 
     public AuthResult register(
@@ -64,18 +76,25 @@ public class AuthPresenter {
             LocalDate dateOfBirth
     ) {
         String guestToken = SessionContext.getSessionToken();
-        if (guestToken == null || guestToken.isBlank() || SessionContext.isLoggedInMember()) {
+        if (guestToken == null || guestToken.isBlank()) {
             return AuthResult.failure(START_GUEST_SESSION_MESSAGE);
         }
-
-        RegisterRequest request = new RegisterRequest(username, email, password, phoneNumber, dateOfBirth);
-        RegisterResponse response = memberService.register(request, guestToken);
-        if (!response.success()) {
-            return AuthResult.failure(response.message());
+        if (SessionContext.isLoggedInMember()) {
+            return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
 
-        storeMemberSession(response.sessionToken(), response.member());
-        return AuthResult.success(response.message());
+        try {
+            RegisterRequest request = new RegisterRequest(username, email, password, phoneNumber, dateOfBirth);
+            RegisterResponse response = memberService.register(request, guestToken);
+            if (!response.success()) {
+                return AuthResult.failure(response.message());
+            }
+
+            storeMemberSession(response.sessionToken(), response.member());
+            return AuthResult.success(response.message());
+        } catch (RuntimeException ex) {
+            return safeFailure("Registration failed. Please try again.", ex);
+        }
     }
 
     public AuthResult logout() {
@@ -84,13 +103,17 @@ public class AuthPresenter {
             return AuthResult.failure(NO_MEMBER_SESSION_MESSAGE);
         }
 
-        LogoutResponse response = memberService.logout(sessionToken);
-        if (!response.success()) {
-            return AuthResult.failure(response.message());
-        }
+        try {
+            LogoutResponse response = memberService.logout(sessionToken);
+            if (!response.success()) {
+                return AuthResult.failure(response.message());
+            }
 
-        storeGuestSession(response.sessionToken());
-        return AuthResult.success(response.message());
+            storeGuestSession(response.sessionToken());
+            return AuthResult.success(response.message());
+        } catch (RuntimeException ex) {
+            return safeFailure("Logout failed. Please try again.", ex);
+        }
     }
 
     public String currentSessionLabel() {
@@ -131,8 +154,9 @@ public class AuthPresenter {
         return token == null || token.isBlank() ? null : sessionTokenService.extractSessionId(token);
     }
 
-    private String messageOrFallback(RuntimeException ex, String fallback) {
-        return ex.getMessage() == null || ex.getMessage().isBlank() ? fallback : ex.getMessage();
+    private AuthResult safeFailure(String message, RuntimeException ex) {
+        logger.warn(message, ex);
+        return AuthResult.failure(message);
     }
 
     public record AuthResult(boolean success, String message) {
