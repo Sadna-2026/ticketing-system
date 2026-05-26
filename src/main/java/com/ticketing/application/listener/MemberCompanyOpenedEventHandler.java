@@ -46,7 +46,7 @@ public class MemberCompanyOpenedEventHandler implements IEventListener {
             // Assign Owner appointment to the member
             StaffAppointment ownerAppointment = new StaffAppointment(
                 companyName,
-                founderId,
+                null,
                 StaffAppointment.StaffRole.OWNER,
                 Collections.emptySet()
             );
