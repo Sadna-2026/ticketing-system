@@ -352,15 +352,18 @@ class CompanyViewTest {
     }
 
     private static Grid<EventSummaryDTO> findEventGrid(Component root) {
-        return findGrids(root).stream()
-                .map(grid -> (Grid<EventSummaryDTO>) grid)
-                .findFirst()
-                .orElseThrow();
+        return (Grid<EventSummaryDTO>) findGridById(root, "company-events-grid");
     }
 
     private static Grid<PurchaseRecordDTO> findPurchasesGrid(Component root) {
-        List<Grid<?>> grids = findGrids(root);
-        return (Grid<PurchaseRecordDTO>) grids.get(1);
+        return (Grid<PurchaseRecordDTO>) findGridById(root, "company-purchases-grid");
+    }
+
+    private static Grid<?> findGridById(Component root, String id) {
+        return findGrids(root).stream()
+                .filter(grid -> grid.getId().map(id::equals).orElse(false))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Grid not found: " + id));
     }
 
     private static List<Grid<?>> findGrids(Component root) {

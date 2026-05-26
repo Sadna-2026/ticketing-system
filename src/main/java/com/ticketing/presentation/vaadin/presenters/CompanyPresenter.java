@@ -83,9 +83,13 @@ public class CompanyPresenter {
         if (token == null) {
             return ActionResult.failure(MEMBER_SESSION_REQUIRED);
         }
+        String normalizedName = blankToNull(name);
+        if (normalizedName == null) {
+            return ActionResult.failure("Company name is required.");
+        }
 
         try {
-            String companyName = companyService.openProductionCompany(token, name, blankToNull(description));
+            String companyName = companyService.openProductionCompany(token, normalizedName, blankToNull(description));
             return ActionResult.success("Company opened: " + companyName);
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, COMPANY_FAILURE_MESSAGE));
@@ -225,17 +229,33 @@ public class CompanyPresenter {
         if (gaCapacity == null || gaCapacity <= 0) {
             return EventActionResult.failure("GA capacity must be positive.");
         }
+        String normalizedCompanyName = blankToNull(companyName);
+        if (normalizedCompanyName == null) {
+            return EventActionResult.failure("Company name is required.");
+        }
+        String normalizedEventName = blankToNull(name);
+        if (normalizedEventName == null) {
+            return EventActionResult.failure("Event name is required.");
+        }
+        String normalizedZoneName = blankToNull(zoneName);
+        if (normalizedZoneName == null) {
+            return EventActionResult.failure("Zone name is required.");
+        }
+        String normalizedSectionName = blankToNull(sectionName);
+        if (normalizedSectionName == null) {
+            return EventActionResult.failure("Venue section is required.");
+        }
 
         try {
             CreateEventRequest request = new CreateEventRequest(
-                    companyName,
-                    name,
+                    normalizedCompanyName,
+                    normalizedEventName,
                     blankToNull(description),
                     category,
                     new EventSchedule(startTime, endTime, doorsOpenTime),
                     new LockTimerDuration(Duration.ofMinutes(lockMinutes)),
-                    List.of(new CreateEventRequest.GAZoneSpec(zoneName, zonePrice, gaCapacity)),
-                    Map.of(sectionName, zoneName)
+                    List.of(new CreateEventRequest.GAZoneSpec(normalizedZoneName, zonePrice, gaCapacity)),
+                    Map.of(normalizedSectionName, normalizedZoneName)
             );
             UUID eventId = eventService.createEvent(token, request);
             return EventActionResult.created("Event created.", eventId);
@@ -318,9 +338,17 @@ public class CompanyPresenter {
         if (eventId == null || zoneId == null) {
             return ActionResult.failure("Event ID and zone ID are required.");
         }
+        String normalizedRow = blankToNull(row);
+        if (normalizedRow == null) {
+            return ActionResult.failure("Seat row is required.");
+        }
+        String normalizedSeatNumber = blankToNull(seatNumber);
+        if (normalizedSeatNumber == null) {
+            return ActionResult.failure("Seat number is required.");
+        }
 
         try {
-            eventService.addSeatsToZone(token, eventId, zoneId, List.of(new CreateEventRequest.SeatSpec(row, seatNumber)));
+            eventService.addSeatsToZone(token, eventId, zoneId, List.of(new CreateEventRequest.SeatSpec(normalizedRow, normalizedSeatNumber)));
             return ActionResult.success("Seat added.");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, INVENTORY_FAILURE_MESSAGE));

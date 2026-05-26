@@ -109,11 +109,22 @@ class CompanyPresenterTest {
         memberSession();
         when(companyService.openProductionCompany("member-token", "Acme", "desc")).thenReturn("Acme");
 
-        ActionResult result = presenter.openCompany("Acme", " desc ");
+        ActionResult result = presenter.openCompany(" Acme ", " desc ");
 
         assertTrue(result.success());
         assertEquals("Company opened: Acme", result.message());
         verify(companyService).openProductionCompany("member-token", "Acme", "desc");
+    }
+
+    @Test
+    void GivenBlankCompanyName_WhenOpeningCompany_ThenValidationMessageIsReturnedBeforeServiceCall() {
+        memberSession();
+
+        ActionResult result = presenter.openCompany("   ", "desc");
+
+        assertFalse(result.success());
+        assertEquals("Company name is required.", result.message());
+        verifyNoInteractions(companyService);
     }
 
     @Test
@@ -173,8 +184,8 @@ class CompanyPresenterTest {
         when(eventService.createEvent(eq("member-token"), any(CreateEventRequest.class))).thenReturn(eventId);
         when(eventService.editEvent(eq("member-token"), any(EditEventRequest.class))).thenReturn(edited);
 
-        EventActionResult created = presenter.createEvent("Acme", "Show", "desc", EventCategory.CONCERT,
-                start, end, doors, 15, "Floor", new BigDecimal("50.00"), 100, "Main Hall");
+        EventActionResult created = presenter.createEvent(" Acme ", " Show ", "desc", EventCategory.CONCERT,
+                start, end, doors, 15, " Floor ", new BigDecimal("50.00"), 100, " Main Hall ");
         EventActionResult edit = presenter.editEvent(eventId, "New name", "desc", "artist", start, end, doors);
         ActionResult cancel = presenter.cancelEvent(eventId);
 
@@ -186,11 +197,27 @@ class CompanyPresenterTest {
         assertTrue(created.success());
         assertEquals(eventId, created.eventId());
         assertEquals("Acme", createRequest.getValue().companyName());
+        assertEquals("Show", createRequest.getValue().name());
         assertEquals("Floor", createRequest.getValue().zones().get(0).name());
+        assertEquals(Map.of("Main Hall", "Floor"), createRequest.getValue().sectionToZoneName());
         assertTrue(edit.success());
         assertSame(edited, edit.eventDetails());
         assertEquals(eventId, editRequest.getValue().eventId());
         assertTrue(cancel.success());
+    }
+
+    @Test
+    void GivenBlankCreateEventIdentifier_WhenCreatingEvent_ThenValidationMessageIsReturnedBeforeServiceCall() {
+        memberSession();
+        Instant start = Instant.parse("2026-06-01T19:00:00Z");
+
+        EventActionResult result = presenter.createEvent("Acme", "Show", "desc", EventCategory.CONCERT,
+                start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS),
+                15, "   ", new BigDecimal("50.00"), 100, "Main Hall");
+
+        assertFalse(result.success());
+        assertEquals("Zone name is required.", result.message());
+        verifyNoInteractions(eventService);
     }
 
     @Test
@@ -203,7 +230,7 @@ class CompanyPresenterTest {
         when(eventQueryService.getEventMap(eventId)).thenReturn(Optional.of(map));
 
         EventMapResult mapResult = presenter.loadEventMap(eventId);
-        ActionResult addSeat = presenter.addSeat(eventId, zoneId, "A", "1");
+        ActionResult addSeat = presenter.addSeat(eventId, zoneId, " A ", " 1 ");
         ActionResult removeSeat = presenter.removeSeat(eventId, zoneId, seatId);
         ActionResult increase = presenter.increaseGACapacity(eventId, zoneId, 5);
         ActionResult decrease = presenter.decreaseGACapacity(eventId, zoneId, 2);
@@ -222,6 +249,17 @@ class CompanyPresenterTest {
         verify(eventService).increaseGACapacity("member-token", eventId, zoneId, 5);
         verify(eventService).decreaseGACapacity("member-token", eventId, zoneId, 2);
         verify(eventService).setZonePrice("member-token", eventId, zoneId, new BigDecimal("75.00"));
+    }
+
+    @Test
+    void GivenBlankSeatFields_WhenAddingSeat_ThenValidationMessageIsReturnedBeforeServiceCall() {
+        memberSession();
+
+        ActionResult result = presenter.addSeat(UUID.randomUUID(), UUID.randomUUID(), "A", "   ");
+
+        assertFalse(result.success());
+        assertEquals("Seat number is required.", result.message());
+        verifyNoInteractions(eventService);
     }
 
     @Test

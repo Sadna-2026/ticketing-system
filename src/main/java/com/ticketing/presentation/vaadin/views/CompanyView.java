@@ -165,6 +165,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void configureCompanyEventsGrid() {
+        companyEventsGrid.setId("company-events-grid");
         companyEventsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
         companyEventsGrid.addColumn(event -> event.category().name()).setHeader("Category").setAutoWidth(true);
         companyEventsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts").setAutoWidth(true);
@@ -173,6 +174,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void configurePurchasesGrid() {
+        purchasesGrid.setId("company-purchases-grid");
         purchasesGrid.addColumn(purchase -> purchase.purchaseId().toString()).setHeader("Purchase ID").setAutoWidth(true);
         purchasesGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         purchasesGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
@@ -567,13 +569,11 @@ public class CompanyView extends VerticalLayout {
     private UUID parseUuid(TextField field, String label) {
         String value = field.getValue();
         if (value == null || value.isBlank()) {
-            UiMessages.error("Enter a " + label + " UUID.");
             return null;
         }
         try {
             return UUID.fromString(value.trim());
         } catch (IllegalArgumentException ex) {
-            UiMessages.error("Enter a valid " + label + " UUID.");
             return null;
         }
     }
