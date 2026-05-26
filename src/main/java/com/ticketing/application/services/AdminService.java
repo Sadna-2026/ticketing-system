@@ -3,7 +3,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -58,7 +57,7 @@ public class AdminService {
         if (!isAdmin(adminToken)) {
             log.warn("Admin remove member denied: missing system admin permission targetMemberId={}", targetMemberId);
             throw new SecurityException("System admin permission required");
-            
+
         }
 
         // 2. Validate Target
@@ -79,7 +78,7 @@ public class AdminService {
                 long ownerCount = companyMembers.stream()
                         .filter(m -> m.hasStaffAppointment(company.getName(), StaffAppointment.StaffRole.OWNER))
                         .count();
-                
+
                 if (ownerCount <= 1) {
                     log.warn("Admin remove member denied: target is only owner targetMemberId={}, company={}",
         targetMemberId, company.getName());
@@ -98,15 +97,9 @@ public class AdminService {
 
     /**
      * UC-II.6.7 — System admin suspends a user.
-     *
-     * @param adminToken  valid admin session token
-     * @param targetMemberId  the member to suspend
-     * @param duration  suspension length, or null for permanent
-     * @param reason  human-readable reason shown to the user
-     * @return the created Suspension
      */
-    public synchronized Suspension suspendUser(String adminToken, UUID targetMemberId,
-                                                Duration duration, String reason) {
+    public Suspension suspendUser(String adminToken, UUID targetMemberId,
+                                   Duration duration, String reason) {
         log.info("Admin suspend user requested: targetMemberId={}, permanent={}",
                 targetMemberId, duration == null);
 
@@ -125,19 +118,15 @@ public class AdminService {
                     return new IllegalArgumentException("Target member not found: " + targetMemberId);
                 });
 
-        // Don't allow suspending the sole system admin
         if (isSoleAdmin(targetMemberId)) {
             log.warn("Suspend user denied: target is sole system admin id={}", targetMemberId);
             throw new IllegalStateException("Cannot suspend the last system admin");
         }
 
         UUID adminId = sessionTokenService.extractMemberId(adminToken);
-        Instant now = Instant.now();
-        Suspension suspension = new Suspension(
+        Suspension suspension = target.suspend(
                 adminId != null ? adminId : UUID.randomUUID(),
-                now, duration, reason);
-
-        target.addSuspension(suspension);
+                duration, reason);
         memberRepository.save(target);
 
         log.info("User suspended: targetMemberId={}, suspensionId={}, permanent={}, duration={}",
@@ -148,13 +137,9 @@ public class AdminService {
 
     /**
      * UC-II.6.8 — System admin cancels (lifts) an active suspension.
-     *
-     * @param adminToken     valid admin session token
-     * @param targetMemberId the suspended member
-     * @param suspensionId   the specific suspension to cancel
      */
-    public synchronized void cancelSuspension(String adminToken, UUID targetMemberId,
-                                               UUID suspensionId) {
+    public void cancelSuspension(String adminToken, UUID targetMemberId,
+                                  UUID suspensionId) {
         log.info("Admin cancel suspension requested: targetMemberId={}, suspensionId={}",
                 targetMemberId, suspensionId);
 
@@ -176,22 +161,7 @@ public class AdminService {
                     return new IllegalArgumentException("Target member not found: " + targetMemberId);
                 });
 
-        // Find the suspension by ID
-        Suspension suspension = target.getSuspensions().stream()
-                .filter(s -> s.getSuspensionId().equals(suspensionId))
-                .findFirst()
-                .orElseThrow(() -> {
-                    log.warn("Cancel suspension denied: suspension not found id={}", suspensionId);
-                    return new IllegalArgumentException("Suspension not found: " + suspensionId);
-                });
-
-        // Must be currently active to cancel
-        if (!suspension.isActive(Instant.now())) {
-            log.warn("Cancel suspension denied: suspension is not active id={}", suspensionId);
-            throw new IllegalStateException("Suspension is not currently active");
-        }
-
-        suspension.cancel();
+        target.cancelSuspension(suspensionId);
         memberRepository.save(target);
 
         log.info("Suspension cancelled: targetMemberId={}, suspensionId={}",

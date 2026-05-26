@@ -1,5 +1,6 @@
 package com.ticketing.domain.member;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -193,7 +194,42 @@ public class Member {
         pendingOffers.add(offer);
     }
 
-    // ── Suspension support (V2 UC-II.6.7) ──────────────────────────
+    // ── Suspension support (V2 UC-II.6.7 / UC-II.6.8) ──────────────
+
+    /**
+     * Domain method: creates and applies a suspension to this member.
+     * @param adminId   the admin who imposed the suspension
+     * @param duration  suspension length, or null for permanent
+     * @param reason    human-readable reason
+     * @return the created Suspension
+     */
+    public Suspension suspend(UUID adminId, Duration duration, String reason) {
+        if (adminId == null) {
+            throw new IllegalArgumentException("adminId is required");
+        }
+        Suspension suspension = new Suspension(adminId, Instant.now(), duration, reason);
+        suspensions.add(suspension);
+        return suspension;
+    }
+
+    /**
+     * Domain method: cancels an active suspension by ID.
+     * @param suspensionId the suspension to cancel
+     */
+    public void cancelSuspension(UUID suspensionId) {
+        if (suspensionId == null) {
+            throw new IllegalArgumentException("suspensionId is required");
+        }
+        Suspension suspension = suspensions.stream()
+                .filter(s -> s.getSuspensionId().equals(suspensionId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Suspension not found: " + suspensionId));
+
+        if (!suspension.isActive(Instant.now())) {
+            throw new IllegalStateException("Suspension is not currently active");
+        }
+        suspension.cancel();
+    }
 
     public synchronized void addSuspension(Suspension suspension) {
         if (suspension == null) {
