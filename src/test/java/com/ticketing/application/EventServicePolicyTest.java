@@ -12,7 +12,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -22,9 +21,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.application.services.PolicyService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.company.Company;
-import com.ticketing.domain.company.CompanyStatus;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.AndPolicy;
@@ -43,13 +41,13 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 
-@DisplayName("PolicyService")
-class PolicyServiceTest {
+@DisplayName("EventService — Policy management")
+class EventServicePolicyTest {
 
     private static final String COMPANY_NAME = "Acme Productions";
     private static final String VALID_TOKEN = "valid-token";
@@ -58,7 +56,7 @@ class PolicyServiceTest {
     private InMemoryCompanyRepository companyRepository;
     private InMemoryMemberRepository memberRepository;
     private ISessionTokenService sessionTokenService;
-    private PolicyService policyService;
+    private EventService eventService;
 
     private UUID memberId;
     private Member member;
@@ -71,8 +69,9 @@ class PolicyServiceTest {
         memberRepository = new InMemoryMemberRepository();
         sessionTokenService = mock(ISessionTokenService.class);
 
-        policyService = new PolicyService(
-                eventRepository, companyRepository, memberRepository, sessionTokenService);
+        eventService = new EventService(
+                eventRepository, companyRepository, memberRepository,
+                mock(IOrderRepository.class), sessionTokenService);
 
         memberId = UUID.randomUUID();
         member = new Member(memberId, "policyAdmin", "admin@example.com", "encryptedPw");
@@ -104,20 +103,12 @@ class PolicyServiceTest {
         return event.getId();
     }
 
-    private Company stubCompany(String name, CompanyStatus status) {
-        Company c = mock(Company.class);
-        when(c.getName()).thenReturn(name);
-        when(c.isActive()).thenReturn(status == CompanyStatus.ACTIVE);
-        when(c.getStatus()).thenReturn(status);
-        return c;
-    }
-
     /** Custom purchase policy for testing — rejects everything. */
     private static IPurchasePolicy rejectAllPolicy() {
         return (ctx) -> PolicyResult.failure("REJECTED", "test rejection");
     }
 
-    /** Custom discount policy for testing — 50 % off. */
+    /** Custom discount policy for testing — 50% off. */
     private static IDiscountPolicy halfPricePolicy() {
         return (order, couponCode, clock) -> {
             BigDecimal total = order.getTotalPrice();
@@ -126,7 +117,7 @@ class PolicyServiceTest {
     }
 
     // ══════════════════════════════════════════════════════════════════
-    //  Event-scope tests
+    //  Event purchase policy
     // ══════════════════════════════════════════════════════════════════
 
     @Nested
@@ -139,7 +130,7 @@ class PolicyServiceTest {
             UUID eventId = createDraftEvent();
 
             IPurchasePolicy custom = rejectAllPolicy();
-            policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, custom);
+            eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, custom);
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
             PolicyResult result = saved.getEventPurchasePolicy().isAllowed(new PurchaseContext(null, null, null));
@@ -152,7 +143,7 @@ class PolicyServiceTest {
                     Set.of(ManagerPermission.POLICY_MODIFICATION));
             UUID eventId = createDraftEvent();
 
-            policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
+            eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
             assertNotNull(saved.getEventPurchasePolicy());
@@ -165,7 +156,7 @@ class PolicyServiceTest {
             UUID eventId = createDraftEvent();
 
             assertThrows(SecurityException.class,
-                    () -> policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
+                    () -> eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
         }
 
         @Test
@@ -173,10 +164,8 @@ class PolicyServiceTest {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = createDraftEvent();
 
-            // first set a custom policy
-            policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
-            // now remove it
-            policyService.removeEventPurchasePolicy(VALID_TOKEN, eventId);
+            eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
+            eventService.removeEventPurchasePolicy(VALID_TOKEN, eventId);
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
             assertTrue(saved.getEventPurchasePolicy() instanceof AlwaysAllowPolicy);
@@ -189,12 +178,16 @@ class PolicyServiceTest {
 
             IPurchasePolicy composite = new AndPolicy(List.of(
                     new AlwaysAllowPolicy(), new OrPolicy(List.of(rejectAllPolicy()))));
-            policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, composite);
+            eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, composite);
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
             assertTrue(saved.getEventPurchasePolicy() instanceof AndPolicy);
         }
     }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Event discount policy
+    // ══════════════════════════════════════════════════════════════════
 
     @Nested
     @DisplayName("Event discount policy")
@@ -205,10 +198,9 @@ class PolicyServiceTest {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = createDraftEvent();
 
-            policyService.setEventDiscountPolicy(VALID_TOKEN, eventId, halfPricePolicy());
+            eventService.setEventDiscountPolicy(VALID_TOKEN, eventId, halfPricePolicy());
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
-            // verify it's no longer the default NoDiscountPolicy
             assertTrue(!(saved.getEventDiscountPolicy() instanceof NoDiscountPolicy));
         }
 
@@ -217,8 +209,8 @@ class PolicyServiceTest {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = createDraftEvent();
 
-            policyService.setEventDiscountPolicy(VALID_TOKEN, eventId, halfPricePolicy());
-            policyService.removeEventDiscountPolicy(VALID_TOKEN, eventId);
+            eventService.setEventDiscountPolicy(VALID_TOKEN, eventId, halfPricePolicy());
+            eventService.removeEventDiscountPolicy(VALID_TOKEN, eventId);
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
             assertTrue(saved.getEventDiscountPolicy() instanceof NoDiscountPolicy);
@@ -226,64 +218,7 @@ class PolicyServiceTest {
     }
 
     // ══════════════════════════════════════════════════════════════════
-    //  Company-scope tests
-    // ══════════════════════════════════════════════════════════════════
-
-    @Nested
-    @DisplayName("Company purchase policy")
-    class CompanyPurchasePolicyTests {
-
-        @Test
-        void GivenOwner_WhenSetCompanyPurchasePolicy_ThenPolicyUpdated() {
-            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
-
-            policyService.setCompanyPurchasePolicy(VALID_TOKEN, COMPANY_NAME, rejectAllPolicy());
-
-            Company saved = companyRepository.findByName(COMPANY_NAME).orElseThrow();
-            PolicyResult result = saved.getPurchasePolicy().isAllowed(new PurchaseContext(null, null, null));
-            assertEquals("REJECTED", result.errorCode());
-        }
-
-        @Test
-        void GivenOwner_WhenRemoveCompanyPurchasePolicy_ThenResetToDefault() {
-            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
-
-            policyService.setCompanyPurchasePolicy(VALID_TOKEN, COMPANY_NAME, rejectAllPolicy());
-            policyService.removeCompanyPurchasePolicy(VALID_TOKEN, COMPANY_NAME);
-
-            Company saved = companyRepository.findByName(COMPANY_NAME).orElseThrow();
-            assertTrue(saved.getPurchasePolicy() instanceof AlwaysAllowPolicy);
-        }
-    }
-
-    @Nested
-    @DisplayName("Company discount policy")
-    class CompanyDiscountPolicyTests {
-
-        @Test
-        void GivenOwner_WhenSetCompanyDiscountPolicy_ThenPolicyUpdated() {
-            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
-
-            policyService.setCompanyDiscountPolicy(VALID_TOKEN, COMPANY_NAME, halfPricePolicy());
-
-            Company saved = companyRepository.findByName(COMPANY_NAME).orElseThrow();
-            assertTrue(!(saved.getDiscountPolicy() instanceof NoDiscountPolicy));
-        }
-
-        @Test
-        void GivenOwner_WhenRemoveCompanyDiscountPolicy_ThenResetToDefault() {
-            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
-
-            policyService.setCompanyDiscountPolicy(VALID_TOKEN, COMPANY_NAME, halfPricePolicy());
-            policyService.removeCompanyDiscountPolicy(VALID_TOKEN, COMPANY_NAME);
-
-            Company saved = companyRepository.findByName(COMPANY_NAME).orElseThrow();
-            assertTrue(saved.getDiscountPolicy() instanceof NoDiscountPolicy);
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════
-    //  Authorization & validation edge cases
+    //  Authorization & validation
     // ══════════════════════════════════════════════════════════════════
 
     @Nested
@@ -298,7 +233,7 @@ class PolicyServiceTest {
 
             UUID eventId = createDraftEvent();
             assertThrows(SecurityException.class,
-                    () -> policyService.setEventPurchasePolicy(guestToken, eventId, rejectAllPolicy()));
+                    () -> eventService.setEventPurchasePolicy(guestToken, eventId, rejectAllPolicy()));
         }
 
         @Test
@@ -308,12 +243,11 @@ class PolicyServiceTest {
 
             UUID eventId = createDraftEvent();
             assertThrows(IllegalArgumentException.class,
-                    () -> policyService.setEventPurchasePolicy(badToken, eventId, rejectAllPolicy()));
+                    () -> eventService.setEventPurchasePolicy(badToken, eventId, rejectAllPolicy()));
         }
 
         @Test
         void GivenStaffOfOtherCompany_WhenSetPolicy_ThenThrowsSecurityException() {
-            // member is staff of "Other Co", not "Acme Productions"
             StaffAppointment otherAppt = new StaffAppointment(
                     "Other Co", memberId, StaffAppointment.StaffRole.OWNER, Set.of());
             member.addStaffAppointment("other co", otherAppt);
@@ -321,7 +255,7 @@ class PolicyServiceTest {
 
             UUID eventId = createDraftEvent();
             assertThrows(SecurityException.class,
-                    () -> policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
+                    () -> eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
         }
 
         @Test
@@ -329,25 +263,12 @@ class PolicyServiceTest {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = createDraftEvent();
 
-            // suspend the company
             Company c = companyRepository.findByName(COMPANY_NAME).orElseThrow();
             c.suspend();
             companyRepository.save(c);
 
             assertThrows(IllegalStateException.class,
-                    () -> policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
-        }
-
-        @Test
-        void GivenSuspendedCompany_WhenSetCompanyPolicy_ThenThrowsIllegalState() {
-            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
-
-            Company c = companyRepository.findByName(COMPANY_NAME).orElseThrow();
-            c.suspend();
-            companyRepository.save(c);
-
-            assertThrows(IllegalStateException.class,
-                    () -> policyService.setCompanyPurchasePolicy(VALID_TOKEN, COMPANY_NAME, rejectAllPolicy()));
+                    () -> eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
         }
 
         @Test
@@ -360,7 +281,7 @@ class PolicyServiceTest {
             eventRepository.save(event);
 
             assertThrows(IllegalStateException.class,
-                    () -> policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
+                    () -> eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy()));
         }
 
         @Test
@@ -369,7 +290,7 @@ class PolicyServiceTest {
             UUID eventId = createDraftEvent();
 
             assertThrows(IllegalArgumentException.class,
-                    () -> policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, null));
+                    () -> eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, null));
         }
 
         @Test
@@ -377,12 +298,12 @@ class PolicyServiceTest {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
 
             assertThrows(IllegalArgumentException.class,
-                    () -> policyService.setEventPurchasePolicy(VALID_TOKEN, UUID.randomUUID(), rejectAllPolicy()));
+                    () -> eventService.setEventPurchasePolicy(VALID_TOKEN, UUID.randomUUID(), rejectAllPolicy()));
         }
     }
 
     // ══════════════════════════════════════════════════════════════════
-    //  Read/query tests
+    //  Policy retrieval
     // ══════════════════════════════════════════════════════════════════
 
     @Nested
@@ -393,14 +314,7 @@ class PolicyServiceTest {
         void GivenEventWithDefaultPolicy_WhenGetPurchasePolicy_ThenReturnsDefault() {
             UUID eventId = createDraftEvent();
 
-            IPurchasePolicy policy = policyService.getEventPurchasePolicy(VALID_TOKEN, eventId);
-
-            assertTrue(policy instanceof AlwaysAllowPolicy);
-        }
-
-        @Test
-        void GivenCompanyWithDefaultPolicy_WhenGetPurchasePolicy_ThenReturnsDefault() {
-            IPurchasePolicy policy = policyService.getCompanyPurchasePolicy(VALID_TOKEN, COMPANY_NAME);
+            IPurchasePolicy policy = eventService.getEventPurchasePolicy(VALID_TOKEN, eventId);
 
             assertTrue(policy instanceof AlwaysAllowPolicy);
         }
@@ -410,9 +324,9 @@ class PolicyServiceTest {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = createDraftEvent();
 
-            policyService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
+            eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
 
-            IPurchasePolicy policy = policyService.getEventPurchasePolicy(VALID_TOKEN, eventId);
+            IPurchasePolicy policy = eventService.getEventPurchasePolicy(VALID_TOKEN, eventId);
             PolicyResult result = policy.isAllowed(new PurchaseContext(null, null, null));
             assertEquals("REJECTED", result.errorCode());
         }
