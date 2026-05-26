@@ -51,6 +51,7 @@ public class OrdersView extends VerticalLayout {
     private final TextField orderId = new TextField("Order ID");
     private final Span inventoryStatus = new Span("Load an event inventory map before adding tickets.");
     private final VerticalLayout inventoryDisplay = new VerticalLayout();
+    private final Span orderActionStatus = new Span("Order actions will report here.");
     private final Span orderStatus = new Span("Create or load an order to see active order details.");
     private final Grid<OrderItemDto> orderItemsGrid = new Grid<>(OrderItemDto.class, false);
     private final IntegerField newGAQuantity = new IntegerField("New GA quantity");
@@ -171,6 +172,7 @@ public class OrdersView extends VerticalLayout {
 
         VerticalLayout section = new VerticalLayout(
                 new H3("Active order"),
+                orderActionStatus,
                 orderStatus,
                 orderItemsGrid,
                 itemActions
@@ -197,7 +199,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void createOrder() {
-        UUID parsedEventId = parseUuid(eventId, "event");
+        UUID parsedEventId = parseUuid(eventId, "event", orderActionStatus);
         if (parsedEventId == null) {
             return;
         }
@@ -206,7 +208,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void loadActiveOrder() {
-        UUID parsedOrderId = parseUuid(orderId, "order");
+        UUID parsedOrderId = parseUuid(orderId, "order", orderActionStatus);
         if (parsedOrderId == null) {
             return;
         }
@@ -215,7 +217,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void loadEventInventory() {
-        UUID parsedEventId = parseUuid(eventId, "event");
+        UUID parsedEventId = parseUuid(eventId, "event", inventoryStatus);
         if (parsedEventId == null) {
             return;
         }
@@ -248,11 +250,13 @@ public class OrdersView extends VerticalLayout {
         CheckoutResult result = presenter.checkout(currentOrderId(), couponCode.getValue());
         if (!result.success()) {
             checkoutStatus.setText(result.message());
+            orderActionStatus.setText(result.message());
             UiMessages.error(result.message());
             return;
         }
 
         checkoutStatus.setText(result.message() + " Purchase ID: " + result.purchaseId());
+        orderActionStatus.setText(result.message());
         currentOrder = null;
         orderId.clear();
         refreshOrderDisplay();
@@ -262,6 +266,7 @@ public class OrdersView extends VerticalLayout {
     private void loadPurchaseHistory() {
         HistoryResult result = presenter.loadPurchaseHistory();
         historyStatus.setText(result.message());
+        orderActionStatus.setText(result.message());
         historyGrid.setItems(result.purchases());
 
         if (!result.success()) {
@@ -275,6 +280,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void handleOrderResult(OrderResult result) {
+        orderActionStatus.setText(result.message());
         if (!result.success()) {
             orderStatus.setText(result.message());
             UiMessages.error(result.message());
@@ -298,6 +304,7 @@ public class OrdersView extends VerticalLayout {
         inventoryDisplay.removeAll();
         currentEventMap = result.success() ? result.eventMap() : null;
         inventoryStatus.setText(result.message());
+        orderActionStatus.setText(result.message());
 
         if (!result.success()) {
             inventoryDisplay.add(new Paragraph(result.message()));
@@ -312,6 +319,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void handleMutationResult(OrderMutationResult result) {
+        orderActionStatus.setText(result.message());
         if (!result.success()) {
             orderStatus.setText(result.message());
             UiMessages.error(result.message());
@@ -420,16 +428,20 @@ public class OrdersView extends VerticalLayout {
         return currentOrder == null ? null : currentOrder.getId();
     }
 
-    private UUID parseUuid(TextField field, String label) {
+    private UUID parseUuid(TextField field, String label, Span status) {
         String value = field.getValue();
         if (value == null || value.isBlank()) {
-            UiMessages.error("Enter a " + label + " ID.");
+            String message = "Enter a " + label + " ID.";
+            status.setText(message);
+            UiMessages.error(message);
             return null;
         }
         try {
             return UUID.fromString(value.trim());
         } catch (IllegalArgumentException ex) {
-            UiMessages.error("Enter a valid " + label + " ID.");
+            String message = "Enter a valid " + label + " ID.";
+            status.setText(message);
+            UiMessages.error(message);
             return null;
         }
     }

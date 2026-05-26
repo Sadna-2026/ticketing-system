@@ -55,6 +55,7 @@ public class EventsView extends VerticalLayout {
     private final Span resultsStatus = new Span("Search for events to see results.");
     private final Grid<EventSummaryDTO> resultsGrid = new Grid<>(EventSummaryDTO.class, false);
     private final Button viewMap = new Button("View selected map");
+    private final Span mapStatus = new Span("Select an event from the results to load its map.");
     private final VerticalLayout mapDisplay = new VerticalLayout();
 
     private EventSummaryDTO selectedEvent;
@@ -80,6 +81,7 @@ public class EventsView extends VerticalLayout {
                 resultsGrid,
                 viewMap,
                 new H3("Event map and inventory"),
+                mapStatus,
                 mapDisplay
         );
     }
@@ -157,8 +159,7 @@ public class EventsView extends VerticalLayout {
 
         selectedEvent = null;
         viewMap.setEnabled(false);
-        mapDisplay.removeAll();
-        mapDisplay.add(new Paragraph("Select an event from the results to view its venue map and inventory."));
+        resetMapDisplay();
 
         if (!result.success()) {
             resultsGrid.setItems(List.of());
@@ -189,8 +190,7 @@ public class EventsView extends VerticalLayout {
         selectedEvent = null;
         viewMap.setEnabled(false);
         resultsStatus.setText("Search for events to see results.");
-        mapDisplay.removeAll();
-        mapDisplay.add(new Paragraph("Select an event from the results to view its venue map and inventory."));
+        resetMapDisplay();
     }
 
     private void loadSelectedEventMap() {
@@ -198,6 +198,7 @@ public class EventsView extends VerticalLayout {
         MapResult result = presenter.loadEventMap(eventId);
 
         mapDisplay.removeAll();
+        mapStatus.setText(result.message());
         if (!result.success()) {
             mapDisplay.add(new Paragraph(result.message()));
             UiMessages.error(result.message());
@@ -206,6 +207,12 @@ public class EventsView extends VerticalLayout {
 
         renderEventMap(result.eventMap());
         UiMessages.success(result.message());
+    }
+
+    private void resetMapDisplay() {
+        mapStatus.setText("Select an event from the results to load its map.");
+        mapDisplay.removeAll();
+        mapDisplay.add(new Paragraph("Select an event from the results to view its venue map and inventory."));
     }
 
     private void renderEventMap(EventMapDTO eventMap) {
