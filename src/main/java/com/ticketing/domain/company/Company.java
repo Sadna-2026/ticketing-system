@@ -15,6 +15,8 @@ public class Company {
     private CompanyStatus status;
     private IPurchasePolicy purchasePolicy;
     private IDiscountPolicy discountPolicy;
+    private IDiscountPolicy discountPolicy;
+    private IPurchasePolicy purchasePolicy;
     private int version;
 
     public Company(String name, String description, UUID founderId) {
@@ -31,6 +33,8 @@ public class Company {
         this.status = CompanyStatus.ACTIVE;
         this.purchasePolicy = new AlwaysAllowPolicy();
         this.discountPolicy = new NoDiscountPolicy();
+        this.discountPolicy = new NoDiscountPolicy();
+        this.purchasePolicy = new AlwaysAllowPolicy();
     }
 
     // --- Getters ---
@@ -49,9 +53,18 @@ public class Company {
         this.purchasePolicy = policy;
     }
 
+    public IDiscountPolicy getDiscountPolicy() { return discountPolicy; }
+
     public void setDiscountPolicy(IDiscountPolicy policy) {
         if (policy == null) throw new IllegalArgumentException("Discount policy cannot be null");
         this.discountPolicy = policy;
+    }
+
+    public IPurchasePolicy getPurchasePolicy() { return purchasePolicy; }
+
+    public void setPurchasePolicy(IPurchasePolicy policy) {
+        if (policy == null) throw new IllegalArgumentException("Purchase policy cannot be null");
+        this.purchasePolicy = policy;
     }
 
     public int getVersion() { return version; }
@@ -67,6 +80,8 @@ public class Company {
         copy.status = this.status;
         copy.purchasePolicy = this.purchasePolicy;
         copy.discountPolicy = this.discountPolicy;
+        copy.discountPolicy = this.discountPolicy;
+        copy.purchasePolicy = this.purchasePolicy;
         copy.version = this.version;
         return copy;
     }
