@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -15,7 +16,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -48,43 +48,51 @@ class EventPolicyTest {
         }
 
         @Test
-        public void GivenEvent_WhenInspectClass_ThenNoPolicySetterExists() throws Exception {
-            // Pin the V1 invariant: there must be no public mutator for the policies
-            // on Event. If someone adds setPurchasePolicy/setDiscountPolicy in V1 by
-            // mistake, this test fails — flagging that the deferral was broken.
+        public void GivenEvent_WhenInspectClass_ThenPolicySettersExist() throws Exception {
+            // V2: policy editing is now supported (UC-II.4.3).
+            // Verify that setPurchasePolicy / setDiscountPolicy are publicly accessible.
+            boolean hasPurchaseSetter = false;
+            boolean hasDiscountSetter = false;
             for (var m : Event.class.getMethods()) {
-                String name = m.getName().toLowerCase();
-                assertTrue(!name.equals("setpurchasepolicy"),
-                        "Event must not expose setPurchasePolicy in V1");
-                assertTrue(!name.equals("setdiscountpolicy"),
-                        "Event must not expose setDiscountPolicy in V1");
+                String name = m.getName();
+                if (name.equals("setPurchasePolicy")) hasPurchaseSetter = true;
+                if (name.equals("setDiscountPolicy")) hasDiscountSetter = true;
             }
+            assertTrue(hasPurchaseSetter, "Event must expose setPurchasePolicy in V2");
+            assertTrue(hasDiscountSetter, "Event must expose setDiscountPolicy in V2");
         }
 
-        // --- V0 acceptance tests for UC-C.2, deferred to V2 per V1 spec ---
+        // --- V2 acceptance tests for UC-II.4.3 (enabled for V2) ---
 
         @Test
-        @Disabled("V1 spec defers UC-II.4.3 — full policy edit lands in V2")
-        public void GivenOwner_WhenEditPolicy_ThenPolicyUpdated() {
-            // V0 acceptance: SuccessfulDefaultPolicyEdit
-        }
-
-        @Test
-        @Disabled("V1 spec defers UC-II.4.3 — full policy edit lands in V2")
-        public void GivenManagerWithPolicyMod_WhenEditPolicy_ThenPolicyUpdated() {
-            // V0 acceptance: ManagerWithPolicyModificationCanEdit
-        }
-
-        @Test
-        @Disabled("V1 spec defers UC-II.4.3 — full policy edit lands in V2")
-        public void GivenManagerWithoutPolicyMod_WhenEditPolicy_ThenDenied() {
-            // V0 acceptance: ManagerWithoutPolicyModificationDenied
+        public void GivenEvent_WhenSetPurchasePolicy_ThenPolicyUpdated() {
+            Event e = newEvent();
+            IPurchasePolicy custom = new AndPolicy(List.of(new AlwaysAllowPolicy()));
+            e.setPurchasePolicy(custom);
+            assertEquals(custom, e.getPurchasePolicy());
         }
 
         @Test
-        @Disabled("V1 spec defers UC-II.4.3 — full policy edit lands in V2")
-        public void GivenInvalidPolicyExpression_WhenEditPolicy_ThenRejected() {
-            // V0 acceptance: InvalidPolicyExpressionRejected
+        public void GivenEvent_WhenSetDiscountPolicy_ThenPolicyUpdated() {
+            Event e = newEvent();
+            IDiscountPolicy custom = new NoDiscountPolicy();
+            e.setDiscountPolicy(custom);
+            assertEquals(custom, e.getDiscountPolicy());
+        }
+
+        @Test
+        public void GivenCancelledEvent_WhenSetPurchasePolicy_ThenThrows() {
+            Event e = newEvent();
+            e.cancel();
+            assertThrows(IllegalStateException.class,
+                    () -> e.setPurchasePolicy(new AlwaysAllowPolicy()));
+        }
+
+        @Test
+        public void GivenNullPolicy_WhenSetPurchasePolicy_ThenThrows() {
+            Event e = newEvent();
+            assertThrows(IllegalArgumentException.class,
+                    () -> e.setPurchasePolicy(null));
         }
 
         // --- helpers ---
