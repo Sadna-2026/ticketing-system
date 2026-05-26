@@ -191,6 +191,15 @@ public class InMemoryMemberRepository implements IMemberRepository {
     }
 
     @Override
+    public List<Member> findAll() {
+        List<Member> result = new ArrayList<>();
+        for (Member m : membersById.values()) {
+            result.add(m.detachedCopy());
+        }
+        return result;
+    }
+
+    @Override
     public void delete(Member member) {
         if (member == null) return;
         membersById.remove(member.getId());

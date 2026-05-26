@@ -255,6 +255,74 @@ public class EventDomainService {
         }
     }
 
+    public void publishEvent(UUID memberId, UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {
+            throw new SecurityException("Insufficient permissions to publish events");
+        }
+        log.info("Publishing event: eventId={}, companyName={}", eventId, company.getName());
+        event.publish();
+        saveEvent(event);
+    }
+
+    public void setEventPurchasePolicy(UUID memberId, UUID eventId, com.ticketing.domain.event.IPurchasePolicy policy) {
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setPurchasePolicy(policy);
+        saveEvent(event);
+    }
+
+    public void removeEventPurchasePolicy(UUID memberId, UUID eventId) {
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setPurchasePolicy(new com.ticketing.domain.event.AlwaysAllowPolicy());
+        saveEvent(event);
+    }
+
+    public void setEventDiscountPolicy(UUID memberId, UUID eventId, com.ticketing.domain.event.IDiscountPolicy policy) {
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setDiscountPolicy(policy);
+        saveEvent(event);
+    }
+
+    public void removeEventDiscountPolicy(UUID memberId, UUID eventId) {
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setDiscountPolicy(new com.ticketing.domain.event.NoDiscountPolicy());
+        saveEvent(event);
+    }
+
+    public com.ticketing.domain.event.IPurchasePolicy getEventPurchasePolicy(UUID eventId) {
+        return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventPurchasePolicy();
+    }
+
+    public com.ticketing.domain.event.IDiscountPolicy getEventDiscountPolicy(UUID eventId) {
+        return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventDiscountPolicy();
+    }
+
+    private void authorizePolicy(StaffAppointment appt) {
+        boolean allowed = appt.isOwner()
+                || (appt.isManager() && appt.hasPermission(ManagerPermission.POLICY_MODIFICATION));
+        if (!allowed) {
+            throw new SecurityException("Insufficient permissions: POLICY_MODIFICATION required");
+        }
+    }
+
     private boolean hasActiveReservations(UUID eventId) {
         return !orderRepository.findActiveByEventId(eventId).isEmpty();
     }

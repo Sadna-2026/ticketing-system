@@ -9,10 +9,16 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.CompanyOpenedEvent;
+import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventPublisher;
+import com.ticketing.domain.event.IPurchasePolicy;
+import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
 import com.ticketing.domain.member.communication.RelinquishOwnershipEvent;
@@ -27,15 +33,18 @@ public class CompanyService {
     private final ICompanyRepository companyRepository;
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
+    private final IMemberRepository memberRepository;
 
     public CompanyService(
-            ICompanyRepository companyRepository, 
-            IEventPublisher eventPublisher, 
-            ISessionTokenService sessionTokenService
+            ICompanyRepository companyRepository,
+            IEventPublisher eventPublisher,
+            ISessionTokenService sessionTokenService,
+            IMemberRepository memberRepository
     ) {
         this.companyRepository = companyRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
+        this.memberRepository = memberRepository;
     }
 
     /**
@@ -195,6 +204,93 @@ public class CompanyService {
         log.info("Ownership relinquishment requested: company={}, owner={}", companyName, ownerId);
     }
 
+    // ── Company-scoped purchase policy ──────────────────────────────
+
+    public void setCompanyPurchasePolicy(String token, String companyName, IPurchasePolicy policy) {
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+
+        UUID memberId = authenticateMember(token);
+        Company company = loadActiveCompany(companyName);
+        authorizePolicy(memberId, company.getName());
+
+        company.setPurchasePolicy(policy);
+        saveCompany(company);
+        log.info("Company purchase policy updated: company={}, by={}", companyName, memberId);
+    }
+
+    public void removeCompanyPurchasePolicy(String token, String companyName) {
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
+
+        UUID memberId = authenticateMember(token);
+        Company company = loadActiveCompany(companyName);
+        authorizePolicy(memberId, company.getName());
+
+        company.setPurchasePolicy(new AlwaysAllowPolicy());
+        saveCompany(company);
+        log.info("Company purchase policy reset to default: company={}, by={}", companyName, memberId);
+    }
+
+    // ── Company-scoped discount policy ──────────────────────────────
+
+    public void setCompanyDiscountPolicy(String token, String companyName, IDiscountPolicy policy) {
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+
+        UUID memberId = authenticateMember(token);
+        Company company = loadActiveCompany(companyName);
+        authorizePolicy(memberId, company.getName());
+
+        company.setDiscountPolicy(policy);
+        saveCompany(company);
+        log.info("Company discount policy updated: company={}, by={}", companyName, memberId);
+    }
+
+    public void removeCompanyDiscountPolicy(String token, String companyName) {
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
+
+        UUID memberId = authenticateMember(token);
+        Company company = loadActiveCompany(companyName);
+        authorizePolicy(memberId, company.getName());
+
+        company.setDiscountPolicy(new NoDiscountPolicy());
+        saveCompany(company);
+        log.info("Company discount policy reset to default: company={}, by={}", companyName, memberId);
+    }
+
+    // ── Discount stacking ────────────────────────────────────────────
+
+    public void setDiscountStacking(String token, String companyName, boolean allow) {
+        if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
+
+        UUID memberId = authenticateMember(token);
+        Company company = loadActiveCompany(companyName);
+        authorizePolicy(memberId, company.getName());
+
+        company.setAllowDiscountStacking(allow);
+        saveCompany(company);
+        log.info("Company discount stacking set to {}: company={}, by={}", allow, companyName, memberId);
+    }
+
+    public boolean isDiscountStackingAllowed(String token, String companyName) {
+        authenticateMember(token);
+        return loadCompany(companyName).isAllowDiscountStacking();
+    }
+
+    // ── Read helpers (company policy queries) ───────────────────────
+
+    public IPurchasePolicy getCompanyPurchasePolicy(String token, String companyName) {
+        authenticateMember(token);
+        return loadCompany(companyName).getPurchasePolicy();
+    }
+
+    public IDiscountPolicy getCompanyDiscountPolicy(String token, String companyName) {
+        authenticateMember(token);
+        return loadCompany(companyName).getDiscountPolicy();
+    }
+
+    // ── Internal helpers ────────────────────────────────────────────
+
     private UUID validateToken(String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Authentication token is required");
@@ -203,6 +299,51 @@ public class CompanyService {
             throw new IllegalArgumentException("Invalid or expired authentication token");
         }
         return sessionTokenService.extractMemberId(token);
+    }
+
+    private UUID authenticateMember(String token) {
+        UUID memberId = validateToken(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests cannot manage policies");
+        }
+        return memberId;
+    }
+
+    private void authorizePolicy(UUID memberId, String companyName) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("Member not found: " + memberId));
+        StaffAppointment appt = member.getStaffAppointment(companyName);
+        if (appt == null) {
+            throw new SecurityException("Caller is not a staff member of company: " + companyName);
+        }
+        boolean allowed = appt.isOwner()
+                || (appt.isManager() && appt.hasPermission(ManagerPermission.POLICY_MODIFICATION));
+        if (!allowed) {
+            throw new SecurityException("Insufficient permissions: POLICY_MODIFICATION required");
+        }
+    }
+
+    private Company loadCompany(String companyName) {
+        return companyRepository.findByName(companyName)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
+    }
+
+    private Company loadActiveCompany(String companyName) {
+        Company company = loadCompany(companyName);
+        if (!company.isActive()) {
+            throw new IllegalStateException(
+                    "Cannot modify policies on a suspended or closed company: " + companyName);
+        }
+        return company;
+    }
+
+    private void saveCompany(Company company) {
+        try {
+            companyRepository.save(company);
+        } catch (OptimisticLockException ex) {
+            log.warn("Company save conflict: company={}", company.getName());
+            throw new IllegalStateException("Company changed concurrently. Please retry.", ex);
+        }
     }
 }
 

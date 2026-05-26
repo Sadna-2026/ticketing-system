@@ -136,4 +136,57 @@ public class AdminDomainService {
                 .map(PurchaseRecordDTO::from)
                 .collect(Collectors.toList());
     }
+
+    public com.ticketing.domain.member.Suspension suspendUser(String adminToken, UUID targetMemberId, java.time.Duration duration, String reason) {
+        log.info("Admin suspend user requested: targetMemberId={}, permanent={}", targetMemberId, duration == null);
+        if (!isAdmin(adminToken)) {
+            throw new SecurityException("System admin permission required");
+        }
+        if (targetMemberId == null) {
+            throw new IllegalArgumentException("targetMemberId is required");
+        }
+        Member target = memberRepository.findById(targetMemberId)
+                .orElseThrow(() -> new IllegalArgumentException("Target member not found: " + targetMemberId));
+        if (isSoleAdmin(targetMemberId)) {
+            throw new IllegalStateException("Cannot suspend the last system admin");
+        }
+        UUID adminId = sessionTokenService.extractMemberId(adminToken);
+        com.ticketing.domain.member.Suspension suspension = target.suspend(adminId != null ? adminId : UUID.randomUUID(), duration, reason);
+        memberRepository.save(target);
+        log.info("User suspended: targetMemberId={}, suspensionId={}, permanent={}, duration={}", targetMemberId, suspension.getSuspensionId(), suspension.isPermanent(), duration);
+        return suspension;
+    }
+
+    public void cancelSuspension(String adminToken, UUID targetMemberId, UUID suspensionId) {
+        log.info("Admin cancel suspension requested: targetMemberId={}, suspensionId={}", targetMemberId, suspensionId);
+        if (!isAdmin(adminToken)) {
+            throw new SecurityException("System admin permission required");
+        }
+        if (targetMemberId == null) throw new IllegalArgumentException("targetMemberId is required");
+        if (suspensionId == null) throw new IllegalArgumentException("suspensionId is required");
+        Member target = memberRepository.findById(targetMemberId)
+                .orElseThrow(() -> new IllegalArgumentException("Target member not found: " + targetMemberId));
+        target.cancelSuspension(suspensionId);
+        memberRepository.save(target);
+        log.info("Suspension cancelled: targetMemberId={}, suspensionId={}", targetMemberId, suspensionId);
+    }
+
+    public List<com.ticketing.application.dto.SuspensionDTO> listSuspensions(String adminToken, boolean activeOnly) {
+        log.info("Admin list suspensions requested: activeOnly={}", activeOnly);
+        if (!isAdmin(adminToken)) {
+            throw new SecurityException("System admin permission required");
+        }
+        java.time.Instant now = java.time.Instant.now();
+        List<Member> allMembers = memberRepository.findAll();
+        List<com.ticketing.application.dto.SuspensionDTO> result = new java.util.ArrayList<>();
+        for (Member member : allMembers) {
+            for (com.ticketing.domain.member.Suspension suspension : member.getSuspensions()) {
+                if (!activeOnly || suspension.isActive(now)) {
+                    result.add(com.ticketing.application.dto.SuspensionDTO.from(suspension, member.getId(), member.getUsername(), now));
+                }
+            }
+        }
+        log.info("Admin list suspensions completed: resultCount={}", result.size());
+        return result;
+    }
 }

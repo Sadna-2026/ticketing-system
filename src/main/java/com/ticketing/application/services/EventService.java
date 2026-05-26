@@ -15,6 +15,8 @@ import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.IPurchasePolicy;
+import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
 import com.ticketing.domain.lottery.LotteryEntry;
@@ -97,11 +99,6 @@ public class EventService {
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
     }
 
-    /**
-     * Creates a new DRAFT event with inventory zones and venue map.
-     * Caller must be Owner/Founder, or a Manager with both
-     * MAP_DEFINITION and INVENTORY_MGMT permissions.
-     */
     public UUID createEvent(String token, CreateEventRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
@@ -110,22 +107,14 @@ public class EventService {
         return domainService.createEvent(memberId, request).getId();
     }
 
-    /**
-     * UC-II.3.6 — Register a member for an event's purchase-right lottery.
-     * Validates: event supports lottery, registration window is open, member not already registered.
-     */
     public LotteryRegistrationResponse registerForLottery(String token, LotteryRegistrationRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
         }
-
         UUID memberId = authenticateMember(token);
-
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
-
         Instant now = clock.instant();
-
         LotteryEntry entry;
         try {
             entry = lotteryRegistrationService.registerMember(event, memberId, request.zoneId(), request.quantity(), now);
@@ -136,7 +125,6 @@ public class EventService {
             log.warn("Lottery registration conflict: eventId={}, memberId={}", request.eventId(), memberId);
             return LotteryRegistrationResponse.failure("Lottery registration changed concurrently. Please retry.");
         }
-
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
@@ -146,19 +134,21 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        
         domainService.cancelEvent(memberId, eventId);
-        
         if (orderDomainService != null) {
             orderDomainService.refundEventPurchases(eventId);
         }
     }
 
-    /**
-     * Edits core event details (name, description, artist, schedule). Same auth
-     * as createEvent (Owner OR Manager with MAP_DEFINITION + INVENTORY_MGMT).
-     * Rejected if the event has any active reservations.
-     */
+    public void publishEvent(String token, UUID eventId) {
+        if (eventId == null) {
+            log.warn("Event publishing denied: missing eventId");
+            throw new IllegalArgumentException("eventId is required");
+        }
+        UUID memberId = authenticateMember(token);
+        domainService.publishEvent(memberId, eventId);
+    }
+
     public EventDetailsDTO editEvent(String token, EditEventRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
@@ -167,8 +157,49 @@ public class EventService {
         return domainService.editEvent(memberId, request);
     }
 
+    // ── Event-scoped purchase policy ────────────────────────────────
+
+    public void setEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+        UUID memberId = authenticateMember(token);
+        domainService.setEventPurchasePolicy(memberId, eventId, policy);
+    }
+
+    public void removeEventPurchasePolicy(String token, UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        UUID memberId = authenticateMember(token);
+        domainService.removeEventPurchasePolicy(memberId, eventId);
+    }
+
+    // ── Event-scoped discount policy ────────────────────────────────
+
+    public void setEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+        UUID memberId = authenticateMember(token);
+        domainService.setEventDiscountPolicy(memberId, eventId, policy);
+    }
+
+    public void removeEventDiscountPolicy(String token, UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        UUID memberId = authenticateMember(token);
+        domainService.removeEventDiscountPolicy(memberId, eventId);
+    }
+
+    // ── Read helpers (event policy queries) ─────────────────────────
+
+    public IPurchasePolicy getEventPurchasePolicy(String token, UUID eventId) {
+        authenticateMember(token);
+        return domainService.getEventPurchasePolicy(eventId);
+    }
+
+    public IDiscountPolicy getEventDiscountPolicy(String token, UUID eventId) {
+        authenticateMember(token);
+        return domainService.getEventDiscountPolicy(eventId);
+    }
+
     // --- UC-C.1: layout & inventory ---
-    // Permission: INVENTORY_MGMT OR MAP_DEFINITION (per spec — not both, unlike createEvent).
 
     public void addSeatsToZone(String token, UUID eventId, UUID zoneId,
                                java.util.List<CreateEventRequest.SeatSpec> seats) {
@@ -236,6 +267,4 @@ public class EventService {
         }
         return memberId;
     }
-
 }
-

@@ -26,6 +26,8 @@ public interface IMemberRepository {
     List<Member> findByCompanyAppointment(String companyName);
 
     void delete(Member member);
+
+    List<Member> findAll();
 }
 
 // public interface IMemberRepository {
