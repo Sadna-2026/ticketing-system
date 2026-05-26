@@ -78,9 +78,8 @@ class AdminPresenterTest {
     }
 
     @Test
-    void GivenApplicationFailure_WhenRemovingMember_ThenApplicationMessageIsReturned() {
+    void GivenApplicationFailure_WhenLoadingGlobalHistory_ThenApplicationMessageIsReturned() {
         adminSession();
-        UUID targetId = UUID.randomUUID();
         when(adminService.getGlobalPurchaseHistory("admin-token", null, null))
                 .thenThrow(new SecurityException("System admin permission required"));
 
@@ -88,6 +87,20 @@ class AdminPresenterTest {
 
         assertFalse(result.success());
         assertEquals("System admin permission required", result.message());
+    }
+
+    @Test
+    void GivenTechnicalStateFailure_WhenRemovingMember_ThenInternalPrefixIsNotShown() {
+        adminSession();
+        UUID targetId = UUID.randomUUID();
+        org.mockito.Mockito.doThrow(new IllegalStateException(
+                "SoleAdminProtection: Cannot remove the last system admin"))
+                .when(adminService).removeMember("admin-token", targetId);
+
+        ActionResult result = presenter.removeMember(targetId);
+
+        assertFalse(result.success());
+        assertEquals("Cannot remove the last system admin", result.message());
     }
 
     @Test

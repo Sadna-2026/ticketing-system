@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -81,6 +82,19 @@ class AdminViewTest {
 
         verify(presenter).removeMember(targetId);
         assertTrue(hasText(view, "Member removed."));
+    }
+
+    @Test
+    void GivenInvalidTargetMemberId_WhenRemoveClicked_ThenInvalidIdMessageIsDisplayedBeforePresenterCall() {
+        AdminPresenter presenter = mockPresenter();
+        AdminView view = new AdminView(presenter);
+        findTextField(view, "Target member ID").setValue("not-a-uuid");
+
+        clickButton(view, "Remove member");
+
+        assertTrue(hasText(view, "Enter a valid target member ID."));
+        verify(presenter).currentSessionLabel();
+        verifyNoMoreInteractions(presenter);
     }
 
     @Test

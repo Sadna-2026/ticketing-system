@@ -133,8 +133,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private VerticalLayout memberSection() {
-        Button removeMember = new Button("Remove member", event -> handleMemberResult(
-                presenter.removeMember(requiredUuid(removeTargetMemberId, "target member"))));
+        Button removeMember = new Button("Remove member", event -> removeMember());
 
         FormLayout form = new FormLayout(removeTargetMemberId);
         VerticalLayout section = new VerticalLayout(
@@ -164,16 +163,8 @@ public class AdminView extends VerticalLayout {
     }
 
     private VerticalLayout suspensionSection() {
-        Button suspend = new Button("Suspend member", event -> handleSuspensionAction(presenter.suspendUser(
-                requiredUuid(suspensionTargetMemberId, "target member"),
-                suspensionDurationDays.getValue(),
-                permanentSuspension.getValue(),
-                suspensionReason.getValue()
-        )));
-        Button cancel = new Button("Cancel suspension", event -> handleSuspensionAction(presenter.cancelSuspension(
-                requiredUuid(suspensionTargetMemberId, "target member"),
-                requiredUuid(suspensionId, "suspension")
-        )));
+        Button suspend = new Button("Suspend member", event -> suspendMember());
+        Button cancel = new Button("Cancel suspension", event -> cancelSuspension());
         Button load = new Button("Load suspensions", event -> loadSuspensions());
 
         FormLayout form = new FormLayout(
@@ -214,6 +205,41 @@ public class AdminView extends VerticalLayout {
         );
         section.setPadding(false);
         return section;
+    }
+
+    private void removeMember() {
+        try {
+            handleMemberResult(presenter.removeMember(requiredUuid(removeTargetMemberId, "target member")));
+        } catch (IllegalArgumentException ex) {
+            memberStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+        }
+    }
+
+    private void suspendMember() {
+        try {
+            handleSuspensionAction(presenter.suspendUser(
+                    requiredUuid(suspensionTargetMemberId, "target member"),
+                    suspensionDurationDays.getValue(),
+                    permanentSuspension.getValue(),
+                    suspensionReason.getValue()
+            ));
+        } catch (IllegalArgumentException ex) {
+            suspensionStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+        }
+    }
+
+    private void cancelSuspension() {
+        try {
+            handleSuspensionAction(presenter.cancelSuspension(
+                    requiredUuid(suspensionTargetMemberId, "target member"),
+                    requiredUuid(suspensionId, "suspension")
+            ));
+        } catch (IllegalArgumentException ex) {
+            suspensionStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+        }
     }
 
     private void loadPurchaseHistory() {
@@ -294,10 +320,7 @@ public class AdminView extends VerticalLayout {
         try {
             return UUID.fromString(value.trim());
         } catch (IllegalArgumentException ex) {
-            if (optional) {
-                throw new IllegalArgumentException("Enter a valid " + label + " ID.");
-            }
-            return null;
+            throw new IllegalArgumentException("Enter a valid " + label + " ID.");
         }
     }
 

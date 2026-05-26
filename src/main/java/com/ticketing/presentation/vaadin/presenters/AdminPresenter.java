@@ -157,9 +157,15 @@ public class AdminPresenter {
     }
 
     private String userMessage(RuntimeException ex, String fallback) {
-        if (ex instanceof IllegalArgumentException
-                || ex instanceof IllegalStateException
-                || ex instanceof SecurityException) {
+        if (ex instanceof IllegalStateException) {
+            String message = cleanStateMessage(ex.getMessage());
+            if (message != null) {
+                logger.warn("Admin action failed: {}", ex.getMessage());
+                return message;
+            }
+        }
+
+        if (ex instanceof IllegalArgumentException || ex instanceof SecurityException) {
             String message = ex.getMessage();
             if (message != null && !message.isBlank()) {
                 return message;
@@ -172,6 +178,18 @@ public class AdminPresenter {
 
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static String cleanStateMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        int separator = message.indexOf(':');
+        if (separator < 0) {
+            return message;
+        }
+        String candidate = message.substring(separator + 1).trim();
+        return candidate.isBlank() ? message : candidate;
     }
 
     public enum Feedback {
