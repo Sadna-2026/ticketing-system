@@ -1,6 +1,9 @@
 package com.ticketing.application.services;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -16,6 +19,7 @@ import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 
@@ -90,6 +94,56 @@ public class AdminService {
         // 6. Terminate Sessions
         sessionTokenService.revokeMemberSessions(targetMemberId);
         log.info("Admin remove member completed: targetMemberId={}", targetMemberId);
+    }
+
+    /**
+     * UC-II.6.7 — System admin suspends a user.
+     *
+     * @param adminToken  valid admin session token
+     * @param targetMemberId  the member to suspend
+     * @param duration  suspension length, or null for permanent
+     * @param reason  human-readable reason shown to the user
+     * @return the created Suspension
+     */
+    public synchronized Suspension suspendUser(String adminToken, UUID targetMemberId,
+                                                Duration duration, String reason) {
+        log.info("Admin suspend user requested: targetMemberId={}, permanent={}",
+                targetMemberId, duration == null);
+
+        if (!isAdmin(adminToken)) {
+            log.warn("Suspend user denied: caller is not a system admin");
+            throw new SecurityException("System admin permission required");
+        }
+
+        if (targetMemberId == null) {
+            throw new IllegalArgumentException("targetMemberId is required");
+        }
+
+        Member target = memberRepository.findById(targetMemberId)
+                .orElseThrow(() -> {
+                    log.warn("Suspend user denied: target member not found id={}", targetMemberId);
+                    return new IllegalArgumentException("Target member not found: " + targetMemberId);
+                });
+
+        // Don't allow suspending the sole system admin
+        if (isSoleAdmin(targetMemberId)) {
+            log.warn("Suspend user denied: target is sole system admin id={}", targetMemberId);
+            throw new IllegalStateException("Cannot suspend the last system admin");
+        }
+
+        UUID adminId = sessionTokenService.extractMemberId(adminToken);
+        Instant now = Instant.now();
+        Suspension suspension = new Suspension(
+                adminId != null ? adminId : UUID.randomUUID(),
+                now, duration, reason);
+
+        target.addSuspension(suspension);
+        memberRepository.save(target);
+
+        log.info("User suspended: targetMemberId={}, suspensionId={}, permanent={}, duration={}",
+                targetMemberId, suspension.getSuspensionId(),
+                suspension.isPermanent(), duration);
+        return suspension;
     }
 
     private boolean isAdmin(String token) {
