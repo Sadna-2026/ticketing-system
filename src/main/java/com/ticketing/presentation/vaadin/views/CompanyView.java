@@ -279,11 +279,13 @@ public class CompanyView extends VerticalLayout {
         Button changePermissions = new Button("Change manager permissions", event -> handlePersonnelResult(
                 presenter.changeManagerPermissions(personnelCompanyName.getValue(), parseUuid(targetMemberId, "target member"),
                         permissions.getSelectedItems())));
+        Button relinquish = new Button("Relinquish ownership", event -> handlePersonnelResult(
+                presenter.relinquishOwnership(personnelCompanyName.getValue())));
         Button loadOrgChart = new Button("Load organization chart", event -> loadOrganizationChart());
 
         FormLayout form = new FormLayout(personnelCompanyName, targetMemberId, role, permissions, offerId);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
-        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revoke, changePermissions, loadOrgChart);
+        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revoke, changePermissions, relinquish, loadOrgChart);
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
 

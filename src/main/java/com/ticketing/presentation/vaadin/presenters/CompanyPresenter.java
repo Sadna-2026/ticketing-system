@@ -202,6 +202,24 @@ public class CompanyPresenter {
         }
     }
 
+    public ActionResult relinquishOwnership(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return ActionResult.failure("Company name is required.");
+        }
+
+        try {
+            companyService.relinquishOwnership(token, normalizedName);
+            return ActionResult.success("Ownership relinquished for " + normalizedName + ".");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+        }
+    }
+
     public EventActionResult createEvent(
             String companyName,
             String name,
