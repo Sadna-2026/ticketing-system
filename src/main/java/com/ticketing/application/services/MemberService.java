@@ -1,6 +1,4 @@
 package com.ticketing.application.services;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -9,14 +7,17 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.auth.SessionTokenData;
+import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.MemberMapper;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.request.LoginRequest;
@@ -286,6 +287,21 @@ public class MemberService {
         logger.info("Member logged out: " + memberId);
 
         return LogoutResponse.success(guestToken);
+    }
+
+    public MemberDto getMemberDetails(String sessionToken) {
+        if (!sessionTokenService.isValid(sessionToken)) {
+            return null;
+        }
+        UUID memberId = sessionTokenService.extractMemberId(sessionToken);
+        if (memberId == null) {
+            return null;
+        }
+        Member member = memberRepository.findById(memberId).orElse(null);
+        if (member == null) {
+            return null;
+        }
+        return MemberMapper.toDto(member);
     }
 
     public MemberExitResponse exitPlatform(String sessionToken) {
