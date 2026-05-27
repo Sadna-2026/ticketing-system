@@ -2,6 +2,7 @@ package com.ticketing.application.listener;
 
 import java.time.LocalDateTime;
 
+import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
 import com.ticketing.domain.exception.OptimisticLockException;
@@ -18,9 +19,11 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
     private static final int MAX_SAVE_RETRIES = 100;
 
     private final IMemberRepository memberRepository;
+    private final INotificationService notificationService;
 
-    public RoleAppointmentOfferRequestedHandler(IMemberRepository memberRepository) {
+    public RoleAppointmentOfferRequestedHandler(IMemberRepository memberRepository, INotificationService notificationService) {
         this.memberRepository = memberRepository;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -61,6 +64,9 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
 
             try {
                 memberRepository.save(target);
+                if (notificationService != null) {
+                    notificationService.notify(target.getId().toString(), "You have a new role offer for company: " + reqEvent.getCompanyName());
+                }
                 return;
             } catch (OptimisticLockException ex) {
                 lastConflict = ex;

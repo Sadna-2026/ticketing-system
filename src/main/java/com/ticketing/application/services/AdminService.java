@@ -1,11 +1,6 @@
 package com.ticketing.application.services;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,10 +12,7 @@ import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
-import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.Suspension;
-import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.services.AdminDomainService;
 
@@ -28,6 +20,7 @@ import com.ticketing.domain.services.AdminDomainService;
 public class AdminService {
 
     private final AdminDomainService domainService;
+    private final INotificationService notificationService;
 
     // Backward compatibility
     public AdminService(
@@ -37,12 +30,15 @@ public class AdminService {
             IAdminRepository adminRepository,
             IOrderRepository orderRepository
     ) {
-        this(new AdminDomainService(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository));
+        this(new AdminDomainService(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository), null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
-    public AdminService(AdminDomainService domainService) {
+    public AdminService(
+            AdminDomainService domainService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this.domainService = domainService;
+        this.notificationService = notificationService;
     }
 
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {
@@ -54,7 +50,11 @@ public class AdminService {
      */
     public Suspension suspendUser(String adminToken, UUID targetMemberId,
                                    Duration duration, String reason) {
-        return domainService.suspendUser(adminToken, targetMemberId, duration, reason);
+        Suspension suspension = domainService.suspendUser(adminToken, targetMemberId, duration, reason);
+        if (notificationService != null) {
+            notificationService.notify(targetMemberId.toString(), "Your account has been suspended" + (reason != null ? ": " + reason : "."));
+        }
+        return suspension;
     }
 
     /**
@@ -63,6 +63,9 @@ public class AdminService {
     public void cancelSuspension(String adminToken, UUID targetMemberId,
                                   UUID suspensionId) {
         domainService.cancelSuspension(adminToken, targetMemberId, suspensionId);
+        if (notificationService != null) {
+            notificationService.notify(targetMemberId.toString(), "Your account suspension has been lifted.");
+        }
     }
 
     /**

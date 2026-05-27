@@ -14,6 +14,7 @@ import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.queue.IQueueRepository;
 import com.ticketing.domain.services.OrderDomainService;
@@ -26,6 +27,7 @@ public class OrderService {
     private final ISessionTokenService sessionTokenService;
     private final OrderDomainService domainService;
     private final QueueDomainService queueDomainService;
+    private final INotificationService notificationService;
 
     // Backward-compatible constructors
 
@@ -36,7 +38,7 @@ public class OrderService {
         this(sessionTokenService,
              new OrderDomainService(orderRepository, eventRepository, null, systemClock,
                      List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway())),
-             null);
+             null, null);
     }
 
     public OrderService(IOrderRepository orderRepository,
@@ -49,7 +51,7 @@ public class OrderService {
         this(sessionTokenService,
              new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
                      paymentGateways, List.of(ticketSupplyGateway)),
-             null);
+             null, null);
     }
 
     public OrderService(IOrderRepository orderRepository,
@@ -62,7 +64,7 @@ public class OrderService {
         this(sessionTokenService,
              new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
                      paymentGateways, ticketSupplyGateways),
-             null);
+             null, null);
     }
 
     public OrderService(IOrderRepository orderRepository,
@@ -76,19 +78,21 @@ public class OrderService {
         this(sessionTokenService,
              new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
                      paymentGateways, ticketSupplyGateways),
-             new QueueDomainService(queueRepository, eventRepository, systemClock));
+             new QueueDomainService(queueRepository, eventRepository, systemClock), null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public OrderService(ISessionTokenService sessionTokenService,
                         OrderDomainService domainService,
-                        QueueDomainService queueDomainService) {
+                        QueueDomainService queueDomainService,
+                        @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         if (sessionTokenService == null) throw new IllegalArgumentException("sessionTokenService is required");
         if (domainService == null) throw new IllegalArgumentException("domainService is required");
 
         this.sessionTokenService = sessionTokenService;
         this.domainService = domainService;
         this.queueDomainService = queueDomainService;
+        this.notificationService = notificationService;
     }
 
     public UUID createOrder(String token, UUID eventId) {
@@ -130,11 +134,23 @@ public class OrderService {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        return domainService.checkout(sessionId, orderId, memberId, couponCode);
+        UUID purchaseId = domainService.checkout(sessionId, orderId, memberId, couponCode);
+        if (notificationService != null && memberId != null) {
+            notificationService.notify(memberId.toString(), "Your checkout was completed successfully.");
+        }
+        return purchaseId;
     }
 
-    public void refundEventPurchases(UUID eventId) {
-        domainService.refundEventPurchases(eventId);
+    public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
+        List<CompletedPurchase> purchases = domainService.refundEventPurchases(eventId);
+        if (notificationService != null) {
+            for (CompletedPurchase purchase : purchases) {
+                if (purchase.memberId() != null) {
+                    notificationService.notify(purchase.memberId().toString(), "The event you purchased tickets for has been cancelled and you have been refunded.");
+                }
+            }
+        }
+        return purchases;
     }
 
     public void removeItemFromOrder(String token, UUID orderId, UUID itemId) {
@@ -177,9 +193,9 @@ public class OrderService {
         if (memberId == null) {
             throw new SecurityException("User must be logged in to view purchase history");
         }
-        List<com.ticketing.domain.order.CompletedPurchase> purchases = domainService.getPurchaseHistory(memberId);
+        List<CompletedPurchase> purchases = domainService.getPurchaseHistory(memberId);
         List<PurchaseRecordDTO> result = new java.util.ArrayList<>();
-        for (com.ticketing.domain.order.CompletedPurchase p : purchases) {
+        for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));
         }
         return result;
