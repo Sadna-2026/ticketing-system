@@ -211,11 +211,12 @@ public class OrderDomainService {
         log.info("Order cancelled: orderId={}", order.getId());
     }
 
-    public void refundEventPurchases(UUID eventId) {
+    public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
         List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
         for (CompletedPurchase purchase : purchases) {
             orderCheckoutService.refundPayment(purchase.transactionId(), purchase.amount());
         }
+        return purchases;
     }
 
     public ActiveOrder getActiveOrder(UUID sessionId, UUID orderId) {

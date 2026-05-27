@@ -2,6 +2,7 @@ package com.ticketing.application.services;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -14,13 +15,15 @@ import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.IPurchasePolicy;
-import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
+import com.ticketing.domain.lottery.LotteryDrawDomainService;
 import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.lottery.LotteryRegistrationDomainService;
+import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.services.EventDomainService;
 import com.ticketing.domain.services.OrderDomainService;
 
@@ -36,6 +39,8 @@ public class EventService {
     private final LotteryRegistrationDomainService lotteryRegistrationService;
     private final OrderDomainService orderDomainService;
     private final EventDomainService domainService;
+    private final LotteryDrawDomainService lotteryDrawService;
+    private final INotificationService notificationService;
 
     // For backwards compatibility with tests
     public EventService(IEventRepository eventRepository,
@@ -52,6 +57,8 @@ public class EventService {
         this.orderDomainService = null; // Tests relying on this will need to be updated if they trigger cancellations
         this.domainService = new EventDomainService(eventRepository, companyRepository, memberRepository, orderRepository);
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
+        this.lotteryDrawService = null;
+        this.notificationService = null;
     }
 
     public EventService(IEventRepository eventRepository,
@@ -90,13 +97,18 @@ public class EventService {
                         ILotteryRepository lotteryRepository,
                         Clock clock,
                         com.ticketing.domain.services.OrderDomainService orderDomainService,
-                        EventDomainService domainService) {
+                        EventDomainService domainService,
+                        com.ticketing.domain.order.IOrderRepository orderRepository,
+                        com.ticketing.application.ISystemClock systemClock,
+                        @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this.eventRepository = eventRepository;
         this.sessionTokenService = sessionTokenService;
         this.clock = clock;
         this.orderDomainService = orderDomainService;
         this.domainService = domainService;
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
+        this.lotteryDrawService = new com.ticketing.domain.lottery.LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new java.util.Random());
+        this.notificationService = notificationService;
     }
 
     public UUID createEvent(String token, CreateEventRequest request) {
@@ -128,6 +140,21 @@ public class EventService {
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
+    public List<com.ticketing.domain.order.ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        UUID memberId = authenticateMember(token);
+        // Authorize if needed
+        List<com.ticketing.domain.order.ActiveOrder> winners = lotteryDrawService.draw(eventId, capacity);
+        if (notificationService != null) {
+            for (com.ticketing.domain.order.ActiveOrder order : winners) {
+                if (order.getMemberId() != null) {
+                    notificationService.notify(order.getMemberId().toString(), "You have won the lottery! You can now purchase tickets for the event.");
+                }
+            }
+        }
+        return winners;
+    }
+
     public void cancelEvent(String token, UUID eventId) {
         if (eventId == null) {
             log.warn("Event cancellation denied: missing eventId");
@@ -136,7 +163,17 @@ public class EventService {
         UUID memberId = authenticateMember(token);
         domainService.cancelEvent(memberId, eventId);
         if (orderDomainService != null) {
-            orderDomainService.refundEventPurchases(eventId);
+            List<CompletedPurchase> refunds = orderDomainService.refundEventPurchases(eventId);
+            if (notificationService != null) {
+                for (CompletedPurchase p : refunds) {
+                    if (p.memberId() != null) {
+                        notificationService.notify(p.memberId().toString(), "The event you purchased tickets for has been cancelled and you have been refunded.");
+                    }
+                }
+            }
+        }
+        if (notificationService != null) {
+            notificationService.notify(memberId.toString(), "Event was cancelled successfully.");
         }
     }
 

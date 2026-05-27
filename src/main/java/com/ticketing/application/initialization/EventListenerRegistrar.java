@@ -38,7 +38,7 @@ public class EventListenerRegistrar {
     @PostConstruct
     public void registerListeners() {
         eventPublisher.subscribe("CompanyOpened", new MemberCompanyOpenedEventHandler(memberRepository));
-        eventPublisher.subscribe("RoleAppointmentOfferRequested", new RoleAppointmentOfferRequestedHandler(memberRepository));
+        eventPublisher.subscribe("RoleAppointmentOfferRequested", new RoleAppointmentOfferRequestedHandler(memberRepository, notificationService));
         eventPublisher.subscribe("RoleAppointmentOfferResponse",
                 new RoleAppointmentOfferResponseHandler(memberRepository, companyRepository, notificationService));
         eventPublisher.subscribe("ManagerPermissionsChanged",
