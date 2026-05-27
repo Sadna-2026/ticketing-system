@@ -72,10 +72,10 @@ class CompanyViewTest {
         CompanyView view = new CompanyView(mockPresenter());
 
         assertTrue(hasText(view, "Public company lookup"));
-        assertTrue(hasText(view, "Owner and founder actions"));
-        assertTrue(hasText(view, "Manager actions"));
-        assertTrue(hasText(view, "Application services still enforce authorization for every action and their responses are shown here."));
-        assertTrue(hasText(view, "Manager action visibility is grouped by capability, but the frontend cannot pre-check company-specific ManagerPermission values from the current session."));
+        assertTrue(hasText(view, "Founder company setup"));
+        assertTrue(hasText(view, "Personnel and roles"));
+        assertTrue(containsText(view, "Choose a section below"));
+        assertTrue(hasText(view, "Application services still enforce authorization for every action and their responses are shown in the status area."));
         assertTrue(hasText(view, "Define and manage purchase rules and discount policies at company or event level."));
         assertTrue(hasButton(view, "Open company"));
         assertTrue(hasButton(view, "Load company info"));
@@ -445,6 +445,15 @@ class CompanyViewTest {
                 .filter(HasText.class::isInstance)
                 .map(HasText.class::cast)
                 .anyMatch(component -> expected.equals(component.getText()));
+    }
+
+    private static boolean containsText(Component root, String fragment) {
+        return components(root).stream()
+                .filter(HasText.class::isInstance)
+                .map(HasText.class::cast)
+                .map(HasText::getText)
+                .filter(text -> text != null)
+                .anyMatch(text -> text.contains(fragment));
     }
 
     private static List<Component> components(Component root) {

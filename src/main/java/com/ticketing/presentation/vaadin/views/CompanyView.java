@@ -6,7 +6,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.application.dto.CompanyPublicDTO;
@@ -48,6 +51,8 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReport
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
+import com.vaadin.flow.component.tabs.Tab;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.details.Details;
@@ -71,6 +76,25 @@ import com.vaadin.flow.router.Route;
 @PageTitle("Company")
 public class CompanyView extends VerticalLayout {
 
+    private enum CompanyMode {
+        LOOKUP("Company lookup", false),
+        FOUNDER("Founder setup", true),
+        PERSONNEL("Personnel", true),
+        LIFECYCLE("Lifecycle", true),
+        EVENTS("Events", true),
+        INVENTORY("Inventory", true),
+        POLICIES("Policies", true),
+        REPORTS("Reports", true);
+
+        private final String label;
+        private final boolean memberOnly;
+
+        CompanyMode(String label, boolean memberOnly) {
+            this.label = label;
+            this.memberOnly = memberOnly;
+        }
+    }
+
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm")
             .withZone(ZoneId.systemDefault());
@@ -79,14 +103,11 @@ public class CompanyView extends VerticalLayout {
 
     private final Span sessionStatus = new Span();
     private final Paragraph memberOnlyCompanyHint = new Paragraph("Log in as a member to use company owner and manager actions.");
-    private VerticalLayout openCompanyControls;
-    private VerticalLayout ownerFounderControls;
-    private VerticalLayout managerControls;
-    private VerticalLayout personnelControls;
-    private VerticalLayout eventManagementControls;
+    private final Tabs modeTabs = new Tabs();
+    private final VerticalLayout modeContent = new VerticalLayout();
+    private final Map<CompanyMode, Tab> tabByMode = new EnumMap<>(CompanyMode.class);
+    private final Map<Tab, VerticalLayout> panelByTab = new HashMap<>();
     private VerticalLayout inventoryManagementControls;
-    private VerticalLayout lifecycleControls;
-    private VerticalLayout reportingControls;
 
     private final TextField openCompanyName = new TextField("New company name");
     private final TextArea openCompanyDescription = new TextArea("New company description");
@@ -160,8 +181,6 @@ public class CompanyView extends VerticalLayout {
     private final ComboBox<String> discountComposition = new ComboBox<>("Discount composition");
     private final Span policyStatus = new Span("View and manage purchase and discount policies.");
     private final Span currentPolicyDisplay = new Span();
-    private VerticalLayout policyControls;
-
     public CompanyView(CompanyPresenter presenter) {
         this.presenter = presenter;
 
@@ -174,19 +193,89 @@ public class CompanyView extends VerticalLayout {
         configureCompanyEventsGrid();
         configurePurchasesGrid();
         configureDisplays();
+        initModePanels();
+        initModeNavigation();
+        attachModePanels();
+
+        modeContent.setPadding(false);
+        modeContent.setSpacing(true);
+        modeContent.setWidthFull();
+        modeTabs.setWidthFull();
 
         add(
                 new H2("Company"),
-                new Paragraph("Use company actions grouped by owner/founder and manager responsibilities."),
-                new Paragraph("Application services still enforce authorization for every action and their responses are shown here."),
+                new Paragraph("Choose a section below. Each mode shows only the controls for that area."),
+                new Paragraph("Application services still enforce authorization for every action and their responses are shown in the status area."),
                 sessionStatus,
                 memberOnlyCompanyHint,
-                publicCompanySection(),
-                inventorySection(),
-                ownerFounderSection(),
-                managerActionsSection()
+                modeTabs,
+                modeContent
         );
+        selectMode(CompanyMode.LOOKUP);
         refreshSessionStatus();
+    }
+
+    private void initModePanels() {
+        VerticalLayout lookupPanel = new VerticalLayout(publicCompanySection(), publicEventMapSection());
+        lookupPanel.setPadding(false);
+        lookupPanel.setSpacing(true);
+
+        Map<CompanyMode, VerticalLayout> panels = Map.of(
+                CompanyMode.LOOKUP, lookupPanel,
+                CompanyMode.FOUNDER, openCompanySection(),
+                CompanyMode.PERSONNEL, personnelSection(),
+                CompanyMode.LIFECYCLE, lifecycleSection(),
+                CompanyMode.EVENTS, eventManagementSection(),
+                CompanyMode.INVENTORY, inventorySection(),
+                CompanyMode.POLICIES, policySection(),
+                CompanyMode.REPORTS, reportingSection()
+        );
+
+        panelByTab.clear();
+        tabByMode.clear();
+        for (CompanyMode mode : CompanyMode.values()) {
+            Tab tab = new Tab(mode.label);
+            tabByMode.put(mode, tab);
+            panelByTab.put(tab, panels.get(mode));
+        }
+    }
+
+    private void initModeNavigation() {
+        modeTabs.removeAll();
+        for (CompanyMode mode : CompanyMode.values()) {
+            modeTabs.add(tabByMode.get(mode));
+        }
+        modeTabs.addSelectedChangeListener(event -> {
+            Tab tab = event.getSelectedTab();
+            if (tab != null) {
+                showPanelForTab(tab);
+            }
+        });
+    }
+
+    private void attachModePanels() {
+        modeContent.removeAll();
+        for (CompanyMode mode : CompanyMode.values()) {
+            VerticalLayout panel = panelByTab.get(tabByMode.get(mode));
+            if (panel != null) {
+                panel.setVisible(false);
+                modeContent.add(panel);
+            }
+        }
+    }
+
+    private void selectMode(CompanyMode mode) {
+        Tab tab = tabByMode.get(mode);
+        modeTabs.setSelectedTab(tab);
+        showPanelForTab(tab);
+    }
+
+    private void showPanelForTab(Tab tab) {
+        panelByTab.values().forEach(panel -> panel.setVisible(false));
+        VerticalLayout panel = panelByTab.get(tab);
+        if (panel != null) {
+            panel.setVisible(true);
+        }
     }
 
     private void configureFields() {
@@ -257,17 +346,20 @@ public class CompanyView extends VerticalLayout {
         return section;
     }
 
-    private VerticalLayout ownerFounderSection() {
+    private VerticalLayout publicEventMapSection() {
+        Button loadMap = new Button("Load event map", event -> loadEventMap());
+        FormLayout mapForm = new FormLayout(inventoryEventId);
+        HorizontalLayout mapActions = new HorizontalLayout(loadMap);
+        mapActions.setAlignItems(Alignment.BASELINE);
+
         VerticalLayout section = new VerticalLayout(
-                new H3("Owner and founder actions"),
-                new Paragraph("Owners manage company staff. Founders manage company lifecycle actions."),
-                openCompanySection(),
-                personnelSection(),
-                lifecycleSection()
+                new H4("Event map (read-only)"),
+                new Paragraph("Inspect published event map data. Inventory changes are under the Inventory section."),
+                mapForm,
+                mapActions,
+                eventMapDisplay
         );
         section.setPadding(false);
-        section.setSpacing(true);
-        ownerFounderControls = section;
         return section;
     }
 
@@ -276,27 +368,12 @@ public class CompanyView extends VerticalLayout {
 
         FormLayout form = new FormLayout(openCompanyName, openCompanyDescription);
         VerticalLayout section = new VerticalLayout(
-                new H4("Founder company setup"),
+                new H3("Founder company setup"),
+                new Paragraph("Register a new production company and become its founder."),
                 form,
                 openCompany
         );
         section.setPadding(false);
-        openCompanyControls = section;
-        return section;
-    }
-
-    private VerticalLayout managerActionsSection() {
-        VerticalLayout section = new VerticalLayout(
-                new H3("Manager actions"),
-                new Paragraph("Manager action visibility is grouped by capability, but the frontend cannot pre-check company-specific ManagerPermission values from the current session."),
-                new Paragraph("Use the controls that match the role assigned by the company; unauthorized application responses will be shown in the relevant status area."),
-                eventManagementSection(),
-                reportingSection(),
-                policySection()
-        );
-        section.setPadding(false);
-        section.setSpacing(true);
-        managerControls = section;
         return section;
     }
 
@@ -328,9 +405,16 @@ public class CompanyView extends VerticalLayout {
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
 
-        VerticalLayout section = new VerticalLayout(new H4("Role appointment and personnel"), form, actions, personnelStatus, orgChartDisplay);
+        VerticalLayout section = new VerticalLayout(
+                new H3("Personnel and roles"),
+                new Paragraph("Owners appoint managers and other owners. Managers accept offers and manage permissions."),
+                new H4("Role appointment and personnel"),
+                form,
+                actions,
+                personnelStatus,
+                orgChartDisplay
+        );
         section.setPadding(false);
-        personnelControls = section;
         return section;
     }
 
@@ -362,14 +446,20 @@ public class CompanyView extends VerticalLayout {
         HorizontalLayout actions = new HorizontalLayout(createEvent, editEvent, publishEvent, cancelEvent);
         actions.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H4("Event management"), createForm, editForm, actions, eventStatus);
+        VerticalLayout section = new VerticalLayout(
+                new H3("Event management"),
+                new Paragraph("Create, edit, publish, and cancel company events."),
+                new H4("Create and edit"),
+                createForm,
+                editForm,
+                actions,
+                eventStatus
+        );
         section.setPadding(false);
-        eventManagementControls = section;
         return section;
     }
 
     private VerticalLayout inventorySection() {
-        Button loadMap = new Button("Load event map", event -> loadEventMap());
         Button addSeat = new Button("Add seat", event -> handleInventoryResult(presenter.addSeat(
                 parseUuid(inventoryEventId, "event"),
                 parseUuid(inventoryZoneId, "zone"),
@@ -397,25 +487,20 @@ public class CompanyView extends VerticalLayout {
                 zonePriceUpdate.getValue()
         )));
 
-        FormLayout mapForm = new FormLayout(inventoryEventId);
-        HorizontalLayout mapActions = new HorizontalLayout(loadMap);
-        mapActions.setAlignItems(Alignment.BASELINE);
-
-        FormLayout form = new FormLayout(inventoryZoneId, seatRow, seatNumber, seatId, capacityDelta, zonePriceUpdate);
+        FormLayout form = new FormLayout(inventoryEventId, inventoryZoneId, seatRow, seatNumber, seatId, capacityDelta, zonePriceUpdate);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
         HorizontalLayout actions = new HorizontalLayout(addSeat, removeSeat, increaseCapacity, decreaseCapacity, setPrice);
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
-        inventoryManagementControls = new VerticalLayout(form, actions);
+        inventoryManagementControls = new VerticalLayout(actions);
         inventoryManagementControls.setPadding(false);
 
         VerticalLayout section = new VerticalLayout(
-                new H4("Inventory and map"),
-                mapForm,
-                mapActions,
+                new H3("Inventory management"),
+                new Paragraph("Adjust seats, GA capacity, and zone pricing for an event."),
+                form,
                 inventoryManagementControls,
-                inventoryStatus,
-                eventMapDisplay
+                inventoryStatus
         );
         section.setPadding(false);
         return section;
@@ -428,9 +513,14 @@ public class CompanyView extends VerticalLayout {
         HorizontalLayout actions = new HorizontalLayout(suspend, reopen, close);
         actions.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H4("Company lifecycle"), lifecycleCompanyName, actions, lifecycleStatus);
+        VerticalLayout section = new VerticalLayout(
+                new H3("Company lifecycle"),
+                new Paragraph("Founders may suspend, reopen, or close their company."),
+                lifecycleCompanyName,
+                actions,
+                lifecycleStatus
+        );
         section.setPadding(false);
-        lifecycleControls = section;
         return section;
     }
 
@@ -441,7 +531,8 @@ public class CompanyView extends VerticalLayout {
         actions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
-                new H4("History and reporting"),
+                new H3("History and reporting"),
+                new Paragraph("View purchase history and sales totals for a company."),
                 reportingCompanyName,
                 actions,
                 reportingStatus,
@@ -449,7 +540,6 @@ public class CompanyView extends VerticalLayout {
                 salesReportDisplay
         );
         section.setPadding(false);
-        reportingControls = section;
         return section;
     }
 
@@ -503,7 +593,7 @@ public class CompanyView extends VerticalLayout {
         discountActions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
-                new H4("Purchase and discount policies"),
+                new H3("Purchase and discount policies"),
                 new Paragraph("Define and manage purchase rules and discount policies at company or event level."),
                 targetForm,
                 new H4("Purchase policy"),
@@ -516,7 +606,6 @@ public class CompanyView extends VerticalLayout {
                 currentPolicyDisplay
         );
         section.setPadding(false);
-        policyControls = section;
         return section;
     }
 
@@ -1020,15 +1109,16 @@ public class CompanyView extends VerticalLayout {
         sessionStatus.setText(presenter.currentSessionLabel());
         boolean member = presenter.currentSessionState().loggedInMember();
         memberOnlyCompanyHint.setVisible(!member);
-        ownerFounderControls.setVisible(member);
-        managerControls.setVisible(member);
-        openCompanyControls.setVisible(member);
-        personnelControls.setVisible(member);
-        eventManagementControls.setVisible(member);
-        inventoryManagementControls.setVisible(member);
-        lifecycleControls.setVisible(member);
-        reportingControls.setVisible(member);
-        policyControls.setVisible(member);
+        for (CompanyMode mode : CompanyMode.values()) {
+            Tab tab = tabByMode.get(mode);
+            if (tab != null) {
+                tab.setVisible(!mode.memberOnly || member);
+            }
+        }
+        Tab selected = modeTabs.getSelectedTab();
+        if (!member || selected == null || !selected.isVisible()) {
+            selectMode(CompanyMode.LOOKUP);
+        }
     }
 
     private String formatInstant(Instant instant) {
