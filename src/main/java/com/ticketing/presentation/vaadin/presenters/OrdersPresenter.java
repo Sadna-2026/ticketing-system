@@ -49,7 +49,7 @@ public class OrdersPresenter {
             if (order == null) {
                 return OrderResult.success("No active order found.", null, null);
             }
-            return OrderResult.success("Active order loaded.", order.getId(), order);
+            return OrderResult.success("Active order loaded.", order.getId(), enrichOrder(order));
         } catch (RuntimeException ex) {
             return OrderResult.failure(userMessage(ex, LOAD_FAILURE_MESSAGE));
         }
@@ -88,7 +88,7 @@ public class OrdersPresenter {
 
         try {
             UUID itemId = orderService.addGATicketsToOrder(token, eventId, zoneId, quantity);
-            ActiveOrderDto order = orderService.getActiveOrder(token);
+            ActiveOrderDto order = enrichOrder(orderService.getActiveOrder(token));
             return OrderMutationResult.success("GA tickets added.", itemId, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, ADD_GA_FAILURE_MESSAGE));
@@ -110,7 +110,7 @@ public class OrdersPresenter {
 
         try {
             UUID itemId = orderService.addSeatToOrder(token, eventId, zoneId, seatId);
-            ActiveOrderDto order = orderService.getActiveOrder(token);
+            ActiveOrderDto order = enrichOrder(orderService.getActiveOrder(token));
             return OrderMutationResult.success("Assigned seat added.", itemId, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, ADD_SEAT_FAILURE_MESSAGE));
@@ -129,7 +129,7 @@ public class OrdersPresenter {
 
         try {
             orderService.removeItemFromOrder(token, itemId);
-            ActiveOrderDto order = orderService.getActiveOrder(token);
+            ActiveOrderDto order = enrichOrder(orderService.getActiveOrder(token));
             return OrderMutationResult.success("Order item removed.", itemId, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, REMOVE_FAILURE_MESSAGE));
@@ -151,7 +151,7 @@ public class OrdersPresenter {
 
         try {
             orderService.updateGAQuantity(token, zoneId, newQuantity);
-            ActiveOrderDto order = orderService.getActiveOrder(token);
+            ActiveOrderDto order = enrichOrder(orderService.getActiveOrder(token));
             return OrderMutationResult.success("GA quantity updated.", null, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, UPDATE_FAILURE_MESSAGE));
@@ -203,6 +203,32 @@ public class OrdersPresenter {
     private static String sessionToken() {
         String token = SessionContext.getSessionToken();
         return token == null || token.isBlank() ? null : token;
+    }
+
+    private ActiveOrderDto enrichOrder(ActiveOrderDto order) {
+        if (order == null) {
+            return null;
+        }
+        if (order.getEventName() != null && !order.getEventName().isBlank()) {
+            return order;
+        }
+        try {
+            return eventService.getEventMap(order.getEventId())
+                    .map(map -> new ActiveOrderDto(
+                            order.getId(),
+                            order.getSessionId(),
+                            order.getMemberId(),
+                            order.getEventId(),
+                            order.getCreatedAt(),
+                            order.getStatus(),
+                            order.getItems(),
+                            order.getTotalPrice(),
+                            map.eventName()))
+                    .orElse(order);
+        } catch (RuntimeException ex) {
+            logger.warn("Could not resolve event name for active order {}", order.getId(), ex);
+            return order;
+        }
     }
 
     private String userMessage(RuntimeException ex, String fallback) {
