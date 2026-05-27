@@ -1,0 +1,10 @@
+security:
+  jwt:
+    secret: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
+    expiration-minutes: 120
+
+ticketing:
+  startup:
+    initialize-platform: true
+  seed:
+    enabled: true
