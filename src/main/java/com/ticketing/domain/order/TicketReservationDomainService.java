@@ -14,8 +14,12 @@ import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.PolicyResult;
+import com.ticketing.domain.event.PurchaseContext;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
 
 @org.springframework.stereotype.Service
 public class TicketReservationDomainService {
@@ -25,13 +29,16 @@ public class TicketReservationDomainService {
     private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
     private final ISystemClock systemClock;
+    private final IMemberRepository memberRepository;
 
     public TicketReservationDomainService(IOrderRepository orderRepository,
                                           IEventRepository eventRepository,
-                                          ISystemClock systemClock) {
+                                          ISystemClock systemClock,
+                                          IMemberRepository memberRepository) {
         this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
         this.systemClock = systemClock;
+        this.memberRepository = memberRepository;
     }
 
     public ActiveOrder findOrCreateActiveOrder(UUID sessionId, UUID memberId, UUID eventId) {
@@ -118,6 +125,7 @@ public class TicketReservationDomainService {
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
         validateSelection(request, event);
+        validatePurchasePolicyOnReservation(event, order, request);
 
         List<UUID> itemIds = new ArrayList<>();
         for (SelectionRequest.SeatPick pick : request.seats()) {
@@ -277,6 +285,33 @@ public class TicketReservationDomainService {
                 zone.sellGA(item.getQuantity());
             }
         }
+    }
+
+    // ── Purchase policy pre-check at reservation time ──
+
+    private void validatePurchasePolicyOnReservation(Event event, ActiveOrder order, SelectionRequest request) {
+        int additionalTickets = 0;
+        for (SelectionRequest.SeatPick ignored : request.seats()) {
+            additionalTickets++;
+        }
+        for (SelectionRequest.GAPick pick : request.gaQuantities()) {
+            additionalTickets += pick.quantity();
+        }
+
+        ActiveOrder simulatedOrder = order.simulateWithAdditionalTickets(additionalTickets);
+        java.time.LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
+        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob);
+        PolicyResult result = event.getEventPurchasePolicy().isAllowed(ctx);
+        if (!result.allowed()) {
+            throw new IllegalStateException(result.reason());
+        }
+    }
+
+    private java.time.LocalDate getBuyerDateOfBirth(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return null;
+        }
+        return memberRepository.findById(memberId).map(Member::getDateOfBirth).orElse(null);
     }
 
     // ── Selection validation ──

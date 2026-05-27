@@ -72,7 +72,7 @@ class QueueServiceTest {
 
         sessionTokenRepository = new InMemorySessionTokenRepository();
         tokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
-        TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock);
+        TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock);
         QueueDomainService queueDomainService = new QueueDomainService(queueRepo, eventRepo, clock);
         orderService = new OrderService(tokenService, ticketReservationService, orderCheckoutService, queueDomainService, null, null);
