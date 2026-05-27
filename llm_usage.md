@@ -316,10 +316,19 @@ Output received (short description):
 - Final understanding (brief explanation in your own words): Tests should be GWT format. AI is great for monotonic tasks like renaming test functions that are never called from anywhere else.
 
 ## Feature / Component: Move logic to domain services
-- Purpose of LLM use: Help me move code around so the application services are smaller.
-- Summary of prompt(s): Move the logic that checks multiple things into domain services. Make sure the application services only orchestrate things.
+- Purpose of LLM use: Help me move code around so the application services aren't depending on many repositories.
+- Summary of prompt(s): Move the logic that uses multiple repos into domain services. Make sure the application services only calls the logic.
 - Output received (short description): Made new domain services like EventDomainService and moved the heavy code there.
 - Files / components affected: EventService, OrderService and their new domain services.
 - Modifications made: Took out the extra repositories from the application services and put them in the domain services instead.
 - Initial gaps in understanding (if any): Just wanted to save some typing time.
 - Final understanding (brief explanation in your own words): The domain services should do the real work and hold the repositories. The application layer is just the entry point now.
+
+## Feature / Component: V2-INF-5 — Automated code coverage reporting (JaCoCo) in CI
+- Purpose of LLM use: Guided step-by-step implementation of JaCoCo for better understanding.
+- Summary of prompt(s): since i'm not familiar and want to use jacoco, insted of using stack overflow i asked for the LLM (so it could explain better).
+- Output received (short description): jacoco plugin in pom, instructions on running tests locally to view the report, and explained how to read JaCoCo coverage metrics (C0, C1).
+- Files / components affected: pom.xml, .github/workflows/ci.yml
+- Modifications made: Added JaCoCo plugin to pom.xml with excludes for UI and Infrastructure layers, fixed surefire argLine overwrite issue, updated CI pipeline to expose the report artifact.
+- Initial gaps in understanding (if any): Unfamiliar with JaCoCo configuration, and interpreting the generated index.html coverage report.
+- Final understanding (brief explanation in your own words): Understood how to bind JaCoCo to the Maven test phase, limit coverage to specific packages, and interpret colors and columns of code coverage in the generated report.

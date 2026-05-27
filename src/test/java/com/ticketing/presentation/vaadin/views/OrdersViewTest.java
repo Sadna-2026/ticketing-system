@@ -47,12 +47,10 @@ class OrdersViewTest {
 
     @BeforeEach
     void setUp() {
-        UI.setCurrent(new UI());
     }
 
     @AfterEach
     void tearDown() {
-        UI.setCurrent(null);
     }
 
     @Test

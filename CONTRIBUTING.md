@@ -34,3 +34,13 @@ Following strict Domain-Driven Design (DDD) principles, the architecture enforce
 2.  **Domain Services** (e.g. `OrderDomainService`, `QueueDomainService`, `EventDomainService`, `OrderTimeDomainService`, `LotteryDrawDomainService`) hold the core domain logic.
     *   They perform cross-aggregate logic (e.g., coordinating between events, queues, and orders).
     *   They interact directly with multiple repositories and infrastructure components to fulfill complex domain operations without leaking that complexity up to the orchestrators.
+
+## Test Coverage
+
+Per V2 specifications, we measure code coverage automatically for the Domain and Application layers using JaCoCo. The UI (Presentation) and Infrastructure layers are excluded.
+
+To generate the code coverage report locally:
+1. Run `mvn clean verify` or `mvn test` in the terminal.
+2. After the tests finish, open `target/site/jacoco/index.html` in your web browser.
+
+In the CI pipeline, the coverage report is generated automatically on every push to `main`/`develop` and PRs. It is uploaded as a build artifact named `jacoco-report`, which you can download directly from the GitHub Actions run summary.
