@@ -86,7 +86,7 @@ class AuthPresenterTest {
         AuthResult result = presenter.startGuestSession();
 
         assertFalse(result.success());
-        assertEquals("You are already logged in as a member. Log out before switching accounts.", result.message());
+        assertEquals("You are already logged in. Log out before switching accounts.", result.message());
         assertEquals("member-token", SessionContext.getSessionToken());
         assertEquals(memberId, SessionContext.getMemberId());
         assertEquals("alice", SessionContext.getUsername());
@@ -237,9 +237,9 @@ class AuthPresenterTest {
         );
 
         assertFalse(loginResult.success());
-        assertEquals("You are already logged in as a member. Log out before switching accounts.", loginResult.message());
+        assertEquals("You are already logged in. Log out before switching accounts.", loginResult.message());
         assertFalse(registerResult.success());
-        assertEquals("You are already logged in as a member. Log out before switching accounts.", registerResult.message());
+        assertEquals("You are already logged in. Log out before switching accounts.", registerResult.message());
         verifyNoInteractions(memberService);
     }
 

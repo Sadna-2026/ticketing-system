@@ -25,7 +25,7 @@ class AuthViewTest {
 
         AuthView view = new AuthView(presenter);
 
-        assertEquals(2, countComponents(view, PasswordField.class));
+        assertEquals(3, countComponents(view, PasswordField.class));
     }
 
     @Test
