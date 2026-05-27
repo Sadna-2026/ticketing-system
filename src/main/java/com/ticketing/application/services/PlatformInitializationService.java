@@ -6,6 +6,7 @@ import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.system.StartupConfiguration;
+import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,11 +95,13 @@ public class PlatformInitializationService {
         if (adminRepository.existsByUsername(startupConfiguration.adminUsername())) {
             return;
         }
+        PasswordEncryptionUtils passwordEncryptionUtils = new PasswordEncryptionUtils();
 
         adminRepository.save(new Admin(
                 UUID.randomUUID(),
                 startupConfiguration.adminUsername().trim(),
-                startupConfiguration.adminEmail().trim().toLowerCase()
+                startupConfiguration.adminEmail().trim().toLowerCase(),
+                passwordEncryptionUtils.hashPassword(startupConfiguration.adminPassword())
         ));
     }
 

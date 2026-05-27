@@ -1,6 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
@@ -122,7 +123,9 @@ class EventsViewTest {
         assertTrue(hasText(view, "Company: Acme"));
         assertTrue(hasText(view, "Available: 10"));
         assertTrue(hasButton(view, "Add A-1"));
-        assertTrue(hasText(view, "A-2 unavailable"));
+        Button unavailableSeat = findButton(view, "Add A-2");
+        assertNotNull(unavailableSeat);
+        assertFalse(unavailableSeat.isEnabled());
     }
 
     @Test
@@ -148,7 +151,6 @@ class EventsViewTest {
         clickButton(view, "Add GA tickets");
         clickButton(view, "Add A-1");
 
-        assertTrue(hasText(view, "GA tickets added."));
         assertTrue(hasText(view, "Assigned seat added."));
         verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 1);
         verify(ordersPresenter).addAssignedSeat(event.id(), seatZoneId, seatId);

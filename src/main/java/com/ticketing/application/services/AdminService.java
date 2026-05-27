@@ -2,6 +2,7 @@ package com.ticketing.application.services;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -12,9 +13,12 @@ import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.MemberMapper;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.services.AdminDomainService;
+import com.ticketing.domain.member.request.*;
+import com.ticketing.domain.member.response.*;
 
 @Service
 public class AdminService {
@@ -77,5 +81,13 @@ public class AdminService {
 
     public List<PurchaseRecordDTO> getGlobalPurchaseHistory(String adminToken, UUID buyerId, String companyName) {
         return domainService.getGlobalPurchaseHistory(adminToken, buyerId, companyName);
+    }
+
+    public LoginResponse adminLogin(LoginRequest request, String guestToken) {
+        return domainService.adminLogin(request, guestToken);
+    }
+
+    public boolean registerAdmin(UUID adminId, String username, String email, String password) {
+        return domainService.registerAdmin(adminId, username, email, password);
     }
 }

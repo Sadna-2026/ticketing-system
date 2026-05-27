@@ -222,7 +222,7 @@ class SuspendUserTest {
 
         @Test
         void GivenSoleAdmin_WhenSuspendSelf_ThenThrowsIllegalState() {
-            Admin soleAdmin = new Admin(targetId, "targetUser", "target@example.com");
+            Admin soleAdmin = new Admin(targetId, "targetUser", "target@example.com", "encPw");
             when(adminRepository.findById(targetId)).thenReturn(Optional.of(soleAdmin));
             when(adminRepository.findAll()).thenReturn(java.util.List.of(soleAdmin));
 

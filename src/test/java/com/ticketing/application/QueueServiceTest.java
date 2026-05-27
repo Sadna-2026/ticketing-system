@@ -79,7 +79,7 @@ class QueueServiceTest {
 
         // Admin
         adminId = UUID.randomUUID();
-        Admin admin = new Admin(adminId, "admin", "admin@mail.com");
+        Admin admin = new Admin(adminId, "admin", "admin@mail.com", "encPw");
         adminRepo.save(admin);
         adminToken = tokenService.generateMemberToken(UUID.randomUUID(), adminId, Set.of("Admin"));
 

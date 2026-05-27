@@ -155,7 +155,7 @@ public class AdminServiceTest {
         memberRepository.saveIfUsernameAndEmailAvailable(target);
 
         // Target is an admin
-        com.ticketing.domain.admin.Admin targetAdmin = new com.ticketing.domain.admin.Admin(targetId, "target", "target@example.com");
+        com.ticketing.domain.admin.Admin targetAdmin = new com.ticketing.domain.admin.Admin(targetId, "target", "target@example.com", "encPw");
         when(adminRepository.findById(targetId)).thenReturn(java.util.Optional.of(targetAdmin));
         // And they are the last one
         when(adminRepository.findAll()).thenReturn(java.util.List.of(targetAdmin));

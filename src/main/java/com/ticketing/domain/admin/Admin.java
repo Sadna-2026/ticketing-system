@@ -14,15 +14,19 @@ public class Admin {
     private String username;
     private String email;
     private int version;
+    private String encryptedPassword;
 
-    public Admin(UUID id, String username, String email) {
+    public Admin(UUID id, String username, String email, String encryptedPassword) {
         if (id == null) throw new IllegalArgumentException("id is required");
         if (username == null || username.isBlank()) throw new IllegalArgumentException("username is required");
         if (email == null || email.isBlank()) throw new IllegalArgumentException("email is required");
         this.id = id;
         this.username = username;
         this.email = email;
+        this.encryptedPassword = encryptedPassword;
     }
+
+    public String getEncryptedPassword() { return encryptedPassword; }
 
     public UUID getId() { return id; }
     public String getUsername() { return username; }
@@ -31,7 +35,7 @@ public class Admin {
     public void incrementVersion() { this.version++; }
 
     public Admin detachedCopy() {
-        Admin copy = new Admin(id, username, email);
+        Admin copy = new Admin(id, username, email, encryptedPassword);
         copy.version = this.version;
         return copy;
     }

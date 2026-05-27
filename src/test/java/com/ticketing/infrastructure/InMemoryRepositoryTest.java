@@ -40,7 +40,7 @@ class InMemoryRepositoryTest {
         @Test
         public void GivenNewAdmin_WhenSave_ThenFindByIdReturnsIt() {
             UUID id = UUID.randomUUID();
-            Admin a = new Admin(id, "root", "root@example.com");
+            Admin a = new Admin(id, "root", "root@example.com", "encPw");
 
             repo.save(a);
 
@@ -50,7 +50,7 @@ class InMemoryRepositoryTest {
         @Test
         public void GivenSavedAdmin_WhenFindByUsername_ThenReturnsIt() {
             UUID id = UUID.randomUUID();
-            repo.save(new Admin(id, "root", "root@example.com"));
+            repo.save(new Admin(id, "root", "root@example.com", "encPw"));
 
             assertTrue(repo.findByUsername("root").isPresent());
             assertTrue(repo.findByUsername("ROOT").isPresent(), "case-insensitive lookup");
@@ -59,9 +59,9 @@ class InMemoryRepositoryTest {
 
         @Test
         public void GivenMultipleAdmins_WhenFindAll_ThenReturnsAll() {
-            repo.save(new Admin(UUID.randomUUID(), "alpha", "a@x.com"));
-            repo.save(new Admin(UUID.randomUUID(), "bravo", "b@x.com"));
-            repo.save(new Admin(UUID.randomUUID(), "charlie", "c@x.com"));
+            repo.save(new Admin(UUID.randomUUID(), "alpha", "a@x.com", "encPw"));
+            repo.save(new Admin(UUID.randomUUID(), "bravo", "b@x.com", "encPw"));
+            repo.save(new Admin(UUID.randomUUID(), "charlie", "c@x.com", "encPw"));
 
             assertEquals(3, repo.findAll().size());
         }
@@ -69,7 +69,7 @@ class InMemoryRepositoryTest {
         @Test
         public void GivenSavedAdmin_WhenDelete_ThenIsGone() {
             UUID id = UUID.randomUUID();
-            repo.save(new Admin(id, "doomed", "d@x.com"));
+            repo.save(new Admin(id, "doomed", "d@x.com", "encPw"));
 
             repo.delete(id);
 
@@ -80,7 +80,7 @@ class InMemoryRepositoryTest {
         @Test
         public void GivenFetchedAdmin_WhenSavedTwice_ThenLatestWins() {
             UUID id = UUID.randomUUID();
-            repo.save(new Admin(id, "first", "a@x.com"));
+            repo.save(new Admin(id, "first", "a@x.com", "encPw"));
             Admin admin = repo.findById(id).orElseThrow();
             admin.setUsername("second");
             admin.setEmail("b@x.com");
