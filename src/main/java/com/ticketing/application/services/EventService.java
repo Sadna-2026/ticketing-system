@@ -2,7 +2,9 @@ package com.ticketing.application.services;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -10,14 +12,20 @@ import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.EventDetailsDTO;
+import com.ticketing.application.dto.EventMapDTO;
+import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.IPurchasePolicy;
+import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
 import com.ticketing.domain.lottery.LotteryDrawDomainService;
@@ -25,6 +33,7 @@ import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.lottery.LotteryRegistrationDomainService;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.services.EventDomainService;
+import com.ticketing.domain.services.EventSearchDomainService;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 
 @org.springframework.stereotype.Service
@@ -35,11 +44,12 @@ public class EventService {
     private final IEventRepository eventRepository;
     private final ISessionTokenService sessionTokenService;
     private final Clock clock;
-    
+
     private final LotteryRegistrationDomainService lotteryRegistrationService;
     private final OrderCheckoutDomainService orderCheckoutService;
     private final EventDomainService domainService;
     private final LotteryDrawDomainService lotteryDrawService;
+    private final EventSearchDomainService eventSearchDomainService;
     private final INotificationService notificationService;
 
     // For backwards compatibility with tests
@@ -58,6 +68,7 @@ public class EventService {
         this.domainService = new EventDomainService(eventRepository, companyRepository, memberRepository, orderRepository);
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
         this.lotteryDrawService = null;
+        this.eventSearchDomainService = new EventSearchDomainService(eventRepository, companyRepository);
         this.notificationService = null;
     }
 
@@ -98,6 +109,7 @@ public class EventService {
                         Clock clock,
                         OrderCheckoutDomainService orderCheckoutService,
                         EventDomainService domainService,
+                        EventSearchDomainService eventSearchDomainService,
                         com.ticketing.domain.order.IOrderRepository orderRepository,
                         com.ticketing.application.ISystemClock systemClock,
                         @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
@@ -108,6 +120,7 @@ public class EventService {
         this.domainService = domainService;
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
         this.lotteryDrawService = new com.ticketing.domain.lottery.LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new java.util.Random());
+        this.eventSearchDomainService = eventSearchDomainService;
         this.notificationService = notificationService;
     }
 
@@ -288,6 +301,69 @@ public class EventService {
         }
         UUID memberId = authenticateMember(token);
         domainService.setZonePrice(memberId, eventId, zoneId, newPrice);
+    }
+
+    // ── Query (from EventQueryService) ───────────────────────────────
+
+    public Optional<EventMapDTO> getEventMap(UUID eventId) {
+        if (eventId == null) return Optional.empty();
+        Optional<Event> maybe = eventRepository.findById(eventId);
+        if (maybe.isEmpty()) {
+            log.info("Event map request denied: id={}, reason=unknown", eventId);
+            return Optional.empty();
+        }
+        Event event = maybe.get();
+        if (!isBrowsable(event)) {
+            log.info("Event map request denied: id={}, reason=status={}", eventId, event.getStatus());
+            return Optional.empty();
+        }
+        if (event.getVenueMap() == null) {
+            log.warn("Event map request denied: id={}, reason=no venueMap attached", eventId);
+            return Optional.empty();
+        }
+
+        List<EventMapDTO.ZoneInfo> zoneDtos = new ArrayList<>();
+        for (InventoryZone zone : event.getZones()) {
+            zoneDtos.add(toZoneInfo(zone));
+        }
+
+        return Optional.of(new EventMapDTO(
+                event.getId(),
+                event.getName(),
+                event.getCompanyName(),
+                event.getStatus(),
+                event.getVenueMap().getSectionToZone(),
+                zoneDtos
+        ));
+    }
+
+    // ── Search (from EventSearchService) ──────────────────────────────
+
+    public List<EventSummaryDTO> searchEvents(SearchEventsRequest req) {
+        return eventSearchDomainService.searchEvents(req);
+    }
+
+    // ── Private helpers (query) ───────────────────────────────────────
+
+    private static boolean isBrowsable(Event e) {
+        return e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT;
+    }
+
+    private static EventMapDTO.ZoneInfo toZoneInfo(InventoryZone z) {
+        if (z.isGA()) {
+            return new EventMapDTO.ZoneInfo(
+                    z.getId(), z.getName(), z.getType(), z.getPricePerTicket(),
+                    z.getMaxCapacity(), z.getAvailableCount(), z.getSoldCount(),
+                    List.of());
+        }
+        List<EventMapDTO.SeatInfo> seats = new ArrayList<>();
+        for (Seat s : z.getSeats()) {
+            seats.add(new EventMapDTO.SeatInfo(s.getId(), s.getRow(), s.getSeatNumber(), s.isAvailable()));
+        }
+        return new EventMapDTO.ZoneInfo(
+                z.getId(), z.getName(), z.getType(), z.getPricePerTicket(),
+                null, null, null,
+                seats);
     }
 
     private UUID authenticateMember(String token) {

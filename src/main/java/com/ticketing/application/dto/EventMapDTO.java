@@ -5,13 +5,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.ticketing.application.services.EventQueryService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
 
 /**
  * Public-facing event map + live inventory snapshot. Returned by
- * {@link EventQueryService#getEventMap}. No staff data, no internals.
+ * {@link EventService#getEventMap}. No staff data, no internals.
  */
 public record EventMapDTO(
         UUID eventId,

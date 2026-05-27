@@ -8,8 +8,6 @@ import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
-import com.ticketing.application.services.EventQueryService;
-import com.ticketing.application.services.EventSearchService;
 import com.ticketing.application.services.EventService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,13 +22,9 @@ import java.util.UUID;
 public class EventController {
 
     private final EventService eventService;
-    private final EventQueryService eventQueryService;
-    private final EventSearchService eventSearchService;
 
-    public EventController(EventService eventService, EventQueryService eventQueryService, EventSearchService eventSearchService) {
+    public EventController(EventService eventService) {
         this.eventService = eventService;
-        this.eventQueryService = eventQueryService;
-        this.eventSearchService = eventSearchService;
     }
 
     @PostMapping
@@ -63,13 +57,13 @@ public class EventController {
 
     @GetMapping("/{eventId}/map")
     public ResponseEntity<ApiResponse<EventMapDTO>> getEventMap(@PathVariable UUID eventId) {
-        Optional<EventMapDTO> dto = eventQueryService.getEventMap(eventId);
+        Optional<EventMapDTO> dto = eventService.getEventMap(eventId);
         return dto.map(val -> ResponseEntity.ok(ApiResponse.success(val))).orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Event map not found")));
     }
 
     @PostMapping("/search")
     public ResponseEntity<ApiResponse<List<EventSummaryDTO>>> searchEvents(@RequestBody SearchEventsRequest request) {
-        List<EventSummaryDTO> results = eventSearchService.searchEvents(request);
+        List<EventSummaryDTO> results = eventService.searchEvents(request);
         return ResponseEntity.ok(ApiResponse.success(results));
     }
 }

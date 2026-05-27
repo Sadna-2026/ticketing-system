@@ -39,12 +39,8 @@ import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
-import com.ticketing.application.services.CompanyHistoryService;
-import com.ticketing.application.services.CompanyLifecycleService;
-import com.ticketing.application.services.CompanyQueryService;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.CompletedPurchaseService;
-import com.ticketing.application.services.EventQueryService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.domain.event.EventCategory;
@@ -67,33 +63,21 @@ import com.vaadin.flow.server.VaadinSession;
 class CompanyPresenterTest {
 
     private CompanyService companyService;
-    private CompanyQueryService companyQueryService;
     private MemberService memberService;
     private EventService eventService;
-    private EventQueryService eventQueryService;
-    private CompanyLifecycleService companyLifecycleService;
-    private CompanyHistoryService companyHistoryService;
     private CompletedPurchaseService completedPurchaseService;
     private CompanyPresenter presenter;
 
     @BeforeEach
     void setUp() {
         companyService = mock(CompanyService.class);
-        companyQueryService = mock(CompanyQueryService.class);
         memberService = mock(MemberService.class);
         eventService = mock(EventService.class);
-        eventQueryService = mock(EventQueryService.class);
-        companyLifecycleService = mock(CompanyLifecycleService.class);
-        companyHistoryService = mock(CompanyHistoryService.class);
         completedPurchaseService = mock(CompletedPurchaseService.class);
         presenter = new CompanyPresenter(
                 companyService,
-                companyQueryService,
                 memberService,
                 eventService,
-                eventQueryService,
-                companyLifecycleService,
-                companyHistoryService,
                 completedPurchaseService
         );
         installVaadinSession();
@@ -130,14 +114,13 @@ class CompanyPresenterTest {
     @Test
     void GivenCompanyName_WhenLoadingCompanyInfo_ThenQueryServiceIsCalledWithoutSessionToken() {
         CompanyPublicDTO company = new CompanyPublicDTO("Acme", "desc", List.of(eventSummary()));
-        when(companyQueryService.getCompanyInfo("Acme")).thenReturn(Optional.of(company));
+        when(companyService.getCompanyInfo("Acme")).thenReturn(Optional.of(company));
 
         CompanyInfoResult result = presenter.loadCompanyInfo("Acme");
 
         assertTrue(result.success());
         assertSame(company, result.company());
-        verify(companyQueryService).getCompanyInfo("Acme");
-        verifyNoInteractions(companyService);
+        verify(companyService).getCompanyInfo("Acme");
     }
 
     @Test
@@ -230,7 +213,7 @@ class CompanyPresenterTest {
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         EventMapDTO map = eventMap(eventId, zoneId);
-        when(eventQueryService.getEventMap(eventId)).thenReturn(Optional.of(map));
+        when(eventService.getEventMap(eventId)).thenReturn(Optional.of(map));
 
         EventMapResult mapResult = presenter.loadEventMap(eventId);
         ActionResult addSeat = presenter.addSeat(eventId, zoneId, " A ", " 1 ");
@@ -246,7 +229,7 @@ class CompanyPresenterTest {
         assertTrue(increase.success());
         assertTrue(decrease.success());
         assertTrue(price.success());
-        verify(eventQueryService).getEventMap(eventId);
+        verify(eventService).getEventMap(eventId);
         verify(eventService).addSeatsToZone("member-token", eventId, zoneId, List.of(new CreateEventRequest.SeatSpec("A", "1")));
         verify(eventService).removeSeats("member-token", eventId, zoneId, List.of(seatId));
         verify(eventService).increaseGACapacity("member-token", eventId, zoneId, 5);
@@ -271,7 +254,7 @@ class CompanyPresenterTest {
         UUID memberId = SessionContext.getMemberId();
         PurchaseRecordDTO purchase = purchase(memberId);
         SalesReportDTO report = new SalesReportDTO("Acme", memberId, List.of(purchase), new BigDecimal("80.00"), 1);
-        when(companyHistoryService.getPurchaseHistory("member-token", "Acme")).thenReturn(List.of(purchase));
+        when(companyService.getPurchaseHistory("member-token", "Acme")).thenReturn(List.of(purchase));
         when(completedPurchaseService.getHierarchicalSalesReport("member-token", "Acme")).thenReturn(report);
 
         ActionResult suspend = presenter.suspendCompany("Acme");
@@ -287,10 +270,10 @@ class CompanyPresenterTest {
         assertEquals(List.of(purchase), history.purchases());
         assertTrue(sales.success());
         assertSame(report, sales.report());
-        verify(companyLifecycleService).suspendCompany("member-token", "Acme");
-        verify(companyLifecycleService).reopenCompany("member-token", "Acme");
-        verify(companyLifecycleService).permanentCloseByFounder("member-token", "Acme");
-        verify(companyHistoryService).getPurchaseHistory("member-token", "Acme");
+        verify(companyService).suspendCompany("member-token", "Acme");
+        verify(companyService).reopenCompany("member-token", "Acme");
+        verify(companyService).permanentCloseByFounder("member-token", "Acme");
+        verify(companyService).getPurchaseHistory("member-token", "Acme");
         verify(completedPurchaseService).getHierarchicalSalesReport("member-token", "Acme");
     }
 
