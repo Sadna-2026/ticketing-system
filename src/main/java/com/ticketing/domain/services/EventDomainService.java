@@ -69,8 +69,8 @@ public class EventDomainService {
                 request.category(),
                 request.schedule(),
                 request.lockTimerDuration(),
-                new com.ticketing.domain.event.AlwaysAllowPolicy(),
-                new com.ticketing.domain.event.NoDiscountPolicy(),
+                company.getPurchasePolicy(),
+                company.getDiscountPolicy(),
                 request.saleMethod(),
                 request.lotteryWindow());
 
@@ -310,7 +310,7 @@ public class EventDomainService {
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
         authorizePolicy(appt);
-        event.setPurchasePolicy(new com.ticketing.domain.event.AlwaysAllowPolicy());
+        event.setPurchasePolicy(company.getPurchasePolicy());
         saveEvent(event);
     }
 
@@ -328,7 +328,33 @@ public class EventDomainService {
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
         authorizePolicy(appt);
-        event.setDiscountPolicy(new com.ticketing.domain.event.NoDiscountPolicy());
+        event.setDiscountPolicy(company.getDiscountPolicy());
+        saveEvent(event);
+    }
+
+    public void addEventPurchasePolicy(UUID memberId, UUID eventId, com.ticketing.domain.event.IPurchasePolicy policy, boolean useOr) {
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        com.ticketing.domain.event.IPurchasePolicy current = event.getEventPurchasePolicy();
+        com.ticketing.domain.event.IPurchasePolicy composed = useOr
+                ? new com.ticketing.domain.event.OrPolicy(java.util.List.of(current, policy))
+                : new com.ticketing.domain.event.AndPolicy(java.util.List.of(current, policy));
+        event.setPurchasePolicy(composed);
+        saveEvent(event);
+    }
+
+    public void addEventDiscountPolicy(UUID memberId, UUID eventId, com.ticketing.domain.event.IDiscountPolicy policy, boolean useStacking) {
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        com.ticketing.domain.event.IDiscountPolicy current = event.getEventDiscountPolicy();
+        com.ticketing.domain.event.IDiscountPolicy composed = useStacking
+                ? new com.ticketing.domain.event.SumCompositeDiscount(java.util.List.of(current, policy))
+                : new com.ticketing.domain.event.MaxCompositeDiscount(java.util.List.of(current, policy));
+        event.setDiscountPolicy(composed);
         saveEvent(event);
     }
 

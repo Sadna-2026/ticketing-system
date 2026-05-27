@@ -14,8 +14,12 @@ import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.PolicyResult;
+import com.ticketing.domain.event.PurchaseContext;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
 
 @org.springframework.stereotype.Service
 public class TicketReservationDomainService {
@@ -25,54 +29,93 @@ public class TicketReservationDomainService {
     private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
     private final ISystemClock systemClock;
+    private final IMemberRepository memberRepository;
 
     public TicketReservationDomainService(IOrderRepository orderRepository,
                                           IEventRepository eventRepository,
-                                          ISystemClock systemClock) {
+                                          ISystemClock systemClock,
+                                          IMemberRepository memberRepository) {
         this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
         this.systemClock = systemClock;
+        this.memberRepository = memberRepository;
     }
 
-    public UUID createOrder(UUID sessionId, UUID memberId, UUID eventId) {
-        orderRepository.findActiveBySessionId(sessionId).ifPresent(existing -> {
-            log.warn("Failed to create order: session {} already has an active order {}", sessionId, existing.getId());
-            throw new IllegalStateException("Session already has an active order");
-        });
+    public ActiveOrder findOrCreateActiveOrder(UUID sessionId, UUID memberId, UUID eventId) {
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order != null) {
+            if (!order.getEventId().equals(eventId)) {
+                throw new IllegalStateException("You already have an active order for another event. Please checkout or clear your cart first.");
+            }
+            return order;
+        }
 
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId is required to create a new order");
+        }
         Event event = findEvent(eventId);
         if (!event.isPublished()) {
-            log.warn("Failed to create order: event {} is not available for purchase", eventId);
             throw new IllegalStateException("Event is not available for purchase");
         }
 
-        ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
+        order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
         saveOrder(order);
-
         log.info("Order created: orderId={}, sessionId={}, eventId={}", order.getId(), sessionId, eventId);
-        return order.getId();
+        return order;
     }
 
-    public UUID addSeatToOrder(UUID sessionId, UUID orderId, UUID zoneId, UUID seatId) {
-        ActiveOrder order = findActiveOrder(orderId);
+    public ActiveOrder getActiveOrder(UUID sessionId, UUID memberId) {
+        ActiveOrder order = null;
+        if (memberId != null) {
+            order = orderRepository.findActiveByMemberId(memberId).orElse(null);
+            if (order != null && !order.getSessionId().equals(sessionId)) {
+                order.updateSessionId(sessionId);
+                saveOrder(order);
+            }
+        }
+        if (order == null) {
+            order = orderRepository.findActiveBySessionId(sessionId).orElse(null);
+            if (order != null && memberId != null && order.getMemberId() == null) {
+                order.updateMemberId(memberId);
+                saveOrder(order);
+            }
+        }
+        if (order != null) {
+            Event event = findEvent(order.getEventId());
+            if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
+                releaseAllInventory(event, order);
+                order.expire();
+                saveEvent(event);
+                saveOrder(order);
+                return null;
+            }
+        }
+        return order;
+    }
+
+    public UUID createOrder(UUID sessionId, UUID memberId, UUID eventId) {
+        return findOrCreateActiveOrder(sessionId, memberId, eventId).getId();
+    }
+
+    public UUID addSeatToOrder(UUID sessionId, UUID memberId, UUID eventId, UUID zoneId, UUID seatId) {
+        ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
-        return addSelectionToOrder(sessionId, orderId,
+        return addSelectionToOrder(sessionId, order,
                 new SelectionRequest(order.getEventId(),
                         List.of(new SelectionRequest.SeatPick(zoneId, seatId)),
                         List.of())).get(0);
     }
 
-    public UUID addGATicketsToOrder(UUID sessionId, UUID orderId, UUID zoneId, int quantity) {
-        ActiveOrder order = findActiveOrder(orderId);
+    public UUID addGATicketsToOrder(UUID sessionId, UUID memberId, UUID eventId, UUID zoneId, int quantity) {
+        ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
-        return addSelectionToOrder(sessionId, orderId,
+        return addSelectionToOrder(sessionId, order,
                 new SelectionRequest(order.getEventId(),
                         List.of(),
                         List.of(new SelectionRequest.GAPick(zoneId, quantity)))).get(0);
     }
 
-    public List<UUID> addSelectionToOrder(UUID sessionId, UUID orderId, SelectionRequest request) {
-        ActiveOrder order = findActiveOrder(orderId);
+    public List<UUID> addSelectionToOrder(UUID sessionId, ActiveOrder order, SelectionRequest request) {
         validateOrderOwnership(sessionId, order);
         if (!order.getEventId().equals(request.eventId())) {
             log.warn("Failed to add selection to order: selection event {} does not match order event {}", request.eventId(), order.getEventId());
@@ -82,6 +125,7 @@ public class TicketReservationDomainService {
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
         validateSelection(request, event);
+        validatePurchasePolicyOnReservation(event, order, request);
 
         List<UUID> itemIds = new ArrayList<>();
         for (SelectionRequest.SeatPick pick : request.seats()) {
@@ -97,8 +141,9 @@ public class TicketReservationDomainService {
         return itemIds;
     }
 
-    public void removeItemFromOrder(UUID sessionId, UUID orderId, UUID itemId) {
-        ActiveOrder order = findActiveOrder(orderId);
+    public void removeItemFromOrder(UUID sessionId, UUID memberId, UUID itemId) {
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
         validateOrderOwnership(sessionId, order);
         Event event = findEvent(order.getEventId());
 
@@ -118,8 +163,9 @@ public class TicketReservationDomainService {
         log.info("Item removed from order: orderId={}, itemId={}", order.getId(), itemId);
     }
 
-    public void updateGAQuantity(UUID sessionId, UUID orderId, UUID zoneId, int newQuantity) {
-        ActiveOrder order = findActiveOrder(orderId);
+    public void updateGAQuantity(UUID sessionId, UUID memberId, UUID zoneId, int newQuantity) {
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
         validateOrderOwnership(sessionId, order);
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
@@ -131,8 +177,9 @@ public class TicketReservationDomainService {
         log.info("GA quantity updated: orderId={}, zoneId={}", order.getId(), zoneId);
     }
 
-    public void cancelOrder(UUID sessionId, UUID orderId) {
-        ActiveOrder order = findActiveOrder(orderId);
+    public void cancelOrder(UUID sessionId, UUID memberId) {
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
         validateOrderOwnership(sessionId, order);
         if (order.getStatus() == OrderStatus.COMPLETED) {
             throw new IllegalStateException("Cannot cancel a completed order");
@@ -147,8 +194,9 @@ public class TicketReservationDomainService {
         log.info("Order cancelled: orderId={}", order.getId());
     }
 
-    public ActiveOrder getActiveOrder(UUID sessionId, UUID orderId) {
-        ActiveOrder order = findActiveOrder(orderId);
+    public ActiveOrder getValidatedActiveOrder(UUID sessionId, UUID memberId) {
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
         validateOrderOwnership(sessionId, order);
         return order;
     }
@@ -237,6 +285,33 @@ public class TicketReservationDomainService {
                 zone.sellGA(item.getQuantity());
             }
         }
+    }
+
+    // ── Purchase policy pre-check at reservation time ──
+
+    private void validatePurchasePolicyOnReservation(Event event, ActiveOrder order, SelectionRequest request) {
+        int additionalTickets = 0;
+        for (SelectionRequest.SeatPick ignored : request.seats()) {
+            additionalTickets++;
+        }
+        for (SelectionRequest.GAPick pick : request.gaQuantities()) {
+            additionalTickets += pick.quantity();
+        }
+
+        ActiveOrder simulatedOrder = order.simulateWithAdditionalTickets(additionalTickets);
+        java.time.LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
+        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob);
+        PolicyResult result = event.getEventPurchasePolicy().isAllowed(ctx);
+        if (!result.allowed()) {
+            throw new IllegalStateException(result.reason());
+        }
+    }
+
+    private java.time.LocalDate getBuyerDateOfBirth(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return null;
+        }
+        return memberRepository.findById(memberId).map(Member::getDateOfBirth).orElse(null);
     }
 
     // ── Selection validation ──

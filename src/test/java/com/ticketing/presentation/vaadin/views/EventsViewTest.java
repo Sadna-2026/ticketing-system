@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -31,6 +32,10 @@ import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
@@ -56,8 +61,9 @@ class EventsViewTest {
     @Test
     void GivenEventsView_WhenRendered_ThenGuestAndMemberSearchControlsAreAvailable() {
         EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
 
-        EventsView view = new EventsView(presenter);
+        EventsView view = new EventsView(presenter, ordersPresenter);
 
         assertTrue(hasButton(view, "Search events"));
         assertTrue(hasButton(view, "Clear filters"));
@@ -71,9 +77,10 @@ class EventsViewTest {
     @Test
     void GivenSearchReturnsEvents_WhenSearchButtonClicked_ThenResultsAreDisplayedInGrid() {
         EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
         EventSummaryDTO event = eventSummary("Spring Concert");
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
-        EventsView view = new EventsView(presenter);
+        EventsView view = new EventsView(presenter, ordersPresenter);
 
         clickButton(view, "Search events");
 
@@ -86,8 +93,9 @@ class EventsViewTest {
     @Test
     void GivenSearchReturnsEmptyList_WhenSearchButtonClicked_ThenEmptyResultIsHandled() {
         EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
         whenSearch(presenter).thenReturn(SearchResult.success("No events found for the current filters.", List.of()));
-        EventsView view = new EventsView(presenter);
+        EventsView view = new EventsView(presenter, ordersPresenter);
 
         clickButton(view, "Search events");
 
@@ -99,11 +107,12 @@ class EventsViewTest {
     @Test
     void GivenSelectedEventHasMap_WhenViewMapClicked_ThenInventoryDataIsDisplayed() {
         EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
         EventSummaryDTO event = eventSummary("Spring Concert");
-        EventMapDTO eventMap = eventMap(event.id());
+        EventMapDTO loadedMap = sampleEventMap(event.id());
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
-        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", eventMap));
-        EventsView view = new EventsView(presenter);
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        EventsView view = new EventsView(presenter, ordersPresenter);
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -112,16 +121,47 @@ class EventsViewTest {
         assertTrue(hasText(view, "Event map loaded."));
         assertTrue(hasText(view, "Company: Acme"));
         assertTrue(hasText(view, "Available: 10"));
+        assertTrue(hasButton(view, "Add A-1"));
         assertTrue(hasText(view, "A-2 unavailable"));
+    }
+
+    @Test
+    void GivenLoadedMap_WhenAddingGaAndAssignedTickets_ThenOrdersPresenterIsCalled() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Spring Concert");
+        EventMapDTO loadedMap = sampleEventMap(event.id());
+        UUID gaZoneId = loadedMap.zones().get(0).id();
+        UUID seatZoneId = loadedMap.zones().get(1).id();
+        UUID seatId = loadedMap.zones().get(1).seats().get(0).id();
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        when(ordersPresenter.addGATickets(event.id(), gaZoneId, 1))
+                .thenReturn(OrderMutationResult.success("GA tickets added.", UUID.randomUUID(), null));
+        when(ordersPresenter.addAssignedSeat(event.id(), seatZoneId, seatId))
+                .thenReturn(OrderMutationResult.success("Assigned seat added.", UUID.randomUUID(), null));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+        clickButton(view, "Add GA tickets");
+        clickButton(view, "Add A-1");
+
+        assertTrue(hasText(view, "GA tickets added."));
+        assertTrue(hasText(view, "Assigned seat added."));
+        verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 1);
+        verify(ordersPresenter).addAssignedSeat(event.id(), seatZoneId, seatId);
     }
 
     @Test
     void GivenSelectedEventMapFails_WhenViewMapClicked_ThenFailureMessageIsShownInline() {
         EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
         EventSummaryDTO event = eventSummary("Spring Concert");
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.failure("Event map not found."));
-        EventsView view = new EventsView(presenter);
+        EventsView view = new EventsView(presenter, ordersPresenter);
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -133,13 +173,22 @@ class EventsViewTest {
     @Test
     void GivenApplicationError_WhenSearchButtonClicked_ThenErrorMessageIsShownToUser() {
         EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
         whenSearch(presenter).thenReturn(SearchResult.failure("Could not search events. Please try again."));
-        EventsView view = new EventsView(presenter);
+        EventsView view = new EventsView(presenter, ordersPresenter);
 
         clickButton(view, "Search events");
 
         assertTrue(hasText(view, "Could not search events. Please try again."));
         assertEquals(0, findGrid(view).getDataProvider().fetch(new Query<>()).count());
+    }
+
+    private OrdersPresenter mockOrdersPresenter() {
+        OrdersPresenter ordersPresenter = mock(OrdersPresenter.class);
+        when(ordersPresenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(ordersPresenter.currentSessionState()).thenReturn(new SessionContext.UiState(true, true, false, false, null, "Guest"));
+        when(ordersPresenter.loadCurrentOrder()).thenReturn(OrderResult.success("No active order found.", null, null));
+        return ordersPresenter;
     }
 
     private org.mockito.stubbing.OngoingStubbing<SearchResult> whenSearch(EventsPresenter presenter) {
@@ -222,7 +271,7 @@ class EventsViewTest {
         );
     }
 
-    private static EventMapDTO eventMap(UUID eventId) {
+    private static EventMapDTO sampleEventMap(UUID eventId) {
         UUID floorId = UUID.randomUUID();
         UUID balconyId = UUID.randomUUID();
         return new EventMapDTO(

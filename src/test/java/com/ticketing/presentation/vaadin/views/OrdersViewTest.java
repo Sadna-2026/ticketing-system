@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -21,15 +20,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.dto.ActiveOrderDto;
-import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
-import com.ticketing.domain.event.EventStatus;
-import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
-import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.InventoryResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -59,73 +54,26 @@ class OrdersViewTest {
 
         OrdersView view = new OrdersView(presenter);
 
-        assertTrue(hasVisibleButton(view, "Create active order"));
-        assertTrue(hasVisibleButton(view, "Load event inventory"));
-        assertTrue(hasVisibleButton(view, "Load active order"));
         assertTrue(hasVisibleButton(view, "Checkout"));
         assertFalse(hasVisibleButton(view, "Load purchase history"));
         assertTrue(hasText(view, "Log in as a member to view purchase history."));
-        assertNotNull(findTextField(view, "Event ID"));
-        assertNotNull(findTextField(view, "Order ID"));
+        assertTrue(hasText(view, "Browse events and add tickets on the Events page."));
         assertNotNull(findTextField(view, "Coupon code"));
         assertNotNull(findIntegerField(view, "New GA quantity"));
         assertEquals(2, findGrids(view).size());
     }
 
     @Test
-    void GivenGuestSessionAndEventId_WhenCreateOrderClicked_ThenActiveOrderSummaryIsDisplayed() {
+    void GivenGuestSession_WhenRendered_ThenActiveOrderSummaryIsDisplayedIfItExists() {
         OrdersPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of());
-        when(presenter.createOrder(eventId)).thenReturn(OrderResult.success("Active order created.", orderId, order));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
         OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Event ID").setValue(eventId.toString());
 
-        clickButton(view, "Create active order");
-
-        assertEquals(orderId.toString(), findTextField(view, "Order ID").getValue());
-        assertTrue(hasText(view, "Active order created."));
-        assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 0 | total 0"));
-        verify(presenter).createOrder(eventId);
-    }
-
-    @Test
-    void GivenActiveOrderAndTicketSelection_WhenAddingGaAndAssignedTickets_ThenOrderSummaryRefreshes() {
-        OrdersPresenter presenter = mockPresenter();
-        UUID eventId = UUID.randomUUID();
-        UUID orderId = UUID.randomUUID();
-        UUID gaZoneId = UUID.randomUUID();
-        UUID seatZoneId = UUID.randomUUID();
-        UUID seatId = UUID.randomUUID();
-        UUID gaItemId = UUID.randomUUID();
-        UUID seatItemId = UUID.randomUUID();
-        EventMapDTO eventMap = eventMap(eventId, gaZoneId, seatZoneId, seatId);
-        ActiveOrderDto emptyOrder = activeOrder(orderId, eventId, List.of());
-        ActiveOrderDto gaOrder = activeOrder(orderId, eventId, List.of(gaItem(gaItemId, gaZoneId, 2)));
-        ActiveOrderDto fullOrder = activeOrder(orderId, eventId, List.of(
-                gaItem(gaItemId, gaZoneId, 2),
-                seatItem(seatItemId, seatZoneId, seatId)));
-        when(presenter.createOrder(eventId)).thenReturn(OrderResult.success("Active order created.", orderId, emptyOrder));
-        when(presenter.loadEventInventory(eventId)).thenReturn(InventoryResult.success("Event inventory loaded.", eventMap));
-        when(presenter.addGATickets(orderId, gaZoneId, 1))
-                .thenReturn(OrderMutationResult.success("GA tickets added.", gaItemId, gaOrder));
-        when(presenter.addAssignedSeat(orderId, seatZoneId, seatId))
-                .thenReturn(OrderMutationResult.success("Assigned seat added.", seatItemId, fullOrder));
-        OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Event ID").setValue(eventId.toString());
-
-        clickButton(view, "Create active order");
-        clickButton(view, "Load event inventory");
-        assertTrue(hasText(view, "Event inventory loaded."));
-        clickButton(view, "Add GA tickets");
-        assertTrue(hasText(view, "GA tickets added."));
-        clickButton(view, "Add A-1");
-
-        assertTrue(hasText(view, "Assigned seat added."));
-        assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 3 | total 250.00"));
-        verify(presenter).addGATickets(orderId, gaZoneId, 1);
-        verify(presenter).addAssignedSeat(orderId, seatZoneId, seatId);
+        assertTrue(hasText(view, "Active order loaded."));
+        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 0 | total 0"));
     }
 
     @Test
@@ -135,17 +83,14 @@ class OrdersViewTest {
         UUID orderId = UUID.randomUUID();
         OrderItemDto item = gaItem(UUID.randomUUID(), UUID.randomUUID(), 3);
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
-        when(presenter.loadActiveOrder(orderId)).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
         OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Order ID").setValue(orderId.toString());
-
-        clickButton(view, "Load active order");
 
         Grid<OrderItemDto> grid = findOrderItemsGrid(view);
         List<OrderItemDto> rows = grid.getDataProvider().fetch(new Query<>()).toList();
         assertEquals(List.of(item), rows);
         assertTrue(hasText(view, "Active order loaded."));
-        assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 3 | total 150.00"));
+        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 3 | total 150.00"));
     }
 
     @Test
@@ -155,21 +100,17 @@ class OrdersViewTest {
         UUID orderId = UUID.randomUUID();
         UUID purchaseId = UUID.randomUUID();
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
-        when(presenter.createOrder(eventId)).thenReturn(OrderResult.success("Active order created.", orderId, order));
-        when(presenter.checkout(orderId, "SAVE20")).thenReturn(CheckoutResult.success("Checkout complete.", purchaseId));
+        when(presenter.checkout("SAVE20")).thenReturn(CheckoutResult.success("Checkout complete.", purchaseId));
         OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Event ID").setValue(eventId.toString());
         findTextField(view, "Coupon code").setValue("SAVE20");
 
-        clickButton(view, "Create active order");
         clickButton(view, "Checkout");
 
         assertTrue(hasText(view, "Checkout complete."));
         assertTrue(hasText(view, "Checkout complete. Purchase ID: " + purchaseId));
-        assertEquals("", findTextField(view, "Order ID").getValue());
         assertTrue(findOrderItemsGrid(view).getDataProvider().fetch(new Query<>()).toList().isEmpty());
-        assertTrue(hasText(view, "Create or load an order to see active order details."));
-        verify(presenter).checkout(orderId, "SAVE20");
+        assertTrue(hasText(view, "No active order. Add tickets from the Events page."));
+        verify(presenter).checkout("SAVE20");
     }
 
     @Test
@@ -204,52 +145,13 @@ class OrdersViewTest {
     }
 
     @Test
-    void GivenInvalidEventId_WhenCreatingOrder_ThenInlineValidationMessageIsShown() {
-        OrdersPresenter presenter = mockPresenter();
-        OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Event ID").setValue("not-a-uuid");
-
-        clickButton(view, "Create active order");
-
-        assertTrue(hasText(view, "Enter a valid event ID."));
-    }
-
-    @Test
     void GivenApplicationServiceThrows_WhenOrderActionRuns_ThenUserFacingErrorIsShown() {
         OrdersPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
-        when(presenter.createOrder(eventId)).thenReturn(OrderResult.failure("Session already has an active order"));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.failure("Could not load active order. Please try again."));
         OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Event ID").setValue(eventId.toString());
 
-        clickButton(view, "Create active order");
-
-        assertTrue(hasText(view, "Session already has an active order"));
-    }
-
-    @Test
-    void GivenActiveOrderAndTicketSelectionFails_WhenAddingGaTickets_ThenFailureMessageIsShownInline() {
-        OrdersPresenter presenter = mockPresenter();
-        UUID eventId = UUID.randomUUID();
-        UUID orderId = UUID.randomUUID();
-        UUID gaZoneId = UUID.randomUUID();
-        UUID seatZoneId = UUID.randomUUID();
-        UUID seatId = UUID.randomUUID();
-        EventMapDTO eventMap = eventMap(eventId, gaZoneId, seatZoneId, seatId);
-        ActiveOrderDto order = activeOrder(orderId, eventId, List.of());
-        when(presenter.createOrder(eventId)).thenReturn(OrderResult.success("Active order created.", orderId, order));
-        when(presenter.loadEventInventory(eventId)).thenReturn(InventoryResult.success("Event inventory loaded.", eventMap));
-        when(presenter.addGATickets(orderId, gaZoneId, 1))
-                .thenReturn(OrderMutationResult.failure("Only 0 ticket(s) remain available in this zone"));
-        OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Event ID").setValue(eventId.toString());
-
-        clickButton(view, "Create active order");
-        clickButton(view, "Load event inventory");
-        clickButton(view, "Add GA tickets");
-
-        assertTrue(hasText(view, "Only 0 ticket(s) remain available in this zone"));
-        verify(presenter).addGATickets(orderId, gaZoneId, 1);
+        assertTrue(hasText(view, "Could not load active order. Please try again."));
     }
 
     @Test
@@ -259,16 +161,14 @@ class OrdersViewTest {
         UUID orderId = UUID.randomUUID();
         String policyMessage = "Purchase policy violation: AGE_RESTRICTED - Buyer does not meet age policy";
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
-        when(presenter.createOrder(eventId)).thenReturn(OrderResult.success("Active order created.", orderId, order));
-        when(presenter.checkout(orderId, "")).thenReturn(CheckoutResult.failure(policyMessage));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.checkout("")).thenReturn(CheckoutResult.failure(policyMessage));
         OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Event ID").setValue(eventId.toString());
 
-        clickButton(view, "Create active order");
         clickButton(view, "Checkout");
 
         assertTrue(hasText(view, policyMessage));
-        verify(presenter).checkout(orderId, "");
+        verify(presenter).checkout("");
     }
 
     @Test
@@ -280,15 +180,13 @@ class OrdersViewTest {
         UUID itemId = UUID.randomUUID();
         OrderItemDto item = gaItem(itemId, zoneId, 2);
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
-        when(presenter.loadActiveOrder(orderId)).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
-        when(presenter.updateGAQuantity(orderId, zoneId, 4))
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.updateGAQuantity(zoneId, 4))
                 .thenReturn(OrderMutationResult.failure("GA quantity exceeds remaining availability."));
-        when(presenter.removeItem(orderId, itemId))
+        when(presenter.removeItem(itemId))
                 .thenReturn(OrderMutationResult.failure("Order item could not be removed."));
         OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Order ID").setValue(orderId.toString());
 
-        clickButton(view, "Load active order");
         findOrderItemsGrid(view).asSingleSelect().setValue(item);
         findIntegerField(view, "New GA quantity").setValue(4);
         clickButton(view, "Update selected GA quantity");
@@ -298,8 +196,8 @@ class OrdersViewTest {
         clickButton(view, "Remove selected item");
 
         assertTrue(hasText(view, "Order item could not be removed."));
-        verify(presenter).updateGAQuantity(orderId, zoneId, 4);
-        verify(presenter).removeItem(orderId, itemId);
+        verify(presenter).updateGAQuantity(zoneId, 4);
+        verify(presenter).removeItem(itemId);
     }
 
     @Test
@@ -313,15 +211,13 @@ class OrdersViewTest {
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
         ActiveOrderDto updatedOrder = activeOrder(orderId, eventId, List.of(gaItem(itemId, zoneId, 4)));
         ActiveOrderDto emptyOrder = activeOrder(orderId, eventId, List.of());
-        when(presenter.loadActiveOrder(orderId)).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
-        when(presenter.updateGAQuantity(orderId, zoneId, 4))
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.updateGAQuantity(zoneId, 4))
                 .thenReturn(OrderMutationResult.success("GA quantity updated.", null, updatedOrder));
-        when(presenter.removeItem(orderId, itemId))
+        when(presenter.removeItem(itemId))
                 .thenReturn(OrderMutationResult.success("Order item removed.", itemId, emptyOrder));
         OrdersView view = new OrdersView(presenter);
-        findTextField(view, "Order ID").setValue(orderId.toString());
 
-        clickButton(view, "Load active order");
         findOrderItemsGrid(view).asSingleSelect().setValue(item);
         findIntegerField(view, "New GA quantity").setValue(4);
         clickButton(view, "Update selected GA quantity");
@@ -330,15 +226,16 @@ class OrdersViewTest {
         clickButton(view, "Remove selected item");
 
         assertTrue(hasText(view, "Order item removed."));
-        assertTrue(hasText(view, "Order " + orderId + " | status ACTIVE | tickets 0 | total 0"));
-        verify(presenter).updateGAQuantity(orderId, zoneId, 4);
-        verify(presenter).removeItem(orderId, itemId);
+        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 0 | total 0"));
+        verify(presenter).updateGAQuantity(zoneId, 4);
+        verify(presenter).removeItem(itemId);
     }
 
     private OrdersPresenter mockPresenter() {
         OrdersPresenter presenter = mock(OrdersPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
         when(presenter.currentSessionState()).thenReturn(guest());
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("No active order found.", null, null));
         return presenter;
     }
 
@@ -457,46 +354,6 @@ class OrdersViewTest {
                 new BigDecimal("50.00"),
                 new BigDecimal("50.00").multiply(BigDecimal.valueOf(quantity)),
                 false);
-    }
-
-    private static OrderItemDto seatItem(UUID itemId, UUID zoneId, UUID seatId) {
-        return new OrderItemDto(
-                itemId,
-                zoneId,
-                seatId,
-                1,
-                new BigDecimal("150.00"),
-                new BigDecimal("150.00"),
-                true);
-    }
-
-    private static EventMapDTO eventMap(UUID eventId, UUID gaZoneId, UUID seatZoneId, UUID seatId) {
-        return new EventMapDTO(
-                eventId,
-                "Spring Concert",
-                "Acme",
-                EventStatus.PUBLISHED,
-                Map.of("Floor", gaZoneId, "Balcony", seatZoneId),
-                List.of(
-                        new EventMapDTO.ZoneInfo(
-                                gaZoneId,
-                                "Floor",
-                                ZoneType.GENERAL_ADMISSION,
-                                new BigDecimal("50.00"),
-                                100,
-                                80,
-                                20,
-                                List.of()),
-                        new EventMapDTO.ZoneInfo(
-                                seatZoneId,
-                                "Balcony",
-                                ZoneType.ASSIGNED_SEATING,
-                                new BigDecimal("150.00"),
-                                null,
-                                null,
-                                null,
-                                List.of(new EventMapDTO.SeatInfo(seatId, "A", "1", true)))
-                ));
     }
 
     private static PurchaseRecordDTO purchase() {

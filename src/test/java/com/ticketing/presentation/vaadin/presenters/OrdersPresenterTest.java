@@ -61,24 +61,7 @@ class OrdersPresenterTest {
         VaadinSession.setCurrent(null);
     }
 
-    @Test
-    void GivenGuestSessionAndEventId_WhenCreatingActiveOrder_ThenOrderServiceCreatesOrderAndSummaryCanLoad() {
-        UUID eventId = UUID.randomUUID();
-        UUID orderId = UUID.randomUUID();
-        ActiveOrderDto order = activeOrder(orderId, eventId, List.of());
-        SessionContext.setSessionToken("guest-token");
-        when(orderService.createOrder("guest-token", eventId)).thenReturn(orderId);
-        when(orderService.getActiveOrder("guest-token", orderId)).thenReturn(order);
 
-        OrderResult result = presenter.createOrder(eventId);
-
-        assertTrue(result.success());
-        assertEquals("Active order created.", result.message());
-        assertEquals(orderId, result.orderId());
-        assertSame(order, result.order());
-        verify(orderService).createOrder("guest-token", eventId);
-        verify(orderService).getActiveOrder("guest-token", orderId);
-    }
 
     @Test
     void GivenActiveOrderAndTicketSelection_WhenAddingGaAndAssignedTickets_ThenOrderServiceAddsTicketsAndViewRefreshesSummary() {
@@ -94,12 +77,12 @@ class OrdersPresenterTest {
                 gaItem(gaItemId, gaZoneId, 2),
                 seatItem(seatItemId, seatZoneId, seatId)));
         SessionContext.setSessionToken("guest-token");
-        when(orderService.addGATicketsToOrder("guest-token", orderId, gaZoneId, 2)).thenReturn(gaItemId);
-        when(orderService.addSeatToOrder("guest-token", orderId, seatZoneId, seatId)).thenReturn(seatItemId);
-        when(orderService.getActiveOrder("guest-token", orderId)).thenReturn(gaOrder, seatOrder);
+        when(orderService.addGATicketsToOrder("guest-token", eventId, gaZoneId, 2)).thenReturn(gaItemId);
+        when(orderService.addSeatToOrder("guest-token", eventId, seatZoneId, seatId)).thenReturn(seatItemId);
+        when(orderService.getActiveOrder("guest-token")).thenReturn(gaOrder, seatOrder);
 
-        OrderMutationResult gaResult = presenter.addGATickets(orderId, gaZoneId, 2);
-        OrderMutationResult seatResult = presenter.addAssignedSeat(orderId, seatZoneId, seatId);
+        OrderMutationResult gaResult = presenter.addGATickets(eventId, gaZoneId, 2);
+        OrderMutationResult seatResult = presenter.addAssignedSeat(eventId, seatZoneId, seatId);
 
         assertTrue(gaResult.success());
         assertEquals("GA tickets added.", gaResult.message());
@@ -109,8 +92,8 @@ class OrdersPresenterTest {
         assertEquals("Assigned seat added.", seatResult.message());
         assertEquals(seatItemId, seatResult.itemId());
         assertSame(seatOrder, seatResult.order());
-        verify(orderService).addGATicketsToOrder("guest-token", orderId, gaZoneId, 2);
-        verify(orderService).addSeatToOrder("guest-token", orderId, seatZoneId, seatId);
+        verify(orderService).addGATicketsToOrder("guest-token", eventId, gaZoneId, 2);
+        verify(orderService).addSeatToOrder("guest-token", eventId, seatZoneId, seatId);
     }
 
     @Test
@@ -119,15 +102,15 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 3)));
         SessionContext.setSessionToken("guest-token");
-        when(orderService.getActiveOrder("guest-token", orderId)).thenReturn(order);
+        when(orderService.getActiveOrder("guest-token")).thenReturn(order);
 
-        OrderResult result = presenter.loadActiveOrder(orderId);
+        OrderResult result = presenter.loadCurrentOrder();
 
         assertTrue(result.success());
         assertEquals("Active order loaded.", result.message());
         assertEquals(1, result.order().getItems().size());
         assertEquals(new BigDecimal("150.00"), result.order().getTotalPrice());
-        verify(orderService).getActiveOrder("guest-token", orderId);
+        verify(orderService).getActiveOrder("guest-token");
     }
 
     @Test
@@ -135,14 +118,14 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         UUID purchaseId = UUID.randomUUID();
         SessionContext.setSessionToken("guest-token");
-        when(orderService.checkout("guest-token", orderId, "SAVE20")).thenReturn(purchaseId);
+        when(orderService.checkout("guest-token", "SAVE20")).thenReturn(purchaseId);
 
-        CheckoutResult result = presenter.checkout(orderId, " SAVE20 ");
+        CheckoutResult result = presenter.checkout(" SAVE20 ");
 
         assertTrue(result.success());
         assertEquals("Checkout complete.", result.message());
         assertEquals(purchaseId, result.purchaseId());
-        verify(orderService).checkout("guest-token", orderId, "SAVE20");
+        verify(orderService).checkout("guest-token", "SAVE20");
     }
 
     @Test
@@ -150,15 +133,15 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         String policyMessage = "Purchase policy violation: AGE_RESTRICTED - Buyer does not meet age policy";
         SessionContext.setSessionToken("guest-token");
-        when(orderService.checkout("guest-token", orderId, null))
+        when(orderService.checkout("guest-token", null))
                 .thenThrow(new IllegalStateException(policyMessage));
 
-        CheckoutResult result = presenter.checkout(orderId, null);
+        CheckoutResult result = presenter.checkout(null);
 
         assertFalse(result.success());
         assertEquals(policyMessage, result.message());
         assertNull(result.purchaseId());
-        verify(orderService).checkout("guest-token", orderId, null);
+        verify(orderService).checkout("guest-token", null);
     }
 
     @Test
@@ -187,19 +170,7 @@ class OrdersPresenterTest {
         verify(orderService).getPurchaseHistory("member-token");
     }
 
-    @Test
-    void GivenApplicationServiceThrows_WhenOrderActionRuns_ThenUserFacingErrorIsShown() {
-        UUID eventId = UUID.randomUUID();
-        SessionContext.setSessionToken("guest-token");
-        when(orderService.createOrder("guest-token", eventId))
-                .thenThrow(new IllegalStateException("Session already has an active order"));
 
-        OrderResult result = presenter.createOrder(eventId);
-
-        assertFalse(result.success());
-        assertEquals("Session already has an active order", result.message());
-        assertNull(result.order());
-    }
 
     @Test
     void GivenSelectedItemAndGaQuantity_WhenRemovingAndUpdating_ThenSupportedOrderActionsAreCalled() {
@@ -209,17 +180,17 @@ class OrdersPresenterTest {
         UUID zoneId = UUID.randomUUID();
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(itemId, zoneId, 4)));
         SessionContext.setSessionToken("guest-token");
-        when(orderService.getActiveOrder("guest-token", orderId)).thenReturn(order);
+        when(orderService.getActiveOrder("guest-token")).thenReturn(order);
 
-        OrderMutationResult removeResult = presenter.removeItem(orderId, itemId);
-        OrderMutationResult updateResult = presenter.updateGAQuantity(orderId, zoneId, 4);
+        OrderMutationResult removeResult = presenter.removeItem(itemId);
+        OrderMutationResult updateResult = presenter.updateGAQuantity(zoneId, 4);
 
         assertTrue(removeResult.success(), removeResult.message());
         assertEquals("Order item removed.", removeResult.message());
         assertTrue(updateResult.success(), updateResult.message());
         assertEquals("GA quantity updated.", updateResult.message());
-        verify(orderService).removeItemFromOrder("guest-token", orderId, itemId);
-        verify(orderService).updateGAQuantity("guest-token", orderId, zoneId, 4);
+        verify(orderService).removeItemFromOrder("guest-token", itemId);
+        verify(orderService).updateGAQuantity("guest-token", zoneId, 4);
     }
 
     @Test
@@ -236,14 +207,7 @@ class OrdersPresenterTest {
         verifyNoInteractions(orderService);
     }
 
-    @Test
-    void GivenNoSession_WhenCreatingOrder_ThenUserIsToldToStartSessionAndNoServiceIsCalled() {
-        OrderResult result = presenter.createOrder(UUID.randomUUID());
 
-        assertFalse(result.success());
-        assertEquals("Start a guest or member session before managing orders.", result.message());
-        verifyNoInteractions(orderService);
-    }
 
     @Test
     void GivenGuestSession_WhenLoadingPurchaseHistory_ThenMemberOnlyInfoIsReturned() {

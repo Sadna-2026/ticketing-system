@@ -8,13 +8,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventCategory;
+import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -30,6 +35,7 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.BigDecimalField;
+import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
@@ -43,6 +49,7 @@ public class EventsView extends VerticalLayout {
             .withZone(ZoneId.systemDefault());
 
     private final EventsPresenter presenter;
+    private final OrdersPresenter ordersPresenter;
 
     private final TextField text = new TextField("Search text");
     private final TextField region = new TextField("Region");
@@ -52,16 +59,21 @@ public class EventsView extends VerticalLayout {
     private final BigDecimalField maxPrice = new BigDecimalField("Max price");
     private final DatePicker fromDate = new DatePicker("From date");
     private final DatePicker toDate = new DatePicker("To date");
+    private final Span sessionStatus = new Span();
+    private final Span activeOrderStatus = new Span();
     private final Span resultsStatus = new Span("Search for events to see results.");
     private final Grid<EventSummaryDTO> resultsGrid = new Grid<>(EventSummaryDTO.class, false);
     private final Button viewMap = new Button("View selected map");
     private final Span mapStatus = new Span("Select an event from the results to load its map.");
+    private final Span reservationStatus = new Span("Add tickets to your active order from the map below.");
     private final VerticalLayout mapDisplay = new VerticalLayout();
 
     private EventSummaryDTO selectedEvent;
+    private EventMapDTO currentEventMap;
 
-    public EventsView(EventsPresenter presenter) {
+    public EventsView(EventsPresenter presenter, OrdersPresenter ordersPresenter) {
         this.presenter = presenter;
+        this.ordersPresenter = ordersPresenter;
 
         setPadding(true);
         setSpacing(true);
@@ -74,16 +86,22 @@ public class EventsView extends VerticalLayout {
 
         add(
                 new H2("Events"),
-                new Paragraph("Search published events and inspect venue map inventory before choosing tickets."),
+                new Paragraph("Search published events, inspect venue inventory, and add tickets to your active order. "
+                        + "Manage and checkout your cart on the Orders page."),
+                sessionStatus,
+                activeOrderStatus,
                 searchSection(),
                 new H3("Search results"),
                 resultsStatus,
                 resultsGrid,
                 viewMap,
-                new H3("Event map and inventory"),
+                new H3("Event map and ticket selection"),
                 mapStatus,
+                reservationStatus,
                 mapDisplay
         );
+        refreshSessionStatus();
+        refreshActiveOrderStatus();
     }
 
     private void configureFields() {
@@ -114,7 +132,7 @@ public class EventsView extends VerticalLayout {
     private void configureMapDisplay() {
         mapDisplay.setPadding(false);
         mapDisplay.setSpacing(true);
-        mapDisplay.add(new Paragraph("Select an event from the results to view its venue map and inventory."));
+        mapDisplay.add(new Paragraph("Select an event from the results, then load its map to add tickets."));
     }
 
     private VerticalLayout searchSection() {
@@ -158,6 +176,7 @@ public class EventsView extends VerticalLayout {
         );
 
         selectedEvent = null;
+        currentEventMap = null;
         viewMap.setEnabled(false);
         resetMapDisplay();
 
@@ -188,6 +207,7 @@ public class EventsView extends VerticalLayout {
         toDate.clear();
         resultsGrid.setItems(List.of());
         selectedEvent = null;
+        currentEventMap = null;
         viewMap.setEnabled(false);
         resultsStatus.setText("Search for events to see results.");
         resetMapDisplay();
@@ -198,6 +218,7 @@ public class EventsView extends VerticalLayout {
         MapResult result = presenter.loadEventMap(eventId);
 
         mapDisplay.removeAll();
+        currentEventMap = result.success() ? result.eventMap() : null;
         mapStatus.setText(result.message());
         if (!result.success()) {
             mapDisplay.add(new Paragraph(result.message()));
@@ -209,10 +230,50 @@ public class EventsView extends VerticalLayout {
         UiMessages.success(result.message());
     }
 
+    private void addGATickets(UUID zoneId, Integer quantity) {
+        UUID eventId = currentEventId();
+        if (eventId == null) {
+            return;
+        }
+        OrderMutationResult result = ordersPresenter.addGATickets(eventId, zoneId, quantity == null ? 0 : quantity);
+        handleReservationResult(result);
+    }
+
+    private void addAssignedSeat(UUID zoneId, UUID seatId) {
+        UUID eventId = currentEventId();
+        if (eventId == null) {
+            return;
+        }
+        OrderMutationResult result = ordersPresenter.addAssignedSeat(eventId, zoneId, seatId);
+        handleReservationResult(result);
+    }
+
+    private void handleReservationResult(OrderMutationResult result) {
+        reservationStatus.setText(result.message());
+        if (!result.success()) {
+            UiMessages.error(result.message());
+            return;
+        }
+        UiMessages.success(result.message());
+        refreshActiveOrderStatus();
+    }
+
+    private UUID currentEventId() {
+        if (currentEventMap != null) {
+            return currentEventMap.eventId();
+        }
+        if (selectedEvent != null) {
+            return selectedEvent.id();
+        }
+        reservationStatus.setText("Load an event map before adding tickets.");
+        UiMessages.error("Load an event map before adding tickets.");
+        return null;
+    }
+
     private void resetMapDisplay() {
         mapStatus.setText("Select an event from the results to load its map.");
         mapDisplay.removeAll();
-        mapDisplay.add(new Paragraph("Select an event from the results to view its venue map and inventory."));
+        mapDisplay.add(new Paragraph("Select an event from the results, then load its map to add tickets."));
     }
 
     private void renderEventMap(EventMapDTO eventMap) {
@@ -255,11 +316,16 @@ public class EventsView extends VerticalLayout {
                 new Span("Price: " + formatPrice(zone.pricePerTicket()))
         );
 
-        if (zone.maxCapacity() != null) {
+        if (zone.type() == ZoneType.GENERAL_ADMISSION) {
+            IntegerField quantity = new IntegerField("Quantity");
+            quantity.setMin(1);
+            quantity.setValue(1);
+            Button addGA = new Button("Add GA tickets", event -> addGATickets(zone.id(), quantity.getValue()));
             content.add(
                     new Span("Capacity: " + zone.maxCapacity()),
                     new Span("Available: " + zone.availableCount()),
-                    new Span("Sold: " + zone.soldCount())
+                    new Span("Sold: " + zone.soldCount()),
+                    new HorizontalLayout(quantity, addGA)
             );
         } else {
             content.add(new Span("Seats: " + zone.seats().size()));
@@ -267,16 +333,15 @@ public class EventsView extends VerticalLayout {
             seats.setSpacing(true);
             seats.getStyle().set("flex-wrap", "wrap");
             for (EventMapDTO.SeatInfo seat : zone.seats()) {
-                Span badge = new Span(seat.row() + "-" + seat.seatNumber() + " "
-                        + (seat.available() ? "available" : "unavailable"));
-                badge.getStyle()
-                        .set("border", "1px solid var(--lumo-contrast-20pct)")
+                Button seatButton = new Button("Add " + seat.row() + "-" + seat.seatNumber(),
+                        event -> addAssignedSeat(zone.id(), seat.id()));
+                seatButton.setEnabled(seat.available());
+                seatButton.getStyle()
                         .set("border-radius", "999px")
-                        .set("padding", "var(--lumo-space-xs) var(--lumo-space-s)")
                         .set("background", seat.available()
                                 ? "var(--lumo-success-color-10pct)"
                                 : "var(--lumo-error-color-10pct)");
-                seats.add(badge);
+                seats.add(seatButton);
             }
             content.add(seats);
         }
@@ -284,6 +349,30 @@ public class EventsView extends VerticalLayout {
         Details details = new Details(zone.name(), content);
         details.setOpened(true);
         return details;
+    }
+
+    private void refreshSessionStatus() {
+        sessionStatus.setText(ordersPresenter.currentSessionLabel());
+    }
+
+    private void refreshActiveOrderStatus() {
+        OrderResult result = ordersPresenter.loadCurrentOrder();
+        if (!result.success()) {
+            activeOrderStatus.setText(result.message());
+            return;
+        }
+        ActiveOrderDto order = result.order();
+        if (order == null) {
+            activeOrderStatus.setText("No active order yet. Adding tickets here will start one for the selected event.");
+            return;
+        }
+        int ticketCount = order.getItems().stream().mapToInt(item -> item.getQuantity()).sum();
+        String eventLabel = order.getEventName() != null && !order.getEventName().isBlank()
+                ? order.getEventName()
+                : order.getEventId().toString();
+        activeOrderStatus.setText("Active order for " + eventLabel
+                + " | " + ticketCount + " ticket(s) | total " + formatPrice(order.getTotalPrice())
+                + " — manage on Orders page");
     }
 
     private String formatCategory(EventCategory category) {

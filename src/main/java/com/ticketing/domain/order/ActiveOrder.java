@@ -13,8 +13,8 @@ import com.ticketing.application.dto.OrderItemDto;
 public class ActiveOrder{
 
     private final UUID id;
-    private final UUID sessionId;
-    private final UUID memberId;
+    private UUID sessionId;
+    private UUID memberId;
     private final UUID eventId;
     private final Instant createdAt;
     private OrderStatus status;
@@ -55,6 +55,16 @@ public class ActiveOrder{
         this.status = OrderStatus.ACTIVE;
         this.items = new ArrayList<>();
         this.version = 0;
+    }
+
+    public void updateSessionId(UUID newSessionId) {
+        if (newSessionId == null) throw new IllegalArgumentException("Session ID is required");
+        this.sessionId = newSessionId;
+    }
+
+    public void updateMemberId(UUID newMemberId) {
+        if (newMemberId == null) throw new IllegalArgumentException("Member ID is required");
+        this.memberId = newMemberId;
     }
 
     public UUID getId() { return id; }
@@ -113,6 +123,22 @@ public class ActiveOrder{
     public void incrementVersion() { this.version++; }
     public int getTotalTicketCount() {
         return items.stream().mapToInt(OrderItem::getQuantity).sum();
+    }
+
+    /**
+     * Returns a lightweight snapshot that reports the ticket count as if
+     * additional tickets were already added. Used for early policy validation
+     * before actually locking inventory.
+     */
+    public ActiveOrder simulateWithAdditionalTickets(int additionalCount) {
+        ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        for (OrderItem item : items) {
+            simulated.items.add(item);
+        }
+        if (additionalCount > 0) {
+            simulated.items.add(OrderItem.forGA(UUID.randomUUID(), UUID.randomUUID(), additionalCount, BigDecimal.ZERO));
+        }
+        return simulated;
     }
 
     public void expire() {
