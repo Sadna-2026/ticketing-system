@@ -76,7 +76,7 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Manager actions"));
         assertTrue(hasText(view, "Application services still enforce authorization for every action and their responses are shown here."));
         assertTrue(hasText(view, "Manager action visibility is grouped by capability, but the frontend cannot pre-check company-specific ManagerPermission values from the current session."));
-        assertTrue(hasText(view, "Policy management is a company-management capability, not a system-admin action. Policy CRUD and attach/edit controls are hidden until backend/application support is available."));
+        assertTrue(hasText(view, "Define and manage purchase rules and discount policies at company or event level."));
         assertTrue(hasButton(view, "Open company"));
         assertTrue(hasButton(view, "Load company info"));
         assertTrue(hasButton(view, "Offer role appointment"));

@@ -18,6 +18,8 @@ import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
+import com.ticketing.domain.event.IDiscountPolicy;
+import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
 import com.ticketing.application.services.CompanyHistoryService;
@@ -48,6 +50,7 @@ public class CompanyPresenter {
     private static final String INVENTORY_FAILURE_MESSAGE = "Could not complete inventory action. Please try again.";
     private static final String LIFECYCLE_FAILURE_MESSAGE = "Could not complete lifecycle action. Please try again.";
     private static final String REPORTING_FAILURE_MESSAGE = "Could not load company reporting data. Please try again.";
+    private static final String POLICY_FAILURE_MESSAGE = "Could not complete policy action. Please try again.";
 
     private final CompanyService companyService;
     private final CompanyQueryService companyQueryService;
@@ -217,6 +220,224 @@ public class CompanyPresenter {
             return ActionResult.success("Ownership relinquished for " + normalizedName + ".");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+        }
+    }
+
+    // ── Purchase Policy ─────────────────────────────────────────────
+
+    public PolicyViewResult loadCompanyPurchasePolicy(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return PolicyViewResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return PolicyViewResult.failure("Company name is required.");
+        }
+        try {
+            IPurchasePolicy policy = companyService.getCompanyPurchasePolicy(token, name);
+            String desc = describePurchasePolicy(policy);
+            return PolicyViewResult.success("Company purchase policy loaded.", desc);
+        } catch (RuntimeException ex) {
+            return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult setCompanyPurchasePolicy(String companyName, IPurchasePolicy policy) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return ActionResult.failure("Company name is required.");
+        }
+        if (policy == null) {
+            return ActionResult.failure("Policy definition is required.");
+        }
+        try {
+            companyService.setCompanyPurchasePolicy(token, name, policy);
+            return ActionResult.success("Company purchase policy updated.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult removeCompanyPurchasePolicy(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return ActionResult.failure("Company name is required.");
+        }
+        try {
+            companyService.removeCompanyPurchasePolicy(token, name);
+            return ActionResult.success("Company purchase policy reset to default (allow all).");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public PolicyViewResult loadEventPurchasePolicy(UUID eventId) {
+        String token = memberToken();
+        if (token == null) {
+            return PolicyViewResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return PolicyViewResult.failure("Event ID is required.");
+        }
+        try {
+            IPurchasePolicy policy = eventService.getEventPurchasePolicy(token, eventId);
+            String desc = describePurchasePolicy(policy);
+            return PolicyViewResult.success("Event purchase policy loaded.", desc);
+        } catch (RuntimeException ex) {
+            return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult setEventPurchasePolicy(UUID eventId, IPurchasePolicy policy) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        if (policy == null) {
+            return ActionResult.failure("Policy definition is required.");
+        }
+        try {
+            eventService.setEventPurchasePolicy(token, eventId, policy);
+            return ActionResult.success("Event purchase policy updated.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult removeEventPurchasePolicy(UUID eventId) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            eventService.removeEventPurchasePolicy(token, eventId);
+            return ActionResult.success("Event purchase policy reset to default (allow all).");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    // ── Discount Policy ─────────────────────────────────────────────
+
+    public PolicyViewResult loadCompanyDiscountPolicy(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return PolicyViewResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return PolicyViewResult.failure("Company name is required.");
+        }
+        try {
+            IDiscountPolicy policy = companyService.getCompanyDiscountPolicy(token, name);
+            String desc = describeDiscountPolicy(policy);
+            return PolicyViewResult.success("Company discount policy loaded.", desc);
+        } catch (RuntimeException ex) {
+            return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult setCompanyDiscountPolicy(String companyName, IDiscountPolicy policy) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return ActionResult.failure("Company name is required.");
+        }
+        if (policy == null) {
+            return ActionResult.failure("Discount policy definition is required.");
+        }
+        try {
+            companyService.setCompanyDiscountPolicy(token, name, policy);
+            return ActionResult.success("Company discount policy updated.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult removeCompanyDiscountPolicy(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return ActionResult.failure("Company name is required.");
+        }
+        try {
+            companyService.removeCompanyDiscountPolicy(token, name);
+            return ActionResult.success("Company discount policy reset to default (no discount).");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public PolicyViewResult loadEventDiscountPolicy(UUID eventId) {
+        String token = memberToken();
+        if (token == null) {
+            return PolicyViewResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return PolicyViewResult.failure("Event ID is required.");
+        }
+        try {
+            IDiscountPolicy policy = eventService.getEventDiscountPolicy(token, eventId);
+            String desc = describeDiscountPolicy(policy);
+            return PolicyViewResult.success("Event discount policy loaded.", desc);
+        } catch (RuntimeException ex) {
+            return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult setEventDiscountPolicy(UUID eventId, IDiscountPolicy policy) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        if (policy == null) {
+            return ActionResult.failure("Discount policy definition is required.");
+        }
+        try {
+            eventService.setEventDiscountPolicy(token, eventId, policy);
+            return ActionResult.success("Event discount policy updated.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult removeEventDiscountPolicy(UUID eventId) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            eventService.removeEventDiscountPolicy(token, eventId);
+            return ActionResult.success("Event discount policy reset to default (no discount).");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
         }
     }
 
@@ -643,5 +864,84 @@ public class CompanyPresenter {
         public static SalesReportResult failure(String message) {
             return new SalesReportResult(false, message, null);
         }
+    }
+
+    public record PolicyViewResult(boolean success, String message, String description) {
+        public static PolicyViewResult success(String message, String description) {
+            return new PolicyViewResult(true, message, description);
+        }
+
+        public static PolicyViewResult failure(String message) {
+            return new PolicyViewResult(false, message, "");
+        }
+    }
+
+    static String describePurchasePolicy(IPurchasePolicy policy) {
+        if (policy == null) return "None (allow all)";
+        if (policy instanceof com.ticketing.domain.event.AlwaysAllowPolicy) return "Allow all (no restrictions)";
+        if (policy instanceof com.ticketing.domain.event.AgeRestrictionPolicy p)
+            return "Age restriction: minimum " + p.getMinimumAge() + " years";
+        if (policy instanceof com.ticketing.domain.event.MaxQuantityPolicy p)
+            return "Max quantity: at most " + p.getMaxTickets() + " tickets";
+        if (policy instanceof com.ticketing.domain.event.MinQuantityPolicy p)
+            return "Min quantity: at least " + p.getMinTickets() + " tickets";
+        if (policy instanceof com.ticketing.domain.event.AndPolicy p) {
+            StringBuilder sb = new StringBuilder("AND(");
+            for (int i = 0; i < p.getPolicies().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(describePurchasePolicy(p.getPolicies().get(i)));
+            }
+            return sb.append(")").toString();
+        }
+        if (policy instanceof com.ticketing.domain.event.OrPolicy p) {
+            StringBuilder sb = new StringBuilder("OR(");
+            for (int i = 0; i < p.getPolicies().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(describePurchasePolicy(p.getPolicies().get(i)));
+            }
+            return sb.append(")").toString();
+        }
+        return policy.getClass().getSimpleName();
+    }
+
+    static String describeDiscountPolicy(IDiscountPolicy policy) {
+        if (policy == null) return "None (no discount)";
+        if (policy instanceof com.ticketing.domain.event.NoDiscountPolicy) return "No discount";
+        if (policy instanceof com.ticketing.domain.event.SimpleDiscount p)
+            return "Simple discount: " + p.getPercentOff() + "% off";
+        if (policy instanceof com.ticketing.domain.event.CouponDiscount p)
+            return "Coupon discount: " + p.getPercentOff() + "% off with code '" + p.getCouponCode() + "' (expires " + p.getExpiresAt() + ")";
+        if (policy instanceof com.ticketing.domain.event.ConditionalDiscount p)
+            return "Conditional discount: " + p.getPercentOff() + "% off when " + describeCondition(p.getCondition());
+        if (policy instanceof com.ticketing.domain.event.MaxCompositeDiscount p) {
+            StringBuilder sb = new StringBuilder("MAX(");
+            for (int i = 0; i < p.getPolicies().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(describeDiscountPolicy(p.getPolicies().get(i)));
+            }
+            return sb.append(")").toString();
+        }
+        if (policy instanceof com.ticketing.domain.event.SumCompositeDiscount p) {
+            StringBuilder sb = new StringBuilder("SUM(");
+            for (int i = 0; i < p.getPolicies().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(describeDiscountPolicy(p.getPolicies().get(i)));
+            }
+            return sb.append(")").toString();
+        }
+        return policy.getClass().getSimpleName();
+    }
+
+    private static String describeCondition(com.ticketing.domain.event.IDiscountCondition condition) {
+        if (condition instanceof com.ticketing.domain.event.MinQuantityCondition c)
+            return "min " + c.getMinTickets() + " tickets";
+        if (condition instanceof com.ticketing.domain.event.MaxQuantityCondition c)
+            return "max " + c.getMaxTickets() + " tickets";
+        if (condition instanceof com.ticketing.domain.event.DateRangeCondition c) {
+            String from = c.getFrom() == null ? "unbounded" : c.getFrom().toString();
+            String to = c.getTo() == null ? "unbounded" : c.getTo().toString();
+            return "date in [" + from + " .. " + to + "]";
+        }
+        return condition.getClass().getSimpleName();
     }
 }
