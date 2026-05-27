@@ -37,51 +37,51 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(orderId));
     }
 
-    @PostMapping("/{orderId}/items/seat")
-    public ResponseEntity<ApiResponse<UUID>> addSeatToOrder(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId, @RequestParam UUID zoneId, @RequestParam UUID seatId) {
-        UUID itemId = orderService.addSeatToOrder(token, orderId, zoneId, seatId);
+    @PostMapping("/current/items/seat")
+    public ResponseEntity<ApiResponse<UUID>> addSeatToOrder(@RequestHeader("X-Session-Token") String token, @RequestParam UUID eventId, @RequestParam UUID zoneId, @RequestParam UUID seatId) {
+        UUID itemId = orderService.addSeatToOrder(token, eventId, zoneId, seatId);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(itemId));
     }
 
-    @PostMapping("/{orderId}/items/ga")
-    public ResponseEntity<ApiResponse<UUID>> addGATicketsToOrder(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId, @RequestParam UUID zoneId, @RequestParam int quantity) {
-        UUID itemId = orderService.addGATicketsToOrder(token, orderId, zoneId, quantity);
+    @PostMapping("/current/items/ga")
+    public ResponseEntity<ApiResponse<UUID>> addGATicketsToOrder(@RequestHeader("X-Session-Token") String token, @RequestParam UUID eventId, @RequestParam UUID zoneId, @RequestParam int quantity) {
+        UUID itemId = orderService.addGATicketsToOrder(token, eventId, zoneId, quantity);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(itemId));
     }
 
-    @PostMapping("/{orderId}/items/selection")
-    public ResponseEntity<ApiResponse<List<UUID>>> addSelectionToOrder(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId, @RequestBody SelectionRequest request) {
-        List<UUID> itemIds = orderService.addSelectionToOrder(token, orderId, request);
+    @PostMapping("/current/items/selection")
+    public ResponseEntity<ApiResponse<List<UUID>>> addSelectionToOrder(@RequestHeader("X-Session-Token") String token, @RequestBody SelectionRequest request) {
+        List<UUID> itemIds = orderService.addSelectionToOrder(token, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(itemIds));
     }
 
-    @PostMapping("/{orderId}/checkout")
-    public ResponseEntity<ApiResponse<UUID>> checkout(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId, @RequestParam(required = false) String couponCode) {
-        UUID purchaseId = orderService.checkout(token, orderId, couponCode);
+    @PostMapping("/current/checkout")
+    public ResponseEntity<ApiResponse<UUID>> checkout(@RequestHeader("X-Session-Token") String token, @RequestParam(required = false) String couponCode) {
+        UUID purchaseId = orderService.checkout(token, couponCode);
         return ResponseEntity.ok(ApiResponse.success(purchaseId));
     }
 
-    @DeleteMapping("/{orderId}/items/{itemId}")
-    public ResponseEntity<ApiResponse<Void>> removeItemFromOrder(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId, @PathVariable UUID itemId) {
-        orderService.removeItemFromOrder(token, orderId, itemId);
+    @DeleteMapping("/current/items/{itemId}")
+    public ResponseEntity<ApiResponse<Void>> removeItemFromOrder(@RequestHeader("X-Session-Token") String token, @PathVariable UUID itemId) {
+        orderService.removeItemFromOrder(token, itemId);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @GetMapping("/{orderId}")
-    public ResponseEntity<ApiResponse<ActiveOrderDto>> getActiveOrder(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId) {
-        ActiveOrderDto dto = orderService.getActiveOrder(token, orderId);
+    @GetMapping("/current")
+    public ResponseEntity<ApiResponse<ActiveOrderDto>> getActiveOrder(@RequestHeader("X-Session-Token") String token) {
+        ActiveOrderDto dto = orderService.getActiveOrder(token);
         return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
-    @PatchMapping("/{orderId}/items/ga")
-    public ResponseEntity<ApiResponse<Void>> updateGAQuantity(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId, @RequestParam UUID zoneId, @RequestParam int quantity) {
-        orderService.updateGAQuantity(token, orderId, zoneId, quantity);
+    @PatchMapping("/current/items/ga")
+    public ResponseEntity<ApiResponse<Void>> updateGAQuantity(@RequestHeader("X-Session-Token") String token, @RequestParam UUID zoneId, @RequestParam int quantity) {
+        orderService.updateGAQuantity(token, zoneId, quantity);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @DeleteMapping("/{orderId}")
-    public ResponseEntity<ApiResponse<Void>> cancelOrder(@RequestHeader("X-Session-Token") String token, @PathVariable UUID orderId) {
-        orderService.cancelOrder(token, orderId);
+    @DeleteMapping("/current")
+    public ResponseEntity<ApiResponse<Void>> cancelOrder(@RequestHeader("X-Session-Token") String token) {
+        orderService.cancelOrder(token);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
