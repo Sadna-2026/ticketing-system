@@ -27,6 +27,14 @@ public class InMemoryOrderRepository implements IOrderRepository {
     }
 
     @Override
+    public Optional<ActiveOrder> findActiveByMemberId(UUID memberId) {
+        if (memberId == null) return Optional.empty();
+        return activeOrders.values().stream()
+                .filter(o -> memberId.equals(o.getMemberId()) && o.isActive())
+                .findFirst();
+    }
+
+    @Override
     public void save(ActiveOrder order) {
         if (order == null) throw new IllegalArgumentException("order cannot be null");
         activeOrders.compute(order.getId(), (id, existing) -> {

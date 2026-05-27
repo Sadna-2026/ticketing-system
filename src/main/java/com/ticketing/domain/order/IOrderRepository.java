@@ -7,6 +7,8 @@ import java.util.UUID;
 public interface IOrderRepository {
     Optional<ActiveOrder> findActiveBySessionId(UUID sessionId);
 
+    Optional<ActiveOrder> findActiveByMemberId(UUID memberId);
+
     void save(ActiveOrder order);
 
     Optional<ActiveOrder> findById(UUID orderId);
