@@ -14,12 +14,12 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.awaitility.Awaitility;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -94,7 +94,8 @@ public class OrderServiceTest {
 
         TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock);
         OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock);
-        orderService = new OrderService(sessionService, ticketReservationService, orderCheckoutService, null, null);
+        OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
+        orderService = new OrderService(sessionService, ticketReservationService, orderCheckoutService, null, orderTimeDomainService, null);
 
         guestToken = sessionService.generateGuestToken();
         setUpPublishedEvent();
@@ -189,29 +190,18 @@ public class OrderServiceTest {
         quickEvent.publish();
         eventRepo.save(quickEvent);
 
-        OrderTimeDomainService expirationService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
-        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-        executor.scheduleAtFixedRate(expirationService::expireOrders, 0, 50, TimeUnit.MILLISECONDS);
-        try {
-            UUID orderId = orderService.createOrder(guestToken, quickEventId);
-            orderService.addGATicketsToOrder(guestToken, orderId, quickZoneId, 5);
-            assertEquals(95, eventRepo.findById(quickEventId).orElseThrow()
-                    .findZone(quickZoneId).getAvailableCount());
+        UUID orderId = orderService.createOrder(guestToken, quickEventId);
+        orderService.addGATicketsToOrder(guestToken, orderId, quickZoneId, 5);
+        assertEquals(95, eventRepo.findById(quickEventId).orElseThrow()
+                .findZone(quickZoneId).getAvailableCount());
 
-            clock.advance(Duration.ofMillis(250));
+        clock.advance(Duration.ofMillis(250));
+        orderService.expireOrders();
 
-            Awaitility.await()
-                    .atMost(2, TimeUnit.SECONDS)
-                    .pollInterval(50, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> assertEquals(OrderStatus.EXPIRED,
-                            orderRepo.findById(orderId).orElseThrow().getStatus()));
-
-            Event eventAfter = eventRepo.findById(quickEventId).orElseThrow();
-            assertEquals(100, eventAfter.findZone(quickZoneId).getAvailableCount());
-            assertEquals(0, eventAfter.findZone(quickZoneId).getLockedCount());
-        } finally {
-            executor.shutdownNow();
-        }
+        assertEquals(OrderStatus.EXPIRED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        Event eventAfter = eventRepo.findById(quickEventId).orElseThrow();
+        assertEquals(100, eventAfter.findZone(quickZoneId).getAvailableCount());
+        assertEquals(0, eventAfter.findZone(quickZoneId).getLockedCount());
     }
 
     @Test
@@ -560,7 +550,7 @@ public class OrderServiceTest {
 
         TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 2);
@@ -584,7 +574,7 @@ public class OrderServiceTest {
 
         TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
@@ -609,7 +599,7 @@ public class OrderServiceTest {
 
         TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway), clock);
-        OrderService partialService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null);
+        OrderService partialService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = partialService.createOrder(guestToken, eventId);
         partialService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
@@ -699,7 +689,7 @@ public class OrderServiceTest {
 
         TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
@@ -721,7 +711,7 @@ public class OrderServiceTest {
 
         TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);

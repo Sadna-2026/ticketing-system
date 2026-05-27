@@ -71,7 +71,7 @@ class QueueConcurrencyTest {
         TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock);
         OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock);
         QueueDomainService queueDomainService = new QueueDomainService(queueRepo, eventRepo, clock);
-        orderService = new OrderService(tokenService, ticketReservationService, orderCheckoutService, queueDomainService, null);
+        orderService = new OrderService(tokenService, ticketReservationService, orderCheckoutService, queueDomainService, null, null);
 
         adminToken = tokenService.generateMemberToken(UUID.randomUUID(), UUID.randomUUID(), Set.of("Admin"));
 

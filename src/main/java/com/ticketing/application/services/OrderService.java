@@ -13,6 +13,7 @@ import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.TicketReservationDomainService;
+import com.ticketing.domain.services.OrderTimeDomainService;
 import com.ticketing.domain.services.QueueDomainService;
 
 @org.springframework.stereotype.Service
@@ -21,6 +22,7 @@ public class OrderService {
     private final TicketReservationDomainService ticketReservationService;
     private final OrderCheckoutDomainService orderCheckoutService;
     private final QueueDomainService queueDomainService;
+    private final OrderTimeDomainService orderTimeDomainService;
     private final INotificationService notificationService;
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -28,6 +30,7 @@ public class OrderService {
                         TicketReservationDomainService ticketReservationService,
                         OrderCheckoutDomainService orderCheckoutService,
                         QueueDomainService queueDomainService,
+                        OrderTimeDomainService orderTimeDomainService,
                         @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         if (sessionTokenService == null) throw new IllegalArgumentException("sessionTokenService is required");
         if (ticketReservationService == null) throw new IllegalArgumentException("ticketReservationService is required");
@@ -37,6 +40,7 @@ public class OrderService {
         this.ticketReservationService = ticketReservationService;
         this.orderCheckoutService = orderCheckoutService;
         this.queueDomainService = queueDomainService;
+        this.orderTimeDomainService = orderTimeDomainService;
         this.notificationService = notificationService;
     }
 
@@ -191,6 +195,13 @@ public class OrderService {
 
     public VirtualQueueDto getQueueForEvent(UUID eventId) {
         return queueDomainService.getQueueForEvent(eventId);
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 10_000)
+    public void expireOrders() {
+        if (orderTimeDomainService != null) {
+            orderTimeDomainService.expireOrders();
+        }
     }
 
     private void validateToken(String token) {
