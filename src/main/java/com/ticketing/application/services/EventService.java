@@ -1,6 +1,5 @@
 package com.ticketing.application.services;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.ISystemClock;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.EventDetailsDTO;
@@ -43,7 +43,7 @@ public class EventService {
 
     private final IEventRepository eventRepository;
     private final ISessionTokenService sessionTokenService;
-    private final Clock clock;
+    private final ISystemClock systemClock;
 
     private final LotteryRegistrationDomainService lotteryRegistrationService;
     private final OrderCheckoutDomainService orderCheckoutService;
@@ -59,11 +59,11 @@ public class EventService {
                         com.ticketing.domain.order.IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService,
                         ILotteryRepository lotteryRepository,
-                        Clock clock,
+                        ISystemClock systemClock,
                         OrderService orderService) {
         this.eventRepository = eventRepository;
         this.sessionTokenService = sessionTokenService;
-        this.clock = clock;
+        this.systemClock = systemClock;
         this.orderCheckoutService = null;
         this.domainService = new EventDomainService(eventRepository, companyRepository, memberRepository, orderRepository);
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
@@ -78,9 +78,9 @@ public class EventService {
                         com.ticketing.domain.order.IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService,
                         ILotteryRepository lotteryRepository,
-                        Clock clock) {
+                        ISystemClock systemClock) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
-                sessionTokenService, lotteryRepository, clock, null);
+                sessionTokenService, lotteryRepository, systemClock, null);
     }
 
     public EventService(IEventRepository eventRepository,
@@ -90,7 +90,7 @@ public class EventService {
                         ISessionTokenService sessionTokenService,
                         OrderService orderService) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
-                sessionTokenService, null, Clock.systemUTC(), orderService);
+                sessionTokenService, null, Instant::now, orderService);
     }
 
     public EventService(IEventRepository eventRepository,
@@ -99,23 +99,22 @@ public class EventService {
                         com.ticketing.domain.order.IOrderRepository orderRepository,
                         ISessionTokenService sessionTokenService) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
-                sessionTokenService, null, Clock.systemUTC(), null);
+                sessionTokenService, null, Instant::now, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public EventService(IEventRepository eventRepository,
                         ISessionTokenService sessionTokenService,
                         ILotteryRepository lotteryRepository,
-                        Clock clock,
                         OrderCheckoutDomainService orderCheckoutService,
                         EventDomainService domainService,
                         EventSearchDomainService eventSearchDomainService,
                         com.ticketing.domain.order.IOrderRepository orderRepository,
-                        com.ticketing.application.ISystemClock systemClock,
+                        ISystemClock systemClock,
                         @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this.eventRepository = eventRepository;
         this.sessionTokenService = sessionTokenService;
-        this.clock = clock;
+        this.systemClock = systemClock;
         this.orderCheckoutService = orderCheckoutService;
         this.domainService = domainService;
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
@@ -139,7 +138,7 @@ public class EventService {
         UUID memberId = authenticateMember(token);
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
-        Instant now = clock.instant();
+        Instant now = systemClock.now();
         LotteryEntry entry;
         try {
             entry = lotteryRegistrationService.registerMember(event, memberId, request.zoneId(), request.quantity(), now);
