@@ -221,6 +221,13 @@ public class EventService {
         domainService.removeEventPurchasePolicy(memberId, eventId);
     }
 
+    public void addEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy, boolean useOr) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+        UUID memberId = authenticateMember(token);
+        domainService.addEventPurchasePolicy(memberId, eventId, policy, useOr);
+    }
+
     // ── Event-scoped discount policy ────────────────────────────────
 
     public void setEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy) {
@@ -234,6 +241,13 @@ public class EventService {
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
         domainService.removeEventDiscountPolicy(memberId, eventId);
+    }
+
+    public void addEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy, boolean useStacking) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (policy == null) throw new IllegalArgumentException("policy is required");
+        UUID memberId = authenticateMember(token);
+        domainService.addEventDiscountPolicy(memberId, eventId, policy, useStacking);
     }
 
     // ── Read helpers (event policy queries) ─────────────────────────
