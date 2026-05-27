@@ -1,5 +1,8 @@
 package com.ticketing.domain.services;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -12,10 +15,10 @@ import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.EventCreationDomainService;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
@@ -32,7 +35,6 @@ public class EventDomainService {
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
     private final IOrderRepository orderRepository;
-    private final EventCreationDomainService eventCreationService;
 
     // Per-event lock so inventory edits on Event A don't block Event B.
     private final ConcurrentHashMap<UUID, Object> eventLocks = new ConcurrentHashMap<>();
@@ -45,7 +47,6 @@ public class EventDomainService {
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.orderRepository = orderRepository;
-        this.eventCreationService = new EventCreationDomainService();
     }
 
     private Object lockFor(UUID eventId) {
@@ -59,8 +60,32 @@ public class EventDomainService {
 
         log.info("Creating event: companyName={}, memberId={}, name={}",
                 company.getName(), memberId, request.name());
-        
-        Event event = eventCreationService.createEventFromRequest(company, request);
+
+        Event event = new Event(
+                UUID.randomUUID(),
+                company.getName(),
+                request.name(),
+                request.description(),
+                request.category(),
+                request.schedule(),
+                request.lockTimerDuration(),
+                new com.ticketing.domain.event.AlwaysAllowPolicy(),
+                new com.ticketing.domain.event.NoDiscountPolicy(),
+                request.saleMethod(),
+                request.lotteryWindow());
+
+        Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
+        for (CreateEventRequest.ZoneSpec spec : request.zones()) {
+            InventoryZone zone = buildZone(spec);
+            if (zoneIdsByName.put(spec.name(), zone.getId()) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate zone name in request: " + spec.name());
+            }
+            event.addZone(zone);
+        }
+
+        VenueMap venueMap = buildVenueMap(request.sectionToZoneName(), zoneIdsByName);
+        event.setVenueMap(venueMap);
 
         saveEvent(event);
         log.info("Event created: eventId={}, companyName={}, status=DRAFT",
@@ -325,6 +350,38 @@ public class EventDomainService {
 
     private boolean hasActiveReservations(UUID eventId) {
         return !orderRepository.findActiveByEventId(eventId).isEmpty();
+    }
+
+    private InventoryZone buildZone(CreateEventRequest.ZoneSpec spec) {
+        return switch (spec) {
+            case CreateEventRequest.GAZoneSpec ga -> InventoryZone.createGA(
+                    UUID.randomUUID(), ga.name(), ga.pricePerTicket(), ga.maxCapacity());
+            case CreateEventRequest.AssignedZoneSpec a -> {
+                InventoryZone zone = InventoryZone.createAssigned(
+                        UUID.randomUUID(), a.name(), a.pricePerTicket());
+                for (CreateEventRequest.SeatSpec seatSpec : a.seats()) {
+                    zone.addSeat(new Seat(UUID.randomUUID(),
+                            seatSpec.row(), seatSpec.seatNumber()));
+                }
+                yield zone;
+            }
+        };
+    }
+
+    private VenueMap buildVenueMap(Map<String, String> sectionToZoneName,
+                                   Map<String, UUID> zoneIdsByName) {
+        Map<String, UUID> sectionToZoneId = new HashMap<>(sectionToZoneName.size());
+        for (Map.Entry<String, String> e : sectionToZoneName.entrySet()) {
+            String zoneName = e.getValue();
+            UUID zoneId = zoneIdsByName.get(zoneName);
+            if (zoneId == null) {
+                throw new IllegalArgumentException(
+                        "Venue map section '" + e.getKey()
+                                + "' references unknown zone: " + zoneName);
+            }
+            sectionToZoneId.put(e.getKey(), zoneId);
+        }
+        return new VenueMap(sectionToZoneId);
     }
 
     private void saveEvent(Event event) {
