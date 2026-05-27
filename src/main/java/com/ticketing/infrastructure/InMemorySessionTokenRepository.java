@@ -7,8 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Repository;
 
-import com.ticketing.domain.auth.ISessionTokenRepository;
-import com.ticketing.domain.auth.SessionToken;
+import com.ticketing.application.auth.ISessionTokenRepository;
+import com.ticketing.application.auth.SessionToken;
 import com.ticketing.domain.exception.OptimisticLockException;
 
 

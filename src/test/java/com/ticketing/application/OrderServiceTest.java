@@ -31,7 +31,7 @@ import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.services.OrderTimeDomainService;
-import com.ticketing.domain.auth.SessionTokenData;
+import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;

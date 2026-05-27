@@ -36,7 +36,7 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.domain.auth.ISessionTokenRepository;
+import com.ticketing.application.auth.ISessionTokenRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;

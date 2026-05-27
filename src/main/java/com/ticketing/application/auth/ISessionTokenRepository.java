@@ -1,4 +1,4 @@
-package com.ticketing.domain.auth;
+package com.ticketing.application.auth;
 
 
 import java.util.Optional;
