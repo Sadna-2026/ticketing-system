@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.request.LoginRequest;
@@ -24,15 +25,19 @@ public class AuthPresenter {
 
     private static final String GUEST_ROLE = "Guest";
     private static final String MEMBER_ROLE = "Member";
+    private static final String ADMIN_ROLE = "Admin";
     private static final String START_GUEST_SESSION_MESSAGE = "Start a guest session before logging in or registering.";
-    private static final String ALREADY_MEMBER_SESSION_MESSAGE = "You are already logged in as a member. Log out before switching accounts.";
+    private static final String ALREADY_MEMBER_SESSION_MESSAGE = "You are already logged in. Log out before switching accounts.";
     private static final String NO_MEMBER_SESSION_MESSAGE = "No authenticated member session exists.";
+    private static final String NOT_AN_ADMIN_MESSAGE = "These credentials are not authorized for admin access.";
 
     private final MemberService memberService;
+    private final AdminService adminService;
     private final ISessionTokenService sessionTokenService;
 
-    public AuthPresenter(MemberService memberService, ISessionTokenService sessionTokenService) {
+    public AuthPresenter(MemberService memberService, AdminService adminService, ISessionTokenService sessionTokenService) {
         this.memberService = memberService;
+        this.adminService = adminService;
         this.sessionTokenService = sessionTokenService;
     }
 
@@ -65,10 +70,47 @@ public class AuthPresenter {
                 return AuthResult.failure(response.message());
             }
 
-            storeMemberSession(response.sessionToken(), response.member());
+            storeMemberSession(response.sessionToken(), response.member(), MEMBER_ROLE);
             return AuthResult.success(response.message());
         } catch (RuntimeException ex) {
             return safeFailure("Login failed. Please try again.", ex);
+        }
+    }
+
+    /**
+     * Logs in using the admin store. The returned session token carries the
+     * SYSTEM_ADMIN permission, which the UI uses to expose admin-only screens.
+     * If the issued token does not actually carry SYSTEM_ADMIN, the session is
+     * rolled back to a fresh guest session and the attempt is reported as
+     * "not authorized for admin access".
+     */
+    public AuthResult adminLogin(String username, String password) {
+        String guestToken = SessionContext.getSessionToken();
+        if (guestToken == null || guestToken.isBlank()) {
+            return AuthResult.failure(START_GUEST_SESSION_MESSAGE);
+        }
+        if (SessionContext.isLoggedInMember()) {
+            return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
+        }
+
+        try {
+            LoginResponse response = adminService.adminLogin(new LoginRequest(username, password), guestToken);
+            if (!response.success()) {
+                return AuthResult.failure(response.message());
+            }
+
+            storeMemberSession(response.sessionToken(), response.member(), ADMIN_ROLE);
+
+            if (!SessionContext.isSystemAdmin()) {
+                // Defensive: if for any reason the issued token did not carry the admin
+                // permission, do not leave the user with an over-privileged appearance.
+                rollbackToGuest();
+                return AuthResult.failure(NOT_AN_ADMIN_MESSAGE);
+            }
+
+            return AuthResult.success("Admin logged in successfully.");
+        } catch (RuntimeException ex) {
+            return safeFailure("Admin login failed. Please try again.", ex);
         }
     }
 
@@ -94,7 +136,7 @@ public class AuthPresenter {
                 return AuthResult.failure(response.message());
             }
 
-            storeMemberSession(response.sessionToken(), response.member());
+            storeMemberSession(response.sessionToken(), response.member(), MEMBER_ROLE);
             return AuthResult.success(response.message());
         } catch (RuntimeException ex) {
             return safeFailure("Registration failed. Please try again.", ex);
@@ -136,7 +178,7 @@ public class AuthPresenter {
         SessionContext.setPermissions(null);
     }
 
-    private void storeMemberSession(String memberToken, MemberDto member) {
+    private void storeMemberSession(String memberToken, MemberDto member, String roleLabel) {
         SessionContext.clear();
         SessionContext.setSessionToken(memberToken);
         SessionContext.setSessionId(extractSessionId(memberToken));
@@ -145,7 +187,23 @@ public class AuthPresenter {
             SessionContext.setMemberId(member.memberId());
             SessionContext.setUsername(member.username());
         }
-        SessionContext.setRole(MEMBER_ROLE);
+        SessionContext.setRole(roleLabel);
+    }
+
+    private void rollbackToGuest() {
+        String currentToken = SessionContext.getSessionToken();
+        if (currentToken != null && !currentToken.isBlank()) {
+            try {
+                sessionTokenService.revokeToken(currentToken);
+            } catch (RuntimeException ignored) {
+                // best-effort revocation; UI session is cleared regardless below.
+            }
+        }
+        try {
+            storeGuestSession(sessionTokenService.generateGuestToken());
+        } catch (RuntimeException ignored) {
+            SessionContext.clear();
+        }
     }
 
     private UUID extractSessionId(String token) {

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.request.LoginRequest;
@@ -42,12 +43,14 @@ class AuthPresenterTest {
     private MemberService memberService;
     private ISessionTokenService sessionTokenService;
     private AuthPresenter presenter;
+    AdminService adminService;
 
     @BeforeEach
     void setUp() {
         memberService = mock(MemberService.class);
         sessionTokenService = mock(ISessionTokenService.class);
-        presenter = new AuthPresenter(memberService, sessionTokenService);
+        adminService = mock(AdminService.class);
+        presenter = new AuthPresenter(memberService,adminService, sessionTokenService);
         installVaadinSession();
     }
 

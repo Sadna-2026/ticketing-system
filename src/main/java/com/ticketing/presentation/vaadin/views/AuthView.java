@@ -27,6 +27,7 @@ public class AuthView extends VerticalLayout {
     private final Span sessionStatus = new Span();
     private final HorizontalLayout guestActions;
     private final VerticalLayout loginForm;
+    private final VerticalLayout adminLoginForm;
     private final VerticalLayout registerForm;
     private final HorizontalLayout logoutActions;
 
@@ -34,6 +35,7 @@ public class AuthView extends VerticalLayout {
         this.presenter = presenter;
         this.guestActions = guestSection();
         this.loginForm = loginSection();
+        this.adminLoginForm = adminLoginSection();
         this.registerForm = registerSection();
         this.logoutActions = logoutSection();
 
@@ -42,10 +44,11 @@ public class AuthView extends VerticalLayout {
 
         add(
                 new H2("Authentication"),
-                new Paragraph("Start as a guest, then log in or register to continue as a member."),
+                new Paragraph("Start as a guest, then log in or register to continue as a member. Admins log in through the separate admin form."),
                 sessionStatus,
                 guestActions,
                 loginForm,
+                adminLoginForm,
                 registerForm,
                 logoutActions
         );
@@ -74,6 +77,26 @@ public class AuthView extends VerticalLayout {
 
         FormLayout form = new FormLayout(username, password);
         VerticalLayout layout = new VerticalLayout(new H3("Log in"), form, login);
+        layout.setPadding(false);
+        return layout;
+    }
+
+    private VerticalLayout adminLoginSection() {
+        TextField username = new TextField("Admin username");
+        PasswordField password = new PasswordField("Admin password");
+        Button login = new Button("Log in as admin", event -> {
+            handle(presenter.adminLogin(username.getValue(), password.getValue()));
+            refreshSessionStatus();
+            MainLayout.refreshCurrentNavigation();
+        });
+
+        FormLayout form = new FormLayout(username, password);
+        VerticalLayout layout = new VerticalLayout(
+                new H3("Admin login"),
+                new Paragraph("For platform administrators only. Regular members should use the member login above."),
+                form,
+                login
+        );
         layout.setPadding(false);
         return layout;
     }
@@ -127,6 +150,7 @@ public class AuthView extends VerticalLayout {
         var session = presenter.currentSessionState();
         guestActions.setVisible(session.noSession());
         loginForm.setVisible(session.guest());
+        adminLoginForm.setVisible(session.guest());
         registerForm.setVisible(session.guest());
         logoutActions.setVisible(session.loggedInMember());
     }

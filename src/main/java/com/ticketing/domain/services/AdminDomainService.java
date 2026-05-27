@@ -11,14 +11,20 @@ import org.springframework.stereotype.Service;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.infrastructure.PasswordEncryptionUtils;
+import com.ticketing.domain.member.request.*;
+import com.ticketing.domain.member.response.*;
+
 
 @Service
 public class AdminDomainService {
@@ -31,7 +37,9 @@ public class AdminDomainService {
     private final ISessionTokenService sessionTokenService;
     private final IAdminRepository adminRepository;
     private final IOrderRepository orderRepository;
+    private final PasswordEncryptionUtils passwordEncryptionUtils = new PasswordEncryptionUtils();
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AdminDomainService(
             IMemberRepository memberRepository,
             ICompanyRepository companyRepository,
@@ -47,6 +55,87 @@ public class AdminDomainService {
         this.sessionTokenService = sessionTokenService;
         this.adminRepository = adminRepository;
         this.orderRepository = orderRepository;
+    }
+
+    /**
+     * Creates and persists a new system administrator.
+     * The raw password is BCrypt-hashed before being stored on the Admin aggregate;
+     * the plaintext is never persisted.
+     *
+     * @return true if a new admin was created, false if one with that username already exists.
+     */
+    public boolean registerAdmin(UUID adminId, String username, String email, String password) {
+        if (adminId == null) {
+            throw new IllegalArgumentException("adminId is required");
+        }
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("username is required");
+        }
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("email is required");
+        }
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("password is required");
+        }
+
+        String normalizedUsername = username.trim();
+        if (adminRepository.existsByUsername(normalizedUsername)) {
+            log.info("Admin registration skipped: username already exists ({})", normalizedUsername);
+            return false;
+        }
+
+        String hashedPassword = passwordEncryptionUtils.hashPassword(password);
+        Admin admin = new Admin(adminId, normalizedUsername, email.trim().toLowerCase(), hashedPassword);
+        adminRepository.save(admin);
+        log.info("System admin registered: id={}, username={}", adminId, normalizedUsername);
+        return true;
+    }
+
+    /**
+     * Authenticates an admin and upgrades the supplied guest session into an
+     * admin-bearing session token. The returned token carries the SYSTEM_ADMIN
+     * permission and the admin's UUID in the memberId claim.
+     */
+    public LoginResponse adminLogin(LoginRequest request, String guestToken) {
+        if (request == null
+                || request.username() == null || request.username().isBlank()
+                || request.password() == null || request.password().isBlank()) {
+            log.warn("Admin login failed: invalid credentials format");
+            return LoginResponse.failure("Invalid credentials.");
+        }
+        if (guestToken == null || guestToken.isBlank() || !sessionTokenService.isValid(guestToken)) {
+            log.warn("Admin login failed: invalid session token");
+            return LoginResponse.failure("Invalid session token.");
+        }
+        if (sessionTokenService.extractMemberId(guestToken) != null) {
+            log.warn("Admin login failed: session already member-bound");
+            return LoginResponse.failure("Only guests can log in.");
+        }
+
+        String username = request.username().trim();
+        Admin admin = adminRepository.findByUsername(username).orElse(null);
+        if (admin == null) {
+            log.warn("Admin login failed: unknown admin username ({})", username);
+            return LoginResponse.failure("Invalid username or password.");
+        }
+        if (!passwordEncryptionUtils.matches(request.password(), admin.getEncryptedPassword())) {
+            log.warn("Admin login failed: wrong password for username ({})", username);
+            return LoginResponse.failure("Invalid username or password.");
+        }
+
+        UUID sessionId = sessionTokenService.extractSessionId(guestToken);
+        String adminToken = sessionTokenService.generateMemberToken(
+                sessionId,
+                admin.getId(),
+                Set.of(ADMIN_PERMISSION)
+        );
+
+        // The UI MemberDto carries the admin's identity so the session shows the username.
+        // Phone number and date of birth are not part of the Admin aggregate, so they are null.
+        MemberDto adminAsDto = new MemberDto(admin.getId(), admin.getUsername(), admin.getEmail(), null, null);
+
+        log.info("Admin logged in: id={}, username={}", admin.getId(), admin.getUsername());
+        return LoginResponse.success(adminAsDto, adminToken);
     }
 
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {

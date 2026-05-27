@@ -30,7 +30,7 @@ class InMemoryOptimisticLockingTest {
     public void GivenTwoAdminSnapshots_WhenSecondSaveIsStale_ThenOptimisticLockException() {
         InMemoryAdminRepository repository = new InMemoryAdminRepository();
         UUID id = UUID.randomUUID();
-        repository.save(new Admin(id, "root", "root@example.com"));
+        repository.save(new Admin(id, "root", "root@example.com", "encPw"));
 
         Admin first = repository.findById(id).orElseThrow();
         Admin second = repository.findById(id).orElseThrow();

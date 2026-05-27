@@ -16,6 +16,8 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.services.PlatformInitializationService;
+import com.ticketing.application.services.AdminService;
+
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
@@ -73,6 +75,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     private final ICompanyRepository companyRepository;
     private final IEventRepository eventRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
+        private final AdminService adminService;
 
     public DevSeedDataInitializer(
             @Value("${ticketing.startup.initialize-platform:true}") boolean initializePlatform,
@@ -82,7 +85,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
             IAdminRepository adminRepository,
             ICompanyRepository companyRepository,
             IEventRepository eventRepository,
-            PasswordEncryptionUtils passwordEncryptionUtils
+            PasswordEncryptionUtils passwordEncryptionUtils,    
+            AdminService adminService
     ) {
         this.initializePlatform = initializePlatform;
         this.seedEnabled = seedEnabled;
@@ -92,6 +96,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         this.companyRepository = companyRepository;
         this.eventRepository = eventRepository;
         this.passwordEncryptionUtils = passwordEncryptionUtils;
+        this.adminService = adminService;
+
     }
 
     @Override
@@ -127,9 +133,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         saveMemberIfMissing(SECOND_OWNER_ID, "owner2", "owner2@ticketing.local", "owner2123",
                 "050-000-0007", LocalDate.of(1984, 4, 12));
 
-        if (adminRepository.findByUsername("admin").isEmpty()) {
-            adminRepository.save(new Admin(ADMIN_ID, "admin", "admin@ticketing.local"));
-        }
+        adminService.registerAdmin(ADMIN_ID, "admin", "admin@ticketing.local", "admin123");
     }
 
     private void saveMemberIfMissing(
