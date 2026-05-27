@@ -125,6 +125,22 @@ public class ActiveOrder{
         return items.stream().mapToInt(OrderItem::getQuantity).sum();
     }
 
+    /**
+     * Returns a lightweight snapshot that reports the ticket count as if
+     * additional tickets were already added. Used for early policy validation
+     * before actually locking inventory.
+     */
+    public ActiveOrder simulateWithAdditionalTickets(int additionalCount) {
+        ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        for (OrderItem item : items) {
+            simulated.items.add(item);
+        }
+        if (additionalCount > 0) {
+            simulated.items.add(OrderItem.forGA(UUID.randomUUID(), UUID.randomUUID(), additionalCount, BigDecimal.ZERO));
+        }
+        return simulated;
+    }
+
     public void expire() {
         if (status == OrderStatus.COMPLETED) {
             throw new IllegalStateException("Cannot expire a completed order");

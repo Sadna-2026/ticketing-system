@@ -93,7 +93,7 @@ public class OrderServiceTest {
                 "01234567890123456789012345678901".getBytes(StandardCharsets.UTF_8));
         sessionService = new SessionTokenService(secret, 120, new InMemorySessionTokenRepository());
 
-        TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock);
+        TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock);
         OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
         orderService = new OrderService(sessionService, ticketReservationService, orderCheckoutService, null, orderTimeDomainService, null);
@@ -288,7 +288,7 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenPurchasePolicyRejects_WhenCheckout_ThenOrderRemainsActiveAndPaymentNotCharged() {
+    void GivenPurchasePolicyRejects_WhenAddingTickets_ThenReservationBlockedAndPaymentNotCharged() {
         UUID policyEventId = UUID.randomUUID();
         UUID policyZoneId = UUID.randomUUID();
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
@@ -299,13 +299,11 @@ public class OrderServiceTest {
         event.publish();
         eventRepo.save(event);
 
-        UUID orderId = orderService.createOrder(guestToken, policyEventId);
-        orderService.addGATicketsToOrder(guestToken, policyEventId, policyZoneId, 1);
+        orderService.createOrder(guestToken, policyEventId);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.addGATicketsToOrder(guestToken, policyEventId, policyZoneId, 1));
 
-        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
         assertEquals(0, paymentGateway.chargeCalls);
     }
 
@@ -550,7 +548,7 @@ public class OrderServiceTest {
         primaryGateway.failIssue = true; // Primary fails
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
 
-        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
         OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
@@ -574,7 +572,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
         secondaryGateway.failIssue = true;
 
-        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
         OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
@@ -599,7 +597,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
         primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success
 
-        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway), clock);
         OrderService partialService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
@@ -689,7 +687,7 @@ public class OrderServiceTest {
         primaryPayment.failCharges = true;
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
 
-        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
         OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
@@ -711,7 +709,7 @@ public class OrderServiceTest {
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
         secondaryPayment.failCharges = true;
 
-        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock);
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
         OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
