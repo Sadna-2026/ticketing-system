@@ -65,6 +65,7 @@ class MemberServiceTest {
     @DisplayName("Login")
     class Login {
 
+        private InMemoryEventRepository eventRepository;
         private IMemberRepository memberRepository;
         private InMemoryOrderRepository orderRepository;
         private SessionTokenService sessionTokenService;
@@ -90,7 +91,7 @@ class MemberServiceTest {
                     sessionTokenService
             );
 
-            InMemoryEventRepository eventRepository = new InMemoryEventRepository();
+            eventRepository = new InMemoryEventRepository();
             TestClock clock = new TestClock(Instant.parse("2026-06-01T10:00:00Z"));
             TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepository, eventRepository, clock);
             OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepository, eventRepository, null, List.of(), List.of(), clock);
@@ -161,6 +162,22 @@ class MemberServiceTest {
             UUID sessionId = sessionTokenService.extractSessionId(guestToken);
             UUID orderId = UUID.randomUUID();
             UUID eventId = UUID.randomUUID();
+            com.ticketing.domain.event.Event event = new com.ticketing.domain.event.Event(
+                    eventId,
+                    "Test Company",
+                    "Test Event",
+                    "desc",
+                    com.ticketing.domain.event.EventCategory.CONCERT,
+                    new com.ticketing.domain.event.EventSchedule(
+                            Instant.parse("2026-07-01T20:00:00Z"),
+                            Instant.parse("2026-07-01T23:00:00Z"),
+                            Instant.parse("2026-07-01T19:00:00Z")
+                    ),
+                    new com.ticketing.domain.event.LockTimerDuration(java.time.Duration.ofMinutes(15))
+            );
+            event.addZone(com.ticketing.domain.event.InventoryZone.createGA(UUID.randomUUID(), "Zone", new java.math.BigDecimal("10.00"), 100));
+            event.publish();
+            ((InMemoryEventRepository) eventRepository).save(event);
             orderRepository.save(new ActiveOrder(orderId, sessionId, eventId, Instant.parse("2026-06-01T10:00:00Z")));
 
             LoginResponse response = memberService.login(new LoginRequest("tamar", "123456"), guestToken);
@@ -169,7 +186,7 @@ class MemberServiceTest {
             assertEquals(sessionId, sessionTokenService.extractSessionId(response.sessionToken()));
             assertTrue(orderRepository.findActiveBySessionId(sessionId).isPresent());
 
-            ActiveOrderDto activeOrder = orderService.getActiveOrder(response.sessionToken(), orderId);
+            ActiveOrderDto activeOrder = orderService.getActiveOrder(response.sessionToken());
             assertEquals(orderId, activeOrder.getId());
             assertEquals(sessionId, activeOrder.getSessionId());
             assertEquals(eventId, activeOrder.getEventId());

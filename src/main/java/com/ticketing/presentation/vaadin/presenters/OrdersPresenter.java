@@ -38,37 +38,17 @@ public class OrdersPresenter {
         this.eventService = eventService;
     }
 
-    public OrderResult createOrder(UUID eventId) {
-        if (eventId == null) {
-            return OrderResult.failure("Enter an event ID before creating an order.");
-        }
-
+    public OrderResult loadCurrentOrder() {
         String token = sessionToken();
         if (token == null) {
             return OrderResult.failure(NO_SESSION_MESSAGE);
         }
 
         try {
-            UUID orderId = orderService.createOrder(token, eventId);
-            ActiveOrderDto order = orderService.getActiveOrder(token, orderId);
-            return OrderResult.success("Active order created.", order.getId(), order);
-        } catch (RuntimeException ex) {
-            return OrderResult.failure(userMessage(ex, CREATE_FAILURE_MESSAGE));
-        }
-    }
-
-    public OrderResult loadActiveOrder(UUID orderId) {
-        if (orderId == null) {
-            return OrderResult.failure("Enter an order ID before loading an order.");
-        }
-
-        String token = sessionToken();
-        if (token == null) {
-            return OrderResult.failure(NO_SESSION_MESSAGE);
-        }
-
-        try {
-            ActiveOrderDto order = orderService.getActiveOrder(token, orderId);
+            ActiveOrderDto order = orderService.getActiveOrder(token);
+            if (order == null) {
+                return OrderResult.success("No active order found.", null, null);
+            }
             return OrderResult.success("Active order loaded.", order.getId(), order);
         } catch (RuntimeException ex) {
             return OrderResult.failure(userMessage(ex, LOAD_FAILURE_MESSAGE));
@@ -90,9 +70,9 @@ public class OrdersPresenter {
         }
     }
 
-    public OrderMutationResult addGATickets(UUID orderId, UUID zoneId, int quantity) {
-        if (orderId == null) {
-            return OrderMutationResult.failure("Create or load an active order before adding tickets.");
+    public OrderMutationResult addGATickets(UUID eventId, UUID zoneId, int quantity) {
+        if (eventId == null) {
+            return OrderMutationResult.failure("Enter an event ID before adding tickets.");
         }
         if (zoneId == null) {
             return OrderMutationResult.failure("Select a GA zone before adding tickets.");
@@ -107,17 +87,17 @@ public class OrdersPresenter {
         }
 
         try {
-            UUID itemId = orderService.addGATicketsToOrder(token, orderId, zoneId, quantity);
-            ActiveOrderDto order = orderService.getActiveOrder(token, orderId);
+            UUID itemId = orderService.addGATicketsToOrder(token, eventId, zoneId, quantity);
+            ActiveOrderDto order = orderService.getActiveOrder(token);
             return OrderMutationResult.success("GA tickets added.", itemId, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, ADD_GA_FAILURE_MESSAGE));
         }
     }
 
-    public OrderMutationResult addAssignedSeat(UUID orderId, UUID zoneId, UUID seatId) {
-        if (orderId == null) {
-            return OrderMutationResult.failure("Create or load an active order before adding tickets.");
+    public OrderMutationResult addAssignedSeat(UUID eventId, UUID zoneId, UUID seatId) {
+        if (eventId == null) {
+            return OrderMutationResult.failure("Enter an event ID before adding tickets.");
         }
         if (zoneId == null || seatId == null) {
             return OrderMutationResult.failure("Select a zone and seat before adding an assigned seat.");
@@ -129,18 +109,15 @@ public class OrdersPresenter {
         }
 
         try {
-            UUID itemId = orderService.addSeatToOrder(token, orderId, zoneId, seatId);
-            ActiveOrderDto order = orderService.getActiveOrder(token, orderId);
+            UUID itemId = orderService.addSeatToOrder(token, eventId, zoneId, seatId);
+            ActiveOrderDto order = orderService.getActiveOrder(token);
             return OrderMutationResult.success("Assigned seat added.", itemId, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, ADD_SEAT_FAILURE_MESSAGE));
         }
     }
 
-    public OrderMutationResult removeItem(UUID orderId, UUID itemId) {
-        if (orderId == null) {
-            return OrderMutationResult.failure("Create or load an active order before removing items.");
-        }
+    public OrderMutationResult removeItem(UUID itemId) {
         if (itemId == null) {
             return OrderMutationResult.failure("Select an order item before removing it.");
         }
@@ -151,18 +128,15 @@ public class OrdersPresenter {
         }
 
         try {
-            orderService.removeItemFromOrder(token, orderId, itemId);
-            ActiveOrderDto order = orderService.getActiveOrder(token, orderId);
+            orderService.removeItemFromOrder(token, itemId);
+            ActiveOrderDto order = orderService.getActiveOrder(token);
             return OrderMutationResult.success("Order item removed.", itemId, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, REMOVE_FAILURE_MESSAGE));
         }
     }
 
-    public OrderMutationResult updateGAQuantity(UUID orderId, UUID zoneId, int newQuantity) {
-        if (orderId == null) {
-            return OrderMutationResult.failure("Create or load an active order before updating quantities.");
-        }
+    public OrderMutationResult updateGAQuantity(UUID zoneId, int newQuantity) {
         if (zoneId == null) {
             return OrderMutationResult.failure("Select a GA order item before updating quantity.");
         }
@@ -176,26 +150,22 @@ public class OrdersPresenter {
         }
 
         try {
-            orderService.updateGAQuantity(token, orderId, zoneId, newQuantity);
-            ActiveOrderDto order = orderService.getActiveOrder(token, orderId);
+            orderService.updateGAQuantity(token, zoneId, newQuantity);
+            ActiveOrderDto order = orderService.getActiveOrder(token);
             return OrderMutationResult.success("GA quantity updated.", null, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, UPDATE_FAILURE_MESSAGE));
         }
     }
 
-    public CheckoutResult checkout(UUID orderId, String couponCode) {
-        if (orderId == null) {
-            return CheckoutResult.failure("Create or load an active order before checkout.");
-        }
-
+    public CheckoutResult checkout(String couponCode) {
         String token = sessionToken();
         if (token == null) {
             return CheckoutResult.failure(NO_SESSION_MESSAGE);
         }
 
         try {
-            UUID purchaseId = orderService.checkout(token, orderId, blankToNull(couponCode));
+            UUID purchaseId = orderService.checkout(token, blankToNull(couponCode));
             return CheckoutResult.success("Checkout complete.", purchaseId);
         } catch (RuntimeException ex) {
             return CheckoutResult.failure(userMessage(ex, CHECKOUT_FAILURE_MESSAGE));

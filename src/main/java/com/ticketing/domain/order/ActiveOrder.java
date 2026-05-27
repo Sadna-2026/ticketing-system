@@ -13,8 +13,8 @@ import com.ticketing.application.dto.OrderItemDto;
 public class ActiveOrder{
 
     private final UUID id;
-    private final UUID sessionId;
-    private final UUID memberId;
+    private UUID sessionId;
+    private UUID memberId;
     private final UUID eventId;
     private final Instant createdAt;
     private OrderStatus status;
@@ -55,6 +55,16 @@ public class ActiveOrder{
         this.status = OrderStatus.ACTIVE;
         this.items = new ArrayList<>();
         this.version = 0;
+    }
+
+    public void updateSessionId(UUID newSessionId) {
+        if (newSessionId == null) throw new IllegalArgumentException("Session ID is required");
+        this.sessionId = newSessionId;
+    }
+
+    public void updateMemberId(UUID newMemberId) {
+        if (newMemberId == null) throw new IllegalArgumentException("Member ID is required");
+        this.memberId = newMemberId;
     }
 
     public UUID getId() { return id; }

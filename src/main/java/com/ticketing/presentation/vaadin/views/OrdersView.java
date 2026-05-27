@@ -48,7 +48,6 @@ public class OrdersView extends VerticalLayout {
 
     private final Span sessionStatus = new Span();
     private final TextField eventId = new TextField("Event ID");
-    private final TextField orderId = new TextField("Order ID");
     private final Span inventoryStatus = new Span("Load an event inventory map before adding tickets.");
     private final VerticalLayout inventoryDisplay = new VerticalLayout();
     private final Span orderActionStatus = new Span("Order actions will report here.");
@@ -95,11 +94,11 @@ public class OrdersView extends VerticalLayout {
         );
         refreshSessionStatus();
         refreshOrderDisplay();
+        loadActiveOrder();
     }
 
     private void configureFields() {
         eventId.setPlaceholder("Published event UUID");
-        orderId.setPlaceholder("Active order UUID");
         couponCode.setPlaceholder("Optional");
         newGAQuantity.setMin(1);
         newGAQuantity.setValue(1);
@@ -142,17 +141,13 @@ public class OrdersView extends VerticalLayout {
     }
 
     private VerticalLayout orderSetupSection() {
-        Button createOrder = new Button("Create active order", event -> createOrder());
         Button loadInventory = new Button("Load event inventory", event -> loadEventInventory());
-        Button loadOrder = new Button("Load active order", event -> loadActiveOrder());
-
-        FormLayout form = new FormLayout(eventId, orderId);
+        FormLayout form = new FormLayout(eventId);
         form.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 1),
                 new FormLayout.ResponsiveStep("720px", 2)
         );
-
-        HorizontalLayout actions = new HorizontalLayout(createOrder, loadInventory, loadOrder);
+        HorizontalLayout actions = new HorizontalLayout(loadInventory);
         actions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(new H3("Start or load"), form, actions);
@@ -202,22 +197,8 @@ public class OrdersView extends VerticalLayout {
         return section;
     }
 
-    private void createOrder() {
-        UUID parsedEventId = parseUuid(eventId, "event", orderActionStatus);
-        if (parsedEventId == null) {
-            return;
-        }
-
-        handleOrderResult(presenter.createOrder(parsedEventId));
-    }
-
     private void loadActiveOrder() {
-        UUID parsedOrderId = parseUuid(orderId, "order", orderActionStatus);
-        if (parsedOrderId == null) {
-            return;
-        }
-
-        handleOrderResult(presenter.loadActiveOrder(parsedOrderId));
+        handleOrderResult(presenter.loadCurrentOrder());
     }
 
     private void loadEventInventory() {
@@ -230,28 +211,32 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void addGATickets(UUID zoneId, Integer quantity) {
-        OrderMutationResult result = presenter.addGATickets(currentOrderId(), zoneId, quantity == null ? 0 : quantity);
+        UUID parsedEventId = parseUuid(eventId, "event", orderActionStatus);
+        if (parsedEventId == null) return;
+        OrderMutationResult result = presenter.addGATickets(parsedEventId, zoneId, quantity == null ? 0 : quantity);
         handleMutationResult(result);
     }
 
     private void addAssignedSeat(UUID zoneId, UUID seatId) {
-        OrderMutationResult result = presenter.addAssignedSeat(currentOrderId(), zoneId, seatId);
+        UUID parsedEventId = parseUuid(eventId, "event", orderActionStatus);
+        if (parsedEventId == null) return;
+        OrderMutationResult result = presenter.addAssignedSeat(parsedEventId, zoneId, seatId);
         handleMutationResult(result);
     }
 
     private void removeSelectedItem() {
         UUID itemId = selectedOrderItem == null ? null : selectedOrderItem.getId();
-        handleMutationResult(presenter.removeItem(currentOrderId(), itemId));
+        handleMutationResult(presenter.removeItem(itemId));
     }
 
     private void updateSelectedGAQuantity() {
         UUID zoneId = selectedOrderItem == null ? null : selectedOrderItem.getZoneId();
         Integer quantity = newGAQuantity.getValue();
-        handleMutationResult(presenter.updateGAQuantity(currentOrderId(), zoneId, quantity == null ? 0 : quantity));
+        handleMutationResult(presenter.updateGAQuantity(zoneId, quantity == null ? 0 : quantity));
     }
 
     private void checkout() {
-        CheckoutResult result = presenter.checkout(currentOrderId(), couponCode.getValue());
+        CheckoutResult result = presenter.checkout(couponCode.getValue());
         if (!result.success()) {
             checkoutStatus.setText(result.message());
             orderActionStatus.setText(result.message());
@@ -262,7 +247,6 @@ public class OrdersView extends VerticalLayout {
         checkoutStatus.setText(result.message() + " Purchase ID: " + result.purchaseId());
         orderActionStatus.setText(result.message());
         currentOrder = null;
-        orderId.clear();
         refreshOrderDisplay();
         UiMessages.success(result.message());
     }
@@ -292,9 +276,6 @@ public class OrdersView extends VerticalLayout {
         }
 
         currentOrder = result.order();
-        if (result.orderId() != null) {
-            orderId.setValue(result.orderId().toString());
-        }
         if (currentOrder != null) {
             eventId.setValue(currentOrder.getEventId().toString());
         }
