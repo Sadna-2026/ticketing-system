@@ -312,15 +312,7 @@ public class CompanyService {
     private void authorizePolicy(UUID memberId, String companyName) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("Member not found: " + memberId));
-        StaffAppointment appt = member.getStaffAppointment(companyName);
-        if (appt == null) {
-            throw new SecurityException("Caller is not a staff member of company: " + companyName);
-        }
-        boolean allowed = appt.isOwner()
-                || (appt.isManager() && appt.hasPermission(ManagerPermission.POLICY_MODIFICATION));
-        if (!allowed) {
-            throw new SecurityException("Insufficient permissions: POLICY_MODIFICATION required");
-        }
+        member.authorizePolicyModification(companyName);
     }
 
     private Company loadCompany(String companyName) {
