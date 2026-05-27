@@ -214,9 +214,9 @@ class OrdersPresenterTest {
         OrderMutationResult removeResult = presenter.removeItem(orderId, itemId);
         OrderMutationResult updateResult = presenter.updateGAQuantity(orderId, zoneId, 4);
 
-        assertTrue(removeResult.success());
+        assertTrue(removeResult.success(), removeResult.message());
         assertEquals("Order item removed.", removeResult.message());
-        assertTrue(updateResult.success());
+        assertTrue(updateResult.success(), updateResult.message());
         assertEquals("GA quantity updated.", updateResult.message());
         verify(orderService).removeItemFromOrder("guest-token", orderId, itemId);
         verify(orderService).updateGAQuantity("guest-token", orderId, zoneId, 4);
