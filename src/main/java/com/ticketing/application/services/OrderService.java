@@ -3,94 +3,39 @@ package com.ticketing.application.services;
 import java.util.List;
 import java.util.UUID;
 
-import com.ticketing.application.ISystemClock;
 import com.ticketing.application.SelectionRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
-import com.ticketing.domain.event.IEventRepository;
-import com.ticketing.domain.gateway.IPaymentGateway;
-import com.ticketing.domain.gateway.ITicketSupplyGateway;
-import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.IOrderRepository;
-import com.ticketing.domain.queue.IQueueRepository;
-import com.ticketing.domain.services.OrderDomainService;
+import com.ticketing.domain.order.OrderCheckoutDomainService;
+import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.domain.services.QueueDomainService;
-import com.ticketing.infrastructure.gateway.StubPaymentGateway;
-import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
 
 @org.springframework.stereotype.Service
 public class OrderService {
     private final ISessionTokenService sessionTokenService;
-    private final OrderDomainService domainService;
+    private final TicketReservationDomainService ticketReservationService;
+    private final OrderCheckoutDomainService orderCheckoutService;
     private final QueueDomainService queueDomainService;
     private final INotificationService notificationService;
 
-    // Backward-compatible constructors
-
-    public OrderService(IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService,
-                        IEventRepository eventRepository,
-                        ISystemClock systemClock) {
-        this(sessionTokenService,
-             new OrderDomainService(orderRepository, eventRepository, null, systemClock,
-                     List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway())),
-             null, null);
-    }
-
-    public OrderService(IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService,
-                        IEventRepository eventRepository,
-                        ISystemClock systemClock,
-                        IMemberRepository memberRepository,
-                        List<IPaymentGateway> paymentGateways,
-                        ITicketSupplyGateway ticketSupplyGateway) {
-        this(sessionTokenService,
-             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
-                     paymentGateways, List.of(ticketSupplyGateway)),
-             null, null);
-    }
-
-    public OrderService(IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService,
-                        IEventRepository eventRepository,
-                        ISystemClock systemClock,
-                        IMemberRepository memberRepository,
-                        List<IPaymentGateway> paymentGateways,
-                        List<ITicketSupplyGateway> ticketSupplyGateways) {
-        this(sessionTokenService,
-             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
-                     paymentGateways, ticketSupplyGateways),
-             null, null);
-    }
-
-    public OrderService(IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService,
-                        IEventRepository eventRepository,
-                        ISystemClock systemClock,
-                        IMemberRepository memberRepository,
-                        IQueueRepository queueRepository,
-                        List<IPaymentGateway> paymentGateways,
-                        List<ITicketSupplyGateway> ticketSupplyGateways) {
-        this(sessionTokenService,
-             new OrderDomainService(orderRepository, eventRepository, memberRepository, systemClock,
-                     paymentGateways, ticketSupplyGateways),
-             new QueueDomainService(queueRepository, eventRepository, systemClock), null);
-    }
-
     @org.springframework.beans.factory.annotation.Autowired
     public OrderService(ISessionTokenService sessionTokenService,
-                        OrderDomainService domainService,
+                        TicketReservationDomainService ticketReservationService,
+                        OrderCheckoutDomainService orderCheckoutService,
                         QueueDomainService queueDomainService,
                         @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         if (sessionTokenService == null) throw new IllegalArgumentException("sessionTokenService is required");
-        if (domainService == null) throw new IllegalArgumentException("domainService is required");
+        if (ticketReservationService == null) throw new IllegalArgumentException("ticketReservationService is required");
+        if (orderCheckoutService == null) throw new IllegalArgumentException("orderCheckoutService is required");
 
         this.sessionTokenService = sessionTokenService;
-        this.domainService = domainService;
+        this.ticketReservationService = ticketReservationService;
+        this.orderCheckoutService = orderCheckoutService;
         this.queueDomainService = queueDomainService;
         this.notificationService = notificationService;
     }
@@ -99,19 +44,19 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        return domainService.createOrder(sessionId, memberId, eventId);
+        return ticketReservationService.createOrder(sessionId, memberId, eventId);
     }
 
     public UUID addSeatToOrder(String token, UUID orderId, UUID zoneId, UUID seatId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        return domainService.addSeatToOrder(sessionId, orderId, zoneId, seatId);
+        return ticketReservationService.addSeatToOrder(sessionId, orderId, zoneId, seatId);
     }
 
     public UUID addGATicketsToOrder(String token, UUID orderId, UUID zoneId, int quantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        return domainService.addGATicketsToOrder(sessionId, orderId, zoneId, quantity);
+        return ticketReservationService.addGATicketsToOrder(sessionId, orderId, zoneId, quantity);
     }
 
     public List<UUID> addSelectionToOrder(String token, UUID orderId, SelectionRequest request) {
@@ -127,14 +72,14 @@ public class OrderService {
                         .map(g -> new com.ticketing.domain.order.SelectionRequest.GAPick(g.zoneId(), g.quantity()))
                         .toList()
         );
-        return domainService.addSelectionToOrder(sessionId, orderId, domainRequest);
+        return ticketReservationService.addSelectionToOrder(sessionId, orderId, domainRequest);
     }
 
     public UUID checkout(String token, UUID orderId, String couponCode) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        UUID purchaseId = domainService.checkout(sessionId, orderId, memberId, couponCode);
+        UUID purchaseId = orderCheckoutService.checkout(sessionId, orderId, memberId, couponCode);
         if (notificationService != null && memberId != null) {
             notificationService.notify(memberId.toString(), "Your checkout was completed successfully.");
         }
@@ -142,7 +87,7 @@ public class OrderService {
     }
 
     public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
-        List<CompletedPurchase> purchases = domainService.refundEventPurchases(eventId);
+        List<CompletedPurchase> purchases = orderCheckoutService.refundEventPurchases(eventId);
         if (notificationService != null) {
             for (CompletedPurchase purchase : purchases) {
                 if (purchase.memberId() != null) {
@@ -156,25 +101,25 @@ public class OrderService {
     public void removeItemFromOrder(String token, UUID orderId, UUID itemId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        domainService.removeItemFromOrder(sessionId, orderId, itemId);
+        ticketReservationService.removeItemFromOrder(sessionId, orderId, itemId);
     }
 
     public void updateGAQuantity(String token, UUID orderId, UUID zoneId, int newQuantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        domainService.updateGAQuantity(sessionId, orderId, zoneId, newQuantity);
+        ticketReservationService.updateGAQuantity(sessionId, orderId, zoneId, newQuantity);
     }
 
     public void cancelOrder(String token, UUID orderId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        domainService.cancelOrder(sessionId, orderId);
+        ticketReservationService.cancelOrder(sessionId, orderId);
     }
 
     public ActiveOrderDto getActiveOrder(String token, UUID orderId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        com.ticketing.domain.order.ActiveOrder order = domainService.getActiveOrder(sessionId, orderId);
+        ActiveOrder order = ticketReservationService.getActiveOrder(sessionId, orderId);
         return new ActiveOrderDto(
                 order.getId(),
                 order.getSessionId(),
@@ -193,7 +138,7 @@ public class OrderService {
         if (memberId == null) {
             throw new SecurityException("User must be logged in to view purchase history");
         }
-        List<CompletedPurchase> purchases = domainService.getPurchaseHistory(memberId);
+        List<CompletedPurchase> purchases = orderCheckoutService.getPurchaseHistory(memberId);
         List<PurchaseRecordDTO> result = new java.util.ArrayList<>();
         for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));

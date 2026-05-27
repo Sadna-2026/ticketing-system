@@ -25,7 +25,7 @@ import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.lottery.LotteryRegistrationDomainService;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.services.EventDomainService;
-import com.ticketing.domain.services.OrderDomainService;
+import com.ticketing.domain.order.OrderCheckoutDomainService;
 
 @org.springframework.stereotype.Service
 public class EventService {
@@ -37,7 +37,7 @@ public class EventService {
     private final Clock clock;
     
     private final LotteryRegistrationDomainService lotteryRegistrationService;
-    private final OrderDomainService orderDomainService;
+    private final OrderCheckoutDomainService orderCheckoutService;
     private final EventDomainService domainService;
     private final LotteryDrawDomainService lotteryDrawService;
     private final INotificationService notificationService;
@@ -54,7 +54,7 @@ public class EventService {
         this.eventRepository = eventRepository;
         this.sessionTokenService = sessionTokenService;
         this.clock = clock;
-        this.orderDomainService = null; // Tests relying on this will need to be updated if they trigger cancellations
+        this.orderCheckoutService = null;
         this.domainService = new EventDomainService(eventRepository, companyRepository, memberRepository, orderRepository);
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
         this.lotteryDrawService = null;
@@ -96,7 +96,7 @@ public class EventService {
                         ISessionTokenService sessionTokenService,
                         ILotteryRepository lotteryRepository,
                         Clock clock,
-                        com.ticketing.domain.services.OrderDomainService orderDomainService,
+                        OrderCheckoutDomainService orderCheckoutService,
                         EventDomainService domainService,
                         com.ticketing.domain.order.IOrderRepository orderRepository,
                         com.ticketing.application.ISystemClock systemClock,
@@ -104,7 +104,7 @@ public class EventService {
         this.eventRepository = eventRepository;
         this.sessionTokenService = sessionTokenService;
         this.clock = clock;
-        this.orderDomainService = orderDomainService;
+        this.orderCheckoutService = orderCheckoutService;
         this.domainService = domainService;
         this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
         this.lotteryDrawService = new com.ticketing.domain.lottery.LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new java.util.Random());
@@ -162,8 +162,8 @@ public class EventService {
         }
         UUID memberId = authenticateMember(token);
         domainService.cancelEvent(memberId, eventId);
-        if (orderDomainService != null) {
-            List<CompletedPurchase> refunds = orderDomainService.refundEventPurchases(eventId);
+        if (orderCheckoutService != null) {
+            List<CompletedPurchase> refunds = orderCheckoutService.refundEventPurchases(eventId);
             if (notificationService != null) {
                 for (CompletedPurchase p : refunds) {
                     if (p.memberId() != null) {

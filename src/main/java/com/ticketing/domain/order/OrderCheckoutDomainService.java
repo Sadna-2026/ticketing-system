@@ -12,6 +12,7 @@ import java.time.LocalDate;
 
 import com.ticketing.application.ISystemClock;
 import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.PurchaseContext;
 import com.ticketing.domain.gateway.CustomerInfo;
@@ -22,21 +23,88 @@ import com.ticketing.domain.gateway.PaymentResult;
 import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.gateway.SupplyResult;
 import com.ticketing.domain.gateway.TicketRequest;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
 
+@org.springframework.stereotype.Service
 public class OrderCheckoutDomainService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderCheckoutDomainService.class);
 
+    private final IOrderRepository orderRepository;
+    private final IEventRepository eventRepository;
+    private final IMemberRepository memberRepository;
     private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketSupplyGateway> ticketSupplyGateways;
     private final ISystemClock systemClock;
+    private final TicketReservationDomainService ticketReservationService;
 
-    public OrderCheckoutDomainService(List<IPaymentGateway> paymentGateways,
+    public OrderCheckoutDomainService(IOrderRepository orderRepository,
+                                      IEventRepository eventRepository,
+                                      IMemberRepository memberRepository,
+                                      List<IPaymentGateway> paymentGateways,
                                       List<ITicketSupplyGateway> ticketSupplyGateways,
-                                      ISystemClock systemClock) {
+                                      ISystemClock systemClock,
+                                      TicketReservationDomainService ticketReservationService) {
+        this.orderRepository = orderRepository;
+        this.eventRepository = eventRepository;
+        this.memberRepository = memberRepository;
         this.paymentGateways = paymentGateways;
         this.ticketSupplyGateways = ticketSupplyGateways;
         this.systemClock = systemClock;
+        this.ticketReservationService = ticketReservationService;
+    }
+
+    public UUID checkout(UUID sessionId, UUID orderId, UUID memberId, String couponCode) {
+        ActiveOrder order = ticketReservationService.findActiveOrder(orderId);
+        validateOrderOwnership(sessionId, order);
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+
+        if (order.getItems().isEmpty()) {
+            log.warn("Failed to checkout order {}: no items in order", order.getId());
+            throw new IllegalStateException("Cannot checkout an empty order");
+        }
+
+        BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
+        LocalDate buyerDob = memberId != null && memberRepository != null
+                ? memberRepository.findById(memberId).map(Member::getDateOfBirth).orElse(null)
+                : null;
+
+        CompletedPurchase purchase;
+        try {
+            purchase = processCheckout(order, event, buyerContact, couponCode, buyerDob);
+        } catch (IllegalStateException e) {
+            ticketReservationService.saveOrder(order);
+            if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
+                ticketReservationService.releaseAllInventory(event, order);
+                ticketReservationService.saveEvent(event);
+            }
+            log.warn("Failed to checkout order {}: {}", order.getId(), e.getMessage());
+            throw e;
+        }
+
+        ticketReservationService.sellAllInventory(event, order);
+        ticketReservationService.saveEvent(event);
+        ticketReservationService.saveOrder(order);
+        orderRepository.save(purchase);
+
+        ticketReservationService.checkAndPublishSoldOut(event);
+        log.info("Checkout complete: orderId={}, purchaseId={}, amount={}",
+                order.getId(), purchase.purchaseId(), purchase.amount());
+        return purchase.purchaseId();
+    }
+
+    public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
+        for (CompletedPurchase purchase : purchases) {
+            refundPayment(purchase.transactionId(), purchase.amount());
+        }
+        return purchases;
+    }
+
+    public List<CompletedPurchase> getPurchaseHistory(UUID memberId) {
+        return orderRepository.findCompletedByMemberId(memberId);
     }
 
     public CompletedPurchase processCheckout(ActiveOrder order, Event event,
@@ -91,6 +159,41 @@ public class OrderCheckoutDomainService {
             log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
             refund != null ? refund.errorMessage() : "All gateways failed");
         }
+    }
+
+    // ── Private helpers ──
+
+    private void validateOrderOwnership(UUID sessionId, ActiveOrder order) {
+        if (!order.getSessionId().equals(sessionId)) {
+            throw new IllegalStateException("Order does not belong to this session");
+        }
+    }
+
+    private void validateOrderNotExpired(ActiveOrder order, Event event) {
+        if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
+            log.warn("Order has expired: orderId={}, eventId={}", order.getId(), event.getId());
+            throw new IllegalStateException("Order has expired");
+        }
+    }
+
+    private Event findEvent(UUID eventId) {
+        return eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
+    }
+
+    private BuyerContactSnapshot buyerContactFor(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return BuyerContactSnapshot.empty();
+        }
+        return memberRepository.findById(memberId)
+                .map(member -> new BuyerContactSnapshot(
+                        member.getEmail(),
+                        member.getUsername(),
+                        member.getPhoneNumber()))
+                .orElseGet(BuyerContactSnapshot::empty);
     }
 
     private PaymentResult chargePayment(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact, BigDecimal finalAmount) {
