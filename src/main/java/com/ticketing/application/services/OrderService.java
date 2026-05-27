@@ -79,7 +79,15 @@ public class OrderService {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        UUID purchaseId = orderCheckoutService.checkout(sessionId, orderId, memberId, couponCode);
+        UUID purchaseId;
+        try {
+            purchaseId = orderCheckoutService.checkout(sessionId, orderId, memberId, couponCode);
+        } catch (IllegalStateException e) {
+            if (notificationService != null && memberId != null) {
+                notificationService.notify(memberId.toString(), "Checkout failed: " + e.getMessage());
+            }
+            throw e;
+        }
         if (notificationService != null && memberId != null) {
             notificationService.notify(memberId.toString(), "Your checkout was completed successfully.");
         }

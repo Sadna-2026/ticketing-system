@@ -1,6 +1,7 @@
 package com.ticketing.domain.order;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -8,13 +9,13 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.LocalDate;
-
 import com.ticketing.application.ISystemClock;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.PurchaseContext;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.CustomerInfo;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
@@ -37,26 +38,23 @@ public class OrderCheckoutDomainService {
     private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketSupplyGateway> ticketSupplyGateways;
     private final ISystemClock systemClock;
-    private final TicketReservationDomainService ticketReservationService;
 
     public OrderCheckoutDomainService(IOrderRepository orderRepository,
                                       IEventRepository eventRepository,
                                       IMemberRepository memberRepository,
                                       List<IPaymentGateway> paymentGateways,
                                       List<ITicketSupplyGateway> ticketSupplyGateways,
-                                      ISystemClock systemClock,
-                                      TicketReservationDomainService ticketReservationService) {
+                                      ISystemClock systemClock) {
         this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
         this.memberRepository = memberRepository;
         this.paymentGateways = paymentGateways;
         this.ticketSupplyGateways = ticketSupplyGateways;
         this.systemClock = systemClock;
-        this.ticketReservationService = ticketReservationService;
     }
 
     public UUID checkout(UUID sessionId, UUID orderId, UUID memberId, String couponCode) {
-        ActiveOrder order = ticketReservationService.findActiveOrder(orderId);
+        ActiveOrder order = findActiveOrder(orderId);
         validateOrderOwnership(sessionId, order);
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
@@ -67,29 +65,27 @@ public class OrderCheckoutDomainService {
         }
 
         BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
-        LocalDate buyerDob = memberId != null && memberRepository != null
-                ? memberRepository.findById(memberId).map(Member::getDateOfBirth).orElse(null)
-                : null;
+        LocalDate buyerDob = getBuyerDateOfBirth(memberId);
 
         CompletedPurchase purchase;
         try {
             purchase = processCheckout(order, event, buyerContact, couponCode, buyerDob);
         } catch (IllegalStateException e) {
-            ticketReservationService.saveOrder(order);
+            saveOrder(order);
             if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
-                ticketReservationService.releaseAllInventory(event, order);
-                ticketReservationService.saveEvent(event);
+                releaseAllInventory(event, order);
+                saveEvent(event);
             }
             log.warn("Failed to checkout order {}: {}", order.getId(), e.getMessage());
             throw e;
         }
 
-        ticketReservationService.sellAllInventory(event, order);
-        ticketReservationService.saveEvent(event);
-        ticketReservationService.saveOrder(order);
+        sellAllInventory(event, order);
+        saveEvent(event);
+        saveOrder(order);
         orderRepository.save(purchase);
 
-        ticketReservationService.checkAndPublishSoldOut(event);
+        checkAndPublishSoldOut(event);
         log.info("Checkout complete: orderId={}, purchaseId={}, amount={}",
                 order.getId(), purchase.purchaseId(), purchase.amount());
         return purchase.purchaseId();
@@ -107,7 +103,9 @@ public class OrderCheckoutDomainService {
         return orderRepository.findCompletedByMemberId(memberId);
     }
 
-    public CompletedPurchase processCheckout(ActiveOrder order, Event event,
+    // ── Checkout internals ──
+
+    private CompletedPurchase processCheckout(ActiveOrder order, Event event,
                                                BuyerContactSnapshot buyerContact, String couponCode,
                                                LocalDate buyerDateOfBirth) {
         validatePurchasePolicy(event, order, order.getMemberId(), buyerDateOfBirth);
@@ -161,7 +159,81 @@ public class OrderCheckoutDomainService {
         }
     }
 
+    // ── Inventory operations ──
+
+    private void sellAllInventory(Event event, ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            InventoryZone zone = event.findZone(item.getZoneId());
+            if (item.isAssignedSeat()) {
+                zone.sellSeat(item.getSeatId());
+            } else {
+                zone.sellGA(item.getQuantity());
+            }
+        }
+    }
+
+    private void releaseAllInventory(Event event, ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            try {
+                InventoryZone zone = event.findZone(item.getZoneId());
+                if (item.isAssignedSeat()) {
+                    zone.releaseSeat(item.getSeatId());
+                } else {
+                    zone.releaseGA(item.getQuantity());
+                }
+            } catch (Exception e) {
+                log.error("Failed to release inventory for item: {}", item.getId(), e);
+            }
+        }
+    }
+
+    private void checkAndPublishSoldOut(Event event) {
+        if (!event.hasAvailableTickets() && event.isPublished()) {
+            event.markSoldOut();
+            saveEvent(event);
+        }
+    }
+
     // ── Private helpers ──
+
+    private ActiveOrder findActiveOrder(UUID orderId) {
+        ActiveOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> {
+                    log.warn("Order not found: orderId={}", orderId);
+                    return new IllegalArgumentException("Order not found: " + orderId);
+                });
+        if (!order.isActive()) {
+            log.warn("Order is not active: orderId={}", orderId);
+            throw new IllegalStateException("Order is not active (status: " + order.getStatus() + ")");
+        }
+        return order;
+    }
+
+    private Event findEvent(UUID eventId) {
+        return eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
+    }
+
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict during checkout: eventId={}", event.getId());
+            throw new IllegalStateException("Event inventory changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveOrder(ActiveOrder order) {
+        try {
+            orderRepository.save(order);
+        } catch (OptimisticLockException ex) {
+            log.warn("Order save conflict: orderId={}", order.getId());
+            throw new IllegalStateException("Order changed concurrently. Please retry.", ex);
+        }
+    }
 
     private void validateOrderOwnership(UUID sessionId, ActiveOrder order) {
         if (!order.getSessionId().equals(sessionId)) {
@@ -176,14 +248,6 @@ public class OrderCheckoutDomainService {
         }
     }
 
-    private Event findEvent(UUID eventId) {
-        return eventRepository.findById(eventId)
-                .orElseThrow(() -> {
-                    log.warn("Event not found: eventId={}", eventId);
-                    return new IllegalArgumentException("Event not found: " + eventId);
-                });
-    }
-
     private BuyerContactSnapshot buyerContactFor(UUID memberId) {
         if (memberId == null || memberRepository == null) {
             return BuyerContactSnapshot.empty();
@@ -194,6 +258,13 @@ public class OrderCheckoutDomainService {
                         member.getUsername(),
                         member.getPhoneNumber()))
                 .orElseGet(BuyerContactSnapshot::empty);
+    }
+
+    private LocalDate getBuyerDateOfBirth(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return null;
+        }
+        return memberRepository.findById(memberId).map(Member::getDateOfBirth).orElse(null);
     }
 
     private PaymentResult chargePayment(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact, BigDecimal finalAmount) {
