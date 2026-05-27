@@ -39,6 +39,7 @@ import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.Query;
+import com.vaadin.flow.router.BeforeEnterEvent;
 
 @DisplayName("AdminView")
 class AdminViewTest {
@@ -97,6 +98,19 @@ class AdminViewTest {
         assertFalse(hasVisibleButton(view, "Suspend member"));
         assertFalse(hasVisibleButton(view, "Check policy backend support"));
         assertTrue(hasText(view, "Log in with system admin permissions to use admin actions."));
+    }
+
+    @Test
+    void GivenRegularMember_WhenEnteringAdminRoute_ThenUserIsReroutedToHome() {
+        AdminPresenter presenter = mock(AdminPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
+        AdminView view = new AdminView(presenter);
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event).rerouteTo(HomeView.class);
     }
 
     @Test

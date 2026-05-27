@@ -19,8 +19,19 @@ As per V1 specifications (#UC-I.5 and #UC-I.6), full real-time and delayed notif
 Per V1 spec (UC-II.4.3 / UC-C.2), the **full purchase/discount policy edit API is deferred to V2**. V1 ships only:
 *   `IPurchasePolicy` + `IDiscountPolicy` abstractions (delivered by INF-9).
 *   `AlwaysAllowPolicy` (purchase) and `NoDiscountPolicy` (discount) defaults wired into every `Event` at construction time.
-*   No setter on `Event` for the policy fields — callers cannot edit them in V1.
+*   In V2, policy management services now exist in the application/domain layers, while Vaadin policy CRUD screens remain intentionally scoped and incrementally exposed.
 The V0 acceptance tests for policy editing (`SuccessfulDefaultPolicyEdit`, etc.) are present in the test suite under `@Disabled("V1 spec defers UC-II.4.3 — full policy edit lands in V2")`.
+
+## Vaadin permission and error-message behavior (V2)
+
+- Route-level Spring Security remains permissive for local UI development (`SecurityConfig`), but sensitive Vaadin views should enforce access semantics in the presentation layer.
+- `MainLayout` navigation is role-aware:
+  - guests: no `Company` / no `Admin`,
+  - members: `Company` visible,
+  - system admins: `Company` and `Admin` visible.
+- `AdminView` now reroutes non-admin sessions away from `/admin` and shows a user-facing permission message.
+- `CompanyView` keeps public lookup/map features visible while member-only actions stay hidden for guest sessions.
+- For UUID-based actions, Vaadin views should surface explicit validation feedback (`Enter a valid ... ID.`) before service calls whenever possible.
 
 ## Service Architecture (Application vs Domain)
 Following strict Domain-Driven Design (DDD) principles, the architecture enforces a strict separation between Application Services and Domain Services:

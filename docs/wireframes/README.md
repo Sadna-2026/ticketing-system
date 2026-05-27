@@ -23,6 +23,9 @@ Each screen lives here as a `.png` or `.pdf` file alongside this README.
 
 The Vaadin `/notifications` route added in V2 is intentionally outside the V1 wireframe set above. It presents a member notification panel with refresh/clear actions and real-time toast delivery for connected users.
 
+For permission/error-message acceptance coverage tied to V2 UI hardening, see:
+- `docs/qa/issue-193-ui-acceptance-matrix.md`
+
 ## What each screen needs to show
 
 Detailed layout briefs — use these as the spec when drawing.

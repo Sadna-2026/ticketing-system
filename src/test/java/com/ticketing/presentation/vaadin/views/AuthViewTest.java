@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +16,7 @@ import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.textfield.PasswordField;
+import com.vaadin.flow.component.textfield.TextField;
 
 @DisplayName("AuthView")
 class AuthViewTest {
@@ -73,6 +75,53 @@ class AuthViewTest {
         assertTrue(hasVisibleButton(view, "Register"));
     }
 
+    @Test
+    void GivenGuestSession_WhenLoginFails_ThenGuestActionsRemainVisibleWithFailureMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest", "Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest(), guest());
+        when(presenter.login("alice", "wrong-pass"))
+                .thenReturn(AuthResult.failure("Invalid username or password."));
+        AuthView view = new AuthView(presenter);
+        TextField username = findTextField(view, "Username");
+        PasswordField password = findPasswordField(view, "Password");
+        assertTrue(username != null);
+        assertTrue(password != null);
+        username.setValue("alice");
+        password.setValue("wrong-pass");
+
+        clickButton(view, "Log in");
+
+        verify(presenter).login("alice", "wrong-pass");
+        assertTrue(hasVisibleButton(view, "Log in"));
+        assertTrue(hasVisibleButton(view, "Register"));
+        assertFalse(hasVisibleButton(view, "Log out"));
+    }
+
+    @Test
+    void GivenGuestSession_WhenLoginSucceeds_ThenOnlyLogoutIsVisible() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest", "Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(guest(), member());
+        when(presenter.login("alice", "correct-pass"))
+                .thenReturn(AuthResult.success("Login successful."));
+        AuthView view = new AuthView(presenter);
+        TextField username = findTextField(view, "Username");
+        PasswordField password = findPasswordField(view, "Password");
+        assertTrue(username != null);
+        assertTrue(password != null);
+        username.setValue("alice");
+        password.setValue("correct-pass");
+
+        clickButton(view, "Log in");
+
+        verify(presenter).login("alice", "correct-pass");
+        assertFalse(hasVisibleButton(view, "Enter as guest"));
+        assertFalse(hasVisibleButton(view, "Log in"));
+        assertFalse(hasVisibleButton(view, "Register"));
+        assertTrue(hasVisibleButton(view, "Log out"));
+    }
+
     private AuthPresenter mockPresenter(SessionContext.UiState state) {
         AuthPresenter presenter = mock(AuthPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn(labelFor(state));
@@ -118,6 +167,28 @@ class AuthViewTest {
         return current + root.getChildren()
                 .mapToLong(child -> countComponents(child, type))
                 .sum();
+    }
+
+    private TextField findTextField(Component root, String label) {
+        if (root instanceof TextField field && label.equals(field.getLabel())) {
+            return field;
+        }
+        return root.getChildren()
+                .map(child -> findTextField(child, label))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private PasswordField findPasswordField(Component root, String label) {
+        if (root instanceof PasswordField field && label.equals(field.getLabel())) {
+            return field;
+        }
+        return root.getChildren()
+                .map(child -> findPasswordField(child, label))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
     private static SessionContext.UiState none() {

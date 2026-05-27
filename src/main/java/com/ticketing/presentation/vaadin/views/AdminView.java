@@ -30,12 +30,14 @@ import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
 @Route(value = "admin", layout = MainLayout.class)
 @PageTitle("Admin")
-public class AdminView extends VerticalLayout {
+public class AdminView extends VerticalLayout implements BeforeEnterObserver {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm")
@@ -86,6 +88,14 @@ public class AdminView extends VerticalLayout {
                 adminActionsSection()
         );
         refreshSessionStatus();
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        if (!presenter.currentSessionState().systemAdmin()) {
+            UiMessages.error("System admin permissions are required to access the Admin page.");
+            event.rerouteTo(HomeView.class);
+        }
     }
 
     private void configureFields() {

@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -277,6 +278,34 @@ class CompanyViewTest {
 
         verify(presenter).publishEvent(eventId);
         assertTrue(hasText(view, "Insufficient permissions to publish events"));
+    }
+
+    @Test
+    void GivenInvalidEventId_WhenPublishingEvent_ThenValidationMessageIsShownBeforePresenterCall() {
+        CompanyPresenter presenter = mockPresenter();
+        CompanyView view = new CompanyView(presenter);
+        findTextField(view, "Event ID").setValue("invalid-uuid");
+
+        clickButton(view, "Publish event");
+
+        assertTrue(hasText(view, "Enter a valid event ID."));
+        verify(presenter).currentSessionLabel();
+        verify(presenter).currentSessionState();
+        verifyNoMoreInteractions(presenter);
+    }
+
+    @Test
+    void GivenInvalidTargetMemberId_WhenOfferingRole_ThenValidationMessageIsShownBeforePresenterCall() {
+        CompanyPresenter presenter = mockPresenter();
+        CompanyView view = new CompanyView(presenter);
+        findTextField(view, "Target member ID").setValue("invalid-uuid");
+
+        clickButton(view, "Offer role appointment");
+
+        assertTrue(hasText(view, "Enter a valid target member ID."));
+        verify(presenter).currentSessionLabel();
+        verify(presenter).currentSessionState();
+        verifyNoMoreInteractions(presenter);
     }
 
     private CompanyPresenter mockPresenter() {

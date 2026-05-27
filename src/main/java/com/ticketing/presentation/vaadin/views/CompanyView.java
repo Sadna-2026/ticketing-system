@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
@@ -262,22 +263,24 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout personnelSection() {
-        Button offerRole = new Button("Offer role appointment", event -> handlePersonnelResult(presenter.offerRoleAppointment(
+        Button offerRole = new Button("Offer role appointment", event -> runPersonnelAction(() -> presenter.offerRoleAppointment(
                 personnelCompanyName.getValue(),
-                parseUuid(targetMemberId, "target member"),
+                requiredUuid(targetMemberId, "target member"),
                 role.getValue(),
                 permissions.getSelectedItems()
         )));
-        Button acceptOffer = new Button("Accept role offer", event -> handlePersonnelResult(
-                presenter.respondToRoleOffer(parseUuid(offerId, "role offer"), true)));
-        Button rejectOffer = new Button("Reject role offer", event -> handlePersonnelResult(
-                presenter.respondToRoleOffer(parseUuid(offerId, "role offer"), false)));
-        Button revoke = new Button("Revoke personnel", event -> handlePersonnelResult(presenter.revokePersonnel(
+        Button acceptOffer = new Button("Accept role offer",
+                event -> runPersonnelAction(() -> presenter.respondToRoleOffer(requiredUuid(offerId, "role offer"), true)));
+        Button rejectOffer = new Button("Reject role offer",
+                event -> runPersonnelAction(() -> presenter.respondToRoleOffer(requiredUuid(offerId, "role offer"), false)));
+        Button revoke = new Button("Revoke personnel", event -> runPersonnelAction(() -> presenter.revokePersonnel(
                 personnelCompanyName.getValue(),
-                parseUuid(targetMemberId, "target member")
+                requiredUuid(targetMemberId, "target member")
         )));
-        Button changePermissions = new Button("Change manager permissions", event -> handlePersonnelResult(
-                presenter.changeManagerPermissions(personnelCompanyName.getValue(), parseUuid(targetMemberId, "target member"),
+        Button changePermissions = new Button("Change manager permissions",
+                event -> runPersonnelAction(() -> presenter.changeManagerPermissions(
+                        personnelCompanyName.getValue(),
+                        requiredUuid(targetMemberId, "target member"),
                         permissions.getSelectedItems())));
         Button loadOrgChart = new Button("Load organization chart", event -> loadOrganizationChart());
 
@@ -296,8 +299,10 @@ public class CompanyView extends VerticalLayout {
     private VerticalLayout eventManagementSection() {
         Button createEvent = new Button("Create company event", event -> createEvent());
         Button editEvent = new Button("Edit event details", event -> editEvent());
-        Button publishEvent = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(parseUuid(eventId, "event"))));
-        Button cancelEvent = new Button("Cancel event", event -> handleEventAction(presenter.cancelEvent(parseUuid(eventId, "event"))));
+        Button publishEvent = new Button("Publish event",
+                event -> runEventAction(() -> presenter.publishEvent(requiredUuid(eventId, "event"))));
+        Button cancelEvent = new Button("Cancel event",
+                event -> runEventAction(() -> presenter.cancelEvent(requiredUuid(eventId, "event"))));
 
         FormLayout createForm = new FormLayout(
                 eventCompanyName,
@@ -329,30 +334,30 @@ public class CompanyView extends VerticalLayout {
 
     private VerticalLayout inventorySection() {
         Button loadMap = new Button("Load event map", event -> loadEventMap());
-        Button addSeat = new Button("Add seat", event -> handleInventoryResult(presenter.addSeat(
-                parseUuid(inventoryEventId, "event"),
-                parseUuid(inventoryZoneId, "zone"),
+        Button addSeat = new Button("Add seat", event -> runInventoryAction(() -> presenter.addSeat(
+                requiredUuid(inventoryEventId, "event"),
+                requiredUuid(inventoryZoneId, "zone"),
                 seatRow.getValue(),
                 seatNumber.getValue()
         )));
-        Button removeSeat = new Button("Remove seat", event -> handleInventoryResult(presenter.removeSeat(
-                parseUuid(inventoryEventId, "event"),
-                parseUuid(inventoryZoneId, "zone"),
-                parseUuid(seatId, "seat")
+        Button removeSeat = new Button("Remove seat", event -> runInventoryAction(() -> presenter.removeSeat(
+                requiredUuid(inventoryEventId, "event"),
+                requiredUuid(inventoryZoneId, "zone"),
+                requiredUuid(seatId, "seat")
         )));
-        Button increaseCapacity = new Button("Increase GA capacity", event -> handleInventoryResult(presenter.increaseGACapacity(
-                parseUuid(inventoryEventId, "event"),
-                parseUuid(inventoryZoneId, "zone"),
+        Button increaseCapacity = new Button("Increase GA capacity", event -> runInventoryAction(() -> presenter.increaseGACapacity(
+                requiredUuid(inventoryEventId, "event"),
+                requiredUuid(inventoryZoneId, "zone"),
                 capacityDelta.getValue()
         )));
-        Button decreaseCapacity = new Button("Decrease GA capacity", event -> handleInventoryResult(presenter.decreaseGACapacity(
-                parseUuid(inventoryEventId, "event"),
-                parseUuid(inventoryZoneId, "zone"),
+        Button decreaseCapacity = new Button("Decrease GA capacity", event -> runInventoryAction(() -> presenter.decreaseGACapacity(
+                requiredUuid(inventoryEventId, "event"),
+                requiredUuid(inventoryZoneId, "zone"),
                 capacityDelta.getValue()
         )));
-        Button setPrice = new Button("Set zone price", event -> handleInventoryResult(presenter.setZonePrice(
-                parseUuid(inventoryEventId, "event"),
-                parseUuid(inventoryZoneId, "zone"),
+        Button setPrice = new Button("Set zone price", event -> runInventoryAction(() -> presenter.setZonePrice(
+                requiredUuid(inventoryEventId, "event"),
+                requiredUuid(inventoryZoneId, "zone"),
                 zonePriceUpdate.getValue()
         )));
 
@@ -486,20 +491,34 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void editEvent() {
-        EventActionResult result = presenter.editEvent(
-                parseUuid(eventId, "event"),
-                newEventName.getValue(),
-                newEventDescription.getValue(),
-                newArtist.getValue(),
-                instant(newStartTime),
-                instant(newEndTime),
-                instant(newDoorsOpenTime)
-        );
-        handleEventAction(result);
+        try {
+            EventActionResult result = presenter.editEvent(
+                    requiredUuid(eventId, "event"),
+                    newEventName.getValue(),
+                    newEventDescription.getValue(),
+                    newArtist.getValue(),
+                    instant(newStartTime),
+                    instant(newEndTime),
+                    instant(newDoorsOpenTime)
+            );
+            handleEventAction(result);
+        } catch (IllegalArgumentException ex) {
+            eventStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+        }
     }
 
     private void loadEventMap() {
-        EventMapResult result = presenter.loadEventMap(parseUuid(inventoryEventId, "event"));
+        EventMapResult result;
+        try {
+            result = presenter.loadEventMap(requiredUuid(inventoryEventId, "event"));
+        } catch (IllegalArgumentException ex) {
+            inventoryStatus.setText(ex.getMessage());
+            eventMapDisplay.removeAll();
+            eventMapDisplay.add(new Paragraph(ex.getMessage()));
+            UiMessages.error(ex.getMessage());
+            return;
+        }
         eventMapDisplay.removeAll();
         if (!result.success()) {
             inventoryStatus.setText(result.message());
@@ -558,6 +577,15 @@ public class CompanyView extends VerticalLayout {
         notify(result);
     }
 
+    private void runPersonnelAction(Supplier<ActionResult> action) {
+        try {
+            handlePersonnelResult(action.get());
+        } catch (IllegalArgumentException ex) {
+            personnelStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+        }
+    }
+
     private void handleEventAction(ActionResult result) {
         eventStatus.setText(result.message());
         notify(result);
@@ -582,6 +610,24 @@ public class CompanyView extends VerticalLayout {
     private void handleInventoryResult(ActionResult result) {
         inventoryStatus.setText(result.message());
         notify(result);
+    }
+
+    private void runInventoryAction(Supplier<ActionResult> action) {
+        try {
+            handleInventoryResult(action.get());
+        } catch (IllegalArgumentException ex) {
+            inventoryStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+        }
+    }
+
+    private void runEventAction(Supplier<ActionResult> action) {
+        try {
+            handleEventAction(action.get());
+        } catch (IllegalArgumentException ex) {
+            eventStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+        }
     }
 
     private void handleLifecycleResult(ActionResult result) {
@@ -643,15 +689,15 @@ public class CompanyView extends VerticalLayout {
         return details;
     }
 
-    private UUID parseUuid(TextField field, String label) {
+    private UUID requiredUuid(TextField field, String label) {
         String value = field.getValue();
         if (value == null || value.isBlank()) {
-            return null;
+            throw new IllegalArgumentException("Enter a valid " + label + " ID.");
         }
         try {
             return UUID.fromString(value.trim());
         } catch (IllegalArgumentException ex) {
-            return null;
+            throw new IllegalArgumentException("Enter a valid " + label + " ID.");
         }
     }
 
