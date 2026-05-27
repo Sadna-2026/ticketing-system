@@ -57,7 +57,7 @@ class OrdersViewTest {
         assertTrue(hasVisibleButton(view, "Checkout"));
         assertFalse(hasVisibleButton(view, "Load purchase history"));
         assertTrue(hasText(view, "Log in as a member to view purchase history."));
-        assertTrue(hasText(view, "Browse events and add tickets on the Events page."));
+        assertTrue(hasText(view, "Review your active order, update quantities, checkout, and view purchase history. Browse events and add tickets on the Events page."));
         assertNotNull(findTextField(view, "Coupon code"));
         assertNotNull(findIntegerField(view, "New GA quantity"));
         assertEquals(2, findGrids(view).size());
