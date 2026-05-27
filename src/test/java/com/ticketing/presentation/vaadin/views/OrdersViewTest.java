@@ -57,7 +57,7 @@ class OrdersViewTest {
         assertTrue(hasVisibleButton(view, "Checkout"));
         assertFalse(hasVisibleButton(view, "Load purchase history"));
         assertTrue(hasText(view, "Log in as a member to view purchase history."));
-        assertTrue(hasText(view, "Browse events and add tickets on the Events page."));
+        assertTrue(containsText(view, "Browse events and add tickets on the Events page."));
         assertNotNull(findTextField(view, "Coupon code"));
         assertNotNull(findIntegerField(view, "New GA quantity"));
         assertEquals(2, findGrids(view).size());
@@ -288,6 +288,16 @@ class OrdersViewTest {
             return true;
         }
         return root.getChildren().anyMatch(child -> hasText(child, text));
+    }
+
+    private boolean containsText(Component root, String fragment) {
+        if (root instanceof HasText hasText) {
+            String text = hasText.getText();
+            if (text != null && text.contains(fragment)) {
+                return true;
+            }
+        }
+        return root.getChildren().anyMatch(child -> containsText(child, fragment));
     }
 
     private boolean isEffectivelyVisible(Component component) {

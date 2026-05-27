@@ -1,6 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
@@ -122,7 +123,8 @@ class EventsViewTest {
         assertTrue(hasText(view, "Company: Acme"));
         assertTrue(hasText(view, "Available: 10"));
         assertTrue(hasButton(view, "Add A-1"));
-        assertTrue(hasText(view, "A-2 unavailable"));
+        assertTrue(hasButton(view, "Add A-2"));
+        assertFalse(isButtonEnabled(view, "Add A-2"));
     }
 
     @Test
@@ -146,9 +148,8 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
         clickButton(view, "Add GA tickets");
-        clickButton(view, "Add A-1");
-
         assertTrue(hasText(view, "GA tickets added."));
+        clickButton(view, "Add A-1");
         assertTrue(hasText(view, "Assigned seat added."));
         verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 1);
         verify(ordersPresenter).addAssignedSeat(event.id(), seatZoneId, seatId);
@@ -226,6 +227,11 @@ class EventsViewTest {
                 .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean isButtonEnabled(Component root, String text) {
+        Button button = findButton(root, text);
+        return button != null && button.isEnabled();
     }
 
     private boolean hasText(Component root, String text) {

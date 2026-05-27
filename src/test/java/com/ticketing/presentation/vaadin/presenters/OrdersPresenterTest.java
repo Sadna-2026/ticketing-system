@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doAnswer;
@@ -52,6 +53,7 @@ class OrdersPresenterTest {
     void setUp() {
         orderService = mock(OrderService.class);
         eventService = mock(EventService.class);
+        when(eventService.getEventMap(any())).thenReturn(Optional.empty());
         presenter = new OrdersPresenter(orderService, eventService);
         installVaadinSession();
     }
