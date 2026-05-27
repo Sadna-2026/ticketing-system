@@ -24,3 +24,9 @@ jobs:
 
     - name: Build and run all tests
       run: mvn clean verify
+
+    - name: Upload JaCoCo Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: jacoco-report
+        path: target/site/jacoco/

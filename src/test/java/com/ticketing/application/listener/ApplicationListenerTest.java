@@ -562,11 +562,13 @@ class ApplicationListenerTest {
 
         private IMemberRepository memberRepository;
         private RoleAppointmentOfferRequestedHandler handler;
+        private INotificationService notificationService;
 
         @BeforeEach
-        public void setUp() {
+        void setUp() {
             memberRepository = mock(IMemberRepository.class);
-            handler = new RoleAppointmentOfferRequestedHandler(memberRepository);
+            notificationService = mock(INotificationService.class);
+            handler = new RoleAppointmentOfferRequestedHandler(memberRepository, notificationService);
         }
 
         @Test

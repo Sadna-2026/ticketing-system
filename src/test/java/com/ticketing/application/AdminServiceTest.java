@@ -1,5 +1,6 @@
 package com.ticketing.application;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
@@ -35,6 +36,7 @@ import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 public class AdminServiceTest {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminService.class);
     private IMemberRepository memberRepository;
     private ICompanyRepository companyRepository;
     private ISessionTokenService sessionTokenService;
@@ -130,6 +132,7 @@ public class AdminServiceTest {
         companyRepository.save(company);
 
         target.addStaffAppointment("SoleComp", new StaffAppointment("SoleComp", targetId, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+        memberRepository.save(target);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
             adminService.removeMember(adminToken, targetId);
@@ -152,7 +155,7 @@ public class AdminServiceTest {
         memberRepository.saveIfUsernameAndEmailAvailable(target);
 
         // Target is an admin
-        com.ticketing.domain.admin.Admin targetAdmin = new com.ticketing.domain.admin.Admin(targetId, "target", "target@example.com");
+        com.ticketing.domain.admin.Admin targetAdmin = new com.ticketing.domain.admin.Admin(targetId, "target", "target@example.com", "encPw");
         when(adminRepository.findById(targetId)).thenReturn(java.util.Optional.of(targetAdmin));
         // And they are the last one
         when(adminRepository.findAll()).thenReturn(java.util.List.of(targetAdmin));

@@ -3,11 +3,11 @@ package com.ticketing.application;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-import com.ticketing.application.services.EventSearchService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
 
 /**
- * Search criteria for {@link EventSearchService#searchEvents}.
+ * Search criteria for {@link EventService#searchEvents}.
  * Every field is optional — null means "do not filter on this field".
  * Filters combine with AND semantics.
  */

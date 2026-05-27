@@ -18,10 +18,17 @@ public final class ActiveOrderDto {
     private final String status;
     private final List<OrderItemDto> items;
     private final BigDecimal totalPrice;
+    private final String eventName;
 
     public ActiveOrderDto(UUID id, UUID sessionId, UUID memberId, UUID eventId,
                           Instant createdAt, String status, List<OrderItemDto> items,
                           BigDecimal totalPrice) {
+        this(id, sessionId, memberId, eventId, createdAt, status, items, totalPrice, null);
+    }
+
+    public ActiveOrderDto(UUID id, UUID sessionId, UUID memberId, UUID eventId,
+                          Instant createdAt, String status, List<OrderItemDto> items,
+                          BigDecimal totalPrice, String eventName) {
         this.id = id;
         this.sessionId = sessionId;
         this.memberId = memberId;
@@ -30,6 +37,7 @@ public final class ActiveOrderDto {
         this.status = status;
         this.items = items;
         this.totalPrice = totalPrice;
+        this.eventName = eventName;
     }
 
     public UUID getId() { return id; }
@@ -40,5 +48,6 @@ public final class ActiveOrderDto {
     public String getStatus() { return status; }
     public List<OrderItemDto> getItems() { return items; }
     public BigDecimal getTotalPrice() { return totalPrice; }
+    public String getEventName() { return eventName; }
 }
 

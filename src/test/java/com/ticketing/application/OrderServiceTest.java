@@ -1,5 +1,6 @@
 package com.ticketing.application;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -13,15 +14,16 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.awaitility.Awaitility;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,9 +31,8 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.application.services.OrderTimeDomainService;
-import com.ticketing.application.services.TicketSelectionService;
-import com.ticketing.domain.auth.SessionTokenData;
+import com.ticketing.domain.services.OrderTimeDomainService;
+import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -53,7 +54,9 @@ import com.ticketing.domain.gateway.TicketRequest;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.OrderStatus;
+import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -90,8 +93,10 @@ public class OrderServiceTest {
                 "01234567890123456789012345678901".getBytes(StandardCharsets.UTF_8));
         sessionService = new SessionTokenService(secret, 120, new InMemorySessionTokenRepository());
 
-        orderService = new OrderService(orderRepo, sessionService, eventRepo, clock,
-                memberRepo, List.of(paymentGateway), ticketSupplyGateway);
+        TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
+        OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock);
+        OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
+        orderService = new OrderService(sessionService, ticketReservationService, orderCheckoutService, null, orderTimeDomainService, null);
 
         guestToken = sessionService.generateGuestToken();
         setUpPublishedEvent();
@@ -101,12 +106,12 @@ public class OrderServiceTest {
     void GivenValidOrder_WhenAddGAAndSeat_ThenInventoryIsLocked() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
 
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
         Event eventAfterGA = eventRepo.findById(eventId).orElseThrow();
         assertEquals(97, eventAfterGA.findZone(gaZoneId).getAvailableCount());
         assertEquals(3, eventAfterGA.findZone(gaZoneId).getLockedCount());
 
-        orderService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
+        orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
         Event eventAfterSeat = eventRepo.findById(eventId).orElseThrow();
         assertTrue(eventAfterSeat.findZone(assignedZoneId).findSeat(seatId).isLocked());
 
@@ -122,7 +127,7 @@ public class OrderServiceTest {
                 List.of(new SelectionRequest.SeatPick(assignedZoneId, seatId)),
                 List.of(new SelectionRequest.GAPick(gaZoneId, 2)));
 
-        List<UUID> itemIds = orderService.addSelectionToOrder(guestToken, orderId, request);
+        List<UUID> itemIds = orderService.addSelectionToOrder(guestToken, request);
 
         assertEquals(2, itemIds.size());
         ActiveOrder order = orderRepo.findById(orderId).orElseThrow();
@@ -136,10 +141,15 @@ public class OrderServiceTest {
     @Test
     void GivenExistingActiveOrder_WhenCreateSecondOrderForSameSession_ThenRejectsAndFirstOrderIntact() {
         UUID firstOrderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, firstOrderId, gaZoneId, 2);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+
+        UUID secondEventId = UUID.randomUUID();
+        Event event2 = createPublishedEvent(secondEventId, "Second Show", Duration.ofMinutes(15));
+        event2.addZone(InventoryZone.createGA(UUID.randomUUID(), "Zone", new BigDecimal("10.00"), 100));
+        eventRepo.save(event2);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.createOrder(guestToken, eventId));
+                () -> orderService.createOrder(guestToken, secondEventId));
 
         ActiveOrder firstOrder = orderRepo.findById(firstOrderId).orElseThrow();
         assertTrue(firstOrder.isActive());
@@ -186,38 +196,27 @@ public class OrderServiceTest {
         quickEvent.publish();
         eventRepo.save(quickEvent);
 
-        OrderTimeDomainService expirationService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
-        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-        executor.scheduleAtFixedRate(expirationService::expireOrders, 0, 50, TimeUnit.MILLISECONDS);
-        try {
-            UUID orderId = orderService.createOrder(guestToken, quickEventId);
-            orderService.addGATicketsToOrder(guestToken, orderId, quickZoneId, 5);
-            assertEquals(95, eventRepo.findById(quickEventId).orElseThrow()
-                    .findZone(quickZoneId).getAvailableCount());
+        UUID orderId = orderService.createOrder(guestToken, quickEventId);
+        orderService.addGATicketsToOrder(guestToken, quickEventId, quickZoneId, 5);
+        assertEquals(95, eventRepo.findById(quickEventId).orElseThrow()
+                .findZone(quickZoneId).getAvailableCount());
 
-            clock.advance(Duration.ofMillis(250));
+        clock.advance(Duration.ofMillis(250));
+        orderService.expireOrders();
 
-            Awaitility.await()
-                    .atMost(2, TimeUnit.SECONDS)
-                    .pollInterval(50, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> assertEquals(OrderStatus.EXPIRED,
-                            orderRepo.findById(orderId).orElseThrow().getStatus()));
-
-            Event eventAfter = eventRepo.findById(quickEventId).orElseThrow();
-            assertEquals(100, eventAfter.findZone(quickZoneId).getAvailableCount());
-            assertEquals(0, eventAfter.findZone(quickZoneId).getLockedCount());
-        } finally {
-            executor.shutdownNow();
-        }
+        assertEquals(OrderStatus.EXPIRED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        Event eventAfter = eventRepo.findById(quickEventId).orElseThrow();
+        assertEquals(100, eventAfter.findZone(quickZoneId).getAvailableCount());
+        assertEquals(0, eventAfter.findZone(quickZoneId).getLockedCount());
     }
 
     @Test
     void GivenLockedTickets_WhenCheckoutSucceeds_ThenOrderCompletesInventorySoldAndSnapshotSaved() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
-        orderService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
+        orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
-        UUID purchaseId = orderService.checkout(guestToken, orderId, null);
+        UUID purchaseId = orderService.checkout(guestToken, null);
 
         ActiveOrder order = orderRepo.findById(orderId).orElseThrow();
         assertEquals(OrderStatus.COMPLETED, order.getStatus());
@@ -248,8 +247,8 @@ public class OrderServiceTest {
         eventRepo.save(event);
 
         UUID orderId = orderService.createOrder(guestToken, soldOutEventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, singleZoneId, 1);
-        orderService.checkout(guestToken, orderId, null);
+        orderService.addGATicketsToOrder(guestToken, soldOutEventId, singleZoneId, 1);
+        orderService.checkout(guestToken, null);
 
         assertEquals(EventStatus.SOLD_OUT, eventRepo.findById(soldOutEventId).orElseThrow().getStatus());
     }
@@ -258,10 +257,10 @@ public class OrderServiceTest {
     void GivenPaymentFails_WhenCheckout_ThenOrderReturnsActiveInventoryStaysLockedAndNoTicketsIssued() {
         paymentGateway.failCharges = true;
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, orderId, null));
+                () -> orderService.checkout(guestToken, null));
 
         assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
         Event event = eventRepo.findById(eventId).orElseThrow();
@@ -275,10 +274,10 @@ public class OrderServiceTest {
     void GivenTicketSupplyFails_WhenCheckout_ThenPaymentRefundedOrderCancelledAndInventoryReleased() {
         ticketSupplyGateway.failIssue = true;
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 2);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, orderId, null));
+                () -> orderService.checkout(guestToken, null));
 
         assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
         Event event = eventRepo.findById(eventId).orElseThrow();
@@ -289,24 +288,22 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenPurchasePolicyRejects_WhenCheckout_ThenOrderRemainsActiveAndPaymentNotCharged() {
+    void GivenPurchasePolicyRejects_WhenAddingTickets_ThenReservationBlockedAndPaymentNotCharged() {
         UUID policyEventId = UUID.randomUUID();
         UUID policyZoneId = UUID.randomUUID();
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (order, memberId) -> PolicyResult.failure("DENIED", "No tickets for you"),
-                (order, coupon, now) -> BigDecimal.ZERO);
+                (ctx) -> PolicyResult.failure("DENIED", "No tickets for you"),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
 
-        UUID orderId = orderService.createOrder(guestToken, policyEventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, policyZoneId, 1);
+        orderService.createOrder(guestToken, policyEventId);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, orderId, null));
+                () -> orderService.addGATicketsToOrder(guestToken, policyEventId, policyZoneId, 1));
 
-        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
         assertEquals(0, paymentGateway.chargeCalls);
     }
 
@@ -316,15 +313,15 @@ public class OrderServiceTest {
         UUID discountZoneId = UUID.randomUUID();
         Event event = new Event(discountEventId, companyName, "Discount Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (order, memberId) -> PolicyResult.success(),
-                (order, coupon, now) -> new BigDecimal("20.00"));
+                (ctx) -> PolicyResult.success(),
+                (order, coupon, now) -> order.getTotalPrice().subtract(new BigDecimal("20.00")).max(BigDecimal.ZERO));
         event.addZone(InventoryZone.createGA(discountZoneId, "Floor", new BigDecimal("50.00"), 10));
         event.publish();
         eventRepo.save(event);
 
         UUID orderId = orderService.createOrder(guestToken, discountEventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, discountZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, orderId, "SAVE20");
+        orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
+        UUID purchaseId = orderService.checkout(guestToken, "SAVE20");
 
         assertEquals(new BigDecimal("80.00"), paymentGateway.chargedAmount);
         assertEquals(new BigDecimal("80.00"), orderRepo.findCompletedById(purchaseId).orElseThrow().amount());
@@ -340,8 +337,8 @@ public class OrderServiceTest {
                 UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
 
         UUID orderId = orderService.createOrder(memberToken, eventId);
-        orderService.addGATicketsToOrder(memberToken, orderId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, orderId, null);
+        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        UUID purchaseId = orderService.checkout(memberToken, null);
 
         assertEquals(memberId, orderRepo.findCompletedById(purchaseId).orElseThrow().memberId());
         assertEquals(memberId, paymentGateway.lastDetails.memberId());
@@ -386,7 +383,7 @@ public class OrderServiceTest {
                                      String token, UUID orderId) {
         try {
             startLatch.await();
-            orderService.addSeatToOrder(token, orderId, assignedZoneId, seatId);
+            orderService.addSeatToOrder(token, eventId, assignedZoneId, seatId);
             successes.incrementAndGet();
         } catch (OptimisticLockException | IllegalStateException e) {
             failures.incrementAndGet();
@@ -468,9 +465,9 @@ public class OrderServiceTest {
     @Test
     void GivenActiveOrder_WhenGetActiveOrder_ThenReturnsDtoWithCorrectData() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
 
-        var dto = orderService.getActiveOrder(guestToken, orderId);
+        var dto = orderService.getActiveOrder(guestToken);
 
         assertEquals(orderId, dto.getId());
         assertEquals(sessionService.extractSessionId(guestToken), dto.getSessionId());
@@ -486,7 +483,7 @@ public class OrderServiceTest {
 
         // GA zone has 100 tickets available — try to lock 101
         assertThrows(IllegalStateException.class,
-                () -> orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 101));
+                () -> orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 101));
 
         // Verify inventory unchanged
         Event event = eventRepo.findById(eventId).get();
@@ -497,41 +494,37 @@ public class OrderServiceTest {
     @Test
     void GivenAlreadyLockedSeat_WhenAnotherOrderTriesToLock_ThenRejects() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
+        orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
         // Second session tries to lock the same seat
         String token2 = sessionService.generateGuestToken();
         UUID orderId2 = orderService.createOrder(token2, eventId);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.addSeatToOrder(token2, orderId2, assignedZoneId, seatId));
+                () -> orderService.addSeatToOrder(token2, eventId, assignedZoneId, seatId));
     }
 
     @Test
     void GivenOrderOwnedBySessionA_WhenSessionBTriesToModify_ThenRejects() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 3);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
 
         // Different session tries to modify
         String otherToken = sessionService.generateGuestToken();
 
-        // Cannot add tickets
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addGATicketsToOrder(otherToken, orderId, gaZoneId, 1));
 
         // Cannot remove items
         ActiveOrder order = orderRepo.findById(orderId).orElseThrow();
         UUID itemId = order.getItems().get(0).getId();
-        assertThrows(IllegalStateException.class,
-                () -> orderService.removeItemFromOrder(otherToken, orderId, itemId));
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.removeItemFromOrder(otherToken, itemId));
 
         // Cannot cancel
-        assertThrows(IllegalStateException.class,
-                () -> orderService.cancelOrder(otherToken, orderId));
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.cancelOrder(otherToken));
 
-        // Cannot view
-        assertThrows(IllegalStateException.class,
-                () -> orderService.getActiveOrder(otherToken, orderId));
+        // Cannot view (returns null, not throws)
+        assertNull(orderService.getActiveOrder(otherToken));
 
         // Original order is still intact
         ActiveOrder intact = orderRepo.findById(orderId).orElseThrow();
@@ -544,9 +537,9 @@ public class OrderServiceTest {
         UUID orderId = orderService.createOrder(guestToken, eventId);
 
         assertThrows(IllegalArgumentException.class,
-                () -> orderService.getActiveOrder(null, orderId));
+                () -> orderService.getActiveOrder(null));
         assertThrows(IllegalArgumentException.class,
-                () -> orderService.removeItemFromOrder("", orderId, UUID.randomUUID()));
+                () -> orderService.removeItemFromOrder("", UUID.randomUUID()));
     }
 
     @Test
@@ -554,15 +547,15 @@ public class OrderServiceTest {
         TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
         primaryGateway.failIssue = true; // Primary fails
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
-        
-        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
-                new TicketSelectionService(eventRepo));
+
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
+        OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
-        failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 2);
+        failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
 
-        UUID purchaseId = failoverService.checkout(guestToken, orderId, null);
+        UUID purchaseId = failoverService.checkout(guestToken, null);
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryGateway.issueCalls);
@@ -578,16 +571,16 @@ public class OrderServiceTest {
         primaryGateway.failIssue = true;
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
         secondaryGateway.failIssue = true;
-        
-        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway),
-                new TicketSelectionService(eventRepo));
+
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
+        OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
-        failoverService.addSeatToOrder(guestToken, orderId, assignedZoneId, seatId);
+        failoverService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> failoverService.checkout(guestToken, orderId, null));
+                () -> failoverService.checkout(guestToken, null));
         
         assertTrue(ex.getMessage().contains("Ticket generation failed"));
         assertEquals(1, primaryGateway.issueCalls);
@@ -602,17 +595,17 @@ public class OrderServiceTest {
     @Test
     void GivenPartialIssuance_WhenCheckout_ThenIssuesAreCancelledRefundAndOrderCancelled() {
         TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
-        primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success 
-        
-        OrderService partialService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(paymentGateway), List.of(primaryGateway),
-                new TicketSelectionService(eventRepo));
+        primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success
+
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
+        OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway), clock);
+        OrderService partialService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = partialService.createOrder(guestToken, eventId);
-        partialService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+        partialService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> partialService.checkout(guestToken, orderId, null));
+                () -> partialService.checkout(guestToken, null));
         
         assertEquals(1, primaryGateway.issueCalls);
         assertEquals(1, primaryGateway.cancelCalls);
@@ -630,10 +623,10 @@ public class OrderServiceTest {
         paymentGateway.failRefunds = true;
 
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, orderId, null));
+                () -> orderService.checkout(guestToken, null));
         
         assertEquals(1, ticketSupplyGateway.issueCalls);
         assertEquals(1, paymentGateway.refundCalls); // tried to refund
@@ -658,8 +651,8 @@ public class OrderServiceTest {
 
         // Make a purchase
         UUID orderId = orderService.createOrder(memberToken, eventId);
-        orderService.addGATicketsToOrder(memberToken, orderId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, orderId, null);
+        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        UUID purchaseId = orderService.checkout(memberToken, null);
 
         // Fetch history
         List<PurchaseRecordDTO> history2 = orderService.getPurchaseHistory(memberToken);
@@ -693,14 +686,14 @@ public class OrderServiceTest {
         TestPaymentGateway primaryPayment = new TestPaymentGateway();
         primaryPayment.failCharges = true;
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
-        
-        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
-                new TicketSelectionService(eventRepo));
+
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
+        OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
-        failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
-        UUID purchaseId = failoverService.checkout(guestToken, orderId, null);
+        failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
+        UUID purchaseId = failoverService.checkout(guestToken, null);
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryPayment.chargeCalls);
@@ -715,16 +708,16 @@ public class OrderServiceTest {
         primaryPayment.failCharges = true;
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
         secondaryPayment.failCharges = true;
-        
-        OrderService failoverService = new OrderService(orderRepo, sessionService, eventRepo, clock, 
-                memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway),
-                new TicketSelectionService(eventRepo));
+
+        TicketReservationDomainService ticketRes = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
+        OrderCheckoutDomainService checkoutSvc = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
+        OrderService failoverService = new OrderService(sessionService, ticketRes, checkoutSvc, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
-        failoverService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 1);
+        failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> failoverService.checkout(guestToken, orderId, null));
+                () -> failoverService.checkout(guestToken, null));
         
         assertEquals(1, primaryPayment.chargeCalls);
         assertEquals(1, secondaryPayment.chargeCalls);
@@ -737,8 +730,8 @@ public class OrderServiceTest {
     void GivenEventWithCompletedPurchases_WhenRefundEventPurchases_ThenAllPurchasesRefunded() {
         // Create a successful order to refund
         UUID orderId = orderService.createOrder(guestToken, eventId);
-        orderService.addGATicketsToOrder(guestToken, orderId, gaZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, orderId, null);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+        UUID purchaseId = orderService.checkout(guestToken, null);
 
         assertNotNull(purchaseId);
         assertEquals(0, paymentGateway.refundCalls); // Should be 0 before we call refundEventPurchases

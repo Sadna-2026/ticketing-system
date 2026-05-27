@@ -4,6 +4,7 @@ import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.PendingRoleOffer;
@@ -86,13 +87,13 @@ public class RoleAppointmentOfferResponseHandler implements IEventListener {
             StaffAppointment appointerAppointment = appointer.getStaffAppointment(offer.getCompanyName());
             if (appointerAppointment != null) {
                 appointerAppointment.addAppointedStaffMember(target.getId());
-                memberRepository.save(appointer);
+                saveMember(appointer);
             }
         }
 
         // Pending offer was taken care of (accepted or rejected), so remove it from the member's pending offers
         target.removePendingOffer(responseEvent.getOfferId());
-        memberRepository.save(target);
+        saveMember(target);
 
         String responseText;
         // Determine the notification message based on acceptance/rejection and role changes
@@ -115,5 +116,13 @@ public class RoleAppointmentOfferResponseHandler implements IEventListener {
 
         // Notify the appointer about the response to their offer
         notificationService.notify(offer.getOfferedByMemberId().toString(), responseText);
+    }
+
+    private void saveMember(Member member) {
+        try {
+            memberRepository.save(member);
+        } catch (OptimisticLockException ex) {
+            throw new IllegalStateException("Role appointment response changed concurrently. Please retry.", ex);
+        }
     }
 }

@@ -9,6 +9,7 @@ import com.ticketing.application.ISystemClock;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
@@ -72,11 +73,19 @@ public class LotteryDrawDomainService {
             OrderItem item = OrderItem.forGA(UUID.randomUUID(), winner.zoneId(), winner.quantity(), zone.getPricePerTicket());
             order.addItem(item);
 
-            orderRepository.save(order);
+            try {
+                orderRepository.save(order);
+            } catch (OptimisticLockException ex) {
+                throw new IllegalStateException("Lottery draw order changed concurrently. Please retry.", ex);
+            }
             createdOrders.add(order);
         }
 
-        eventRepository.save(event);
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            throw new IllegalStateException("Lottery draw event changed concurrently. Please retry.", ex);
+        }
         return createdOrders;
     }
 

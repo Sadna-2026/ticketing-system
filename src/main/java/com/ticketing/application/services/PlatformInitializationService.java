@@ -2,9 +2,11 @@ package com.ticketing.application.services;
 
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.system.StartupConfiguration;
+import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,6 +15,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@org.springframework.stereotype.Service
 public class PlatformInitializationService {
 
     private static final Logger log = LoggerFactory.getLogger(PlatformInitializationService.class);
@@ -54,7 +57,11 @@ public class PlatformInitializationService {
             return halt("Unable to connect to supply service");
         }
 
-        registerSystemAdmin();
+        try {
+            registerSystemAdmin();
+        } catch (OptimisticLockException ex) {
+            return halt("System admin changed concurrently. Please retry initialization.");
+        }
         startupConfiguration.activate();
         recordEvent("Platform initialization succeeded");
         log.info("Platform initialized successfully");
@@ -88,11 +95,13 @@ public class PlatformInitializationService {
         if (adminRepository.existsByUsername(startupConfiguration.adminUsername())) {
             return;
         }
+        PasswordEncryptionUtils passwordEncryptionUtils = new PasswordEncryptionUtils();
 
         adminRepository.save(new Admin(
                 UUID.randomUUID(),
                 startupConfiguration.adminUsername().trim(),
-                startupConfiguration.adminEmail().trim().toLowerCase()
+                startupConfiguration.adminEmail().trim().toLowerCase(),
+                passwordEncryptionUtils.hashPassword(startupConfiguration.adminPassword())
         ));
     }
 
@@ -114,7 +123,7 @@ public class PlatformInitializationService {
 
     private InitializationResult halt(String message) {
         recordEvent("Platform initialization failed: " + message);
-        log.warn("Platform initialization failed: {}", message);
+        log.error("Platform initialization failed: {}", message);
         return InitializationResult.failure(message);
     }
 
@@ -132,3 +141,4 @@ public class PlatformInitializationService {
         }
     }
 }
+

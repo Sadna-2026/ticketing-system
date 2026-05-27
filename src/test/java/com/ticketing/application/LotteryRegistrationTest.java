@@ -1,10 +1,9 @@
 package com.ticketing.application;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,7 +72,7 @@ public class LotteryRegistrationTest {
         lotteryRepository = new InMemoryLotteryRepository();
         sessionTokenService = mock(ISessionTokenService.class);
 
-        Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
+        ISystemClock fixedClock = () -> NOW;
 
         eventService = new EventService(
                 eventRepository, companyRepository, memberRepository,

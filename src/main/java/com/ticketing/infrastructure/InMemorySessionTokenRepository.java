@@ -7,8 +7,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Repository;
 
-import com.ticketing.domain.auth.ISessionTokenRepository;
-import com.ticketing.domain.auth.SessionToken;
+import com.ticketing.application.auth.ISessionTokenRepository;
+import com.ticketing.application.auth.SessionToken;
+import com.ticketing.domain.exception.OptimisticLockException;
 
 
 @Repository
@@ -22,7 +23,19 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
             throw new IllegalArgumentException("sessionToken cannot be null");
         }
 
-        tokens.put(sessionToken.getTokenId(), sessionToken);
+        tokens.compute(sessionToken.getTokenId(), (id, existing) -> {
+            if (existing == null) {
+                sessionToken.incrementVersion();
+                SessionToken stored = sessionToken.detachedCopy();
+                return stored;
+            }
+            if (sessionToken.getVersion() != existing.getVersion()) {
+                throw new OptimisticLockException("SessionToken", id);
+            }
+            sessionToken.incrementVersion();
+            SessionToken stored = sessionToken.detachedCopy();
+            return stored;
+        });
     }
 
     @Override
@@ -31,7 +44,8 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
             return Optional.empty();
         }
 
-        return Optional.ofNullable(tokens.get(tokenId));
+        SessionToken token = tokens.get(tokenId);
+        return token != null ? Optional.of(token.detachedCopy()) : Optional.empty();
     }
 
     @Override
@@ -40,11 +54,7 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
             return;
         }
 
-        SessionToken token = tokens.get(tokenId);
-
-        if (token != null) {
-            token.revoke(reason);
-        }
+        revokeStored(tokenId, reason);
     }
 
     @Override
@@ -55,7 +65,7 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
 
         for (SessionToken token : tokens.values()) {
             if (token.getSessionId().equals(sessionId) && token.isActive()) {
-                token.revoke(reason);
+                revokeStored(token.getTokenId(), reason);
             }
         }
     }
@@ -68,7 +78,7 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
 
         for (SessionToken token : tokens.values()) {
             if (memberId.equals(token.getMemberId()) && token.isActive()) {
-                token.revoke(reason);
+                revokeStored(token.getTokenId(), reason);
             }
         }
     }
@@ -89,4 +99,13 @@ public class InMemorySessionTokenRepository implements ISessionTokenRepository {
             if (token.isExpired()) {
                 tokens.remove(token.getTokenId());
     }}}
+
+    private void revokeStored(UUID tokenId, String reason) {
+        tokens.computeIfPresent(tokenId, (id, existing) -> {
+            SessionToken token = existing.detachedCopy();
+            token.revoke(reason);
+            token.incrementVersion();
+            return token;
+        });
+    }
 }

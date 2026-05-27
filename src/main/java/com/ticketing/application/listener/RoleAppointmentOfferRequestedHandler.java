@@ -2,8 +2,10 @@ package com.ticketing.application.listener;
 
 import java.time.LocalDateTime;
 
+import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -14,17 +16,28 @@ import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEv
 
 public class RoleAppointmentOfferRequestedHandler implements IEventListener {
 
-    private final IMemberRepository memberRepository;
+    private static final int MAX_SAVE_RETRIES = 100;
 
-    public RoleAppointmentOfferRequestedHandler(IMemberRepository memberRepository) {
+    private final IMemberRepository memberRepository;
+    private final INotificationService notificationService;
+
+    public RoleAppointmentOfferRequestedHandler(IMemberRepository memberRepository, INotificationService notificationService) {
         this.memberRepository = memberRepository;
+        this.notificationService = notificationService;
     }
 
     @Override
     public void handle(IEvent event) {
         if (event instanceof RoleAppointmentOfferRequestedEvent) {
             RoleAppointmentOfferRequestedEvent reqEvent = (RoleAppointmentOfferRequestedEvent) event;
-            
+
+            addOfferWithOptimisticRetry(reqEvent);
+        }
+    }
+
+    private void addOfferWithOptimisticRetry(RoleAppointmentOfferRequestedEvent reqEvent) {
+        OptimisticLockException lastConflict = null;
+        for (int attempt = 0; attempt < MAX_SAVE_RETRIES; attempt++) {
             Member appointer = memberRepository.findById(reqEvent.getAppointerId())
                 .orElseThrow(() -> new IllegalArgumentException("Appointer not found"));
             
@@ -48,9 +61,18 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
                 LocalDateTime.now().plusDays(7)
             );
             target.addPendingOffer(offer);
-            
-            memberRepository.save(target);
+
+            try {
+                memberRepository.save(target);
+                if (notificationService != null) {
+                    notificationService.notify(target.getId().toString(), "You have a new role offer for company: " + reqEvent.getCompanyName());
+                }
+                return;
+            } catch (OptimisticLockException ex) {
+                lastConflict = ex;
+            }
         }
+        throw lastConflict;
     }
 
     private void checkPermission(Member member, String companyName, ManagerPermission permission) {

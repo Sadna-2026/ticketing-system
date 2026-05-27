@@ -1,5 +1,6 @@
 package com.ticketing.application;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,8 +33,6 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
-import com.ticketing.application.services.EventQueryService;
-import com.ticketing.application.services.EventSearchService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
@@ -118,6 +117,64 @@ class EventServiceTest {
             assertEquals(
                     saved.getZones().stream().map(InventoryZone::getId).collect(java.util.stream.Collectors.toSet()),
                     vm.mappedZoneIds());
+        }
+
+        @Test
+        public void GivenOwnerAndDraftEvent_WhenPublishEvent_ThenEventBecomesPublished() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+
+            eventService.publishEvent(VALID_TOKEN, eventId);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertEquals(EventStatus.PUBLISHED, saved.getStatus());
+        }
+
+        @Test
+        public void GivenManagerWithLifecyclePermission_WhenPublishEvent_ThenEventBecomesPublished() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            appointAs(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.EVENT_LIFECYCLE));
+
+            eventService.publishEvent(VALID_TOKEN, eventId);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertEquals(EventStatus.PUBLISHED, saved.getStatus());
+        }
+
+        @Test
+        public void GivenPublishedEvent_WhenPublishEventAgain_ThenThrowIllegalStateException() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            eventService.publishEvent(VALID_TOKEN, eventId);
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
+
+            assertEquals("Can only publish a DRAFT event", ex.getMessage());
+        }
+
+        @Test
+        public void GivenSuspendedCompany_WhenPublishEvent_ThenThrowOperationNeutralMessage() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            useMockedCompanyRepoReturning(stubCompany(COMPANY_NAME, CompanyStatus.SUSPENDED));
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
+
+            assertEquals("Company is suspended or closed: " + COMPANY_NAME, ex.getMessage());
+        }
+
+        @Test
+        public void GivenManagerWithoutLifecyclePermission_WhenPublishEvent_ThenThrowSecurityException() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            appointAs(StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
+
+            assertThrows(SecurityException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
         }
 
         @Test
@@ -1082,12 +1139,13 @@ class EventServiceTest {
             private static final String COMPANY = "Acme Productions";
 
             private InMemoryEventRepository eventRepo;
-            private EventQueryService service;
+            private EventService service;
 
             @BeforeEach
             public void setUp() {
                 eventRepo = new InMemoryEventRepository();
-                service = new EventQueryService(eventRepo);
+                service = new EventService(eventRepo, new InMemoryCompanyRepository(), new InMemoryMemberRepository(),
+                        mock(IOrderRepository.class), mock(ISessionTokenService.class));
             }
 
             @Test
@@ -1299,13 +1357,14 @@ class EventServiceTest {
 
             private InMemoryEventRepository eventRepo;
             private InMemoryCompanyRepository companyRepo;
-            private EventSearchService service;
+            private EventService service;
 
             @BeforeEach
             public void setUp() {
                 eventRepo = new InMemoryEventRepository();
                 companyRepo = new InMemoryCompanyRepository();
-                service = new EventSearchService(eventRepo, companyRepo);
+                service = new EventService(eventRepo, companyRepo, new InMemoryMemberRepository(),
+                        mock(IOrderRepository.class), mock(ISessionTokenService.class));
 
                 companyRepo.save(new Company(COMPANY_A, "x", UUID.randomUUID()));
                 companyRepo.save(new Company(COMPANY_B, "x", UUID.randomUUID()));

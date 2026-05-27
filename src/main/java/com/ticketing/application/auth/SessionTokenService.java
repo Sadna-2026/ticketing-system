@@ -13,10 +13,9 @@ import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import com.ticketing.domain.auth.ISessionTokenRepository;
-import com.ticketing.domain.auth.SessionToken;
-import com.ticketing.domain.auth.SessionTokenData;
-
+import com.ticketing.domain.exception.OptimisticLockException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtException;
@@ -27,6 +26,7 @@ import io.jsonwebtoken.security.Keys;
 @Service
 public class SessionTokenService implements ISessionTokenService {
 
+    private static final Logger log = LoggerFactory.getLogger(SessionTokenService.class);
     private static final String ISSUER = "ticketing-system";
 
     private static final String CLAIM_SESSION_ID = "sessionId";
@@ -64,6 +64,7 @@ public class SessionTokenService implements ISessionTokenService {
 
     @Override
     public String generateGuestToken() {
+        log.info("Guest token generation requested");
         SessionTokenData tokenData = new SessionTokenData(
                 UUID.randomUUID(),
                 null,
@@ -73,7 +74,9 @@ public class SessionTokenService implements ISessionTokenService {
                 null
         );
 
-        return buildAndSaveToken(tokenData);
+        String token = buildAndSaveToken(tokenData);
+        log.info("Guest token generated: sessionId={}", tokenData.getSessionId());
+        return token;
     }
 
     @Override
@@ -86,19 +89,25 @@ public class SessionTokenService implements ISessionTokenService {
                 null,
                 null
         );
-
-        return generateMemberToken(tokenData);
+        log.info("Member token generation requested: sessionId={}, memberId={}", sessionId, memberId);
+        String token = generateMemberToken(tokenData);
+        log.info("Member token generated: sessionId={}, memberId={}", sessionId, memberId);
+        return token;
     }
 
     @Override
     public String generateMemberToken(SessionTokenData tokenData) {
         if (tokenData == null) {
+            log.error("Token data is null");
             throw new IllegalArgumentException("tokenData cannot be null");
         }
 
         if (tokenData.getMemberId() == null) {
+            log.error("Member ID is null");
             throw new IllegalArgumentException("memberId cannot be null for member token");
         }
+        log.info("Member token upgrade requested: sessionId={}, memberId={}",
+        tokenData.getSessionId(), tokenData.getMemberId());
 
         /*
          * Guest -> member upgrade:
@@ -109,7 +118,10 @@ public class SessionTokenService implements ISessionTokenService {
                 "UPGRADED_TO_MEMBER"
         );
 
-        return buildAndSaveToken(tokenData);
+        String token = buildAndSaveToken(tokenData);
+        log.info("Member token upgrade completed: sessionId={}, memberId={}",
+                tokenData.getSessionId(), tokenData.getMemberId());
+        return token;
     }
 
     @Override
@@ -162,22 +174,30 @@ public class SessionTokenService implements ISessionTokenService {
 
     @Override
     public void revokeToken(String token) {
+        log.info("Token revoke requested");
         Claims claims = parseClaimsOnly(token);
         UUID tokenId = getTokenIdFromClaims(claims);
 
         sessionTokenRepository.revoke(tokenId, "LOGOUT");
+        log.info("Token revoked: tokenId={}", tokenId);  
     }
 
     @Override
     public String logout(String token) {
+        
+        log.info("Session logout requested");
         revokeToken(token);
-        return generateGuestToken();
+        String guestToken = generateGuestToken();
+        log.info("Session logout completed");
+        return guestToken;
     }
 
     @Override
     public void revokeMemberSessions(UUID memberId) {
         if (memberId != null) {
+            log.info("Revoking sessions for member: {}", memberId);
             sessionTokenRepository.revokeAllByMemberId(memberId, "MEMBER_REMOVED");
+            log.info("Sessions revoked for member: {}", memberId);
         }
     }
 
@@ -197,7 +217,11 @@ public class SessionTokenService implements ISessionTokenService {
                 expiration
         );
 
-        sessionTokenRepository.save(sessionToken);
+        try {
+            sessionTokenRepository.save(sessionToken);
+        } catch (OptimisticLockException ex) {
+            throw new IllegalStateException("Session token changed concurrently. Please retry.", ex);
+        }
 
         return jwt;
     }
@@ -342,15 +366,20 @@ public class SessionTokenService implements ISessionTokenService {
 
     @Override
     public boolean endSession(String token) {
+        log.info("End session requested");
         if (token == null || token.isBlank()) {
+            log.warn("End session ignored: missing token");
             return false;
         }
 
         if (!isValid(token)) {
+            log.warn("End session ignored: invalid token");
             return false;
         }
 
+        
         revokeToken(token);
+        log.info("End session completed");
         return true;
     }
 }

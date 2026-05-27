@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.domain.event.CompanyOpenedEvent;
 import com.ticketing.domain.event.IEvent;
 import com.ticketing.domain.event.IEventListener;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
@@ -45,7 +46,7 @@ public class MemberCompanyOpenedEventHandler implements IEventListener {
             // Assign Owner appointment to the member
             StaffAppointment ownerAppointment = new StaffAppointment(
                 companyName,
-                founderId,
+                null,
                 StaffAppointment.StaffRole.OWNER,
                 Collections.emptySet()
             );
@@ -53,6 +54,9 @@ public class MemberCompanyOpenedEventHandler implements IEventListener {
             memberRepository.save(founder);
 
             log.info("Member assigned owner role: memberId={}, companyName={}", founderId, companyName);
+        } catch (OptimisticLockException e) {
+            log.warn("Concurrent founder role assignment conflict: memberId={}, companyName={}", founderId, companyName);
+            throw new IllegalStateException("Founder role assignment changed concurrently. Please retry.", e);
         } catch (Exception e) {
             log.error("Error handling CompanyOpenedEvent for company={}, founder={}: {}", 
                 companyName, founderId, e.getMessage(), e);

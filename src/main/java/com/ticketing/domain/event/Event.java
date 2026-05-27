@@ -31,9 +31,8 @@ public class Event{
     private final List<InventoryZone> zones;
     private VenueMap venueMap;
   
-    // TODO(v2): add purchase/discount policies
-    private final IPurchasePolicy purchasePolicy;
-    private final IDiscountPolicy discountPolicy;
+    private IPurchasePolicy purchasePolicy;
+    private IDiscountPolicy discountPolicy;
 
     private final SaleMethod saleMethod;
     private final LotteryWindow lotteryWindow; // non-null only when saleMethod == LOTTERY
@@ -225,6 +224,22 @@ public class Event{
 
     public IDiscountPolicy getEventDiscountPolicy() {
         return discountPolicy;
+    }
+
+    public void setPurchasePolicy(IPurchasePolicy policy) {
+        rejectIfCancelled();
+        if (policy == null) {
+            throw new IllegalArgumentException("Purchase policy cannot be null");
+        }
+        this.purchasePolicy = policy;
+    }
+
+    public void setDiscountPolicy(IDiscountPolicy policy) {
+        rejectIfCancelled();
+        if (policy == null) {
+            throw new IllegalArgumentException("Discount policy cannot be null");
+        }
+        this.discountPolicy = policy;
     }
 
     public void setVenueMap(VenueMap venueMap) {

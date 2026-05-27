@@ -51,7 +51,7 @@ public class InitializationService {
      */
     public CompanyService initializeCompanyService() {
         log.info("Initializing CompanyService");
-        return new CompanyService(companyRepository, eventPublisher, sessionTokenService);
+        return new CompanyService(companyRepository, eventPublisher, sessionTokenService, memberRepository);
     }
 
     /**
@@ -65,7 +65,7 @@ public class InitializationService {
         eventPublisher.subscribe("CompanyOpened", companyOpenedHandler);
 
         // Register the handler for RoleAppointmentOfferRequested
-        RoleAppointmentOfferRequestedHandler requestHandler = new RoleAppointmentOfferRequestedHandler(memberRepository);
+        RoleAppointmentOfferRequestedHandler requestHandler = new RoleAppointmentOfferRequestedHandler(memberRepository, notificationService);
         eventPublisher.subscribe("RoleAppointmentOfferRequested", requestHandler);
 
         // Register the handler for RoleAppointmentOfferResponse

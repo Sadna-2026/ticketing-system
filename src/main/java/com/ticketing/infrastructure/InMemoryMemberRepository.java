@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Repository;
 
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 
@@ -19,7 +20,7 @@ public class InMemoryMemberRepository implements IMemberRepository {
     private final ConcurrentHashMap<String, UUID> idsByEmail = new ConcurrentHashMap<>();
 
     @Override
-    public synchronized boolean saveIfUsernameAndEmailAvailable(Member member) {
+    public boolean saveIfUsernameAndEmailAvailable(Member member) {
         if (member == null) {
             throw new IllegalArgumentException("member cannot be null");
         }
@@ -27,23 +28,36 @@ public class InMemoryMemberRepository implements IMemberRepository {
         String username = normalizeUsername(member.getUsername());
         String email = normalizeEmail(member.getEmail());
 
-        if (idsByUsername.containsKey(username)) {
+        UUID reservedUsername = idsByUsername.putIfAbsent(username, member.getId());
+        if (reservedUsername != null) {
             return false;
         }
 
-        if (idsByEmail.containsKey(email)) {
+        UUID reservedEmail = idsByEmail.putIfAbsent(email, member.getId());
+        if (reservedEmail != null) {
+            idsByUsername.remove(username, member.getId());
             return false;
         }
 
-        membersById.put(member.getId(), member);
-        idsByUsername.put(username, member.getId());
-        idsByEmail.put(email, member.getId());
+        Member created = membersById.compute(member.getId(), (id, existing) -> {
+            if (existing != null) {
+                return existing;
+            }
+            member.incrementVersion();
+            return member.detachedCopy();
+        });
+
+        if (created.getVersion() != member.getVersion()) {
+            idsByUsername.remove(username, member.getId());
+            idsByEmail.remove(email, member.getId());
+            return false;
+        }
 
         return true;
     }
 
     @Override
-    public synchronized boolean updateIfUsernameAndEmailAvailable(Member member, String username, String email) {
+    public boolean updateIfUsernameAndEmailAvailable(Member member, String username, String email) {
         if (member == null) {
             throw new IllegalArgumentException("member cannot be null");
         }
@@ -83,7 +97,8 @@ public class InMemoryMemberRepository implements IMemberRepository {
             return Optional.empty();
         }
 
-        return Optional.ofNullable(membersById.get(memberId));
+        Member member = membersById.get(memberId);
+        return member != null ? Optional.of(member.detachedCopy()) : Optional.empty();
     }
 
     @Override
@@ -127,7 +142,7 @@ public class InMemoryMemberRepository implements IMemberRepository {
         List<Member> hits = new ArrayList<>();
         for (Member m : membersById.values()) {
             if (m.getStaffAppointment(companyName) != null) {
-                hits.add(m);
+                hits.add(m.detachedCopy());
             }
         }
         return hits;
@@ -138,13 +153,54 @@ public class InMemoryMemberRepository implements IMemberRepository {
         if (member == null) {
             throw new IllegalArgumentException("member cannot be null");
         }
-        membersById.put(member.getId(), member);
-        idsByUsername.put(normalizeUsername(member.getUsername()), member.getId());
-        idsByEmail.put(normalizeEmail(member.getEmail()), member.getId());
+        String newUsername = normalizeUsername(member.getUsername());
+        String newEmail = normalizeEmail(member.getEmail());
+        membersById.compute(member.getId(), (id, existing) -> {
+            UUID usernameOwner = idsByUsername.get(newUsername);
+            UUID emailOwner = idsByEmail.get(newEmail);
+            if (usernameOwner != null && !usernameOwner.equals(id)) {
+                throw new IllegalArgumentException("Username already in use.");
+            }
+            if (emailOwner != null && !emailOwner.equals(id)) {
+                throw new IllegalArgumentException("Email already in use.");
+            }
+            if (existing == null) {
+                member.incrementVersion();
+                Member stored = member.detachedCopy();
+                idsByUsername.put(newUsername, id);
+                idsByEmail.put(newEmail, id);
+                return stored;
+            }
+            if (member.getVersion() != existing.getVersion()) {
+                throw new OptimisticLockException("Member", id);
+            }
+            String oldUsername = normalizeUsername(existing.getUsername());
+            String oldEmail = normalizeEmail(existing.getEmail());
+            if (!oldUsername.equals(newUsername)) {
+                idsByUsername.remove(oldUsername, id);
+            }
+            if (!oldEmail.equals(newEmail)) {
+                idsByEmail.remove(oldEmail, id);
+            }
+            member.incrementVersion();
+            Member stored = member.detachedCopy();
+            idsByUsername.put(newUsername, id);
+            idsByEmail.put(newEmail, id);
+            return stored;
+        });
     }
 
     @Override
-    public synchronized void delete(Member member) {
+    public List<Member> findAll() {
+        List<Member> result = new ArrayList<>();
+        for (Member m : membersById.values()) {
+            result.add(m.detachedCopy());
+        }
+        return result;
+    }
+
+    @Override
+    public void delete(Member member) {
         if (member == null) return;
         membersById.remove(member.getId());
         idsByUsername.remove(normalizeUsername(member.getUsername()));
