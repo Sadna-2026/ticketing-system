@@ -11,7 +11,9 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -24,6 +26,8 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.application.CreateEventRequest;
+import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.Event;
@@ -33,10 +37,13 @@ import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.MaxCompositeDiscount;
+import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.PurchaseContext;
+import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -330,5 +337,167 @@ class EventServicePolicyTest {
             PolicyResult result = policy.isAllowed(new PurchaseContext(null, null, null));
             assertEquals("REJECTED", result.errorCode());
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Company default policy inheritance
+    // ══════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Company default policy inheritance")
+    class CompanyDefaultPolicyInheritance {
+
+        @Test
+        void GivenCompanyWithAgePolicy_WhenCreateEvent_ThenEventInheritsCompanyPurchasePolicy() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            Company c = companyRepository.findByName(COMPANY_NAME).orElseThrow();
+            c.setPurchasePolicy(new AgeRestrictionPolicy(18));
+            companyRepository.save(c);
+
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validCreateRequest());
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertTrue(saved.getEventPurchasePolicy() instanceof AgeRestrictionPolicy);
+            assertEquals(18, ((AgeRestrictionPolicy) saved.getEventPurchasePolicy()).getMinimumAge());
+        }
+
+        @Test
+        void GivenCompanyWithDiscountPolicy_WhenCreateEvent_ThenEventInheritsCompanyDiscountPolicy() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            Company c = companyRepository.findByName(COMPANY_NAME).orElseThrow();
+            c.setDiscountPolicy(halfPricePolicy());
+            companyRepository.save(c);
+
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validCreateRequest());
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertNotNull(saved.getEventDiscountPolicy());
+            assertTrue(!(saved.getEventDiscountPolicy() instanceof NoDiscountPolicy));
+        }
+
+        @Test
+        void GivenCompanyWithCustomPolicy_WhenRemoveEventPurchasePolicy_ThenResetsToCompanyDefault() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            Company c = companyRepository.findByName(COMPANY_NAME).orElseThrow();
+            c.setPurchasePolicy(new AgeRestrictionPolicy(21));
+            companyRepository.save(c);
+
+            UUID eventId = createDraftEvent();
+
+            eventService.setEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy());
+            eventService.removeEventPurchasePolicy(VALID_TOKEN, eventId);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertTrue(saved.getEventPurchasePolicy() instanceof AgeRestrictionPolicy);
+            assertEquals(21, ((AgeRestrictionPolicy) saved.getEventPurchasePolicy()).getMinimumAge());
+        }
+
+        @Test
+        void GivenCompanyWithCustomDiscount_WhenRemoveEventDiscountPolicy_ThenResetsToCompanyDefault() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            Company c = companyRepository.findByName(COMPANY_NAME).orElseThrow();
+            c.setDiscountPolicy(halfPricePolicy());
+            companyRepository.save(c);
+
+            UUID eventId = createDraftEvent();
+
+            eventService.setEventDiscountPolicy(VALID_TOKEN, eventId, halfPricePolicy());
+            eventService.removeEventDiscountPolicy(VALID_TOKEN, eventId);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertTrue(!(saved.getEventDiscountPolicy() instanceof NoDiscountPolicy));
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Add (compose) policy
+    // ══════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Add (compose) policy")
+    class AddComposePolicy {
+
+        @Test
+        void GivenOwner_WhenAddPurchasePolicyWithAnd_ThenComposedAsAndPolicy() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = createDraftEvent();
+
+            eventService.addEventPurchasePolicy(VALID_TOKEN, eventId, new MaxQuantityPolicy(4), false);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertTrue(saved.getEventPurchasePolicy() instanceof AndPolicy);
+        }
+
+        @Test
+        void GivenOwner_WhenAddPurchasePolicyWithOr_ThenComposedAsOrPolicy() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = createDraftEvent();
+
+            eventService.addEventPurchasePolicy(VALID_TOKEN, eventId, rejectAllPolicy(), true);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertTrue(saved.getEventPurchasePolicy() instanceof OrPolicy);
+        }
+
+        @Test
+        void GivenOwner_WhenAddDiscountPolicyWithStacking_ThenComposedAsSumComposite() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = createDraftEvent();
+
+            eventService.addEventDiscountPolicy(VALID_TOKEN, eventId, halfPricePolicy(), true);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertTrue(saved.getEventDiscountPolicy() instanceof SumCompositeDiscount);
+        }
+
+        @Test
+        void GivenOwner_WhenAddDiscountPolicyWithoutStacking_ThenComposedAsMaxComposite() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = createDraftEvent();
+
+            eventService.addEventDiscountPolicy(VALID_TOKEN, eventId, halfPricePolicy(), false);
+
+            Event saved = eventRepository.findById(eventId).orElseThrow();
+            assertTrue(saved.getEventDiscountPolicy() instanceof MaxCompositeDiscount);
+        }
+
+        @Test
+        void GivenManagerWithoutPolicyMod_WhenAddPurchasePolicy_ThenDenied() {
+            appointAs(StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.INVENTORY_MGMT));
+            UUID eventId = createDraftEvent();
+
+            assertThrows(SecurityException.class,
+                    () -> eventService.addEventPurchasePolicy(VALID_TOKEN, eventId, new MaxQuantityPolicy(4), false));
+        }
+
+        @Test
+        void GivenNullPolicy_WhenAddPurchasePolicy_ThenThrowsIllegalArgument() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = createDraftEvent();
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> eventService.addEventPurchasePolicy(VALID_TOKEN, eventId, null, false));
+        }
+    }
+
+    // ── helpers for service-level event creation ────────────────────
+
+    private CreateEventRequest validCreateRequest() {
+        Instant start = Instant.now().plus(30, java.time.temporal.ChronoUnit.DAYS);
+        Instant end = start.plus(3, java.time.temporal.ChronoUnit.HOURS);
+        Instant doors = start.minus(1, java.time.temporal.ChronoUnit.HOURS);
+
+        List<CreateEventRequest.ZoneSpec> zones = List.of(
+                new CreateEventRequest.GAZoneSpec("Floor", new BigDecimal("50.00"), 500));
+
+        Map<String, String> sectionMap = new LinkedHashMap<>();
+        sectionMap.put("Section A", "Floor");
+
+        return new CreateEventRequest(COMPANY_NAME, "Test Concert", "desc",
+                EventCategory.CONCERT,
+                new EventSchedule(start, end, doors),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                zones, sectionMap);
     }
 }
