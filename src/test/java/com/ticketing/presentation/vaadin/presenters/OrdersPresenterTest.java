@@ -29,7 +29,7 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
-import com.ticketing.application.services.EventQueryService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
@@ -45,14 +45,14 @@ import com.vaadin.flow.server.VaadinSession;
 class OrdersPresenterTest {
 
     private OrderService orderService;
-    private EventQueryService eventQueryService;
+    private EventService eventService;
     private OrdersPresenter presenter;
 
     @BeforeEach
     void setUp() {
         orderService = mock(OrderService.class);
-        eventQueryService = mock(EventQueryService.class);
-        presenter = new OrdersPresenter(orderService, eventQueryService);
+        eventService = mock(EventService.class);
+        presenter = new OrdersPresenter(orderService, eventService);
         installVaadinSession();
     }
 
@@ -226,13 +226,13 @@ class OrdersPresenterTest {
     void GivenEventId_WhenLoadingInventory_ThenEventQueryServiceIsCalledWithoutSessionToken() {
         UUID eventId = UUID.randomUUID();
         EventMapDTO eventMap = eventMap(eventId);
-        when(eventQueryService.getEventMap(eventId)).thenReturn(Optional.of(eventMap));
+        when(eventService.getEventMap(eventId)).thenReturn(Optional.of(eventMap));
 
         InventoryResult result = presenter.loadEventInventory(eventId);
 
         assertTrue(result.success());
         assertSame(eventMap, result.eventMap());
-        verify(eventQueryService).getEventMap(eventId);
+        verify(eventService).getEventMap(eventId);
         verifyNoInteractions(orderService);
     }
 

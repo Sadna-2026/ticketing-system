@@ -13,9 +13,6 @@ import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import com.ticketing.domain.auth.ISessionTokenRepository;
-import com.ticketing.domain.auth.SessionToken;
-import com.ticketing.domain.auth.SessionTokenData;
 import com.ticketing.domain.exception.OptimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

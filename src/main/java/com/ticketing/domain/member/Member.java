@@ -162,6 +162,18 @@ public class Member {
         return appointment != null && appointment.getRole() == role;
     }
 
+    public void authorizePolicyModification(String companyName) {
+        StaffAppointment appt = getStaffAppointment(companyName);
+        if (appt == null) {
+            throw new SecurityException("Caller is not a staff member of company: " + companyName);
+        }
+        boolean allowed = appt.isOwner()
+                || (appt.isManager() && appt.hasPermission(ManagerPermission.POLICY_MODIFICATION));
+        if (!allowed) {
+            throw new SecurityException("Insufficient permissions: POLICY_MODIFICATION required");
+        }
+    }
+
     public List<PendingRoleOffer> getPendingOffers() {
         synchronized(this) {
             return Collections.unmodifiableList(new ArrayList<>(pendingOffers));

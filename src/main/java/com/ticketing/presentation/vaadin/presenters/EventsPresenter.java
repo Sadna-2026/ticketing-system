@@ -13,8 +13,7 @@ import org.springframework.stereotype.Component;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
-import com.ticketing.application.services.EventQueryService;
-import com.ticketing.application.services.EventSearchService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
 
 @Component
@@ -27,12 +26,10 @@ public class EventsPresenter {
     private static final String MAP_NOT_FOUND_MESSAGE = "Event map not found.";
     private static final String MAP_FAILURE_MESSAGE = "Could not load event map. Please try again.";
 
-    private final EventSearchService eventSearchService;
-    private final EventQueryService eventQueryService;
+    private final EventService eventService;
 
-    public EventsPresenter(EventSearchService eventSearchService, EventQueryService eventQueryService) {
-        this.eventSearchService = eventSearchService;
-        this.eventQueryService = eventQueryService;
+    public EventsPresenter(EventService eventService) {
+        this.eventService = eventService;
     }
 
     public SearchResult searchEvents(
@@ -57,7 +54,7 @@ public class EventsPresenter {
                     endOfDay(toDate)
             );
 
-            List<EventSummaryDTO> events = eventSearchService.searchEvents(request);
+            List<EventSummaryDTO> events = eventService.searchEvents(request);
             if (events.isEmpty()) {
                 return SearchResult.success(EMPTY_SEARCH_MESSAGE, events);
             }
@@ -76,7 +73,7 @@ public class EventsPresenter {
         }
 
         try {
-            return eventQueryService.getEventMap(eventId)
+            return eventService.getEventMap(eventId)
                     .map(eventMap -> MapResult.success("Event map loaded.", eventMap))
                     .orElseGet(() -> MapResult.failure(MAP_NOT_FOUND_MESSAGE));
         } catch (RuntimeException ex) {

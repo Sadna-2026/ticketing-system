@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
-import com.ticketing.application.services.EventQueryService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.OrderService;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
@@ -31,11 +31,11 @@ public class OrdersPresenter {
     private static final String HISTORY_FAILURE_MESSAGE = "Could not load purchase history. Please try again.";
 
     private final OrderService orderService;
-    private final EventQueryService eventQueryService;
+    private final EventService eventService;
 
-    public OrdersPresenter(OrderService orderService, EventQueryService eventQueryService) {
+    public OrdersPresenter(OrderService orderService, EventService eventService) {
         this.orderService = orderService;
-        this.eventQueryService = eventQueryService;
+        this.eventService = eventService;
     }
 
     public OrderResult createOrder(UUID eventId) {
@@ -81,7 +81,7 @@ public class OrdersPresenter {
         }
 
         try {
-            return eventQueryService.getEventMap(eventId)
+            return eventService.getEventMap(eventId)
                     .map(eventMap -> InventoryResult.success("Event inventory loaded.", eventMap))
                     .orElseGet(() -> InventoryResult.failure("Event inventory not found."));
         } catch (RuntimeException ex) {

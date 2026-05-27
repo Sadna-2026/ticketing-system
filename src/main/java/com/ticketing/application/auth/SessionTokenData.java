@@ -1,4 +1,4 @@
-package com.ticketing.domain.auth;
+package com.ticketing.application.auth;
 
 import java.util.Collections;
 import java.util.HashSet;

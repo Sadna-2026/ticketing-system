@@ -36,7 +36,7 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.domain.auth.ISessionTokenRepository;
+import com.ticketing.application.auth.ISessionTokenRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -50,6 +50,8 @@ import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.response.UpdateMemberDetailsResponse;
 import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.OrderCheckoutDomainService;
+import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -88,12 +90,11 @@ class MemberServiceTest {
                     sessionTokenService
             );
 
-            orderService = new OrderService(
-                    orderRepository,
-                    sessionTokenService,
-                    new InMemoryEventRepository(),
-                    new TestClock(Instant.parse("2026-06-01T10:00:00Z"))
-            );
+            InMemoryEventRepository eventRepository = new InMemoryEventRepository();
+            TestClock clock = new TestClock(Instant.parse("2026-06-01T10:00:00Z"));
+            TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepository, eventRepository, clock);
+            OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepository, eventRepository, null, List.of(), List.of(), clock);
+            orderService = new OrderService(sessionTokenService, ticketReservationService, orderCheckoutService, null, null, null);
         }
 
         @Test

@@ -27,8 +27,7 @@ import org.mockito.ArgumentCaptor;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
-import com.ticketing.application.services.EventQueryService;
-import com.ticketing.application.services.EventSearchService;
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
@@ -41,15 +40,13 @@ import com.vaadin.flow.server.VaadinSession;
 @DisplayName("EventsPresenter")
 class EventsPresenterTest {
 
-    private EventSearchService eventSearchService;
-    private EventQueryService eventQueryService;
+    private EventService eventService;
     private EventsPresenter presenter;
 
     @BeforeEach
     void setUp() {
-        eventSearchService = mock(EventSearchService.class);
-        eventQueryService = mock(EventQueryService.class);
-        presenter = new EventsPresenter(eventSearchService, eventQueryService);
+        eventService = mock(EventService.class);
+        presenter = new EventsPresenter(eventService);
         installVaadinSession();
     }
 
@@ -64,7 +61,7 @@ class EventsPresenterTest {
         EventSummaryDTO event = eventSummary("Spring Concert");
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(memberId);
-        when(eventSearchService.searchEvents(any(SearchEventsRequest.class))).thenReturn(List.of(event));
+        when(eventService.searchEvents(any(SearchEventsRequest.class))).thenReturn(List.of(event));
 
         SearchResult result = presenter.searchEvents(
                 " spring ",
@@ -78,7 +75,7 @@ class EventsPresenterTest {
         );
 
         ArgumentCaptor<SearchEventsRequest> request = ArgumentCaptor.forClass(SearchEventsRequest.class);
-        verify(eventSearchService).searchEvents(request.capture());
+        verify(eventService).searchEvents(request.capture());
         assertTrue(result.success());
         assertEquals(List.of(event), result.events());
         assertEquals("member-token", SessionContext.getSessionToken());
@@ -93,7 +90,7 @@ class EventsPresenterTest {
     void GivenSearchReturnsEvents_WhenSearchingEvents_ThenResultsAreReturnedForVaadinComponents() {
         EventSummaryDTO first = eventSummary("Spring Concert");
         EventSummaryDTO second = eventSummary("Summer Festival");
-        when(eventSearchService.searchEvents(any(SearchEventsRequest.class))).thenReturn(List.of(first, second));
+        when(eventService.searchEvents(any(SearchEventsRequest.class))).thenReturn(List.of(first, second));
 
         SearchResult result = presenter.searchEvents(null, null, null, null, null, null, null, null);
 
@@ -105,7 +102,7 @@ class EventsPresenterTest {
 
     @Test
     void GivenSearchReturnsEmptyList_WhenSearchingEvents_ThenEmptyResultIsSuccessfulWithInfoMessage() {
-        when(eventSearchService.searchEvents(any(SearchEventsRequest.class))).thenReturn(List.of());
+        when(eventService.searchEvents(any(SearchEventsRequest.class))).thenReturn(List.of());
 
         SearchResult result = presenter.searchEvents("missing", null, null, null, null, null, null, null);
 
@@ -118,7 +115,7 @@ class EventsPresenterTest {
     void GivenSelectedEventHasMap_WhenLoadingMap_ThenInventoryDataIsReturned() {
         UUID eventId = UUID.randomUUID();
         EventMapDTO eventMap = eventMap(eventId);
-        when(eventQueryService.getEventMap(eventId)).thenReturn(java.util.Optional.of(eventMap));
+        when(eventService.getEventMap(eventId)).thenReturn(java.util.Optional.of(eventMap));
 
         MapResult result = presenter.loadEventMap(eventId);
 
@@ -132,7 +129,7 @@ class EventsPresenterTest {
     @Test
     void GivenMapIsMissing_WhenLoadingMap_ThenEventMapNotFoundMessageIsReturned() {
         UUID eventId = UUID.randomUUID();
-        when(eventQueryService.getEventMap(eventId)).thenReturn(java.util.Optional.empty());
+        when(eventService.getEventMap(eventId)).thenReturn(java.util.Optional.empty());
 
         MapResult result = presenter.loadEventMap(eventId);
 
@@ -143,7 +140,7 @@ class EventsPresenterTest {
 
     @Test
     void GivenApplicationError_WhenSearchingEvents_ThenUserFacingErrorIsReturned() {
-        when(eventSearchService.searchEvents(any(SearchEventsRequest.class)))
+        when(eventService.searchEvents(any(SearchEventsRequest.class)))
                 .thenThrow(new IllegalStateException("database internals"));
 
         SearchResult result = presenter.searchEvents(null, null, null, null, null, null, null, null);

@@ -21,8 +21,8 @@ import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
-import com.ticketing.application.services.CompanyLifecycleService;
 import com.ticketing.application.services.CompanyService;
+import com.ticketing.domain.services.CompanyLifecycleDomainService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
@@ -125,7 +125,7 @@ public class CompanyServiceConcurrencyTest {
         setupFounderWithCompany(founder1, company1);
         setupFounderWithCompany(founder2, company2);
 
-        CompanyLifecycleService lifecycleService = newLifecycleService(companyRepository);
+        CompanyService lifecycleService = newCompanyServiceWithLifecycle(companyRepository);
 
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(2);
@@ -159,7 +159,7 @@ public class CompanyServiceConcurrencyTest {
         setupFounderWithCompany(founder2, company2, blockingRepo);
         blockingRepo.enableBlocking();
 
-        CompanyLifecycleService lifecycleService = newLifecycleService(blockingRepo);
+        CompanyService lifecycleService = newCompanyServiceWithLifecycle(blockingRepo);
 
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch company1EnteredSave = new CountDownLatch(1);
@@ -215,18 +215,18 @@ public class CompanyServiceConcurrencyTest {
         when(sessionTokenService.extractPermissions(anyString())).thenReturn(Set.of());
     }
 
-    private CompanyLifecycleService newLifecycleService(ICompanyRepository repo) {
-        return new CompanyLifecycleService(
+    private CompanyService newCompanyServiceWithLifecycle(ICompanyRepository repo) {
+        CompanyLifecycleDomainService lifecycleDomainService = new CompanyLifecycleDomainService(
                 repo,
                 new InMemoryEventRepository(),
                 memberRepository,
                 new InMemoryOrderRepository(),
-                mock(IPaymentGateway.class),
-                sessionTokenService);
+                mock(IPaymentGateway.class));
+        return new CompanyService(repo, null, sessionTokenService, memberRepository, null, lifecycleDomainService, null);
     }
 
     private static void runSuspend(
-            CompanyLifecycleService lifecycleService,
+            CompanyService lifecycleService,
             UUID founderId,
             String companyName,
             CountDownLatch startLatch,

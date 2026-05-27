@@ -20,12 +20,8 @@ import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
-import com.ticketing.application.services.CompanyHistoryService;
-import com.ticketing.application.services.CompanyLifecycleService;
-import com.ticketing.application.services.CompanyQueryService;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.CompletedPurchaseService;
-import com.ticketing.application.services.EventQueryService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.domain.event.EventCategory;
@@ -50,31 +46,19 @@ public class CompanyPresenter {
     private static final String REPORTING_FAILURE_MESSAGE = "Could not load company reporting data. Please try again.";
 
     private final CompanyService companyService;
-    private final CompanyQueryService companyQueryService;
     private final MemberService memberService;
     private final EventService eventService;
-    private final EventQueryService eventQueryService;
-    private final CompanyLifecycleService companyLifecycleService;
-    private final CompanyHistoryService companyHistoryService;
     private final CompletedPurchaseService completedPurchaseService;
 
     public CompanyPresenter(
             CompanyService companyService,
-            CompanyQueryService companyQueryService,
             MemberService memberService,
             EventService eventService,
-            EventQueryService eventQueryService,
-            CompanyLifecycleService companyLifecycleService,
-            CompanyHistoryService companyHistoryService,
             CompletedPurchaseService completedPurchaseService
     ) {
         this.companyService = companyService;
-        this.companyQueryService = companyQueryService;
         this.memberService = memberService;
         this.eventService = eventService;
-        this.eventQueryService = eventQueryService;
-        this.companyLifecycleService = companyLifecycleService;
-        this.companyHistoryService = companyHistoryService;
         this.completedPurchaseService = completedPurchaseService;
     }
 
@@ -98,7 +82,7 @@ public class CompanyPresenter {
 
     public CompanyInfoResult loadCompanyInfo(String companyName) {
         try {
-            return companyQueryService.getCompanyInfo(companyName)
+            return companyService.getCompanyInfo(companyName)
                     .map(company -> CompanyInfoResult.success("Company information loaded.", company))
                     .orElseGet(() -> CompanyInfoResult.failure("Company not found."));
         } catch (RuntimeException ex) {
@@ -338,7 +322,7 @@ public class CompanyPresenter {
         }
 
         try {
-            return eventQueryService.getEventMap(eventId)
+            return eventService.getEventMap(eventId)
                     .map(eventMap -> EventMapResult.success("Event map loaded.", eventMap))
                     .orElseGet(() -> EventMapResult.failure("Event map not found."));
         } catch (RuntimeException ex) {
@@ -418,15 +402,15 @@ public class CompanyPresenter {
     }
 
     public ActionResult suspendCompany(String companyName) {
-        return lifecycle(companyName, "Company suspended.", (token, name) -> companyLifecycleService.suspendCompany(token, name));
+        return lifecycle(companyName, "Company suspended.", (token, name) -> companyService.suspendCompany(token, name));
     }
 
     public ActionResult reopenCompany(String companyName) {
-        return lifecycle(companyName, "Company reopened.", (token, name) -> companyLifecycleService.reopenCompany(token, name));
+        return lifecycle(companyName, "Company reopened.", (token, name) -> companyService.reopenCompany(token, name));
     }
 
     public ActionResult closeCompany(String companyName) {
-        return lifecycle(companyName, "Company closed.", (token, name) -> companyLifecycleService.permanentCloseByFounder(token, name));
+        return lifecycle(companyName, "Company closed.", (token, name) -> companyService.permanentCloseByFounder(token, name));
     }
 
     public PurchaseHistoryResult loadPurchaseHistory(String companyName) {
@@ -436,7 +420,7 @@ public class CompanyPresenter {
         }
 
         try {
-            List<PurchaseRecordDTO> purchases = companyHistoryService.getPurchaseHistory(token, companyName);
+            List<PurchaseRecordDTO> purchases = companyService.getPurchaseHistory(token, companyName);
             String message = purchases.isEmpty() ? "No company purchases found." : "Loaded " + purchases.size() + " purchase(s).";
             return PurchaseHistoryResult.success(message, purchases);
         } catch (RuntimeException ex) {

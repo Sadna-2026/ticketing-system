@@ -2,8 +2,6 @@ package com.ticketing.presentation.rest;
 
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.services.CompanyService;
-import com.ticketing.application.services.CompanyQueryService;
-import com.ticketing.application.services.CompanyLifecycleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,13 +18,9 @@ import com.ticketing.domain.member.StaffAppointment;
 public class CompanyController {
 
     private final CompanyService companyService;
-    private final CompanyQueryService companyQueryService;
-    private final CompanyLifecycleService companyLifecycleService;
 
-    public CompanyController(CompanyService companyService, CompanyQueryService companyQueryService, CompanyLifecycleService companyLifecycleService) {
+    public CompanyController(CompanyService companyService) {
         this.companyService = companyService;
-        this.companyQueryService = companyQueryService;
-        this.companyLifecycleService = companyLifecycleService;
     }
 
     @PostMapping
@@ -37,7 +31,7 @@ public class CompanyController {
 
     @GetMapping("/{companyName}")
     public ResponseEntity<ApiResponse<CompanyPublicDTO>> getCompanyInfo(@PathVariable String companyName) {
-        Optional<CompanyPublicDTO> dto = companyQueryService.getCompanyInfo(companyName);
+        Optional<CompanyPublicDTO> dto = companyService.getCompanyInfo(companyName);
         return dto.map(val -> ResponseEntity.ok(ApiResponse.success(val))).orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Company not found")));
     }
 
@@ -67,19 +61,19 @@ public class CompanyController {
 
     @PatchMapping("/{companyName}/lifecycle/suspend")
     public ResponseEntity<ApiResponse<Void>> suspendCompany(@RequestHeader("X-Session-Token") String token, @PathVariable String companyName) {
-        companyLifecycleService.suspendCompany(token, companyName);
+        companyService.suspendCompany(token, companyName);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @PatchMapping("/{companyName}/lifecycle/reopen")
     public ResponseEntity<ApiResponse<Void>> reopenCompany(@RequestHeader("X-Session-Token") String token, @PathVariable String companyName) {
-        companyLifecycleService.reopenCompany(token, companyName);
+        companyService.reopenCompany(token, companyName);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @DeleteMapping("/{companyName}")
     public ResponseEntity<ApiResponse<Void>> closeCompany(@RequestHeader("X-Session-Token") String token, @PathVariable String companyName) {
-        companyLifecycleService.permanentCloseByFounder(token, companyName);
+        companyService.permanentCloseByFounder(token, companyName);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 }
