@@ -32,9 +32,9 @@ import com.ticketing.domain.lottery.LotteryDrawDomainService;
 import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.lottery.LotteryRegistrationDomainService;
 import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.services.EventDomainService;
 import com.ticketing.domain.services.EventSearchDomainService;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
 
 @org.springframework.stereotype.Service
 public class EventService {

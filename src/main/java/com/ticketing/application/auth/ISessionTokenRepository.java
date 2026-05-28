@@ -1,6 +1,5 @@
 package com.ticketing.application.auth;
 
-
 import java.util.Optional;
 import java.util.UUID;
 

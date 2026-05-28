@@ -1,6 +1,5 @@
 package com.ticketing.infrastructure;
 
-
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,7 +9,6 @@ import org.springframework.stereotype.Repository;
 import com.ticketing.application.auth.ISessionTokenRepository;
 import com.ticketing.application.auth.SessionToken;
 import com.ticketing.domain.exception.OptimisticLockException;
-
 
 @Repository
 public class InMemorySessionTokenRepository implements ISessionTokenRepository {

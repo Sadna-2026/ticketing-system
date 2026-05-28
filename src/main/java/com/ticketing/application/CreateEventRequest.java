@@ -1,14 +1,14 @@
 package com.ticketing.application;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.LotteryWindow;
 import com.ticketing.domain.event.SaleMethod;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
 
 public record CreateEventRequest(
         String companyName,

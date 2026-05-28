@@ -5,9 +5,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Optional;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public class Member {
