@@ -1,14 +1,15 @@
 package com.ticketing.presentation.rest;
 
-import com.ticketing.domain.member.request.LoginRequest;
-import com.ticketing.domain.member.response.LoginResponse;
-import com.ticketing.domain.member.request.RegisterRequest;
-import com.ticketing.domain.member.response.RegisterResponse;
-import com.ticketing.domain.member.response.LogoutResponse;
-import com.ticketing.application.services.MemberService;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import com.ticketing.application.services.MemberService;
+import com.ticketing.domain.member.request.LoginRequest;
+import com.ticketing.domain.member.request.RegisterRequest;
+import com.ticketing.domain.member.response.LoginResponse;
+import com.ticketing.domain.member.response.LogoutResponse;
+import com.ticketing.domain.member.response.RegisterResponse;
 
 @RestController
 @RequestMapping("/api/auth")

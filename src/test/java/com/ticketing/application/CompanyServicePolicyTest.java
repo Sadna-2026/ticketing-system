@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.domain.company.Company;
-import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventPublisher;
@@ -27,12 +26,10 @@ import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.PurchaseContext;
-import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
-import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 
 @DisplayName("CompanyService — Policy management")

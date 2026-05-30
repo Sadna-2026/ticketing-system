@@ -1,4 +1,5 @@
 package com.ticketing.domain.company;
+
 import java.util.Optional;
 
 import com.ticketing.infrastructure.IRepository;

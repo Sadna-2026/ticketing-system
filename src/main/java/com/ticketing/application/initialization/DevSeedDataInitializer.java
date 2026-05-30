@@ -15,10 +15,8 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-import com.ticketing.application.services.PlatformInitializationService;
 import com.ticketing.application.services.AdminService;
-
-import com.ticketing.domain.admin.Admin;
+import com.ticketing.application.services.PlatformInitializationService;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;

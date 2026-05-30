@@ -1,6 +1,5 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,8 +24,8 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
-import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.InMemoryOrderRepository;
 
 /**
  * Unit tests for CompletedPurchaseService.

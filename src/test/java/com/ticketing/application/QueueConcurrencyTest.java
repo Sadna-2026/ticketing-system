@@ -1,5 +1,8 @@
 package com.ticketing.application;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,12 +16,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.TestClock;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.services.OrderService;
@@ -27,9 +27,9 @@ import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.exception.OptimisticLockException;
-import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.TicketReservationDomainService;
+import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.domain.services.QueueDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;

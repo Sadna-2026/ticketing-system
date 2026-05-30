@@ -1,26 +1,23 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
@@ -36,7 +33,6 @@ import com.ticketing.domain.event.LotteryWindow;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;

@@ -1,14 +1,14 @@
 package  com.ticketing.infrastructure.gateway;
 
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.gateway.SupplyResult;
 import com.ticketing.domain.gateway.TicketRequest;
-
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @org.springframework.stereotype.Component
 public class StubTicketSupplyGateway implements ITicketSupplyGateway {

@@ -1,6 +1,5 @@
 package com.ticketing.application.dto;
 
-
 import java.time.Instant;
 import java.util.UUID;
 

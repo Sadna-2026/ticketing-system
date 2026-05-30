@@ -16,8 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.domain.admin.Admin;
 import com.ticketing.application.auth.SessionToken;
+import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.member.Member;

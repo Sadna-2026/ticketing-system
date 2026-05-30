@@ -45,7 +45,6 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReport
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
-import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;

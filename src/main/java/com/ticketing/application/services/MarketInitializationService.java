@@ -1,5 +1,11 @@
 package com.ticketing.application.services;
 
+import java.util.Set;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.ticketing.application.MarketInitializationResponse;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.domain.admin.Admin;
@@ -7,11 +13,6 @@ import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.system.StartupConfiguration;
-
-import java.util.Set;
-import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @org.springframework.stereotype.Service
 public class MarketInitializationService {

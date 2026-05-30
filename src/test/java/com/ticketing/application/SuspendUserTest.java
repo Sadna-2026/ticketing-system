@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -26,8 +25,6 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
-import com.ticketing.domain.company.ICompanyRepository;
-import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.IOrderRepository;

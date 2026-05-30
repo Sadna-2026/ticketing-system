@@ -3,6 +3,9 @@ package com.ticketing.presentation.vaadin.presenters;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -31,10 +34,6 @@ import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHisto
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.server.VaadinSession;
-
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
 
 @DisplayName("AdminPresenter")
 class AdminPresenterTest {

@@ -1,21 +1,22 @@
 package com.ticketing.presentation.rest;
 
-import com.ticketing.application.CreateEventRequest;
-import com.ticketing.application.EditEventRequest;
-import com.ticketing.application.dto.LotteryRegistrationRequest;
-import com.ticketing.application.dto.LotteryRegistrationResponse;
-import com.ticketing.application.SearchEventsRequest;
-import com.ticketing.application.dto.EventDetailsDTO;
-import com.ticketing.application.dto.EventMapDTO;
-import com.ticketing.application.dto.EventSummaryDTO;
-import com.ticketing.application.services.EventService;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import com.ticketing.application.CreateEventRequest;
+import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.SearchEventsRequest;
+import com.ticketing.application.dto.EventDetailsDTO;
+import com.ticketing.application.dto.EventMapDTO;
+import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.LotteryRegistrationRequest;
+import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.application.services.EventService;
 
 @RestController
 @RequestMapping("/api/events")

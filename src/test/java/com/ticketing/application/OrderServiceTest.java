@@ -1,6 +1,11 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -14,25 +19,17 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.domain.services.OrderTimeDomainService;
-import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -57,6 +54,7 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.order.TicketReservationDomainService;
+import com.ticketing.domain.services.OrderTimeDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;

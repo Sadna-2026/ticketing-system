@@ -1,12 +1,12 @@
 package  com.ticketing.infrastructure.gateway;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
 import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.PaymentDetails;
 import com.ticketing.domain.gateway.PaymentResult;
 import com.ticketing.domain.gateway.RefundResult;
-
-import java.math.BigDecimal;
-import java.util.UUID;
 
 @org.springframework.stereotype.Component
 public class StubPaymentGateway implements IPaymentGateway {

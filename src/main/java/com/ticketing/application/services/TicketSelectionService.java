@@ -3,12 +3,12 @@ package com.ticketing.application.services;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.ticketing.domain.order.SelectionRequest;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.order.SelectionRequest;
 
 /**
  * Pre-reservation validation per UC-II.8. Confirms the requested seats / GA

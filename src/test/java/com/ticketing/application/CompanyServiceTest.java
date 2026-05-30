@@ -1,16 +1,4 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.lang.reflect.Field;
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,10 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -35,14 +19,27 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.application.services.CompanyService;
-import com.ticketing.domain.services.CompanyHistoryDomainService;
-import com.ticketing.domain.services.CompanyLifecycleDomainService;
-import com.ticketing.domain.services.CompanyQueryDomainService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
@@ -63,12 +60,14 @@ import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
 import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.services.CompanyHistoryDomainService;
+import com.ticketing.domain.services.CompanyLifecycleDomainService;
+import com.ticketing.domain.services.CompanyQueryDomainService;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
-
 
 @DisplayName("CompanyService")
 class CompanyServiceTest {
