@@ -106,7 +106,7 @@ class NotificationsViewTest {
                 .thenReturn(RegistrationResult.success("member-1", "listener-1"));
         NotificationsView view = new NotificationsView(presenter);
 
-        UI.getCurrent().add(view);
+        attachViewToCurrentUi(view);
 
         assertTrue(hasText(view, "Real-time notifications connected."));
         assertTrue(hasText(view, "No pending notifications."));
@@ -119,11 +119,17 @@ class NotificationsViewTest {
         when(presenter.registerRealtimeListener(any()))
                 .thenReturn(RegistrationResult.success("member-1", "listener-1"));
         NotificationsView view = new NotificationsView(presenter);
-        UI.getCurrent().add(view);
+        attachViewToCurrentUi(view);
 
         UI.getCurrent().remove(view);
 
         verify(presenter).unregisterRealtimeListener("member-1", "listener-1");
+    }
+
+    private void attachViewToCurrentUi(Component view) {
+        UI ui = new UI();
+        UI.setCurrent(ui);
+        ui.add(view);
     }
 
     private boolean hasButton(Component root, String text) {

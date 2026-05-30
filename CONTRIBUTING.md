@@ -44,3 +44,5 @@ To generate the code coverage report locally:
 2. After the tests finish, open `target/site/jacoco/index.html` in your web browser.
 
 In the CI pipeline, the coverage report is generated automatically on every push to `main`/`develop` and PRs. It is uploaded as a build artifact named `jacoco-report`, which you can download directly from the GitHub Actions run summary.
+
+The required JaCoCo threshold is **75% line coverage** over the Domain and Application bundle. The build fails during `mvn verify` when coverage is below `0.75`, so every contributor must keep the covered Domain/Application scope at or above 75%.

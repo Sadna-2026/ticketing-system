@@ -22,10 +22,11 @@ jobs:
         distribution: 'temurin'
         cache: maven
 
-    - name: Build and run all tests
+    - name: Build, test, and enforce JaCoCo coverage
       run: mvn clean verify
 
     - name: Upload JaCoCo Coverage Report
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: jacoco-report
