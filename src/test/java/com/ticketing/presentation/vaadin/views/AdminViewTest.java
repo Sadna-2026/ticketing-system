@@ -158,6 +158,7 @@ class AdminViewTest {
 
         clickButton(view, "Load global purchase history");
 
+        verify(presenter).loadGlobalPurchaseHistory(null, "Acme");
         assertTrue(hasText(view, "System admin permission required"));
         assertEquals(0, findPurchaseHistoryGrid(view).getDataProvider().fetch(new Query<>()).count());
     }

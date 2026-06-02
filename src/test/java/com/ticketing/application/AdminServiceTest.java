@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.MemberSummaryDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.domain.admin.IAdminRepository;
@@ -284,5 +285,50 @@ public class AdminServiceTest {
 
         assertEquals(1, results.size());
         assertEquals(companyName, results.get(0).companyName());
+    }
+
+    @Test
+    public void GivenAdminAndBlankQuery_WhenSearchMembers_ThenAllMembersReturned() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "alice", "alice@example.com", "pass"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "bob", "bob@example.com", "pass"));
+
+        List<MemberSummaryDto> results = adminService.searchMembers(adminToken, "");
+
+        assertEquals(2, results.size());
+    }
+
+    @Test
+    public void GivenAdminAndPartialQuery_WhenSearchMembers_ThenOnlyMatchingUsernamesReturned() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "manager", "manager@example.com", "pass"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "alice", "alice@example.com", "pass"));
+
+        List<MemberSummaryDto> results = adminService.searchMembers(adminToken, "man");
+
+        assertEquals(1, results.size());
+        assertEquals("manager", results.get(0).username());
+    }
+
+    @Test
+    public void GivenAdminAndMixedCaseQuery_WhenSearchMembers_ThenMatchIsCaseInsensitive() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "Alice", "alice@example.com", "pass"));
+
+        List<MemberSummaryDto> results = adminService.searchMembers(adminToken, "ALI");
+
+        assertEquals(1, results.size());
+        assertEquals("Alice", results.get(0).username());
+    }
+
+    @Test
+    public void GivenNonAdminToken_WhenSearchMembers_ThenSecurityExceptionThrown() {
+        String token = "user-token";
+        when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
+
+        assertThrows(SecurityException.class, () -> adminService.searchMembers(token, ""));
     }
 }

@@ -1,6 +1,7 @@
 package com.ticketing.domain.services;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -263,9 +264,9 @@ public class AdminDomainService {
         if (!isAdmin(adminToken)) {
             throw new SecurityException("System admin permission required");
         }
-        String query = usernameQuery == null ? "" : usernameQuery.trim().toLowerCase();
+        String query = usernameQuery == null ? "" : usernameQuery.trim().toLowerCase(Locale.ROOT);
         return memberRepository.findAll().stream()
-                .filter(m -> query.isEmpty() || m.getUsername().toLowerCase().contains(query))
+                .filter(m -> query.isEmpty() || m.getUsername().toLowerCase(Locale.ROOT).contains(query))
                 .map(m -> new com.ticketing.application.dto.MemberSummaryDto(m.getId(), m.getUsername()))
                 .collect(Collectors.toList());
     }

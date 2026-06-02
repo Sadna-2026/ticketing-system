@@ -211,20 +211,16 @@ public class AdminView extends VerticalLayout {
     }
 
     private void removeMember() {
-        MemberSummaryDto target = removeMemberPicker.getValue();
+        MemberSummaryDto target = requireSelected(removeMemberPicker, memberStatus, "Select a target member.");
         if (target == null) {
-            memberStatus.setText("Select a target member.");
-            UiMessages.error("Select a target member.");
             return;
         }
         handleMemberResult(presenter.removeMember(target.id()));
     }
 
     private void suspendMember() {
-        MemberSummaryDto target = suspensionTargetPicker.getValue();
+        MemberSummaryDto target = requireSelected(suspensionTargetPicker, suspensionStatus, "Select a suspension target member.");
         if (target == null) {
-            suspensionStatus.setText("Select a suspension target member.");
-            UiMessages.error("Select a suspension target member.");
             return;
         }
         handleSuspensionAction(presenter.suspendUser(
@@ -236,10 +232,8 @@ public class AdminView extends VerticalLayout {
     }
 
     private void cancelSuspension() {
-        MemberSummaryDto target = suspensionTargetPicker.getValue();
+        MemberSummaryDto target = requireSelected(suspensionTargetPicker, suspensionStatus, "Select a suspension target member.");
         if (target == null) {
-            suspensionStatus.setText("Select a suspension target member.");
-            UiMessages.error("Select a suspension target member.");
             return;
         }
         UUID sid;
@@ -308,6 +302,15 @@ public class AdminView extends VerticalLayout {
         } else {
             UiMessages.error(result.message());
         }
+    }
+
+    private MemberSummaryDto requireSelected(ComboBox<MemberSummaryDto> picker, Span status, String message) {
+        MemberSummaryDto selected = picker.getValue();
+        if (selected == null) {
+            status.setText(message);
+            UiMessages.error(message);
+        }
+        return selected;
     }
 
     private UUID requiredUuid(TextField field, String label) {
