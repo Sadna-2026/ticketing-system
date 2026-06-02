@@ -1,6 +1,7 @@
 package com.ticketing.domain.services;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -257,6 +258,17 @@ public class AdminDomainService {
         target.cancelSuspension(suspensionId);
         memberRepository.save(target);
         log.info("Suspension cancelled: targetMemberId={}, suspensionId={}", targetMemberId, suspensionId);
+    }
+
+    public List<com.ticketing.application.dto.MemberSummaryDTO> searchMembers(String adminToken, String usernameQuery) {
+        if (!isAdmin(adminToken)) {
+            throw new SecurityException("System admin permission required");
+        }
+        String query = usernameQuery == null ? "" : usernameQuery.trim().toLowerCase(Locale.ROOT);
+        return memberRepository.findAll().stream()
+                .filter(m -> query.isEmpty() || m.getUsername().toLowerCase(Locale.ROOT).contains(query))
+                .map(m -> new com.ticketing.application.dto.MemberSummaryDTO(m.getId(), m.getUsername()))
+                .collect(Collectors.toList());
     }
 
     public List<com.ticketing.application.dto.SuspensionDTO> listSuspensions(String adminToken, boolean activeOnly) {
