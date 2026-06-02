@@ -114,7 +114,8 @@ public class EventsView extends VerticalLayout {
         companyName.setPlaceholder("Search by company name");
         companyName.setItemLabelGenerator(CompanySummaryDTO::name);
         companyName.setClearButtonVisible(true);
-        companyName.setItems(presenter.searchCompanies(""));
+        List<CompanySummaryDTO> companies = presenter.searchCompanies("");
+        companyName.setItems(companies == null ? List.of() : companies);
 
         viewMap.setEnabled(false);
         viewMap.addClickListener(event -> loadSelectedEventMap());

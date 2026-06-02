@@ -330,17 +330,21 @@ public class CompanyView extends VerticalLayout {
 
     private void reloadCompanyEvents(ComboBox<EventSummaryDTO> picker, CompanySummaryDTO company) {
         picker.clear();
-        picker.setItems(company == null ? List.of() : presenter.listCompanyEvents(company.name()));
+        picker.setItems(company == null ? List.of() : orEmpty(presenter.listCompanyEvents(company.name())));
     }
 
     private void populatePickerItems() {
-        List<CompanySummaryDTO> companies = presenter.searchCompanies("");
+        List<CompanySummaryDTO> companies = orEmpty(presenter.searchCompanies(""));
         for (ComboBox<CompanySummaryDTO> picker : List.of(
                 infoCompanyName, personnelCompanyName, eventCompanyName,
                 inventoryCompanyName, lifecycleCompanyName, reportingCompanyName, policyCompanyName)) {
             picker.setItems(companies);
         }
-        lookupEventPicker.setItems(presenter.searchBrowsableEvents());
+        lookupEventPicker.setItems(orEmpty(presenter.searchBrowsableEvents()));
+    }
+
+    private static <T> List<T> orEmpty(List<T> items) {
+        return items == null ? List.of() : items;
     }
 
     private void configureCompanyEventsGrid() {
@@ -975,7 +979,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void selectEventInPicker(ComboBox<EventSummaryDTO> picker, String companyName, UUID eventId) {
-        List<EventSummaryDTO> events = presenter.listCompanyEvents(companyName);
+        List<EventSummaryDTO> events = orEmpty(presenter.listCompanyEvents(companyName));
         picker.setItems(events);
         events.stream()
                 .filter(e -> e.id().equals(eventId))
