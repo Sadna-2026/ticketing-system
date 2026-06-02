@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.application.dto.ActiveOrderDto;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventCategory;
@@ -53,7 +54,7 @@ public class EventsView extends VerticalLayout {
 
     private final TextField text = new TextField("Search text");
     private final TextField region = new TextField("Region");
-    private final TextField companyName = new TextField("Company");
+    private final ComboBox<CompanySummaryDTO> companyName = new ComboBox<>("Company");
     private final ComboBox<EventCategory> category = new ComboBox<>("Category");
     private final BigDecimalField minPrice = new BigDecimalField("Min price");
     private final BigDecimalField maxPrice = new BigDecimalField("Max price");
@@ -110,7 +111,11 @@ public class EventsView extends VerticalLayout {
 
         text.setPlaceholder("Event, artist, or description");
         region.setPlaceholder("Exact region");
-        companyName.setPlaceholder("Company name");
+        companyName.setPlaceholder("Search by company name");
+        companyName.setItemLabelGenerator(CompanySummaryDTO::name);
+        companyName.setClearButtonVisible(true);
+        List<CompanySummaryDTO> companies = presenter.searchCompanies("");
+        companyName.setItems(companies == null ? List.of() : companies);
 
         viewMap.setEnabled(false);
         viewMap.addClickListener(event -> loadSelectedEventMap());
@@ -168,7 +173,7 @@ public class EventsView extends VerticalLayout {
                 text.getValue(),
                 region.getValue(),
                 category.getValue(),
-                companyName.getValue(),
+                companyName.getValue() == null ? null : companyName.getValue().name(),
                 minPrice.getValue(),
                 maxPrice.getValue(),
                 fromDate.getValue(),

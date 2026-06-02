@@ -33,6 +33,7 @@ import org.mockito.ArgumentCaptor;
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
@@ -299,6 +300,51 @@ class CompanyPresenterTest {
         assertFalse(result.success());
         assertEquals("A production company with this name already exists.", result.message());
         assertNull(presenter.loadEventMap(null).eventMap());
+    }
+
+    @Test
+    void GivenCompaniesExist_WhenSearchingCompanies_ThenServiceResultsAreReturned() {
+        when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchCompanies("ac"));
+    }
+
+    @Test
+    void GivenServiceError_WhenSearchingCompanies_ThenEmptyListIsReturned() {
+        when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
+
+        assertTrue(presenter.searchCompanies("a").isEmpty());
+    }
+
+    @Test
+    void GivenMemberSession_WhenListingCompanyEvents_ThenEventServiceIsCalledWithToken() {
+        memberSession();
+        EventSummaryDTO event = eventSummary();
+        when(eventService.listCompanyEvents("member-token", "Acme")).thenReturn(List.of(event));
+
+        assertEquals(List.of(event), presenter.listCompanyEvents("Acme"));
+    }
+
+    @Test
+    void GivenNoMemberSession_WhenListingCompanyEvents_ThenEmptyListIsReturnedWithoutCallingService() {
+        when(eventService.listCompanyEvents(any(), any())).thenReturn(List.of(eventSummary()));
+
+        assertTrue(presenter.listCompanyEvents("Acme").isEmpty());
+    }
+
+    @Test
+    void GivenBlankCompany_WhenListingCompanyEvents_ThenEmptyListIsReturned() {
+        memberSession();
+
+        assertTrue(presenter.listCompanyEvents("   ").isEmpty());
+    }
+
+    @Test
+    void GivenBrowsableEvents_WhenSearchingBrowsable_ThenSearchServiceResultsAreReturned() {
+        EventSummaryDTO event = eventSummary();
+        when(eventService.searchEvents(any())).thenReturn(List.of(event));
+
+        assertEquals(List.of(event), presenter.searchBrowsableEvents());
     }
 
     private void memberSession() {

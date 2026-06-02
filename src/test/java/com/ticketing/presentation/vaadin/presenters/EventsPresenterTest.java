@@ -25,8 +25,10 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.application.SearchEventsRequest;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -41,12 +43,14 @@ import com.vaadin.flow.server.VaadinSession;
 class EventsPresenterTest {
 
     private EventService eventService;
+    private CompanyService companyService;
     private EventsPresenter presenter;
 
     @BeforeEach
     void setUp() {
         eventService = mock(EventService.class);
-        presenter = new EventsPresenter(eventService);
+        companyService = mock(CompanyService.class);
+        presenter = new EventsPresenter(eventService, companyService);
         installVaadinSession();
     }
 
@@ -148,6 +152,22 @@ class EventsPresenterTest {
         assertFalse(result.success());
         assertTrue(result.empty());
         assertEquals("Could not search events. Please try again.", result.message());
+    }
+
+    @Test
+    void GivenCompaniesExist_WhenSearchingCompanies_ThenApplicationServiceResultsAreReturned() {
+        when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        List<CompanySummaryDTO> results = presenter.searchCompanies("ac");
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), results);
+    }
+
+    @Test
+    void GivenApplicationError_WhenSearchingCompanies_ThenEmptyListIsReturned() {
+        when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
+
+        assertTrue(presenter.searchCompanies("x").isEmpty());
     }
 
     private void installVaadinSession() {

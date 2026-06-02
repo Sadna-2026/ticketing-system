@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventCategory;
@@ -68,8 +69,8 @@ class EventsViewTest {
         assertTrue(hasButton(view, "Search events"));
         assertTrue(hasButton(view, "Clear filters"));
         assertTrue(hasButton(view, "View selected map"));
-        assertEquals(3, countComponents(view, TextField.class));
-        assertEquals(1, countComponents(view, ComboBox.class));
+        assertEquals(2, countComponents(view, TextField.class));
+        assertEquals(2, countComponents(view, ComboBox.class));
         assertEquals(2, countComponents(view, BigDecimalField.class));
         assertEquals(2, countComponents(view, DatePicker.class));
     }
@@ -182,6 +183,46 @@ class EventsViewTest {
 
         assertTrue(hasText(view, "Could not search events. Please try again."));
         assertEquals(0, findGrid(view).getDataProvider().fetch(new Query<>()).count());
+    }
+
+    @Test
+    void GivenCompanySelectedInPicker_WhenSearching_ThenCompanyNameIsPassedToPresenter() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        when(presenter.searchCompanies("")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+        whenSearch(presenter).thenReturn(SearchResult.success("No events found for the current filters.", List.of()));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+        findCompanyComboBox(view).setValue(new CompanySummaryDTO("Acme"));
+
+        clickButton(view, "Search events");
+
+        verify(presenter).searchEvents(
+                nullable(String.class),
+                nullable(String.class),
+                nullable(EventCategory.class),
+                eq("Acme"),
+                nullable(BigDecimal.class),
+                nullable(BigDecimal.class),
+                nullable(LocalDate.class),
+                nullable(LocalDate.class)
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private ComboBox<CompanySummaryDTO> findCompanyComboBox(Component root) {
+        return (ComboBox<CompanySummaryDTO>) componentsOf(root).stream()
+                .filter(ComboBox.class::isInstance)
+                .map(ComboBox.class::cast)
+                .filter(combo -> "Company".equals(combo.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Company ComboBox not found"));
+    }
+
+    private java.util.List<Component> componentsOf(Component root) {
+        java.util.List<Component> result = new java.util.ArrayList<>();
+        result.add(root);
+        root.getChildren().forEach(child -> result.addAll(componentsOf(child)));
+        return result;
     }
 
     private OrdersPresenter mockOrdersPresenter() {

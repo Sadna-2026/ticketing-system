@@ -2,6 +2,7 @@ package com.ticketing.domain.services;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -52,6 +53,22 @@ public class EventSearchDomainService {
         log.info("Event search: text={}, category={}, company={}, hits={}",
                 q.text(), q.category(), q.companyName(), hits.size());
         return hits;
+    }
+
+    /**
+     * Lists every event belonging to the given company, regardless of status, for use by
+     * company-management event pickers (which must surface drafts so they can be published,
+     * edited, or cancelled). Unlike {@link #searchEvents}, this does not filter by browsable
+     * status or active-company state.
+     */
+    public List<EventSummaryDTO> findCompanyEvents(String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            return List.of();
+        }
+        return eventRepository.findByCompanyName(companyName).stream()
+                .map(EventSummaryDTO::from)
+                .sorted(Comparator.comparing(EventSummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 
     private Set<String> activeCompanyNames() {

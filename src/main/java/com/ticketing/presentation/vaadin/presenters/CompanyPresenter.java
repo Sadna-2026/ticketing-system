@@ -14,9 +14,12 @@ import org.springframework.stereotype.Component;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
+import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
@@ -91,6 +94,40 @@ public class CompanyPresenter {
         } catch (RuntimeException ex) {
             logger.warn(COMPANY_INFO_FAILURE_MESSAGE, ex);
             return CompanyInfoResult.failure(COMPANY_INFO_FAILURE_MESSAGE);
+        }
+    }
+
+    /** Active companies for company pickers; empty on failure so the view never crashes. */
+    public List<CompanySummaryDTO> searchCompanies(String query) {
+        try {
+            return companyService.searchCompanies(query);
+        } catch (RuntimeException ex) {
+            logger.warn("Company search failed", ex);
+            return List.of();
+        }
+    }
+
+    /** All events of a company (any status) for management pickers; empty if no member session. */
+    public List<EventSummaryDTO> listCompanyEvents(String companyName) {
+        String token = memberToken();
+        if (token == null || companyName == null || companyName.isBlank()) {
+            return List.of();
+        }
+        try {
+            return eventService.listCompanyEvents(token, companyName);
+        } catch (RuntimeException ex) {
+            logger.warn("Company event listing failed", ex);
+            return List.of();
+        }
+    }
+
+    /** Browsable (published/sold-out) events for the public event-map lookup picker. */
+    public List<EventSummaryDTO> searchBrowsableEvents() {
+        try {
+            return eventService.searchEvents(SearchEventsRequest.empty());
+        } catch (RuntimeException ex) {
+            logger.warn("Browsable event search failed", ex);
+            return List.of();
         }
     }
 
