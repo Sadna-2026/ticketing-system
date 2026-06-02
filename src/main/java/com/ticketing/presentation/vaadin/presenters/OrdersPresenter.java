@@ -1,8 +1,10 @@
 package com.ticketing.presentation.vaadin.presenters;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.EventMapDTO;
+import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.OrderService;
@@ -79,12 +82,12 @@ public class OrdersPresenter {
      * cart then falls back to the UUID string, so the order flow still works.
      */
     public OrderLabels labelsFor(ActiveOrderDto order) {
-        if (order == null) {
+        if (order == null || order.getItems().isEmpty()) {
             return OrderLabels.empty();
         }
         try {
             return eventService.getEventMap(order.getEventId())
-                    .map(OrdersPresenter::buildLabels)
+                    .map(eventMap -> buildLabels(eventMap, order.getItems()))
                     .orElseGet(OrderLabels::empty);
         } catch (RuntimeException ex) {
             logger.warn("Could not resolve zone/seat labels for active order {}", order.getId(), ex);
@@ -92,13 +95,32 @@ public class OrdersPresenter {
         }
     }
 
-    private static OrderLabels buildLabels(EventMapDTO eventMap) {
+    /** Resolves labels only for the zones/seats actually referenced by the order's items. */
+    private static OrderLabels buildLabels(EventMapDTO eventMap, List<OrderItemDto> items) {
+        Set<UUID> neededZones = new HashSet<>();
+        Set<UUID> neededSeats = new HashSet<>();
+        for (OrderItemDto item : items) {
+            if (item.getZoneId() != null) {
+                neededZones.add(item.getZoneId());
+            }
+            if (item.getSeatId() != null) {
+                neededSeats.add(item.getSeatId());
+            }
+        }
+
         Map<UUID, String> zoneNames = new HashMap<>();
         Map<UUID, String> seatLabels = new HashMap<>();
         for (EventMapDTO.ZoneInfo zone : eventMap.zones()) {
-            zoneNames.put(zone.id(), zone.name());
+            if (neededZones.contains(zone.id())) {
+                zoneNames.put(zone.id(), zone.name());
+            }
+            if (neededSeats.isEmpty()) {
+                continue;
+            }
             for (EventMapDTO.SeatInfo seat : zone.seats()) {
-                seatLabels.put(seat.id(), seat.row() + "-" + seat.seatNumber());
+                if (neededSeats.contains(seat.id())) {
+                    seatLabels.put(seat.id(), seat.row() + "-" + seat.seatNumber());
+                }
             }
         }
         return new OrderLabels(zoneNames, seatLabels);

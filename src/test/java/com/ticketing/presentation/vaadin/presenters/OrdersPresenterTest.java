@@ -251,6 +251,17 @@ class OrdersPresenterTest {
     }
 
     @Test
+    void GivenOrderWithNoItems_WhenResolvingLabels_ThenEmptyLabelsAndNoEventMapLookup() {
+        ActiveOrderDto order = activeOrder(UUID.randomUUID(), UUID.randomUUID(), List.of());
+
+        OrderLabels labels = presenter.labelsFor(order);
+
+        assertTrue(labels.zoneNames().isEmpty());
+        assertTrue(labels.seatLabels().isEmpty());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
     void GivenEventMapLookupFails_WhenResolvingLabels_ThenEmptyLabelsAreReturned() {
         UUID eventId = UUID.randomUUID();
         ActiveOrderDto order = activeOrder(UUID.randomUUID(), eventId,
