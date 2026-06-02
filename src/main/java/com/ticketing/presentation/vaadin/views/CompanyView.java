@@ -1,5 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
+import static com.ticketing.presentation.vaadin.util.RequiredFields.markRequired;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -301,6 +303,27 @@ public class CompanyView extends VerticalLayout {
 
         inventoryZoneId.setPlaceholder("Zone UUID");
         seatId.setPlaceholder("Assigned seat UUID");
+
+        markRequiredFields();
+    }
+
+    private void markRequiredFields() {
+        markRequired(openCompanyName, "Company name is required.");
+
+        markRequired(personnelCompanyName, "Select a company.");
+        markRequired(targetMemberId, "Target member ID is required.");
+        markRequired(role, "Select a role.");
+
+        markRequired(eventCompanyName, "Select a company.");
+        markRequired(eventName, "Event name is required.");
+        markRequired(eventCategory, "Select a category.");
+        markRequired(startTime, "Start time is required.");
+        markRequired(endTime, "End time is required.");
+        markRequired(lockMinutes, "Lock minutes is required.");
+        markRequired(zoneName, "Zone name is required.");
+        markRequired(zonePrice, "Zone price is required.");
+        markRequired(gaCapacity, "GA capacity is required.");
+        markRequired(sectionName, "Venue section is required.");
     }
 
     private void configurePickers() {

@@ -304,6 +304,44 @@ class CompanyViewTest {
         assertEquals("No events for this company", eventPicker.getPlaceholder());
     }
 
+    @Test
+    void GivenCompanyView_WhenRendered_ThenMandatoryFieldsShowRequiredIndicatorAndOptionalFieldsDoNot() {
+        CompanyView view = new CompanyView(mockPresenter());
+
+        assertTrue(findTextField(view, "New company name").isRequiredIndicatorVisible());
+        assertTrue(findCompanyCombo(view, "Personnel company name").isRequiredIndicatorVisible());
+        assertTrue(findTextField(view, "Target member ID").isRequiredIndicatorVisible());
+        assertTrue(findComboByLabel(view, "Role").isRequiredIndicatorVisible());
+        assertTrue(findCompanyCombo(view, "Event company name").isRequiredIndicatorVisible());
+        assertTrue(findTextField(view, "Event name").isRequiredIndicatorVisible());
+        assertTrue(findComboByLabel(view, "Event category").isRequiredIndicatorVisible());
+        assertTrue(findDateTimePicker(view, "Start time").isRequiredIndicatorVisible());
+        assertTrue(findDateTimePicker(view, "End time").isRequiredIndicatorVisible());
+        assertTrue(findIntegerField(view, "Lock minutes").isRequiredIndicatorVisible());
+        assertTrue(findTextField(view, "Zone name").isRequiredIndicatorVisible());
+        assertTrue(findBigDecimalField(view, "Zone price").isRequiredIndicatorVisible());
+        assertTrue(findIntegerField(view, "GA capacity").isRequiredIndicatorVisible());
+        assertTrue(findTextField(view, "Venue section").isRequiredIndicatorVisible());
+
+        assertFalse(findTextArea(view, "New company description").isRequiredIndicatorVisible());
+        assertFalse(findTextArea(view, "Event description").isRequiredIndicatorVisible());
+        assertFalse(findDateTimePicker(view, "Doors open time").isRequiredIndicatorVisible());
+        assertFalse(findTextField(view, "Role offer ID").isRequiredIndicatorVisible());
+    }
+
+    @Test
+    void GivenRequiredField_WhenValueIsClearedToBlank_ThenItShowsInlineError() {
+        CompanyView view = new CompanyView(mockPresenter());
+        TextField eventName = findTextField(view, "Event name");
+
+        eventName.setValue("Summer Concert");
+        assertFalse(eventName.isInvalid());
+
+        eventName.setValue("");
+        assertTrue(eventName.isInvalid());
+        assertEquals("Event name is required.", eventName.getErrorMessage());
+    }
+
     private CompanyPresenter mockPresenter() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");

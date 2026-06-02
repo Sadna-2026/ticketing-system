@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +16,8 @@ import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter.AuthResult;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.HasLabel;
+import com.vaadin.flow.component.HasValueAndElement;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.textfield.PasswordField;
 
@@ -71,6 +76,49 @@ class AuthViewTest {
         assertFalse(hasVisibleButton(view, "Enter as guest"));
         assertTrue(hasVisibleButton(view, "Log in"));
         assertTrue(hasVisibleButton(view, "Register"));
+    }
+
+    @Test
+    void GivenAuthView_WhenRendered_ThenMandatoryFieldsShowRequiredIndicatorAndOptionalFieldsDoNot() {
+        AuthView view = new AuthView(mockPresenter(guest()));
+
+        assertAllRequired(view, "Username");
+        assertAllRequired(view, "Password");
+        assertAllRequired(view, "Admin username");
+        assertAllRequired(view, "Admin password");
+        assertAllRequired(view, "Email");
+
+        assertNoneRequired(view, "Phone number");
+        assertNoneRequired(view, "Date of birth");
+    }
+
+    private void assertAllRequired(Component root, String label) {
+        List<HasValueAndElement<?, ?>> fields = findFieldsByLabel(root, label);
+        assertFalse(fields.isEmpty(), "No field found with label: " + label);
+        fields.forEach(field -> assertTrue(field.isRequiredIndicatorVisible(),
+                label + " should be marked required"));
+    }
+
+    private void assertNoneRequired(Component root, String label) {
+        List<HasValueAndElement<?, ?>> fields = findFieldsByLabel(root, label);
+        assertFalse(fields.isEmpty(), "No field found with label: " + label);
+        fields.forEach(field -> assertFalse(field.isRequiredIndicatorVisible(),
+                label + " should be optional"));
+    }
+
+    private static List<HasValueAndElement<?, ?>> findFieldsByLabel(Component root, String label) {
+        List<HasValueAndElement<?, ?>> result = new ArrayList<>();
+        collectFieldsByLabel(root, label, result);
+        return result;
+    }
+
+    private static void collectFieldsByLabel(Component component, String label,
+            List<HasValueAndElement<?, ?>> out) {
+        if (component instanceof HasLabel hasLabel && label.equals(hasLabel.getLabel())
+                && component instanceof HasValueAndElement<?, ?> field) {
+            out.add(field);
+        }
+        component.getChildren().forEach(child -> collectFieldsByLabel(child, label, out));
     }
 
     private AuthPresenter mockPresenter(SessionContext.UiState state) {

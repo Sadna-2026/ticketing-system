@@ -1,5 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
+import static com.ticketing.presentation.vaadin.util.RequiredFields.markRequired;
+
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter.AuthResult;
@@ -69,6 +71,8 @@ public class AuthView extends VerticalLayout {
     private VerticalLayout loginSection() {
         TextField username = new TextField("Username");
         PasswordField password = new PasswordField("Password");
+        markRequired(username, "Username is required.");
+        markRequired(password, "Password is required.");
         Button login = new Button("Log in", event -> {
             handle(presenter.login(username.getValue(), password.getValue()));
             refreshSessionStatus();
@@ -84,6 +88,8 @@ public class AuthView extends VerticalLayout {
     private VerticalLayout adminLoginSection() {
         TextField username = new TextField("Admin username");
         PasswordField password = new PasswordField("Admin password");
+        markRequired(username, "Admin username is required.");
+        markRequired(password, "Admin password is required.");
         Button login = new Button("Log in as admin", event -> {
             handle(presenter.adminLogin(username.getValue(), password.getValue()));
             refreshSessionStatus();
@@ -107,6 +113,9 @@ public class AuthView extends VerticalLayout {
         PasswordField password = new PasswordField("Password");
         TextField phoneNumber = new TextField("Phone number");
         DatePicker dateOfBirth = new DatePicker("Date of birth");
+        markRequired(username, "Username is required.");
+        markRequired(email, "Email is required.");
+        markRequired(password, "Password is required.");
         Button register = new Button("Register", event -> {
             handle(presenter.register(
                     username.getValue(),
