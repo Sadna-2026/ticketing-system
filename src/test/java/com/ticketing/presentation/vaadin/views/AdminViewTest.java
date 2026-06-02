@@ -205,6 +205,18 @@ class AdminViewTest {
         verifyNoMoreInteractions(presenter);
     }
 
+    @Test
+    void GivenAdminView_WhenRendered_ThenSuspensionTargetIsRequiredAndOptionalFieldsAreNot() {
+        AdminView view = new AdminView(mockPresenter());
+
+        assertTrue(findComboBox(view, "Suspension target member").isRequiredIndicatorVisible());
+
+        assertFalse(findTextArea(view, "Suspension reason").isRequiredIndicatorVisible());
+        assertFalse(findTextField(view, "Suspension ID").isRequiredIndicatorVisible());
+        assertFalse(findIntegerField(view, "Duration days").isRequiredIndicatorVisible());
+        assertFalse(findComboBox(view, "Buyer member").isRequiredIndicatorVisible());
+    }
+
     private AdminPresenter mockPresenter() {
         AdminPresenter presenter = mock(AdminPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (root)");

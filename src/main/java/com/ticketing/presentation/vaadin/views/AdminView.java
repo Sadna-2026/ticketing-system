@@ -1,5 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
+import static com.ticketing.presentation.vaadin.util.RequiredFields.markRequired;
+
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -110,6 +112,8 @@ public class AdminView extends VerticalLayout {
         suspensionReason.setPlaceholder("Reason shown in application error/status flows");
         suspensionId.setPlaceholder("Suspension UUID");
         activeSuspensionsOnly.setValue(true);
+
+        markRequired(suspensionTargetPicker, "Select a suspension target member.");
     }
 
     private void configurePurchaseHistoryGrid() {
