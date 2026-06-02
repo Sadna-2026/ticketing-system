@@ -1,6 +1,8 @@
 package com.ticketing.presentation.vaadin.presenters;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -68,6 +70,38 @@ public class OrdersPresenter {
             logger.warn(INVENTORY_FAILURE_MESSAGE, ex);
             return InventoryResult.failure(INVENTORY_FAILURE_MESSAGE);
         }
+    }
+
+    /**
+     * Resolves human-readable zone names and seat labels for the items in an order,
+     * so the cart can display them instead of raw UUIDs while keeping the ids internal.
+     * Returns empty maps when the order is null or its event map can't be loaded — the
+     * cart then falls back to the UUID string, so the order flow still works.
+     */
+    public OrderLabels labelsFor(ActiveOrderDto order) {
+        if (order == null) {
+            return OrderLabels.empty();
+        }
+        try {
+            return eventService.getEventMap(order.getEventId())
+                    .map(OrdersPresenter::buildLabels)
+                    .orElseGet(OrderLabels::empty);
+        } catch (RuntimeException ex) {
+            logger.warn("Could not resolve zone/seat labels for active order {}", order.getId(), ex);
+            return OrderLabels.empty();
+        }
+    }
+
+    private static OrderLabels buildLabels(EventMapDTO eventMap) {
+        Map<UUID, String> zoneNames = new HashMap<>();
+        Map<UUID, String> seatLabels = new HashMap<>();
+        for (EventMapDTO.ZoneInfo zone : eventMap.zones()) {
+            zoneNames.put(zone.id(), zone.name());
+            for (EventMapDTO.SeatInfo seat : zone.seats()) {
+                seatLabels.put(seat.id(), seat.row() + "-" + seat.seatNumber());
+            }
+        }
+        return new OrderLabels(zoneNames, seatLabels);
     }
 
     public OrderMutationResult addGATickets(UUID eventId, UUID zoneId, int quantity) {
@@ -256,6 +290,18 @@ public class OrdersPresenter {
 
         public static OrderResult failure(String message) {
             return new OrderResult(false, message, null, null);
+        }
+    }
+
+    /** Human-readable cart labels resolved from an event map; ids stay internal. */
+    public record OrderLabels(Map<UUID, String> zoneNames, Map<UUID, String> seatLabels) {
+        public OrderLabels {
+            zoneNames = zoneNames == null ? Map.of() : Map.copyOf(zoneNames);
+            seatLabels = seatLabels == null ? Map.of() : Map.copyOf(seatLabels);
+        }
+
+        public static OrderLabels empty() {
+            return new OrderLabels(Map.of(), Map.of());
         }
     }
 

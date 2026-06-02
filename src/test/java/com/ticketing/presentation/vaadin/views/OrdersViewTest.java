@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -25,6 +27,7 @@ import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -90,6 +93,28 @@ class OrdersViewTest {
         assertEquals(List.of(item), rows);
         assertTrue(hasText(view, "Active order loaded."));
         assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 3 | total 150.00"));
+    }
+
+    @Test
+    void GivenOrderWithSeat_WhenRendered_ThenCartShowsZoneAndSeatLabelColumnsNotUuids() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        OrderItemDto item = seatItem(UUID.randomUUID(), zoneId, seatId);
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.labelsFor(order)).thenReturn(new OrderLabels(Map.of(zoneId, "Balcony"), Map.of(seatId, "A-1")));
+
+        OrdersView view = new OrdersView(presenter);
+
+        List<String> headers = columnHeaders(findOrderItemsGrid(view));
+        assertTrue(headers.contains("Zone"), headers.toString());
+        assertTrue(headers.contains("Seat"), headers.toString());
+        assertFalse(headers.contains("Zone ID"));
+        assertFalse(headers.contains("Seat ID"));
+        verify(presenter).labelsFor(order);
     }
 
     @Test
@@ -235,6 +260,7 @@ class OrdersViewTest {
         when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
         when(presenter.currentSessionState()).thenReturn(guest());
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("No active order found.", null, null));
+        when(presenter.labelsFor(any())).thenReturn(OrderLabels.empty());
         return presenter;
     }
 
@@ -316,6 +342,12 @@ class OrdersViewTest {
         return (Grid<PurchaseRecordDTO>) findGrids(root).get(1);
     }
 
+    private List<String> columnHeaders(Grid<?> grid) {
+        return grid.getColumns().stream()
+                .map(Grid.Column::getHeaderText)
+                .toList();
+    }
+
     private List<Grid<?>> findGrids(Component root) {
         List<Grid<?>> grids = new ArrayList<>();
         collectGrids(root, grids);
@@ -353,6 +385,17 @@ class OrdersViewTest {
                 new BigDecimal("50.00"),
                 new BigDecimal("50.00").multiply(BigDecimal.valueOf(quantity)),
                 false);
+    }
+
+    private static OrderItemDto seatItem(UUID itemId, UUID zoneId, UUID seatId) {
+        return new OrderItemDto(
+                itemId,
+                zoneId,
+                seatId,
+                1,
+                new BigDecimal("150.00"),
+                new BigDecimal("150.00"),
+                true);
     }
 
     private static PurchaseRecordDTO purchase() {
