@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.application.dto.MemberSummaryDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
@@ -126,6 +127,19 @@ public class AdminPresenter {
             return PurchaseHistoryResult.success(message, purchases);
         } catch (RuntimeException ex) {
             return PurchaseHistoryResult.failure(userMessage(ex, ADMIN_HISTORY_FAILURE_MESSAGE));
+        }
+    }
+
+    public List<MemberSummaryDto> searchMembers(String usernameQuery) {
+        String token = adminToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return adminService.searchMembers(token, usernameQuery);
+        } catch (RuntimeException ex) {
+            logger.warn("Member search failed", ex);
+            return List.of();
         }
     }
 

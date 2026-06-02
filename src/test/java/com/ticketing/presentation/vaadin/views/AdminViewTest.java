@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.dto.MemberSummaryDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
@@ -33,6 +34,7 @@ import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.Checkbox;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -62,10 +64,10 @@ class AdminViewTest {
         assertTrue(hasButton(view, "Suspend member"));
         assertTrue(hasButton(view, "Cancel suspension"));
         assertTrue(hasButton(view, "Load suspensions"));
-        assertNotNull(findTextField(view, "Target member ID"));
-        assertNotNull(findTextField(view, "Buyer member ID"));
+        assertNotNull(findComboBox(view, "Target member"));
+        assertNotNull(findComboBox(view, "Buyer member"));
+        assertNotNull(findComboBox(view, "Suspension target member"));
         assertNotNull(findTextField(view, "Company name"));
-        assertNotNull(findTextField(view, "Suspension target member ID"));
         assertNotNull(findTextField(view, "Suspension ID"));
         assertEquals(2, findGrids(view).size());
     }
@@ -101,51 +103,53 @@ class AdminViewTest {
     @Test
     void GivenTargetMember_WhenRemoveClicked_ThenPresenterIsCalledAndStatusIsDisplayed() {
         AdminPresenter presenter = mockPresenter();
-        UUID targetId = UUID.randomUUID();
-        when(presenter.removeMember(targetId)).thenReturn(ActionResult.success("Member removed."));
+        MemberSummaryDto member = new MemberSummaryDto(UUID.randomUUID(), "alice");
+        when(presenter.searchMembers("")).thenReturn(List.of(member));
+        when(presenter.removeMember(member.id())).thenReturn(ActionResult.success("Member removed."));
         AdminView view = new AdminView(presenter);
-        findTextField(view, "Target member ID").setValue(targetId.toString());
+        findComboBox(view, "Target member").setValue(member);
 
         clickButton(view, "Remove member");
 
-        verify(presenter).removeMember(targetId);
+        verify(presenter).removeMember(member.id());
         assertTrue(hasText(view, "Member removed."));
     }
 
     @Test
-    void GivenInvalidTargetMemberId_WhenRemoveClicked_ThenInvalidIdMessageIsDisplayedBeforePresenterCall() {
+    void GivenNoMemberSelected_WhenRemoveClicked_ThenErrorMessageIsDisplayedBeforePresenterCall() {
         AdminPresenter presenter = mockPresenter();
         AdminView view = new AdminView(presenter);
-        findTextField(view, "Target member ID").setValue("not-a-uuid");
 
         clickButton(view, "Remove member");
 
-        assertTrue(hasText(view, "Enter a valid target member ID."));
+        assertTrue(hasText(view, "Select a target member."));
         verify(presenter).currentSessionLabel();
         verify(presenter).currentSessionState();
+        verify(presenter).searchMembers("");
         verifyNoMoreInteractions(presenter);
     }
 
     @Test
     void GivenHistoryRows_WhenLoadGlobalHistoryClicked_ThenGridDisplaysPurchases() {
         AdminPresenter presenter = mockPresenter();
-        UUID buyerId = UUID.randomUUID();
-        PurchaseRecordDTO purchase = purchase(buyerId);
-        when(presenter.loadGlobalPurchaseHistory(buyerId, "Acme"))
+        MemberSummaryDto buyer = new MemberSummaryDto(UUID.randomUUID(), "bob");
+        when(presenter.searchMembers("")).thenReturn(List.of(buyer));
+        PurchaseRecordDTO purchase = purchase(buyer.id());
+        when(presenter.loadGlobalPurchaseHistory(buyer.id(), "Acme"))
                 .thenReturn(PurchaseHistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
         AdminView view = new AdminView(presenter);
-        findTextField(view, "Buyer member ID").setValue(buyerId.toString());
+        findComboBox(view, "Buyer member").setValue(buyer);
         findTextField(view, "Company name").setValue("Acme");
 
         clickButton(view, "Load global purchase history");
 
-        verify(presenter).loadGlobalPurchaseHistory(buyerId, "Acme");
+        verify(presenter).loadGlobalPurchaseHistory(buyer.id(), "Acme");
         assertTrue(hasText(view, "Loaded 1 purchase(s)."));
         assertEquals(List.of(purchase), findPurchaseHistoryGrid(view).getDataProvider().fetch(new Query<>()).toList());
     }
 
     @Test
-    void GivenApplicationError_WhenLoadGlobalHistoryClicked_ThenMessageIsDisplayedAndGridCleared() {
+    void GivenNoBuyerSelected_WhenLoadGlobalHistoryClicked_ThenHistoryLoadedWithNullBuyer() {
         AdminPresenter presenter = mockPresenter();
         when(presenter.loadGlobalPurchaseHistory(null, "Acme"))
                 .thenReturn(PurchaseHistoryResult.failure("System admin permission required"));
@@ -161,16 +165,17 @@ class AdminViewTest {
     @Test
     void GivenSuspensionInputs_WhenActionsClicked_ThenPresenterMethodsAreCalledAndRowsDisplay() {
         AdminPresenter presenter = mockPresenter();
-        UUID targetId = UUID.randomUUID();
-        UUID suspensionId = UUID.randomUUID();
-        SuspensionDTO suspension = suspension(targetId, suspensionId);
-        when(presenter.suspendUser(targetId, 7, false, "Spam")).thenReturn(ActionResult.success("Member suspended for 7 day(s)."));
-        when(presenter.cancelSuspension(targetId, suspensionId)).thenReturn(ActionResult.success("Suspension cancelled."));
+        MemberSummaryDto target = new MemberSummaryDto(UUID.randomUUID(), "carol");
+        UUID suspensionIdValue = UUID.randomUUID();
+        when(presenter.searchMembers("")).thenReturn(List.of(target));
+        SuspensionDTO suspension = suspension(target.id(), suspensionIdValue);
+        when(presenter.suspendUser(target.id(), 7, false, "Spam")).thenReturn(ActionResult.success("Member suspended for 7 day(s)."));
+        when(presenter.cancelSuspension(target.id(), suspensionIdValue)).thenReturn(ActionResult.success("Suspension cancelled."));
         when(presenter.listSuspensions(true)).thenReturn(SuspensionListResult.success("Loaded 1 suspension(s).", List.of(suspension)));
         AdminView view = new AdminView(presenter);
-        findTextField(view, "Suspension target member ID").setValue(targetId.toString());
+        findComboBox(view, "Suspension target member").setValue(target);
         findTextArea(view, "Suspension reason").setValue("Spam");
-        findTextField(view, "Suspension ID").setValue(suspensionId.toString());
+        findTextField(view, "Suspension ID").setValue(suspensionIdValue.toString());
         findIntegerField(view, "Duration days").setValue(7);
         findCheckbox(view, "Active suspensions only").setValue(true);
 
@@ -178,17 +183,32 @@ class AdminViewTest {
         clickButton(view, "Cancel suspension");
         clickButton(view, "Load suspensions");
 
-        verify(presenter).suspendUser(targetId, 7, false, "Spam");
-        verify(presenter).cancelSuspension(targetId, suspensionId);
+        verify(presenter).suspendUser(target.id(), 7, false, "Spam");
+        verify(presenter).cancelSuspension(target.id(), suspensionIdValue);
         verify(presenter).listSuspensions(true);
         assertTrue(hasText(view, "Loaded 1 suspension(s)."));
         assertEquals(List.of(suspension), findSuspensionsGrid(view).getDataProvider().fetch(new Query<>()).toList());
+    }
+
+    @Test
+    void GivenNoSuspensionTargetSelected_WhenSuspendClicked_ThenErrorMessageIsDisplayed() {
+        AdminPresenter presenter = mockPresenter();
+        AdminView view = new AdminView(presenter);
+
+        clickButton(view, "Suspend member");
+
+        assertTrue(hasText(view, "Select a suspension target member."));
+        verify(presenter).currentSessionLabel();
+        verify(presenter).currentSessionState();
+        verify(presenter).searchMembers("");
+        verifyNoMoreInteractions(presenter);
     }
 
     private AdminPresenter mockPresenter() {
         AdminPresenter presenter = mock(AdminPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (root)");
         when(presenter.currentSessionState()).thenReturn(admin());
+        when(presenter.searchMembers("")).thenReturn(List.of());
         return presenter;
     }
 
@@ -244,6 +264,16 @@ class AdminViewTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Button not found: " + text));
         button.click();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ComboBox<MemberSummaryDto> findComboBox(Component root, String label) {
+        return components(root).stream()
+                .filter(ComboBox.class::isInstance)
+                .map(c -> (ComboBox<MemberSummaryDto>) c)
+                .filter(field -> label.equals(field.getLabel()))
+                .findFirst()
+                .orElse(null);
     }
 
     private static TextField findTextField(Component root, String label) {
