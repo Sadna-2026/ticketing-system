@@ -137,7 +137,7 @@ public class CompanyView extends VerticalLayout {
     private final BigDecimalField zonePrice = new BigDecimalField("Zone price");
     private final IntegerField gaCapacity = new IntegerField("GA capacity");
     private final TextField sectionName = new TextField("Venue section");
-    private final ComboBox<EventSummaryDTO> eventId = new ComboBox<>("Event");
+    private final ComboBox<EventSummaryDTO> eventId = new ComboBox<>("Event to manage");
     private final TextField newEventName = new TextField("New event name");
     private final TextArea newEventDescription = new TextArea("New event description");
     private final TextField newArtist = new TextField("New artist");
@@ -330,7 +330,14 @@ public class CompanyView extends VerticalLayout {
 
     private void reloadCompanyEvents(ComboBox<EventSummaryDTO> picker, CompanySummaryDTO company) {
         picker.clear();
-        picker.setItems(company == null ? List.of() : orEmpty(presenter.listCompanyEvents(company.name())));
+        List<EventSummaryDTO> events = company == null ? List.of() : orEmpty(presenter.listCompanyEvents(company.name()));
+        picker.setItems(events);
+        // The policy picker keeps its "optional / company-level" hint; the others reflect cascade state.
+        if (picker != policyEventId) {
+            picker.setPlaceholder(company == null
+                    ? "Select a company first"
+                    : events.isEmpty() ? "No events for this company" : "Select an event");
+        }
     }
 
     private void populatePickerItems() {

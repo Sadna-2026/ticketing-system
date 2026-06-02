@@ -102,7 +102,7 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Load sales report"));
         assertNotNull(findTextField(view, "New company name"));
         assertNotNull(findTextField(view, "Target member ID"));
-        assertNotNull(findEventCombo(view, "Event"));
+        assertNotNull(findEventCombo(view, "Event to manage"));
         assertNotNull(findCompanyCombo(view, "Event company name"));
         assertEquals(2, findGrids(view).size());
     }
@@ -213,7 +213,7 @@ class CompanyViewTest {
 
         clickButton(view, "Create company event");
         // Creating an event auto-selects it in both the management and inventory pickers.
-        assertEquals(eventId, findEventCombo(view, "Event").getValue().id());
+        assertEquals(eventId, findEventCombo(view, "Event to manage").getValue().id());
         assertEquals(eventId, findEventCombo(view, "Inventory event").getValue().id());
 
         // The public lookup picker is independent of the management pickers.
@@ -280,12 +280,28 @@ class CompanyViewTest {
         when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Event company name").setValue(company("Acme"));
-        findEventCombo(view, "Event").setValue(event("Show", eventId));
+        findEventCombo(view, "Event to manage").setValue(event("Show", eventId));
 
         clickButton(view, "Publish event");
 
         verify(presenter).publishEvent(eventId);
         assertTrue(hasText(view, "Insufficient permissions to publish events"));
+    }
+
+    @Test
+    void GivenCompanySelection_WhenEventPickerCascades_ThenPlaceholderReflectsState() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", UUID.randomUUID())));
+        when(presenter.listCompanyEvents("Empty Co")).thenReturn(List.of());
+        CompanyView view = new CompanyView(presenter);
+        ComboBox<EventSummaryDTO> eventPicker = findEventCombo(view, "Event to manage");
+        assertEquals("Select a company first", eventPicker.getPlaceholder());
+
+        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
+        assertEquals("Select an event", eventPicker.getPlaceholder());
+
+        findCompanyCombo(view, "Event company name").setValue(company("Empty Co"));
+        assertEquals("No events for this company", eventPicker.getPlaceholder());
     }
 
     private CompanyPresenter mockPresenter() {
