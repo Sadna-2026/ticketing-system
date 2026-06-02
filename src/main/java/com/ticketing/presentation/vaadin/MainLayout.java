@@ -1,7 +1,9 @@
 package com.ticketing.presentation.vaadin;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.views.AdminView;
@@ -18,11 +20,14 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
+import com.vaadin.flow.router.AfterNavigationEvent;
+import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.router.RouterLink;
 
-public class MainLayout extends AppLayout {
+public class MainLayout extends AppLayout implements AfterNavigationObserver {
 
     private final Tabs navigation = new Tabs();
+    private final Map<Class<? extends Component>, Tab> tabsByTarget = new HashMap<>();
 
     public MainLayout() {
         H1 title = new H1("Ticketing System");
@@ -38,9 +43,13 @@ public class MainLayout extends AppLayout {
 
     public void refreshNavigation() {
         navigation.removeAll();
+        tabsByTarget.clear();
         for (NavigationItem item : navigationItems(SessionContext.currentUiState())) {
-            navigation.add(tab(item));
+            Tab tab = tab(item);
+            tabsByTarget.put(item.target(), tab);
+            navigation.add(tab);
         }
+        selectCurrentTab();
     }
 
     public static void refreshCurrentNavigation() {
@@ -75,6 +84,22 @@ public class MainLayout extends AppLayout {
     private Tab tab(NavigationItem item) {
         RouterLink link = new RouterLink(item.label(), item.target());
         return new Tab(link);
+    }
+
+    @Override
+    public void afterNavigation(AfterNavigationEvent event) {
+        selectCurrentTab();
+    }
+
+    /**
+     * Highlights the navigation tab for the view currently shown, so the tab bar
+     * reflects the active route. Without this, {@link Tabs} keeps its default
+     * (first tab) selected regardless of the route — e.g. the redirect to
+     * {@code AuthView} would leave "Home" highlighted while on the auth page.
+     */
+    private void selectCurrentTab() {
+        Component content = getContent();
+        navigation.setSelectedTab(content == null ? null : tabsByTarget.get(content.getClass()));
     }
 
     record NavigationItem(String label, Class<? extends Component> target) {
