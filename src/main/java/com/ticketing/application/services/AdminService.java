@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.application.dto.MemberSummaryDto;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.domain.admin.IAdminRepository;
@@ -78,7 +78,7 @@ public class AdminService {
         return domainService.listSuspensions(adminToken, activeOnly);
     }
 
-    public List<MemberSummaryDto> searchMembers(String adminToken, String usernameQuery) {
+    public List<MemberSummaryDTO> searchMembers(String adminToken, String usernameQuery) {
         return domainService.searchMembers(adminToken, usernameQuery);
     }
 

@@ -260,14 +260,14 @@ public class AdminDomainService {
         log.info("Suspension cancelled: targetMemberId={}, suspensionId={}", targetMemberId, suspensionId);
     }
 
-    public List<com.ticketing.application.dto.MemberSummaryDto> searchMembers(String adminToken, String usernameQuery) {
+    public List<com.ticketing.application.dto.MemberSummaryDTO> searchMembers(String adminToken, String usernameQuery) {
         if (!isAdmin(adminToken)) {
             throw new SecurityException("System admin permission required");
         }
         String query = usernameQuery == null ? "" : usernameQuery.trim().toLowerCase(Locale.ROOT);
         return memberRepository.findAll().stream()
                 .filter(m -> query.isEmpty() || m.getUsername().toLowerCase(Locale.ROOT).contains(query))
-                .map(m -> new com.ticketing.application.dto.MemberSummaryDto(m.getId(), m.getUsername()))
+                .map(m -> new com.ticketing.application.dto.MemberSummaryDTO(m.getId(), m.getUsername()))
                 .collect(Collectors.toList());
     }
 

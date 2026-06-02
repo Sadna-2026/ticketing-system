@@ -22,7 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.dto.MemberSummaryDto;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
@@ -103,7 +103,7 @@ class AdminViewTest {
     @Test
     void GivenTargetMember_WhenRemoveClicked_ThenPresenterIsCalledAndStatusIsDisplayed() {
         AdminPresenter presenter = mockPresenter();
-        MemberSummaryDto member = new MemberSummaryDto(UUID.randomUUID(), "alice");
+        MemberSummaryDTO member = new MemberSummaryDTO(UUID.randomUUID(), "alice");
         when(presenter.searchMembers("")).thenReturn(List.of(member));
         when(presenter.removeMember(member.id())).thenReturn(ActionResult.success("Member removed."));
         AdminView view = new AdminView(presenter);
@@ -132,7 +132,7 @@ class AdminViewTest {
     @Test
     void GivenHistoryRows_WhenLoadGlobalHistoryClicked_ThenGridDisplaysPurchases() {
         AdminPresenter presenter = mockPresenter();
-        MemberSummaryDto buyer = new MemberSummaryDto(UUID.randomUUID(), "bob");
+        MemberSummaryDTO buyer = new MemberSummaryDTO(UUID.randomUUID(), "bob");
         when(presenter.searchMembers("")).thenReturn(List.of(buyer));
         PurchaseRecordDTO purchase = purchase(buyer.id());
         when(presenter.loadGlobalPurchaseHistory(buyer.id(), "Acme"))
@@ -166,7 +166,7 @@ class AdminViewTest {
     @Test
     void GivenSuspensionInputs_WhenActionsClicked_ThenPresenterMethodsAreCalledAndRowsDisplay() {
         AdminPresenter presenter = mockPresenter();
-        MemberSummaryDto target = new MemberSummaryDto(UUID.randomUUID(), "carol");
+        MemberSummaryDTO target = new MemberSummaryDTO(UUID.randomUUID(), "carol");
         UUID suspensionIdValue = UUID.randomUUID();
         when(presenter.searchMembers("")).thenReturn(List.of(target));
         SuspensionDTO suspension = suspension(target.id(), suspensionIdValue);
@@ -268,10 +268,10 @@ class AdminViewTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static ComboBox<MemberSummaryDto> findComboBox(Component root, String label) {
+    private static ComboBox<MemberSummaryDTO> findComboBox(Component root, String label) {
         return components(root).stream()
                 .filter(ComboBox.class::isInstance)
-                .map(c -> (ComboBox<MemberSummaryDto>) c)
+                .map(c -> (ComboBox<MemberSummaryDTO>) c)
                 .filter(field -> label.equals(field.getLabel()))
                 .findFirst()
                 .orElse(null);

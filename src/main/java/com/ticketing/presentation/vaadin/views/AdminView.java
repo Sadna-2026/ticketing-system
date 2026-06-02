@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
-import com.ticketing.application.dto.MemberSummaryDto;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.presentation.vaadin.MainLayout;
@@ -52,15 +52,15 @@ public class AdminView extends VerticalLayout {
     private VerticalLayout suspensionControls;
 
     private final Span memberStatus = new Span("Remove members using system admin authorization.");
-    private final ComboBox<MemberSummaryDto> removeMemberPicker = new ComboBox<>("Target member");
+    private final ComboBox<MemberSummaryDTO> removeMemberPicker = new ComboBox<>("Target member");
 
     private final Span historyStatus = new Span("Load global purchase history by buyer, company, or all purchases.");
-    private final ComboBox<MemberSummaryDto> historyBuyerPicker = new ComboBox<>("Buyer member");
+    private final ComboBox<MemberSummaryDTO> historyBuyerPicker = new ComboBox<>("Buyer member");
     private final TextField historyCompanyName = new TextField("Company name");
     private final Grid<PurchaseRecordDTO> purchaseHistoryGrid = new Grid<>(PurchaseRecordDTO.class, false);
 
     private final Span suspensionStatus = new Span("Suspend members and view active or historical suspensions.");
-    private final ComboBox<MemberSummaryDto> suspensionTargetPicker = new ComboBox<>("Suspension target member");
+    private final ComboBox<MemberSummaryDTO> suspensionTargetPicker = new ComboBox<>("Suspension target member");
     private final IntegerField suspensionDurationDays = new IntegerField("Duration days");
     private final Checkbox permanentSuspension = new Checkbox("Permanent suspension");
     private final TextArea suspensionReason = new TextArea("Suspension reason");
@@ -92,14 +92,14 @@ public class AdminView extends VerticalLayout {
     }
 
     private void configureMemberPickers() {
-        removeMemberPicker.setItemLabelGenerator(MemberSummaryDto::username);
+        removeMemberPicker.setItemLabelGenerator(MemberSummaryDTO::username);
         removeMemberPicker.setPlaceholder("Search by username");
 
-        historyBuyerPicker.setItemLabelGenerator(MemberSummaryDto::username);
+        historyBuyerPicker.setItemLabelGenerator(MemberSummaryDTO::username);
         historyBuyerPicker.setPlaceholder("Optional — search by username");
         historyBuyerPicker.setClearButtonVisible(true);
 
-        suspensionTargetPicker.setItemLabelGenerator(MemberSummaryDto::username);
+        suspensionTargetPicker.setItemLabelGenerator(MemberSummaryDTO::username);
         suspensionTargetPicker.setPlaceholder("Search by username");
     }
 
@@ -211,7 +211,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private void removeMember() {
-        MemberSummaryDto target = requireSelected(removeMemberPicker, memberStatus, "Select a target member.");
+        MemberSummaryDTO target = requireSelected(removeMemberPicker, memberStatus, "Select a target member.");
         if (target == null) {
             return;
         }
@@ -219,7 +219,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private void suspendMember() {
-        MemberSummaryDto target = requireSelected(suspensionTargetPicker, suspensionStatus, "Select a suspension target member.");
+        MemberSummaryDTO target = requireSelected(suspensionTargetPicker, suspensionStatus, "Select a suspension target member.");
         if (target == null) {
             return;
         }
@@ -232,7 +232,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private void cancelSuspension() {
-        MemberSummaryDto target = requireSelected(suspensionTargetPicker, suspensionStatus, "Select a suspension target member.");
+        MemberSummaryDTO target = requireSelected(suspensionTargetPicker, suspensionStatus, "Select a suspension target member.");
         if (target == null) {
             return;
         }
@@ -248,7 +248,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private void loadPurchaseHistory() {
-        MemberSummaryDto buyer = historyBuyerPicker.getValue();
+        MemberSummaryDTO buyer = historyBuyerPicker.getValue();
         UUID buyerId = buyer == null ? null : buyer.id();
         PurchaseHistoryResult result;
         try {
@@ -304,8 +304,8 @@ public class AdminView extends VerticalLayout {
         }
     }
 
-    private MemberSummaryDto requireSelected(ComboBox<MemberSummaryDto> picker, Span status, String message) {
-        MemberSummaryDto selected = picker.getValue();
+    private MemberSummaryDTO requireSelected(ComboBox<MemberSummaryDTO> picker, Span status, String message) {
+        MemberSummaryDTO selected = picker.getValue();
         if (selected == null) {
             status.setText(message);
             UiMessages.error(message);
@@ -338,7 +338,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private void loadMemberPickerItems() {
-        List<MemberSummaryDto> members = presenter.searchMembers("");
+        List<MemberSummaryDTO> members = presenter.searchMembers("");
         removeMemberPicker.setItems(members);
         historyBuyerPicker.setItems(members);
         suspensionTargetPicker.setItems(members);

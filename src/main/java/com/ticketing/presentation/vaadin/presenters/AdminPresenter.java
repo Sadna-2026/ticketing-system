@@ -8,7 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.ticketing.application.dto.MemberSummaryDto;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
@@ -130,7 +130,7 @@ public class AdminPresenter {
         }
     }
 
-    public List<MemberSummaryDto> searchMembers(String usernameQuery) {
+    public List<MemberSummaryDTO> searchMembers(String usernameQuery) {
         String token = adminToken();
         if (token == null) {
             return List.of();

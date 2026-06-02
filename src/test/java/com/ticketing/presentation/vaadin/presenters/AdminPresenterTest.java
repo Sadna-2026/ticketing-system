@@ -25,7 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.dto.MemberSummaryDto;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
@@ -174,9 +174,9 @@ class AdminPresenterTest {
         adminSession();
         UUID memberId = UUID.randomUUID();
         when(adminService.searchMembers("admin-token", "ali"))
-                .thenReturn(List.of(new MemberSummaryDto(memberId, "alice")));
+                .thenReturn(List.of(new MemberSummaryDTO(memberId, "alice")));
 
-        List<MemberSummaryDto> result = presenter.searchMembers("ali");
+        List<MemberSummaryDTO> result = presenter.searchMembers("ali");
 
         assertEquals(1, result.size());
         assertEquals("alice", result.get(0).username());
@@ -186,7 +186,7 @@ class AdminPresenterTest {
 
     @Test
     void GivenNoAdminSession_WhenSearchingMembers_ThenEmptyListIsReturnedWithoutCallingService() {
-        List<MemberSummaryDto> result = presenter.searchMembers("ali");
+        List<MemberSummaryDTO> result = presenter.searchMembers("ali");
 
         assertTrue(result.isEmpty());
         verifyNoInteractions(adminService);

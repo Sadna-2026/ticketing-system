@@ -23,7 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
-import com.ticketing.application.dto.MemberSummaryDto;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.domain.admin.IAdminRepository;
@@ -294,7 +294,7 @@ public class AdminServiceTest {
         memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "alice", "alice@example.com", "pass"));
         memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "bob", "bob@example.com", "pass"));
 
-        List<MemberSummaryDto> results = adminService.searchMembers(adminToken, "");
+        List<MemberSummaryDTO> results = adminService.searchMembers(adminToken, "");
 
         assertEquals(2, results.size());
     }
@@ -306,7 +306,7 @@ public class AdminServiceTest {
         memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "manager", "manager@example.com", "pass"));
         memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "alice", "alice@example.com", "pass"));
 
-        List<MemberSummaryDto> results = adminService.searchMembers(adminToken, "man");
+        List<MemberSummaryDTO> results = adminService.searchMembers(adminToken, "man");
 
         assertEquals(1, results.size());
         assertEquals("manager", results.get(0).username());
@@ -318,7 +318,7 @@ public class AdminServiceTest {
         when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
         memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "Alice", "alice@example.com", "pass"));
 
-        List<MemberSummaryDto> results = adminService.searchMembers(adminToken, "ALI");
+        List<MemberSummaryDTO> results = adminService.searchMembers(adminToken, "ALI");
 
         assertEquals(1, results.size());
         assertEquals("Alice", results.get(0).username());
