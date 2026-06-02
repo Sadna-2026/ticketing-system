@@ -25,6 +25,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
@@ -47,6 +48,7 @@ import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.textfield.BigDecimalField;
@@ -100,7 +102,8 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Load sales report"));
         assertNotNull(findTextField(view, "New company name"));
         assertNotNull(findTextField(view, "Target member ID"));
-        assertNotNull(findTextField(view, "Event ID"));
+        assertNotNull(findEventCombo(view, "Event"));
+        assertNotNull(findCompanyCombo(view, "Event company name"));
         assertEquals(2, findGrids(view).size());
     }
 
@@ -143,7 +146,7 @@ class CompanyViewTest {
                 .thenReturn(CompanyInfoResult.success("Company information loaded.",
                         new CompanyPublicDTO("Acme", "desc", List.of(event))));
         CompanyView view = new CompanyView(presenter);
-        findTextField(view, "Company info name").setValue("Acme");
+        findCompanyCombo(view, "Company info name").setValue(company("Acme"));
 
         clickButton(view, "Load company info");
 
@@ -166,7 +169,7 @@ class CompanyViewTest {
         when(presenter.changeManagerPermissions(eq("Acme"), eq(targetId), any()))
                 .thenReturn(ActionResult.success("Manager permissions updated."));
         CompanyView view = new CompanyView(presenter);
-        findTextField(view, "Personnel company name").setValue("Acme");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         findTextField(view, "Target member ID").setValue(targetId.toString());
         findTextField(view, "Role offer ID").setValue(offerId.toString());
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS));
@@ -192,9 +195,11 @@ class CompanyViewTest {
         UUID eventId = UUID.randomUUID();
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
+        EventSummaryDTO created = event("Show", eventId);
         when(presenter.createEvent(eq("Acme"), eq("Show"), eq("desc"), eq(EventCategory.CONCERT),
                 any(), any(), any(), eq(15), eq("Floor"), eq(new BigDecimal("50.00")), eq(100), eq("Main Hall")))
                 .thenReturn(EventActionResult.created("Event created.", eventId));
+        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(created));
         when(presenter.publishEvent(eventId)).thenReturn(ActionResult.success("Event published."));
         when(presenter.cancelEvent(eventId)).thenReturn(ActionResult.success("Event cancelled."));
         when(presenter.loadEventMap(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId)));
@@ -207,9 +212,12 @@ class CompanyViewTest {
         fillCreateEventForm(view);
 
         clickButton(view, "Create company event");
-        assertEquals(eventId.toString(), findTextField(view, "Event ID").getValue());
-        assertEquals(eventId.toString(), findTextField(view, "Inventory event ID").getValue());
+        // Creating an event auto-selects it in both the management and inventory pickers.
+        assertEquals(eventId, findEventCombo(view, "Event").getValue().id());
+        assertEquals(eventId, findEventCombo(view, "Inventory event").getValue().id());
 
+        // The public lookup picker is independent of the management pickers.
+        findEventCombo(view, "Published event").setValue(created);
         findTextField(view, "Inventory zone ID").setValue(zoneId.toString());
         findTextField(view, "Seat row").setValue("A");
         findTextField(view, "Seat number").setValue("1");
@@ -249,8 +257,8 @@ class CompanyViewTest {
         when(presenter.loadPurchaseHistory("Acme")).thenReturn(PurchaseHistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
         when(presenter.loadSalesReport("Acme")).thenReturn(SalesReportResult.success("Sales report loaded.", report));
         CompanyView view = new CompanyView(presenter);
-        findTextField(view, "Lifecycle company name").setValue("Acme");
-        findTextField(view, "Reporting company name").setValue("Acme");
+        findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
+        findCompanyCombo(view, "Reporting company name").setValue(company("Acme"));
 
         clickButton(view, "Suspend company");
         clickButton(view, "Reopen company");
@@ -269,8 +277,10 @@ class CompanyViewTest {
         CompanyPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
         when(presenter.publishEvent(eventId)).thenReturn(ActionResult.failure("Insufficient permissions to publish events"));
+        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
         CompanyView view = new CompanyView(presenter);
-        findTextField(view, "Event ID").setValue(eventId.toString());
+        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
+        findEventCombo(view, "Event").setValue(event("Show", eventId));
 
         clickButton(view, "Publish event");
 
@@ -286,7 +296,7 @@ class CompanyViewTest {
     }
 
     private void fillCreateEventForm(CompanyView view) {
-        findTextField(view, "Event company name").setValue("Acme");
+        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
         findTextField(view, "Event name").setValue("Show");
         findTextArea(view, "Event description").setValue("desc");
         findDateTimePicker(view, "Start time").setValue(LocalDateTime.of(2026, 6, 1, 19, 0));
@@ -358,6 +368,40 @@ class CompanyViewTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Button not found: " + text));
         button.click();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ComboBox<CompanySummaryDTO> findCompanyCombo(Component root, String label) {
+        return (ComboBox<CompanySummaryDTO>) findComboByLabel(root, label);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ComboBox<EventSummaryDTO> findEventCombo(Component root, String label) {
+        return (ComboBox<EventSummaryDTO>) findComboByLabel(root, label);
+    }
+
+    private static ComboBox<?> findComboByLabel(Component root, String label) {
+        return components(root).stream()
+                .filter(ComboBox.class::isInstance)
+                .map(component -> (ComboBox<?>) component)
+                .filter(combo -> label.equals(combo.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("ComboBox not found: " + label));
+    }
+
+    private static CompanySummaryDTO company(String name) {
+        return new CompanySummaryDTO(name);
+    }
+
+    private static EventSummaryDTO event(String name, UUID id) {
+        Instant start = Instant.parse("2026-06-01T19:00:00Z");
+        return new EventSummaryDTO(
+                id,
+                name,
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plusSeconds(7200), start.minusSeconds(3600)),
+                EventStatus.DRAFT
+        );
     }
 
     private static TextField findTextField(Component root, String label) {

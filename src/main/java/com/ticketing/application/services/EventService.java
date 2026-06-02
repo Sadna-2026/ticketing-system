@@ -356,6 +356,15 @@ public class EventService {
         return eventSearchDomainService.searchEvents(req);
     }
 
+    /**
+     * Lists all events of a company (any status) for management pickers. Requires a valid
+     * member session; the per-action services still enforce company-management authorization.
+     */
+    public List<EventSummaryDTO> listCompanyEvents(String token, String companyName) {
+        authenticateMember(token);
+        return eventSearchDomainService.findCompanyEvents(companyName);
+    }
+
     // ── Private helpers (query) ───────────────────────────────────────
 
     private static boolean isBrowsable(Event e) {

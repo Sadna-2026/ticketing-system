@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -326,6 +327,10 @@ public class CompanyService {
 
     public Optional<CompanyPublicDTO> getCompanyInfo(String companyName) {
         return companyQueryDomainService.getCompanyInfo(companyName);
+    }
+
+    public List<CompanySummaryDTO> searchCompanies(String query) {
+        return companyQueryDomainService.searchCompanies(query);
     }
 
     // ── History (from CompanyHistoryService) ───────────────────────
