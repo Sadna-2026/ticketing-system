@@ -160,6 +160,35 @@ class EventsViewTest {
     }
 
     @Test
+    @DisplayName("Assigned-seating zone renders a seat map grouped by row, ordered, with free/taken status")
+    void GivenAssignedZone_WhenMapRendered_ThenSeatsGroupedByRowWithFreeTakenStatus() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Spring Concert");
+        EventMapDTO loadedMap = seatMapEventMap(event.id());
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        // Seats are grouped under per-row labels and a free/taken legend is shown.
+        assertTrue(hasText(view, "Row A"));
+        assertTrue(hasText(view, "Row B"));
+        assertTrue(hasText(view, "● Free"));
+        assertTrue(hasText(view, "● Taken"));
+
+        // Live availability is reflected: free seats enabled, taken seats disabled.
+        assertTrue(findButton(view, "Add A-1").isEnabled());
+        assertFalse(findButton(view, "Add A-10").isEnabled());
+
+        // Rows are ordered by label and seats by seat number (numeric, not lexicographic).
+        assertEquals(List.of("Add A-1", "Add A-2", "Add A-10", "Add B-1"), seatButtonTexts(view));
+    }
+
+    @Test
     void GivenSelectedEventMapFails_WhenViewMapClicked_ThenFailureMessageIsShownInline() {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
@@ -298,6 +327,22 @@ class EventsViewTest {
                 .or(() -> Optional.empty());
     }
 
+    private List<String> seatButtonTexts(Component root) {
+        List<String> texts = new java.util.ArrayList<>();
+        collectSeatButtonTexts(root, texts);
+        return texts;
+    }
+
+    private void collectSeatButtonTexts(Component root, List<String> acc) {
+        if (root instanceof Button button) {
+            String text = button.getText();
+            if (text != null && text.startsWith("Add ") && text.contains("-")) {
+                acc.add(text);
+            }
+        }
+        root.getChildren().forEach(child -> collectSeatButtonTexts(child, acc));
+    }
+
     private long countComponents(Component root, Class<? extends Component> type) {
         long current = type.isInstance(root) ? 1 : 0;
         return current + root.getChildren()
@@ -347,6 +392,37 @@ class EventsViewTest {
                                 List.of(
                                         new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "1", true),
                                         new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "2", false)
+                                )
+                        )
+                )
+        );
+    }
+
+    // Assigned zone with seats supplied out of order (across rows and seat numbers)
+    // so a rendering test can assert the seat map sorts them: rows by label, seats
+    // numerically. A-10 is taken to exercise free/taken status alongside ordering.
+    private static EventMapDTO seatMapEventMap(UUID eventId) {
+        UUID balconyId = UUID.randomUUID();
+        return new EventMapDTO(
+                eventId,
+                "Spring Concert",
+                "Acme",
+                EventStatus.PUBLISHED,
+                Map.of("Balcony", balconyId),
+                List.of(
+                        new EventMapDTO.ZoneInfo(
+                                balconyId,
+                                "Balcony",
+                                ZoneType.ASSIGNED_SEATING,
+                                new BigDecimal("95.00"),
+                                null,
+                                null,
+                                null,
+                                List.of(
+                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "10", false),
+                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "B", "1", true),
+                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "1", true),
+                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "2", true)
                                 )
                         )
                 )
