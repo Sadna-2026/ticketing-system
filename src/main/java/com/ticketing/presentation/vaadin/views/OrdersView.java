@@ -14,6 +14,7 @@ import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
@@ -56,6 +57,7 @@ public class OrdersView extends VerticalLayout {
 
     private ActiveOrderDto currentOrder;
     private OrderItemDto selectedOrderItem;
+    private OrderLabels currentLabels = OrderLabels.empty();
 
     public OrdersView(OrdersPresenter presenter) {
         this.presenter = presenter;
@@ -98,8 +100,8 @@ public class OrdersView extends VerticalLayout {
 
     private void configureOrderItemsGrid() {
         orderItemsGrid.addColumn(item -> item.getId().toString()).setHeader("Item ID").setAutoWidth(true);
-        orderItemsGrid.addColumn(item -> item.getZoneId().toString()).setHeader("Zone ID").setAutoWidth(true);
-        orderItemsGrid.addColumn(this::formatSeat).setHeader("Seat ID").setAutoWidth(true);
+        orderItemsGrid.addColumn(this::formatZone).setHeader("Zone").setAutoWidth(true);
+        orderItemsGrid.addColumn(this::formatSeat).setHeader("Seat").setAutoWidth(true);
         orderItemsGrid.addColumn(OrderItemDto::getQuantity).setHeader("Quantity").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> formatPrice(item.getPricePerTicket())).setHeader("Price").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> formatPrice(item.getTotalPrice())).setHeader("Line total").setAutoWidth(true);
@@ -233,6 +235,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void refreshOrderDisplay() {
+        currentLabels = presenter.labelsFor(currentOrder);
         List<OrderItemDto> items = currentOrder == null ? List.of() : currentOrder.getItems();
         orderItemsGrid.setItems(items);
         orderItemsGrid.setVisible(!items.isEmpty());
@@ -276,8 +279,20 @@ public class OrdersView extends VerticalLayout {
         historySection.setVisible(member);
     }
 
+    private String formatZone(OrderItemDto item) {
+        UUID zoneId = item.getZoneId();
+        if (zoneId == null) {
+            return "";
+        }
+        return currentLabels.zoneNames().getOrDefault(zoneId, zoneId.toString());
+    }
+
     private String formatSeat(OrderItemDto item) {
-        return item.getSeatId() == null ? "" : item.getSeatId().toString();
+        UUID seatId = item.getSeatId();
+        if (seatId == null) {
+            return "";
+        }
+        return currentLabels.seatLabels().getOrDefault(seatId, seatId.toString());
     }
 
     private String formatInstant(Instant instant) {

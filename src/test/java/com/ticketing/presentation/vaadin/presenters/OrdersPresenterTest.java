@@ -36,6 +36,7 @@ import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.InventoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -208,6 +209,70 @@ class OrdersPresenterTest {
     }
 
 
+
+    @Test
+    void GivenActiveOrder_WhenResolvingLabels_ThenZoneNamesAndSeatLabelsAreReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID gaZoneId = UUID.randomUUID();
+        UUID seatZoneId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(UUID.randomUUID(), eventId, List.of(
+                gaItem(UUID.randomUUID(), gaZoneId, 2),
+                seatItem(UUID.randomUUID(), seatZoneId, seatId)));
+        EventMapDTO eventMap = new EventMapDTO(
+                eventId,
+                "Spring Concert",
+                "Acme",
+                EventStatus.PUBLISHED,
+                Map.of("Floor", gaZoneId, "Balcony", seatZoneId),
+                List.of(
+                        new EventMapDTO.ZoneInfo(gaZoneId, "Floor", ZoneType.GENERAL_ADMISSION,
+                                new BigDecimal("50.00"), 100, 80, 20, List.of()),
+                        new EventMapDTO.ZoneInfo(seatZoneId, "Balcony", ZoneType.ASSIGNED_SEATING,
+                                new BigDecimal("150.00"), null, null, null,
+                                List.of(new EventMapDTO.SeatInfo(seatId, "A", "1", true)))));
+        when(eventService.getEventMap(eventId)).thenReturn(Optional.of(eventMap));
+
+        OrderLabels labels = presenter.labelsFor(order);
+
+        assertEquals("Floor", labels.zoneNames().get(gaZoneId));
+        assertEquals("Balcony", labels.zoneNames().get(seatZoneId));
+        assertEquals("A-1", labels.seatLabels().get(seatId));
+        verify(eventService).getEventMap(eventId);
+    }
+
+    @Test
+    void GivenNullOrder_WhenResolvingLabels_ThenEmptyLabelsAreReturned() {
+        OrderLabels labels = presenter.labelsFor(null);
+
+        assertTrue(labels.zoneNames().isEmpty());
+        assertTrue(labels.seatLabels().isEmpty());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    void GivenOrderWithNoItems_WhenResolvingLabels_ThenEmptyLabelsAndNoEventMapLookup() {
+        ActiveOrderDto order = activeOrder(UUID.randomUUID(), UUID.randomUUID(), List.of());
+
+        OrderLabels labels = presenter.labelsFor(order);
+
+        assertTrue(labels.zoneNames().isEmpty());
+        assertTrue(labels.seatLabels().isEmpty());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    void GivenEventMapLookupFails_WhenResolvingLabels_ThenEmptyLabelsAreReturned() {
+        UUID eventId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(UUID.randomUUID(), eventId,
+                List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(eventService.getEventMap(eventId)).thenThrow(new RuntimeException("boom"));
+
+        OrderLabels labels = presenter.labelsFor(order);
+
+        assertTrue(labels.zoneNames().isEmpty());
+        assertTrue(labels.seatLabels().isEmpty());
+    }
 
     @Test
     void GivenGuestSession_WhenLoadingPurchaseHistory_ThenMemberOnlyInfoIsReturned() {
