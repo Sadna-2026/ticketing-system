@@ -7,10 +7,13 @@ import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @DisplayName("MainLayout")
+@ExtendWith(VaadinSessionExtension.class)
 class MainLayoutTest {
 
     @Test

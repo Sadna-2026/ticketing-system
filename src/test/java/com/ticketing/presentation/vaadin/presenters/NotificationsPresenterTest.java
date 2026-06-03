@@ -3,34 +3,30 @@ package com.ticketing.presentation.vaadin.presenters;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.application.services.NotificationQueryService;
 import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.infrastructure.notification.WebSocketNotificationService;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("NotificationsPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class NotificationsPresenterTest {
 
     private NotificationQueryService notificationQueryService;
@@ -42,12 +38,6 @@ class NotificationsPresenterTest {
         notificationQueryService = mock(NotificationQueryService.class);
         realtimeNotificationService = mock(WebSocketNotificationService.class);
         presenter = new NotificationsPresenter(notificationQueryService, realtimeNotificationService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
     @Test
@@ -146,21 +136,5 @@ class NotificationsPresenterTest {
         presenter.unregisterRealtimeListener(memberId, registrationId);
 
         verify(realtimeNotificationService).removeListener(memberId, registrationId);
-    }
-
-    private void installVaadinSession() {
-        VaadinSession session = mock(VaadinSession.class);
-        Map<String, Object> attributes = new HashMap<>();
-
-        doAnswer(invocation -> {
-            attributes.put(invocation.getArgument(0, String.class), invocation.getArgument(1));
-            return null;
-        }).when(session).setAttribute(anyString(), nullable(Object.class));
-
-        when(session.getAttribute(anyString())).thenAnswer(invocation ->
-                attributes.get(invocation.getArgument(0, String.class))
-        );
-
-        VaadinSession.setCurrent(session);
     }
 }
