@@ -48,6 +48,7 @@ public class OrdersView extends VerticalLayout {
     private final IntegerField newGAQuantity = new IntegerField("New GA quantity");
     private final Button removeSelectedItem = new Button("Remove selected item");
     private final Button updateSelectedGAQuantity = new Button("Update selected GA quantity");
+    private final Button clearCart = new Button("Clear cart");
     private final TextField couponCode = new TextField("Coupon code");
     private final Span checkoutStatus = new Span("Checkout is available once the active order has tickets.");
     private final Span historyStatus = new Span("Members can load purchase history.");
@@ -96,6 +97,9 @@ public class OrdersView extends VerticalLayout {
 
         updateSelectedGAQuantity.setEnabled(false);
         updateSelectedGAQuantity.addClickListener(event -> updateSelectedGAQuantity());
+
+        clearCart.setEnabled(false);
+        clearCart.addClickListener(event -> clearCart());
     }
 
     private void configureOrderItemsGrid() {
@@ -123,7 +127,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private VerticalLayout activeOrderSection() {
-        HorizontalLayout itemActions = new HorizontalLayout(removeSelectedItem, newGAQuantity, updateSelectedGAQuantity);
+        HorizontalLayout itemActions = new HorizontalLayout(removeSelectedItem, newGAQuantity, updateSelectedGAQuantity, clearCart);
         itemActions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
@@ -167,6 +171,10 @@ public class OrdersView extends VerticalLayout {
         UUID zoneId = selectedOrderItem == null ? null : selectedOrderItem.getZoneId();
         Integer quantity = newGAQuantity.getValue();
         handleMutationResult(presenter.updateGAQuantity(zoneId, quantity == null ? 0 : quantity));
+    }
+
+    private void clearCart() {
+        handleMutationResult(presenter.cancelOrder());
     }
 
     private void checkout() {
@@ -242,6 +250,7 @@ public class OrdersView extends VerticalLayout {
         selectedOrderItem = null;
         orderItemsGrid.deselectAll();
         refreshItemActionState();
+        clearCart.setEnabled(currentOrder != null);
 
         if (currentOrder == null) {
             orderStatus.setText("No active order. Add tickets from the Events page.");

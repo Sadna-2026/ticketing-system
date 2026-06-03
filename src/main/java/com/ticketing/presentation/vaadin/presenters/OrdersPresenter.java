@@ -33,6 +33,7 @@ public class OrdersPresenter {
     private static final String REMOVE_FAILURE_MESSAGE = "Could not remove order item. Please try again.";
     private static final String UPDATE_FAILURE_MESSAGE = "Could not update GA quantity. Please try again.";
     private static final String CHECKOUT_FAILURE_MESSAGE = "Could not checkout. Please try again.";
+    private static final String CLEAR_FAILURE_MESSAGE = "Could not clear the cart. Please try again.";
     private static final String HISTORY_FAILURE_MESSAGE = "Could not load purchase history. Please try again.";
 
     private final OrderService orderService;
@@ -211,6 +212,25 @@ public class OrdersPresenter {
             return OrderMutationResult.success("GA quantity updated.", null, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, UPDATE_FAILURE_MESSAGE));
+        }
+    }
+
+    /**
+     * Clears the active order (releases its locked inventory) so the buyer isn't
+     * stuck with an order pinned to one event. Surfaces the domain reason (e.g. no
+     * active order) on failure.
+     */
+    public OrderMutationResult cancelOrder() {
+        String token = sessionToken();
+        if (token == null) {
+            return OrderMutationResult.failure(NO_SESSION_MESSAGE);
+        }
+
+        try {
+            orderService.cancelOrder(token);
+            return OrderMutationResult.success("Cart cleared.", null, null);
+        } catch (RuntimeException ex) {
+            return OrderMutationResult.failure(userMessage(ex, CLEAR_FAILURE_MESSAGE));
         }
     }
 
