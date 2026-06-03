@@ -32,6 +32,7 @@ import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
+import com.ticketing.presentation.vaadin.components.SeatMapComponent;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
@@ -49,6 +50,9 @@ import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.Query;
+
+import elemental.json.JsonArray;
+import elemental.json.JsonObject;
 
 @DisplayName("EventsView")
 @ExtendWith(VaadinSessionExtension.class)
@@ -125,10 +129,13 @@ class EventsViewTest {
         assertTrue(hasText(view, "Event map loaded."));
         assertTrue(hasText(view, "Company: Acme"));
         assertTrue(hasText(view, "Available: 10"));
-        assertTrue(hasButton(view, "Add A-1"));
-        Button unavailableSeat = findButton(view, "Add A-2");
-        assertNotNull(unavailableSeat);
-        assertFalse(unavailableSeat.isEnabled());
+
+        // The assigned-seating zone renders as a single client-side seat map fed a
+        // compact payload, with availability reflected per seat (no per-seat component).
+        JsonArray seats = seatMapPayload(view);
+        assertEquals(2, seats.length());
+        assertFalse(seatEntry(seats, "A", "1").getBoolean("taken"));
+        assertTrue(seatEntry(seats, "A", "2").getBoolean("taken"));
     }
 
     @Test
@@ -152,7 +159,9 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
         clickButton(view, "Add GA tickets");
-        clickButton(view, "Add A-1");
+        // Simulate the client-side seat click: the <seat-map> element calls back to
+        // the server with the chosen seat id.
+        findSeatMap(view).selectSeat(seatId.toString());
 
         assertTrue(hasText(view, "Assigned seat added."));
         verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 1);
@@ -160,8 +169,8 @@ class EventsViewTest {
     }
 
     @Test
-    @DisplayName("Assigned-seating zone renders a seat map grouped by row, ordered, with free/taken status")
-    void GivenAssignedZone_WhenMapRendered_ThenSeatsGroupedByRowWithFreeTakenStatus() {
+    @DisplayName("Assigned-seating zone feeds the client seat map an ordered payload with free/taken status")
+    void GivenAssignedZone_WhenMapRendered_ThenSeatPayloadIsOrderedWithFreeTakenStatus() {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
         EventSummaryDTO event = eventSummary("Spring Concert");
@@ -174,18 +183,15 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
 
-        // Seats are grouped under per-row labels and a free/taken legend is shown.
-        assertTrue(hasText(view, "Row A"));
-        assertTrue(hasText(view, "Row B"));
-        assertTrue(hasText(view, "● Free"));
-        assertTrue(hasText(view, "● Taken"));
+        // The assigned zone renders as a single <seat-map> element (no per-seat component).
+        JsonArray seats = seatMapPayload(view);
 
-        // Live availability is reflected: free seats enabled, taken seats disabled.
-        assertTrue(findButton(view, "Add A-1").isEnabled());
-        assertFalse(findButton(view, "Add A-10").isEnabled());
+        // The payload is ordered by row label, then by seat number numerically (not lexicographically).
+        assertEquals(List.of("A-1", "A-2", "A-10", "B-1"), seatLabels(seats));
 
-        // Rows are ordered by label and seats by seat number (numeric, not lexicographic).
-        assertEquals(List.of("Add A-1", "Add A-2", "Add A-10", "Add B-1"), seatButtonTexts(view));
+        // Live availability is reflected per seat: A-10 is taken, A-1 is free.
+        assertFalse(seatEntry(seats, "A", "1").getBoolean("taken"));
+        assertTrue(seatEntry(seats, "A", "10").getBoolean("taken"));
     }
 
     @Test
@@ -327,20 +333,44 @@ class EventsViewTest {
                 .or(() -> Optional.empty());
     }
 
-    private List<String> seatButtonTexts(Component root) {
-        List<String> texts = new java.util.ArrayList<>();
-        collectSeatButtonTexts(root, texts);
-        return texts;
+    private SeatMapComponent findSeatMap(Component root) {
+        SeatMapComponent map = findSeatMapOrNull(root);
+        assertNotNull(map, "SeatMapComponent not found");
+        return map;
     }
 
-    private void collectSeatButtonTexts(Component root, List<String> acc) {
-        if (root instanceof Button button) {
-            String text = button.getText();
-            if (text != null && text.startsWith("Add ") && text.contains("-")) {
-                acc.add(text);
+    private SeatMapComponent findSeatMapOrNull(Component root) {
+        if (root instanceof SeatMapComponent map) {
+            return map;
+        }
+        return root.getChildren()
+                .map(this::findSeatMapOrNull)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private JsonArray seatMapPayload(Component root) {
+        return (JsonArray) findSeatMap(root).getElement().getPropertyRaw("seats");
+    }
+
+    private List<String> seatLabels(JsonArray seats) {
+        List<String> labels = new java.util.ArrayList<>();
+        for (int i = 0; i < seats.length(); i++) {
+            JsonObject seat = seats.getObject(i);
+            labels.add(seat.getString("row") + "-" + seat.getString("num"));
+        }
+        return labels;
+    }
+
+    private JsonObject seatEntry(JsonArray seats, String row, String num) {
+        for (int i = 0; i < seats.length(); i++) {
+            JsonObject seat = seats.getObject(i);
+            if (row.equals(seat.getString("row")) && num.equals(seat.getString("num"))) {
+                return seat;
             }
         }
-        root.getChildren().forEach(child -> collectSeatButtonTexts(child, acc));
+        throw new AssertionError("Seat not found in payload: " + row + "-" + num);
     }
 
     private long countComponents(Component root, Class<? extends Component> type) {
