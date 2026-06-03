@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +25,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
@@ -334,26 +338,97 @@ public class EventsView extends VerticalLayout {
             );
         } else {
             content.add(new Span("Seats: " + zone.seats().size()));
-            HorizontalLayout seats = new HorizontalLayout();
-            seats.setSpacing(true);
-            seats.getStyle().set("flex-wrap", "wrap");
-            for (EventMapDTO.SeatInfo seat : zone.seats()) {
-                Button seatButton = new Button("Add " + seat.row() + "-" + seat.seatNumber(),
-                        event -> addAssignedSeat(zone.id(), seat.id()));
-                seatButton.setEnabled(seat.available());
-                seatButton.getStyle()
-                        .set("border-radius", "999px")
-                        .set("background", seat.available()
-                                ? "var(--lumo-success-color-10pct)"
-                                : "var(--lumo-error-color-10pct)");
-                seats.add(seatButton);
-            }
-            content.add(seats);
+            content.add(seatMapLegend());
+            content.add(seatMap(zone));
         }
 
         Details details = new Details(zone.name(), content);
         details.setOpened(true);
         return details;
+    }
+
+    /**
+     * Renders the assigned-seating zone as a read-only seat map: one line per row
+     * (rows ordered by label, seats ordered by seat number), each seat coloured by
+     * live availability — green when free, red when taken. Free seats remain clickable
+     * to add to the active order; taken seats are disabled.
+     */
+    private Component seatMap(EventMapDTO.ZoneInfo zone) {
+        VerticalLayout rows = new VerticalLayout();
+        rows.setPadding(false);
+        rows.setSpacing(false);
+
+        for (Map.Entry<String, List<EventMapDTO.SeatInfo>> rowEntry : groupSeatsByRow(zone.seats()).entrySet()) {
+            HorizontalLayout rowLayout = new HorizontalLayout();
+            rowLayout.setSpacing(true);
+            rowLayout.setAlignItems(com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment.CENTER);
+            rowLayout.getStyle().set("flex-wrap", "wrap");
+
+            Span rowLabel = new Span("Row " + rowEntry.getKey());
+            rowLabel.getStyle().set("font-weight", "bold").set("min-width", "4em");
+            rowLayout.add(rowLabel);
+
+            for (EventMapDTO.SeatInfo seat : rowEntry.getValue()) {
+                rowLayout.add(seatCell(zone.id(), seat));
+            }
+            rows.add(rowLayout);
+        }
+        return rows;
+    }
+
+    private Button seatCell(UUID zoneId, EventMapDTO.SeatInfo seat) {
+        Button seatButton = new Button("Add " + seat.row() + "-" + seat.seatNumber(),
+                event -> addAssignedSeat(zoneId, seat.id()));
+        seatButton.setEnabled(seat.available());
+        seatButton.getStyle()
+                .set("border-radius", "999px")
+                .set("background", seat.available()
+                        ? "var(--lumo-success-color-10pct)"
+                        : "var(--lumo-error-color-10pct)");
+        return seatButton;
+    }
+
+    private Component seatMapLegend() {
+        HorizontalLayout legend = new HorizontalLayout(
+                legendSwatch("Free", "var(--lumo-success-color-10pct)"),
+                legendSwatch("Taken", "var(--lumo-error-color-10pct)")
+        );
+        legend.setSpacing(true);
+        return legend;
+    }
+
+    private Span legendSwatch(String label, String color) {
+        Span dot = new Span("● " + label);
+        dot.getStyle().set("background", color)
+                .set("border-radius", "999px")
+                .set("padding", "0 var(--lumo-space-s)");
+        return dot;
+    }
+
+    /**
+     * Groups seats into rows ordered by row label, with each row's seats ordered by
+     * seat number (numerically when parseable, falling back to lexicographic order).
+     */
+    private LinkedHashMap<String, List<EventMapDTO.SeatInfo>> groupSeatsByRow(List<EventMapDTO.SeatInfo> seats) {
+        List<EventMapDTO.SeatInfo> sorted = seats.stream()
+                .sorted(Comparator.comparing(EventMapDTO.SeatInfo::row)
+                        .thenComparingInt(seat -> seatNumberOrder(seat.seatNumber()))
+                        .thenComparing(EventMapDTO.SeatInfo::seatNumber))
+                .toList();
+
+        LinkedHashMap<String, List<EventMapDTO.SeatInfo>> byRow = new LinkedHashMap<>();
+        for (EventMapDTO.SeatInfo seat : sorted) {
+            byRow.computeIfAbsent(seat.row(), row -> new ArrayList<>()).add(seat);
+        }
+        return byRow;
+    }
+
+    private int seatNumberOrder(String seatNumber) {
+        try {
+            return Integer.parseInt(seatNumber.trim());
+        } catch (NumberFormatException ex) {
+            return Integer.MAX_VALUE;
+        }
     }
 
     private void refreshSessionStatus() {
