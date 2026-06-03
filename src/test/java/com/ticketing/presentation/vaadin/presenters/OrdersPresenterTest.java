@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -192,6 +193,39 @@ class OrdersPresenterTest {
         assertEquals("GA quantity updated.", updateResult.message());
         verify(orderService).removeItemFromOrder("guest-token", itemId);
         verify(orderService).updateGAQuantity("guest-token", zoneId, 4);
+    }
+
+    @Test
+    void GivenActiveOrder_WhenCancellingOrder_ThenCartIsClearedAndServiceIsCalled() {
+        SessionContext.setSessionToken("guest-token");
+
+        OrderMutationResult result = presenter.cancelOrder();
+
+        assertTrue(result.success(), result.message());
+        assertEquals("Cart cleared.", result.message());
+        assertNull(result.order());
+        verify(orderService).cancelOrder("guest-token");
+    }
+
+    @Test
+    void GivenNoSession_WhenCancellingOrder_ThenSessionMessageAndNoServiceCall() {
+        OrderMutationResult result = presenter.cancelOrder();
+
+        assertFalse(result.success());
+        assertEquals("Start a guest or member session before managing orders.", result.message());
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void GivenNoActiveOrder_WhenCancellingOrder_ThenDomainReasonIsSurfaced() {
+        SessionContext.setSessionToken("guest-token");
+        doThrow(new IllegalArgumentException("No active order found"))
+                .when(orderService).cancelOrder("guest-token");
+
+        OrderMutationResult result = presenter.cancelOrder();
+
+        assertFalse(result.success());
+        assertEquals("No active order found", result.message());
     }
 
     @Test

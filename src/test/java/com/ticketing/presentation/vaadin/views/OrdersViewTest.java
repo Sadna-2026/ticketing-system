@@ -118,6 +118,25 @@ class OrdersViewTest {
     }
 
     @Test
+    void GivenEmptiedOrderPinnedToEvent_WhenClearCartClicked_ThenOrderIsClearedViaPresenter() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        // The dead-end: an order still exists (pinned to its event) but has no items.
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of());
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.cancelOrder()).thenReturn(OrderMutationResult.success("Cart cleared.", null, null));
+        OrdersView view = new OrdersView(presenter);
+
+        assertTrue(hasVisibleButton(view, "Clear cart"));
+        clickButton(view, "Clear cart");
+
+        assertTrue(hasText(view, "Cart cleared."));
+        assertTrue(hasText(view, "No active order. Add tickets from the Events page."));
+        verify(presenter).cancelOrder();
+    }
+
+    @Test
     void GivenOrderWithCoupon_WhenCheckoutClicked_ThenPurchaseIdIsDisplayed() {
         OrdersPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
