@@ -57,6 +57,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID ADULT_EVENT_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     public static final UUID ASSIGNED_EVENT_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     public static final UUID CONFERENCE_EVENT_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
+    public static final UUID LARGE_ASSIGNED_EVENT_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
+    public static final UUID LARGE_ASSIGNED_ZONE_ID = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff");
     public static final UUID CONCERT_GA_ZONE_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     public static final UUID ADULT_GA_ZONE_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     public static final UUID ASSIGNED_SEAT_ZONE_ID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
@@ -190,6 +192,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 EventCategory.CONCERT, new AgeRestrictionPolicy(18), ADULT_GA_ZONE_ID, "18+ floor",
                 new BigDecimal("30.00"), 80);
         saveAssignedEventIfMissing();
+        saveLargeAssignedEventIfMissing();
         saveGaEventIfMissing(CONFERENCE_EVENT_ID, SECOND_COMPANY_NAME, "Northwind Tech Summit",
                 "Second-company event with a max-quantity policy for permission and search QA.",
                 EventCategory.CONFERENCE, new MaxQuantityPolicy(4), CONFERENCE_GA_ZONE_ID, "Auditorium",
@@ -248,5 +251,37 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         event.setVenueMap(new VenueMap(Map.of("Orchestra", ASSIGNED_SEAT_ZONE_ID)));
         event.publish();
         eventRepository.save(event);
+    }
+
+    // Large assigned-seating event (26 rows A-Z x 25 seats = 650) for seat-map
+    // scalability QA (#255). Local QA fixture — not part of the #255 PR.
+    private void saveLargeAssignedEventIfMissing() {
+        if (eventRepository.findById(LARGE_ASSIGNED_EVENT_ID).isPresent()) {
+            return;
+        }
+        int rows = 26;
+        int seatsPerRow = 25;
+        Instant start = Instant.now().plus(Duration.ofDays(60));
+        Event event = new Event(LARGE_ASSIGNED_EVENT_ID, COMPANY_NAME, "Grand Theatre (650 seats)",
+                "Seeded large assigned-seating event for seat-map scalability QA.",
+                EventCategory.PLAY,
+                new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofMinutes(45))),
+                new LockTimerDuration(Duration.ofMinutes(10)),
+                new MinQuantityPolicy(1),
+                new NoDiscountPolicy());
+        event.setArtist("QA Theater");
+        event.setRegion("Tel Aviv");
+        InventoryZone zone = InventoryZone.createAssigned(LARGE_ASSIGNED_ZONE_ID, "Auditorium", new BigDecimal("95.00"));
+        for (int r = 0; r < rows; r++) {
+            String row = Character.toString((char) ('A' + r));
+            for (int s = 1; s <= seatsPerRow; s++) {
+                zone.addSeat(new Seat(UUID.randomUUID(), row, String.valueOf(s)));
+            }
+        }
+        event.addZone(zone);
+        event.setVenueMap(new VenueMap(Map.of("Auditorium", LARGE_ASSIGNED_ZONE_ID)));
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded large assigned event '{}' with {} seats", event.getName(), rows * seatsPerRow);
     }
 }
