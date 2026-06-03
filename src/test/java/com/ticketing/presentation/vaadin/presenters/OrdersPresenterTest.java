@@ -5,9 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -21,10 +18,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.EventMapDTO;
@@ -40,10 +37,11 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.InventoryRes
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("OrdersPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class OrdersPresenterTest {
 
     private OrderService orderService;
@@ -55,12 +53,6 @@ class OrdersPresenterTest {
         orderService = mock(OrderService.class);
         eventService = mock(EventService.class);
         presenter = new OrdersPresenter(orderService, eventService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
 
@@ -319,22 +311,6 @@ class OrdersPresenterTest {
         assertEquals("Purchase history is available for members only.", result.message());
         assertTrue(result.purchases().isEmpty());
         verifyNoInteractions(orderService);
-    }
-
-    private void installVaadinSession() {
-        VaadinSession session = mock(VaadinSession.class);
-        Map<String, Object> attributes = new java.util.HashMap<>();
-
-        doAnswer(invocation -> {
-            attributes.put(invocation.getArgument(0, String.class), invocation.getArgument(1));
-            return null;
-        }).when(session).setAttribute(anyString(), nullable(Object.class));
-
-        when(session.getAttribute(anyString())).thenAnswer(invocation ->
-                attributes.get(invocation.getArgument(0, String.class))
-        );
-
-        VaadinSession.setCurrent(session);
     }
 
     private static ActiveOrderDto activeOrder(UUID orderId, UUID eventId, List<OrderItemDto> items) {

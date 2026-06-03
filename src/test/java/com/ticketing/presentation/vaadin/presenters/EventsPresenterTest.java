@@ -18,10 +18,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.application.SearchEventsRequest;
@@ -36,10 +36,11 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("EventsPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class EventsPresenterTest {
 
     private EventService eventService;
@@ -51,12 +52,6 @@ class EventsPresenterTest {
         eventService = mock(EventService.class);
         companyService = mock(CompanyService.class);
         presenter = new EventsPresenter(eventService, companyService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
     @Test
@@ -168,16 +163,6 @@ class EventsPresenterTest {
         when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
 
         assertTrue(presenter.searchCompanies("x").isEmpty());
-    }
-
-    private void installVaadinSession() {
-        Map<String, Object> attributes = new java.util.HashMap<>();
-        VaadinSession session = mock(VaadinSession.class);
-        org.mockito.Mockito.doAnswer(invocation -> attributes.put(invocation.getArgument(0), invocation.getArgument(1)))
-                .when(session).setAttribute(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.nullable(Object.class));
-        when(session.getAttribute(org.mockito.ArgumentMatchers.anyString()))
-                .thenAnswer(invocation -> attributes.get(invocation.getArgument(0)));
-        VaadinSession.setCurrent(session);
     }
 
     private static EventSummaryDTO eventSummary(String name) {

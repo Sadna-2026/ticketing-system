@@ -5,24 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.AdminService;
@@ -34,10 +29,11 @@ import com.ticketing.domain.member.response.LoginResponse;
 import com.ticketing.domain.member.response.LogoutResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter.AuthResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("AuthPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class AuthPresenterTest {
 
     private MemberService memberService;
@@ -51,12 +47,6 @@ class AuthPresenterTest {
         sessionTokenService = mock(ISessionTokenService.class);
         adminService = mock(AdminService.class);
         presenter = new AuthPresenter(memberService,adminService, sessionTokenService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
     @Test
@@ -317,21 +307,5 @@ class AuthPresenterTest {
                 "0500000000",
                 LocalDate.of(2000, 1, 1)
         );
-    }
-
-    private void installVaadinSession() {
-        VaadinSession session = mock(VaadinSession.class);
-        Map<String, Object> attributes = new HashMap<>();
-
-        doAnswer(invocation -> {
-            attributes.put(invocation.getArgument(0, String.class), invocation.getArgument(1));
-            return null;
-        }).when(session).setAttribute(anyString(), nullable(Object.class));
-
-        when(session.getAttribute(anyString())).thenAnswer(invocation ->
-                attributes.get(invocation.getArgument(0, String.class))
-        );
-
-        VaadinSession.setCurrent(session);
     }
 }

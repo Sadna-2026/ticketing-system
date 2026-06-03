@@ -3,9 +3,6 @@ package com.ticketing.presentation.vaadin.presenters;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -14,16 +11,14 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
@@ -33,10 +28,11 @@ import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("AdminPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class AdminPresenterTest {
 
     private AdminService adminService;
@@ -46,12 +42,6 @@ class AdminPresenterTest {
     void setUp() {
         adminService = mock(AdminService.class);
         presenter = new AdminPresenter(adminService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
     @Test
@@ -197,15 +187,6 @@ class AdminPresenterTest {
         SessionContext.setMemberId(UUID.randomUUID());
         SessionContext.setUsername("root");
         SessionContext.setPermissions(Set.of("SYSTEM_ADMIN"));
-    }
-
-    private void installVaadinSession() {
-        Map<String, Object> attributes = new HashMap<>();
-        VaadinSession session = mock(VaadinSession.class);
-        doAnswer(invocation -> attributes.put(invocation.getArgument(0), invocation.getArgument(1)))
-                .when(session).setAttribute(anyString(), nullable(Object.class));
-        when(session.getAttribute(anyString())).thenAnswer(invocation -> attributes.get(invocation.getArgument(0)));
-        VaadinSession.setCurrent(session);
     }
 
     private static PurchaseRecordDTO purchase(UUID memberId) {

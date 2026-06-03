@@ -6,10 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -24,10 +21,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.application.CreateEventRequest;
@@ -57,10 +54,11 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapRes
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("CompanyPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class CompanyPresenterTest {
 
     private CompanyService companyService;
@@ -81,12 +79,6 @@ class CompanyPresenterTest {
                 eventService,
                 completedPurchaseService
         );
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
     @Test
@@ -352,15 +344,6 @@ class CompanyPresenterTest {
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(memberId);
         SessionContext.setUsername("alice");
-    }
-
-    private void installVaadinSession() {
-        Map<String, Object> attributes = new java.util.HashMap<>();
-        VaadinSession session = mock(VaadinSession.class);
-        doAnswer(invocation -> attributes.put(invocation.getArgument(0), invocation.getArgument(1)))
-                .when(session).setAttribute(anyString(), nullable(Object.class));
-        when(session.getAttribute(anyString())).thenAnswer(invocation -> attributes.get(invocation.getArgument(0)));
-        VaadinSession.setCurrent(session);
     }
 
     private static EventSummaryDTO eventSummary() {
