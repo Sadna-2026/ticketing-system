@@ -30,7 +30,6 @@ import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
 import com.ticketing.domain.lottery.LotteryDrawDomainService;
 import com.ticketing.domain.lottery.LotteryEntry;
-import com.ticketing.domain.lottery.LotteryRegistrationDomainService;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.services.EventDomainService;
@@ -42,10 +41,10 @@ public class EventService {
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
 
     private final IEventRepository eventRepository;
+    private final ILotteryRepository lotteryRepository;
     private final ISessionTokenService sessionTokenService;
     private final ISystemClock systemClock;
 
-    private final LotteryRegistrationDomainService lotteryRegistrationService;
     private final OrderCheckoutDomainService orderCheckoutService;
     private final EventDomainService domainService;
     private final LotteryDrawDomainService lotteryDrawService;
@@ -62,11 +61,11 @@ public class EventService {
                         ISystemClock systemClock,
                         OrderService orderService) {
         this.eventRepository = eventRepository;
+        this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
         this.orderCheckoutService = null;
         this.domainService = new EventDomainService(eventRepository, companyRepository, memberRepository, orderRepository);
-        this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
         this.lotteryDrawService = null;
         this.eventSearchDomainService = new EventSearchDomainService(eventRepository, companyRepository);
         this.notificationService = null;
@@ -113,11 +112,11 @@ public class EventService {
                         ISystemClock systemClock,
                         @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this.eventRepository = eventRepository;
+        this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
         this.orderCheckoutService = orderCheckoutService;
         this.domainService = domainService;
-        this.lotteryRegistrationService = new LotteryRegistrationDomainService(lotteryRepository);
         this.lotteryDrawService = new com.ticketing.domain.lottery.LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new java.util.Random());
         this.eventSearchDomainService = eventSearchDomainService;
         this.notificationService = notificationService;
@@ -141,7 +140,26 @@ public class EventService {
         Instant now = systemClock.now();
         LotteryEntry entry;
         try {
-            entry = lotteryRegistrationService.registerMember(event, memberId, request.zoneId(), request.quantity(), now);
+            if (!event.isLottery()) {
+                throw new IllegalStateException("Event does not support lottery sale method.");
+            }
+            if (!event.isLotteryRegistrationOpen(now)) {
+                throw new IllegalStateException("Lottery registration window is closed.");
+            }
+            if (lotteryRepository.findByEventAndMember(event.getId(), memberId).isPresent()) {
+                throw new IllegalStateException("Member is already registered for this lottery.");
+            }
+
+            event.findZone(request.zoneId());
+            entry = new LotteryEntry(
+                    UUID.randomUUID(),
+                    event.getId(),
+                    memberId,
+                    request.zoneId(),
+                    request.quantity(),
+                    now
+            );
+            lotteryRepository.save(entry);
         } catch (IllegalStateException e) {
             log.warn("Lottery registration denied: {}", e.getMessage());
             return LotteryRegistrationResponse.failure(e.getMessage());
@@ -149,6 +167,8 @@ public class EventService {
             log.warn("Lottery registration conflict: eventId={}, memberId={}", request.eventId(), memberId);
             return LotteryRegistrationResponse.failure("Lottery registration changed concurrently. Please retry.");
         }
+        log.info("Lottery registration successful: memberId={}, eventId={}, entryId={}",
+                memberId, event.getId(), entry.id());
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
