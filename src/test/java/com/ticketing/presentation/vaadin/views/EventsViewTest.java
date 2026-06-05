@@ -224,6 +224,20 @@ class EventsViewTest {
     }
 
     @Test
+    @DisplayName("A specific failure reason from the presenter is shown to the user, not a generic message")
+    void GivenSpecificFailureReason_WhenSearchButtonClicked_ThenThatExactReasonIsShownAndGridStaysEmpty() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        whenSearch(presenter).thenReturn(SearchResult.failure("Minimum price cannot be greater than maximum price."));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+
+        assertTrue(hasText(view, "Minimum price cannot be greater than maximum price."));
+        assertEquals(0, findGrid(view).getDataProvider().fetch(new Query<>()).count());
+    }
+
+    @Test
     void GivenCompanySelectedInPicker_WhenSearching_ThenCompanyNameIsPassedToPresenter() {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
