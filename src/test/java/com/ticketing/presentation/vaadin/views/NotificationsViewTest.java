@@ -9,12 +9,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
@@ -22,6 +26,7 @@ import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.server.Command;
 
 @DisplayName("NotificationsView")
 class NotificationsViewTest {
@@ -114,6 +119,24 @@ class NotificationsViewTest {
     }
 
     @Test
+    void GivenRegisteredView_WhenServicePushesNotification_ThenListenerUpdatesTheUi() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        AtomicReference<NotificationListener> captured = new AtomicReference<>();
+        when(presenter.registerRealtimeListener(any())).thenAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return RegistrationResult.success("member-1", "listener-1");
+        });
+        NotificationsView view = new NotificationsView(presenter);
+        attachViewToSynchronousUi(view);
+
+        assertNotNull(captured.get(), "view did not register a realtime listener on attach");
+        captured.get().onMessage("Role appointment offer received.");
+
+        assertTrue(hasText(view, "Role appointment offer received."));
+        assertTrue(hasText(view, "Showing 1 notification(s)."));
+    }
+
+    @Test
     void GivenRegisteredView_WhenDetached_ThenOnlyOwnRealtimeRegistrationIsRemoved() {
         NotificationsPresenter presenter = mock(NotificationsPresenter.class);
         when(presenter.registerRealtimeListener(any()))
@@ -128,6 +151,25 @@ class NotificationsViewTest {
 
     private void attachViewToCurrentUi(Component view) {
         UI ui = new UI();
+        UI.setCurrent(ui);
+        ui.add(view);
+    }
+
+    /**
+     * Attaches the view to a UI whose {@link UI#access(Command)} runs the command synchronously.
+     * A bare test UI has no {@link com.vaadin.flow.server.VaadinSession}, so the real
+     * {@code ui.access(...)} the view uses to marshal push callbacks onto the UI thread throws
+     * {@link com.vaadin.flow.component.UIDetachedException}. Running the command inline lets the
+     * test exercise the registered listener end-to-end without a live WebSocket/session.
+     */
+    private void attachViewToSynchronousUi(Component view) {
+        UI ui = new UI() {
+            @Override
+            public Future<Void> access(Command command) {
+                command.execute();
+                return CompletableFuture.completedFuture(null);
+            }
+        };
         UI.setCurrent(ui);
         ui.add(view);
     }
