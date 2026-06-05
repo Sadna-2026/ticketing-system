@@ -164,6 +164,24 @@ class OrdersPresenterTest {
         verify(orderService).getPurchaseHistory("member-token");
     }
 
+    @Test
+    void GivenMemberSession_WhenPurchaseHistoryServiceThrows_ThenFallbackFailureMessageIsReturned() {
+        UUID memberId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(memberId);
+        SessionContext.setUsername("alice");
+        when(orderService.getPurchaseHistory("member-token"))
+                .thenThrow(new RuntimeException("repository unavailable"));
+
+        HistoryResult result = presenter.loadPurchaseHistory();
+
+        assertFalse(result.success());
+        assertFalse(result.memberOnly());
+        assertEquals("Could not load purchase history. Please try again.", result.message());
+        assertTrue(result.purchases().isEmpty());
+        verify(orderService).getPurchaseHistory("member-token");
+    }
+
 
 
     @Test

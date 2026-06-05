@@ -177,6 +177,23 @@ class OrdersViewTest {
     }
 
     @Test
+    void GivenMemberWithNoPurchases_WhenLoadingPurchaseHistory_ThenNoPurchasesMessageIsShownAndGridIsHidden() {
+        OrdersPresenter presenter = mockPresenter();
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
+        when(presenter.loadPurchaseHistory()).thenReturn(HistoryResult.success("No purchases found.", List.of()));
+        OrdersView view = new OrdersView(presenter);
+
+        clickButton(view, "Load purchase history");
+
+        Grid<PurchaseRecordDTO> grid = findHistoryGrid(view);
+        assertTrue(grid.getDataProvider().fetch(new Query<>()).toList().isEmpty());
+        assertFalse(grid.isVisible());
+        assertTrue(hasText(view, "No purchases found."));
+        verify(presenter).loadPurchaseHistory();
+    }
+
+    @Test
     void GivenPurchaseHistoryFails_WhenLoadingPurchaseHistory_ThenFailureMessageIsShownInline() {
         OrdersPresenter presenter = mockPresenter();
         when(presenter.loadPurchaseHistory())
