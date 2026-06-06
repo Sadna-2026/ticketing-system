@@ -95,7 +95,7 @@ class MemberServiceTest {
             TestClock clock = new TestClock(Instant.parse("2026-06-01T10:00:00Z"));
             TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepository, eventRepository, clock, memberRepository);
             OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepository, eventRepository, null, List.of(), List.of(), clock);
-            orderService = new OrderService(sessionTokenService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null);
+            orderService = new OrderService(sessionTokenService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null, null, null);
         }
 
         @Test

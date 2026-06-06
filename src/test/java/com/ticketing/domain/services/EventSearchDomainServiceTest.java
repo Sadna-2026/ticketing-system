@@ -2,6 +2,9 @@ package com.ticketing.domain.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -13,7 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -21,17 +26,27 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.InMemoryOrderRepository;
 
-@DisplayName("EventSearchDomainService.findCompanyEvents")
+@DisplayName("EventService.listCompanyEvents")
 class EventSearchDomainServiceTest {
 
     private InMemoryEventRepository eventRepository;
-    private EventSearchDomainService eventSearchDomainService;
+    private EventService eventService;
+    private ISessionTokenService sessionTokenService;
 
     @BeforeEach
     void setUp() {
         eventRepository = new InMemoryEventRepository();
-        eventSearchDomainService = new EventSearchDomainService(eventRepository, new InMemoryCompanyRepository());
+        sessionTokenService = mock(ISessionTokenService.class);
+        when(sessionTokenService.isValid(anyString())).thenReturn(true);
+        when(sessionTokenService.extractMemberId(anyString())).thenReturn(UUID.randomUUID());
+        eventService = new EventService(eventRepository,
+                new InMemoryCompanyRepository(),
+                new InMemoryMemberRepository(),
+                new InMemoryOrderRepository(),
+                sessionTokenService);
     }
 
     @Test
@@ -40,7 +55,7 @@ class EventSearchDomainServiceTest {
         eventRepository.save(draftEvent("Acme", "Autumn Show"));
         eventRepository.save(draftEvent("Other", "Beta Show"));
 
-        List<EventSummaryDTO> results = eventSearchDomainService.findCompanyEvents("Acme");
+        List<EventSummaryDTO> results = eventService.listCompanyEvents("token", "Acme");
 
         assertEquals(List.of("Autumn Show", "Spring Show"), results.stream().map(EventSummaryDTO::name).toList());
     }
@@ -52,10 +67,8 @@ class EventSearchDomainServiceTest {
         cancelled.cancel();
         eventRepository.save(cancelled);
 
-        List<EventSummaryDTO> results = eventSearchDomainService.findCompanyEvents("Acme");
+        List<EventSummaryDTO> results = eventService.listCompanyEvents("token", "Acme");
 
-        // Unlike the public searchEvents, management listing must surface drafts/cancelled so
-        // they can be published or managed.
         assertEquals(2, results.size());
         assertTrue(results.stream().anyMatch(e -> e.status() == EventStatus.DRAFT));
         assertTrue(results.stream().anyMatch(e -> e.status() == EventStatus.CANCELLED));
@@ -65,8 +78,8 @@ class EventSearchDomainServiceTest {
     void GivenBlankCompanyName_WhenFindingCompanyEvents_ThenEmptyListReturned() {
         eventRepository.save(draftEvent("Acme", "Spring Show"));
 
-        assertTrue(eventSearchDomainService.findCompanyEvents("  ").isEmpty());
-        assertTrue(eventSearchDomainService.findCompanyEvents(null).isEmpty());
+        assertTrue(eventService.listCompanyEvents("token", "  ").isEmpty());
+        assertTrue(eventService.listCompanyEvents("token", null).isEmpty());
     }
 
     private static Event draftEvent(String companyName, String name) {

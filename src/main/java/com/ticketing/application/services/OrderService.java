@@ -2,26 +2,41 @@ package com.ticketing.application.services;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.ticketing.application.ISystemClock;
 import com.ticketing.application.SelectionRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.TicketReservationDomainService;
+import com.ticketing.domain.queue.IQueueRepository;
+import com.ticketing.domain.queue.QueueConfig;
+import com.ticketing.domain.queue.QueueEntry;
+import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.domain.services.OrderTimeDomainService;
-import com.ticketing.domain.services.QueueDomainService;
 
 @org.springframework.stereotype.Service
 public class OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
     private final ISessionTokenService sessionTokenService;
     private final TicketReservationDomainService ticketReservationDomainService;
     private final OrderCheckoutDomainService orderCheckoutDomainService;
-    private final QueueDomainService queueDomainService;
+    private final IQueueRepository queueRepository;
+    private final IEventRepository eventRepository;
+    private final ISystemClock systemClock;
     private final OrderTimeDomainService orderTimeDomainService;
     private final INotificationService notificationService;
 
@@ -29,7 +44,9 @@ public class OrderService {
     public OrderService(ISessionTokenService sessionTokenService,
             TicketReservationDomainService ticketReservationDomainService,
             OrderCheckoutDomainService orderCheckoutDomainService,
-            QueueDomainService queueDomainService,
+            IQueueRepository queueRepository,
+            IEventRepository eventRepository,
+            ISystemClock systemClock,
             OrderTimeDomainService orderTimeDomainService,
             @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         if (sessionTokenService == null)
@@ -42,7 +59,9 @@ public class OrderService {
         this.sessionTokenService = sessionTokenService;
         this.ticketReservationDomainService = ticketReservationDomainService;
         this.orderCheckoutDomainService = orderCheckoutDomainService;
-        this.queueDomainService = queueDomainService;
+        this.queueRepository = queueRepository;
+        this.eventRepository = eventRepository;
+        this.systemClock = systemClock;
         this.orderTimeDomainService = orderTimeDomainService;
         this.notificationService = notificationService;
     }
@@ -173,43 +192,96 @@ public class OrderService {
         return result;
     }
 
-    // Virtual Queue methods
+    // ── Virtual Queue methods ──────────────────────────────────────────
 
     public UUID createQueue(String token, UUID eventId, int threshold, int flowRate) {
         validateToken(token);
-        return queueDomainService.createQueue(eventId, threshold, flowRate);
+
+        if (eventRepository != null) {
+            eventRepository.findById(eventId)
+                    .orElseThrow(() -> {
+                        log.warn("Event not found: eventId={}", eventId);
+                        return new IllegalArgumentException("Event not found: " + eventId);
+                    });
+        }
+
+        queueRepository.findByEventId(eventId).ifPresent(existing -> {
+            log.warn("A virtual queue already exists for this event: eventId={}", eventId);
+            throw new IllegalStateException("A virtual queue already exists for this event");
+        });
+
+        QueueConfig config = new QueueConfig(threshold, flowRate);
+        VirtualQueue queue = new VirtualQueue(UUID.randomUUID(), eventId, config);
+        saveQueue(queue);
+        log.info("Queue created: queueId={}, eventId={}", queue.getId(), eventId);
+        return queue.getId();
     }
 
     public QueueEntryDto tryEnterOrQueue(UUID eventId, UUID sessionId) {
-        return queueDomainService.tryEnterOrQueue(eventId, sessionId);
+        log.info("Try enter or queue: eventId={}, sessionId={}", eventId, sessionId);
+
+        VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
+        if (queue == null || !queue.isActive()) {
+            return null;
+        }
+
+        if (queue.shouldQueue()) {
+            QueueEntry entry = queue.enqueue(sessionId, systemClock.now());
+            saveQueue(queue);
+            log.info("User queued: sessionId={}, eventId={}", sessionId, eventId);
+            return entry.toQueueDto();
+        } else {
+            queue.userEnteredDirectly();
+            saveQueue(queue);
+            return null;
+        }
     }
 
     public List<QueueEntryDto> admitNextBatch(String token, UUID eventId) {
         validateToken(token);
-        return queueDomainService.admitNextBatch(eventId);
+        VirtualQueue queue = findQueueByEvent(eventId);
+        List<QueueEntry> admitted = queue.admitNextBatch();
+        saveQueue(queue);
+        log.info("Admitted {} users from queue for eventId={}", admitted.size(), eventId);
+        return admitted.stream()
+                .map(QueueEntry::toQueueDto)
+                .collect(Collectors.toList());
     }
 
     public void userLeft(UUID eventId) {
-        queueDomainService.userLeft(eventId);
+        VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
+        if (queue != null) {
+            queue.userLeft();
+            saveQueue(queue);
+        }
     }
 
     public void updateQueueConfig(String token, UUID eventId, int threshold, int flowRate) {
         validateToken(token);
-        queueDomainService.updateQueueConfig(eventId, threshold, flowRate);
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queue.updateConfig(new QueueConfig(threshold, flowRate));
+        saveQueue(queue);
+        log.info("Queue config updated: eventId={}", eventId);
     }
 
     public void flushQueue(String token, UUID eventId) {
         validateToken(token);
-        queueDomainService.flushQueue(eventId);
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queue.flush();
+        saveQueue(queue);
+        log.info("Queue flushed: eventId={}", eventId);
     }
 
     public List<VirtualQueueDto> getAllActiveQueues(String token) {
         validateToken(token);
-        return queueDomainService.getAllActiveQueues();
+        log.info("Getting all active queues");
+        return queueRepository.findAllActive().stream()
+                .map(VirtualQueue::toVirtualQueueDto)
+                .collect(Collectors.toList());
     }
 
     public VirtualQueueDto getQueueForEvent(UUID eventId) {
-        return queueDomainService.getQueueForEvent(eventId);
+        return findQueueByEvent(eventId).toVirtualQueueDto();
     }
 
     @org.springframework.scheduling.annotation.Scheduled(fixedRate = 10_000)
@@ -217,6 +289,20 @@ public class OrderService {
         if (orderTimeDomainService != null) {
             orderTimeDomainService.expireOrders();
         }
+    }
+
+    private void saveQueue(VirtualQueue queue) {
+        try {
+            queueRepository.save(queue);
+        } catch (OptimisticLockException ex) {
+            log.warn("Queue save conflict: queueId={}", queue.getId());
+            throw ex;
+        }
+    }
+
+    private VirtualQueue findQueueByEvent(UUID eventId) {
+        return queueRepository.findByEventId(eventId)
+                .orElseThrow(() -> new IllegalStateException("No virtual queue for event: " + eventId));
     }
 
     private void validateToken(String token) {

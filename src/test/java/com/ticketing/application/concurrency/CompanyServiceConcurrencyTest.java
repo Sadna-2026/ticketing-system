@@ -32,7 +32,6 @@ import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.services.CompanyLifecycleDomainService;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryEventRepository;
@@ -217,13 +216,8 @@ public class CompanyServiceConcurrencyTest {
     }
 
     private CompanyService newCompanyServiceWithLifecycle(ICompanyRepository repo) {
-        CompanyLifecycleDomainService companyLifecycleDomainService = new CompanyLifecycleDomainService(
-                repo,
-                new InMemoryEventRepository(),
-                memberRepository,
-                new InMemoryOrderRepository(),
-                mock(IPaymentGateway.class));
-        return new CompanyService(repo, null, sessionTokenService, memberRepository, null, companyLifecycleDomainService, null);
+        return new CompanyService(repo, null, sessionTokenService, memberRepository,
+                new InMemoryEventRepository(), new InMemoryOrderRepository(), mock(IPaymentGateway.class));
     }
 
     private static void runSuspend(

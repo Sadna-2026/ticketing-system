@@ -30,7 +30,6 @@ import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.domain.queue.VirtualQueue;
-import com.ticketing.domain.services.QueueDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -70,8 +69,7 @@ class QueueConcurrencyTest {
         tokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
         TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
         OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock);
-        QueueDomainService queueDomainService = new QueueDomainService(queueRepo, eventRepo, clock);
-        orderService = new OrderService(tokenService, ticketReservationDomainService, orderCheckoutDomainService, queueDomainService, null, null);
+        orderService = new OrderService(tokenService, ticketReservationDomainService, orderCheckoutDomainService, queueRepo, eventRepo, clock, null, null);
 
         adminToken = tokenService.generateMemberToken(UUID.randomUUID(), UUID.randomUUID(), Set.of("Admin"));
 
