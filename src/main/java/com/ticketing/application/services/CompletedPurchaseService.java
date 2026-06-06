@@ -10,25 +10,24 @@ import com.ticketing.domain.services.CompletedPurchaseDomainService;
 @org.springframework.stereotype.Service
 public class CompletedPurchaseService {
 
-    private final CompletedPurchaseDomainService domainService;
+    private final CompletedPurchaseDomainService completedPurchaseDomainService;
 
     // Backward compatibility constructor
     public CompletedPurchaseService(
             IOrderRepository orderRepository,
             ICompanyRepository companyRepository,
             IMemberRepository memberRepository,
-            ISessionTokenService sessionTokenService
-    ) {
-        this(new CompletedPurchaseDomainService(orderRepository, companyRepository, memberRepository, sessionTokenService));
+            ISessionTokenService sessionTokenService) {
+        this(new CompletedPurchaseDomainService(orderRepository, companyRepository, memberRepository,
+                sessionTokenService));
     }
 
     @org.springframework.beans.factory.annotation.Autowired
-    public CompletedPurchaseService(CompletedPurchaseDomainService domainService) {
-        this.domainService = domainService;
+    public CompletedPurchaseService(CompletedPurchaseDomainService completedPurchaseDomainService) {
+        this.completedPurchaseDomainService = completedPurchaseDomainService;
     }
 
     public SalesReportDTO getHierarchicalSalesReport(String token, String companyName) {
-        return domainService.getHierarchicalSalesReport(token, companyName);
+        return completedPurchaseDomainService.getHierarchicalSalesReport(token, companyName);
     }
 }
-

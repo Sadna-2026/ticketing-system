@@ -19,26 +19,29 @@ import com.ticketing.domain.services.QueueDomainService;
 @org.springframework.stereotype.Service
 public class OrderService {
     private final ISessionTokenService sessionTokenService;
-    private final TicketReservationDomainService ticketReservationService;
-    private final OrderCheckoutDomainService orderCheckoutService;
+    private final TicketReservationDomainService ticketReservationDomainService;
+    private final OrderCheckoutDomainService orderCheckoutDomainService;
     private final QueueDomainService queueDomainService;
     private final OrderTimeDomainService orderTimeDomainService;
     private final INotificationService notificationService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public OrderService(ISessionTokenService sessionTokenService,
-                        TicketReservationDomainService ticketReservationService,
-                        OrderCheckoutDomainService orderCheckoutService,
-                        QueueDomainService queueDomainService,
-                        OrderTimeDomainService orderTimeDomainService,
-                        @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
-        if (sessionTokenService == null) throw new IllegalArgumentException("sessionTokenService is required");
-        if (ticketReservationService == null) throw new IllegalArgumentException("ticketReservationService is required");
-        if (orderCheckoutService == null) throw new IllegalArgumentException("orderCheckoutService is required");
+            TicketReservationDomainService ticketReservationDomainService,
+            OrderCheckoutDomainService orderCheckoutDomainService,
+            QueueDomainService queueDomainService,
+            OrderTimeDomainService orderTimeDomainService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
+        if (sessionTokenService == null)
+            throw new IllegalArgumentException("sessionTokenService is required");
+        if (ticketReservationDomainService == null)
+            throw new IllegalArgumentException("ticketReservationService is required");
+        if (orderCheckoutDomainService == null)
+            throw new IllegalArgumentException("orderCheckoutService is required");
 
         this.sessionTokenService = sessionTokenService;
-        this.ticketReservationService = ticketReservationService;
-        this.orderCheckoutService = orderCheckoutService;
+        this.ticketReservationDomainService = ticketReservationDomainService;
+        this.orderCheckoutDomainService = orderCheckoutDomainService;
         this.queueDomainService = queueDomainService;
         this.orderTimeDomainService = orderTimeDomainService;
         this.notificationService = notificationService;
@@ -48,29 +51,31 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        return ticketReservationService.createOrder(sessionId, memberId, eventId);
+        return ticketReservationDomainService.createOrder(sessionId, memberId, eventId);
     }
 
     public UUID addSeatToOrder(String token, UUID eventId, UUID zoneId, UUID seatId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        return ticketReservationService.addSeatToOrder(sessionId, memberId, eventId, zoneId, seatId);
+        return ticketReservationDomainService.addSeatToOrder(sessionId, memberId, eventId, zoneId, seatId);
     }
 
     public UUID addGATicketsToOrder(String token, UUID eventId, UUID zoneId, int quantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        return ticketReservationService.addGATicketsToOrder(sessionId, memberId, eventId, zoneId, quantity);
+        return ticketReservationDomainService.addGATicketsToOrder(sessionId, memberId, eventId, zoneId, quantity);
     }
 
     public List<UUID> addSelectionToOrder(String token, SelectionRequest request) {
         validateToken(token);
-        if (request == null) throw new IllegalArgumentException("request is required");
+        if (request == null)
+            throw new IllegalArgumentException("request is required");
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ActiveOrder order = ticketReservationService.findOrCreateActiveOrder(sessionId, memberId, request.eventId());
+        ActiveOrder order = ticketReservationDomainService.findOrCreateActiveOrder(sessionId, memberId,
+                request.eventId());
         com.ticketing.domain.order.SelectionRequest domainRequest = new com.ticketing.domain.order.SelectionRequest(
                 request.eventId(),
                 request.seats().stream()
@@ -78,19 +83,18 @@ public class OrderService {
                         .toList(),
                 request.gaQuantities().stream()
                         .map(g -> new com.ticketing.domain.order.SelectionRequest.GAPick(g.zoneId(), g.quantity()))
-                        .toList()
-        );
-        return ticketReservationService.addSelectionToOrder(sessionId, order, domainRequest);
+                        .toList());
+        return ticketReservationDomainService.addSelectionToOrder(sessionId, order, domainRequest);
     }
 
     public UUID checkout(String token, String couponCode) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        ActiveOrder order = ticketReservationService.getValidatedActiveOrder(sessionId, memberId);
+        ActiveOrder order = ticketReservationDomainService.getValidatedActiveOrder(sessionId, memberId);
         UUID purchaseId;
         try {
-            purchaseId = orderCheckoutService.checkout(sessionId, order.getId(), memberId, couponCode);
+            purchaseId = orderCheckoutDomainService.checkout(sessionId, order.getId(), memberId, couponCode);
         } catch (IllegalStateException e) {
             if (notificationService != null && memberId != null) {
                 notificationService.notify(memberId.toString(), "Checkout failed: " + e.getMessage());
@@ -104,11 +108,12 @@ public class OrderService {
     }
 
     public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
-        List<CompletedPurchase> purchases = orderCheckoutService.refundEventPurchases(eventId);
+        List<CompletedPurchase> purchases = orderCheckoutDomainService.refundEventPurchases(eventId);
         if (notificationService != null) {
             for (CompletedPurchase purchase : purchases) {
                 if (purchase.memberId() != null) {
-                    notificationService.notify(purchase.memberId().toString(), "The event you purchased tickets for has been cancelled and you have been refunded.");
+                    notificationService.notify(purchase.memberId().toString(),
+                            "The event you purchased tickets for has been cancelled and you have been refunded.");
                 }
             }
         }
@@ -119,29 +124,30 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ticketReservationService.removeItemFromOrder(sessionId, memberId, itemId);
+        ticketReservationDomainService.removeItemFromOrder(sessionId, memberId, itemId);
     }
 
     public void updateGAQuantity(String token, UUID zoneId, int newQuantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ticketReservationService.updateGAQuantity(sessionId, memberId, zoneId, newQuantity);
+        ticketReservationDomainService.updateGAQuantity(sessionId, memberId, zoneId, newQuantity);
     }
 
     public void cancelOrder(String token) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ticketReservationService.cancelOrder(sessionId, memberId);
+        ticketReservationDomainService.cancelOrder(sessionId, memberId);
     }
 
     public ActiveOrderDto getActiveOrder(String token) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ActiveOrder order = ticketReservationService.getActiveOrder(sessionId, memberId);
-        if (order == null) return null;
+        ActiveOrder order = ticketReservationDomainService.getActiveOrder(sessionId, memberId);
+        if (order == null)
+            return null;
         return new ActiveOrderDto(
                 order.getId(),
                 order.getSessionId(),
@@ -150,8 +156,7 @@ public class OrderService {
                 order.getCreatedAt(),
                 order.getStatus().name(),
                 order.getItemsDto(),
-                order.getTotalPrice()
-        );
+                order.getTotalPrice());
     }
 
     public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
@@ -160,7 +165,7 @@ public class OrderService {
         if (memberId == null) {
             throw new SecurityException("User must be logged in to view purchase history");
         }
-        List<CompletedPurchase> purchases = orderCheckoutService.getPurchaseHistory(memberId);
+        List<CompletedPurchase> purchases = orderCheckoutDomainService.getPurchaseHistory(memberId);
         List<PurchaseRecordDTO> result = new java.util.ArrayList<>();
         for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));

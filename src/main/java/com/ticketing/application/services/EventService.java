@@ -45,79 +45,81 @@ public class EventService {
     private final ISessionTokenService sessionTokenService;
     private final ISystemClock systemClock;
 
-    private final OrderCheckoutDomainService orderCheckoutService;
-    private final EventDomainService domainService;
-    private final LotteryDrawDomainService lotteryDrawService;
+    private final OrderCheckoutDomainService orderCheckoutDomainService;
+    private final EventDomainService eventDomainService;
+    private final LotteryDrawDomainService lotteryDrawDomainService;
     private final EventSearchDomainService eventSearchDomainService;
     private final INotificationService notificationService;
 
     // For backwards compatibility with tests
     public EventService(IEventRepository eventRepository,
-                        com.ticketing.domain.company.ICompanyRepository companyRepository,
-                        com.ticketing.domain.member.IMemberRepository memberRepository,
-                        com.ticketing.domain.order.IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService,
-                        ILotteryRepository lotteryRepository,
-                        ISystemClock systemClock,
-                        OrderService orderService) {
+            com.ticketing.domain.company.ICompanyRepository companyRepository,
+            com.ticketing.domain.member.IMemberRepository memberRepository,
+            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ISessionTokenService sessionTokenService,
+            ILotteryRepository lotteryRepository,
+            ISystemClock systemClock,
+            OrderService orderService) {
         this.eventRepository = eventRepository;
         this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
-        this.orderCheckoutService = null;
-        this.domainService = new EventDomainService(eventRepository, companyRepository, memberRepository, orderRepository);
-        this.lotteryDrawService = null;
+        this.orderCheckoutDomainService = null;
+        this.eventDomainService = new EventDomainService(eventRepository, companyRepository, memberRepository,
+                orderRepository);
+        this.lotteryDrawDomainService = null;
         this.eventSearchDomainService = new EventSearchDomainService(eventRepository, companyRepository);
         this.notificationService = null;
     }
 
     public EventService(IEventRepository eventRepository,
-                        com.ticketing.domain.company.ICompanyRepository companyRepository,
-                        com.ticketing.domain.member.IMemberRepository memberRepository,
-                        com.ticketing.domain.order.IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService,
-                        ILotteryRepository lotteryRepository,
-                        ISystemClock systemClock) {
+            com.ticketing.domain.company.ICompanyRepository companyRepository,
+            com.ticketing.domain.member.IMemberRepository memberRepository,
+            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ISessionTokenService sessionTokenService,
+            ILotteryRepository lotteryRepository,
+            ISystemClock systemClock) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
                 sessionTokenService, lotteryRepository, systemClock, null);
     }
 
     public EventService(IEventRepository eventRepository,
-                        com.ticketing.domain.company.ICompanyRepository companyRepository,
-                        com.ticketing.domain.member.IMemberRepository memberRepository,
-                        com.ticketing.domain.order.IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService,
-                        OrderService orderService) {
+            com.ticketing.domain.company.ICompanyRepository companyRepository,
+            com.ticketing.domain.member.IMemberRepository memberRepository,
+            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ISessionTokenService sessionTokenService,
+            OrderService orderService) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
                 sessionTokenService, null, Instant::now, orderService);
     }
 
     public EventService(IEventRepository eventRepository,
-                        com.ticketing.domain.company.ICompanyRepository companyRepository,
-                        com.ticketing.domain.member.IMemberRepository memberRepository,
-                        com.ticketing.domain.order.IOrderRepository orderRepository,
-                        ISessionTokenService sessionTokenService) {
+            com.ticketing.domain.company.ICompanyRepository companyRepository,
+            com.ticketing.domain.member.IMemberRepository memberRepository,
+            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ISessionTokenService sessionTokenService) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
                 sessionTokenService, null, Instant::now, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public EventService(IEventRepository eventRepository,
-                        ISessionTokenService sessionTokenService,
-                        ILotteryRepository lotteryRepository,
-                        OrderCheckoutDomainService orderCheckoutService,
-                        EventDomainService domainService,
-                        EventSearchDomainService eventSearchDomainService,
-                        com.ticketing.domain.order.IOrderRepository orderRepository,
-                        ISystemClock systemClock,
-                        @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
+            ISessionTokenService sessionTokenService,
+            ILotteryRepository lotteryRepository,
+            OrderCheckoutDomainService orderCheckoutService,
+            EventDomainService domainService,
+            EventSearchDomainService eventSearchDomainService,
+            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ISystemClock systemClock,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this.eventRepository = eventRepository;
         this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
-        this.orderCheckoutService = orderCheckoutService;
-        this.domainService = domainService;
-        this.lotteryDrawService = new com.ticketing.domain.lottery.LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new java.util.Random());
+        this.orderCheckoutDomainService = orderCheckoutService;
+        this.eventDomainService = domainService;
+        this.lotteryDrawDomainService = new com.ticketing.domain.lottery.LotteryDrawDomainService(lotteryRepository,
+                eventRepository, orderRepository, systemClock, new java.util.Random());
         this.eventSearchDomainService = eventSearchDomainService;
         this.notificationService = notificationService;
     }
@@ -127,7 +129,7 @@ public class EventService {
             throw new IllegalArgumentException("request cannot be null");
         }
         UUID memberId = authenticateMember(token);
-        return domainService.createEvent(memberId, request).getId();
+        return eventDomainService.createEvent(memberId, request).getId();
     }
 
     public LotteryRegistrationResponse registerForLottery(String token, LotteryRegistrationRequest request) {
@@ -157,8 +159,7 @@ public class EventService {
                     memberId,
                     request.zoneId(),
                     request.quantity(),
-                    now
-            );
+                    now);
             lotteryRepository.save(entry);
         } catch (IllegalStateException e) {
             log.warn("Lottery registration denied: {}", e.getMessage());
@@ -173,14 +174,16 @@ public class EventService {
     }
 
     public List<com.ticketing.domain.order.ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
         // Authorize if needed
-        List<com.ticketing.domain.order.ActiveOrder> winners = lotteryDrawService.draw(eventId, capacity);
+        List<com.ticketing.domain.order.ActiveOrder> winners = lotteryDrawDomainService.draw(eventId, capacity);
         if (notificationService != null) {
             for (com.ticketing.domain.order.ActiveOrder order : winners) {
                 if (order.getMemberId() != null) {
-                    notificationService.notify(order.getMemberId().toString(), "You have won the lottery! You can now purchase tickets for the event.");
+                    notificationService.notify(order.getMemberId().toString(),
+                            "You have won the lottery! You can now purchase tickets for the event.");
                 }
             }
         }
@@ -193,13 +196,14 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        domainService.cancelEvent(memberId, eventId);
-        if (orderCheckoutService != null) {
-            List<CompletedPurchase> refunds = orderCheckoutService.refundEventPurchases(eventId);
+        eventDomainService.cancelEvent(memberId, eventId);
+        if (orderCheckoutDomainService != null) {
+            List<CompletedPurchase> refunds = orderCheckoutDomainService.refundEventPurchases(eventId);
             if (notificationService != null) {
                 for (CompletedPurchase p : refunds) {
                     if (p.memberId() != null) {
-                        notificationService.notify(p.memberId().toString(), "The event you purchased tickets for has been cancelled and you have been refunded.");
+                        notificationService.notify(p.memberId().toString(),
+                                "The event you purchased tickets for has been cancelled and you have been refunded.");
                     }
                 }
             }
@@ -215,7 +219,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        domainService.publishEvent(memberId, eventId);
+        eventDomainService.publishEvent(memberId, eventId);
     }
 
     public EventDetailsDTO editEvent(String token, EditEventRequest request) {
@@ -223,69 +227,79 @@ public class EventService {
             throw new IllegalArgumentException("request cannot be null");
         }
         UUID memberId = authenticateMember(token);
-        return domainService.editEvent(memberId, request);
+        return eventDomainService.editEvent(memberId, request);
     }
 
     // ── Event-scoped purchase policy ────────────────────────────────
 
     public void setEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
-        if (policy == null) throw new IllegalArgumentException("policy is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
+        if (policy == null)
+            throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        domainService.setEventPurchasePolicy(memberId, eventId, policy);
+        eventDomainService.setEventPurchasePolicy(memberId, eventId, policy);
     }
 
     public void removeEventPurchasePolicy(String token, UUID eventId) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
-        domainService.removeEventPurchasePolicy(memberId, eventId);
+        eventDomainService.removeEventPurchasePolicy(memberId, eventId);
     }
 
     public void addEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy, boolean useOr) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
-        if (policy == null) throw new IllegalArgumentException("policy is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
+        if (policy == null)
+            throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        domainService.addEventPurchasePolicy(memberId, eventId, policy, useOr);
+        eventDomainService.addEventPurchasePolicy(memberId, eventId, policy, useOr);
     }
 
     // ── Event-scoped discount policy ────────────────────────────────
 
     public void setEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
-        if (policy == null) throw new IllegalArgumentException("policy is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
+        if (policy == null)
+            throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        domainService.setEventDiscountPolicy(memberId, eventId, policy);
+        eventDomainService.setEventDiscountPolicy(memberId, eventId, policy);
     }
 
     public void removeEventDiscountPolicy(String token, UUID eventId) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
-        domainService.removeEventDiscountPolicy(memberId, eventId);
+        eventDomainService.removeEventDiscountPolicy(memberId, eventId);
     }
 
     public void addEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy, boolean useStacking) {
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
-        if (policy == null) throw new IllegalArgumentException("policy is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
+        if (policy == null)
+            throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        domainService.addEventDiscountPolicy(memberId, eventId, policy, useStacking);
+        eventDomainService.addEventDiscountPolicy(memberId, eventId, policy, useStacking);
     }
 
     // ── Read helpers (event policy queries) ─────────────────────────
 
     public IPurchasePolicy getEventPurchasePolicy(String token, UUID eventId) {
         authenticateMember(token);
-        return domainService.getEventPurchasePolicy(eventId);
+        return eventDomainService.getEventPurchasePolicy(eventId);
     }
 
     public IDiscountPolicy getEventDiscountPolicy(String token, UUID eventId) {
         authenticateMember(token);
-        return domainService.getEventDiscountPolicy(eventId);
+        return eventDomainService.getEventDiscountPolicy(eventId);
     }
 
     // --- UC-C.1: layout & inventory ---
 
     public void addSeatsToZone(String token, UUID eventId, UUID zoneId,
-                               java.util.List<CreateEventRequest.SeatSpec> seats) {
+            java.util.List<CreateEventRequest.SeatSpec> seats) {
         if (seats == null || seats.isEmpty()) {
             throw new IllegalArgumentException("seats list is required");
         }
@@ -294,18 +308,19 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        domainService.addSeatsToZone(memberId, eventId, zoneId, seats);
+        eventDomainService.addSeatsToZone(memberId, eventId, zoneId, seats);
     }
 
     public void removeSeats(String token, UUID eventId, UUID zoneId,
-                            java.util.List<UUID> seatIds) {
+            java.util.List<UUID> seatIds) {
         if (seatIds == null || seatIds.isEmpty()) {
             log.warn("Invalid seatIds list: {}", seatIds);
             throw new IllegalArgumentException("seatIds list is required");
         }
-        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
-        domainService.removeSeats(memberId, eventId, zoneId, seatIds);
+        eventDomainService.removeSeats(memberId, eventId, zoneId, seatIds);
     }
 
     public void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
@@ -314,7 +329,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        domainService.increaseGACapacity(memberId, eventId, zoneId, delta);
+        eventDomainService.increaseGACapacity(memberId, eventId, zoneId, delta);
     }
 
     public void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
@@ -323,23 +338,24 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        domainService.decreaseGACapacity(memberId, eventId, zoneId, delta);
+        eventDomainService.decreaseGACapacity(memberId, eventId, zoneId, delta);
     }
 
     public void setZonePrice(String token, UUID eventId, UUID zoneId,
-                             java.math.BigDecimal newPrice) {
+            java.math.BigDecimal newPrice) {
         if (eventId == null) {
             log.warn("Invalid eventId: {}", eventId);
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        domainService.setZonePrice(memberId, eventId, zoneId, newPrice);
+        eventDomainService.setZonePrice(memberId, eventId, zoneId, newPrice);
     }
 
     // ── Query (from EventQueryService) ───────────────────────────────
 
     public Optional<EventMapDTO> getEventMap(UUID eventId) {
-        if (eventId == null) return Optional.empty();
+        if (eventId == null)
+            return Optional.empty();
         Optional<Event> maybe = eventRepository.findById(eventId);
         if (maybe.isEmpty()) {
             log.info("Event map request denied: id={}, reason=unknown", eventId);
@@ -366,8 +382,7 @@ public class EventService {
                 event.getCompanyName(),
                 event.getStatus(),
                 event.getVenueMap().getSectionToZone(),
-                zoneDtos
-        ));
+                zoneDtos));
     }
 
     // ── Search (from EventSearchService) ──────────────────────────────
@@ -377,8 +392,10 @@ public class EventService {
     }
 
     /**
-     * Lists all events of a company (any status) for management pickers. Requires a valid
-     * member session; the per-action services still enforce company-management authorization.
+     * Lists all events of a company (any status) for management pickers. Requires a
+     * valid
+     * member session; the per-action services still enforce company-management
+     * authorization.
      */
     public List<EventSummaryDTO> listCompanyEvents(String token, String companyName) {
         authenticateMember(token);

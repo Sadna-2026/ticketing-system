@@ -511,8 +511,8 @@ class CompanyServiceTest {
             memberRepo = new InMemoryMemberRepository();
             orderRepo = new InMemoryOrderRepository();
             tokens = mock(ISessionTokenService.class);
-            CompanyHistoryDomainService historyDomainService = new CompanyHistoryDomainService(companyRepo, memberRepo, orderRepo, tokens);
-            service = new CompanyService(companyRepo, null, tokens, memberRepo, historyDomainService, null, null);
+            CompanyHistoryDomainService companyHistoryDomainService = new CompanyHistoryDomainService(companyRepo, memberRepo, orderRepo, tokens);
+            service = new CompanyService(companyRepo, null, tokens, memberRepo, companyHistoryDomainService, null, null);
 
             ownerId = UUID.randomUUID();
             owner = new Member(ownerId, "owner", "owner@x.com", "pw");
@@ -672,8 +672,8 @@ class CompanyServiceTest {
             orderRepo = new InMemoryOrderRepository();
             paymentGateway = mock(IPaymentGateway.class);
             tokens = mock(ISessionTokenService.class);
-            CompanyLifecycleDomainService lifecycleDomainService = new CompanyLifecycleDomainService(companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway);
-            service = new CompanyService(companyRepo, null, tokens, memberRepo, null, lifecycleDomainService, null);
+            CompanyLifecycleDomainService companyLifecycleDomainService = new CompanyLifecycleDomainService(companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway);
+            service = new CompanyService(companyRepo, null, tokens, memberRepo, null, companyLifecycleDomainService, null);
 
             founderId = UUID.randomUUID();
             founder = new Member(founderId, "founder", "founder@x.com", "pw");
@@ -819,8 +819,8 @@ class CompanyServiceTest {
                 companyRepo.findByName(COMPANY).orElseThrow().getStatus());
 
             // 3) simulate a service restart: build a fresh service whose in-memory queue is empty
-            CompanyLifecycleDomainService freshLifecycleDomainService = new CompanyLifecycleDomainService(companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway);
-            CompanyService freshService = new CompanyService(companyRepo, null, tokens, memberRepo, null, freshLifecycleDomainService, null);
+            CompanyLifecycleDomainService freshCompanyLifecycleDomainService = new CompanyLifecycleDomainService(companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway);
+            CompanyService freshService = new CompanyService(companyRepo, null, tokens, memberRepo, null, freshCompanyLifecycleDomainService, null);
 
             // 4) gateway recovers; retry must rehydrate the queue from completedPurchaseRepo
             when(paymentGateway.refund(anyString(), anyDouble()))
@@ -897,8 +897,8 @@ class CompanyServiceTest {
         public void setUp() {
             companyRepo = new InMemoryCompanyRepository();
             eventRepo = new InMemoryEventRepository();
-            CompanyQueryDomainService queryDomainService = new CompanyQueryDomainService(companyRepo, eventRepo);
-            service = new CompanyService(companyRepo, null, null, null, null, null, queryDomainService);
+            CompanyQueryDomainService companyQueryDomainService = new CompanyQueryDomainService(companyRepo, eventRepo);
+            service = new CompanyService(companyRepo, null, null, null, null, null, companyQueryDomainService);
         }
 
         @Test
