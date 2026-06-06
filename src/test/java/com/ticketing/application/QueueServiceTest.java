@@ -23,8 +23,6 @@ import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LockTimerDuration;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
-import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
@@ -69,9 +67,7 @@ class QueueServiceTest {
 
         sessionTokenRepository = new InMemorySessionTokenRepository();
         tokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
-        TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock);
-        orderService = new OrderService(tokenService, ticketReservationDomainService, orderCheckoutDomainService, queueRepo, eventRepo, clock, null, null);
+        orderService = new OrderService(tokenService, orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock, queueRepo, null, null);
 
         // Admin
         adminId = UUID.randomUUID();

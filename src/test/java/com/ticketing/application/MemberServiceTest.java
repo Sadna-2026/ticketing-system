@@ -50,8 +50,6 @@ import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.response.UpdateMemberDetailsResponse;
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
-import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -93,9 +91,7 @@ class MemberServiceTest {
 
             eventRepository = new InMemoryEventRepository();
             TestClock clock = new TestClock(Instant.parse("2026-06-01T10:00:00Z"));
-            TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepository, eventRepository, clock, memberRepository);
-            OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepository, eventRepository, null, List.of(), List.of(), clock);
-            orderService = new OrderService(sessionTokenService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null, null, null);
+            orderService = new OrderService(sessionTokenService, orderRepository, eventRepository, memberRepository, List.of(), List.of(), clock, null, null, null);
         }
 
         @Test

@@ -43,15 +43,14 @@ import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
-import com.ticketing.domain.lottery.LotteryDrawDomainService;
 import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
+import com.ticketing.domain.order.OrderItem;
 
 @org.springframework.stereotype.Service
 public class EventService {
@@ -66,9 +65,9 @@ public class EventService {
     private final ISessionTokenService sessionTokenService;
     private final ISystemClock systemClock;
 
-    private final OrderCheckoutDomainService orderCheckoutDomainService;
-    private final LotteryDrawDomainService lotteryDrawDomainService;
+    private final OrderService orderService;
     private final INotificationService notificationService;
+    private final java.util.Random random;
 
     private final ConcurrentHashMap<UUID, Object> eventLocks = new ConcurrentHashMap<>();
 
@@ -88,9 +87,9 @@ public class EventService {
         this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
-        this.orderCheckoutDomainService = null;
-        this.lotteryDrawDomainService = null;
+        this.orderService = orderService;
         this.notificationService = null;
+        this.random = new java.util.Random();
     }
 
     public EventService(IEventRepository eventRepository,
@@ -130,8 +129,8 @@ public class EventService {
             IOrderRepository orderRepository,
             ISessionTokenService sessionTokenService,
             ILotteryRepository lotteryRepository,
-            OrderCheckoutDomainService orderCheckoutService,
             ISystemClock systemClock,
+            OrderService orderService,
             @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
@@ -140,11 +139,9 @@ public class EventService {
         this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
-        this.orderCheckoutDomainService = orderCheckoutService;
-        this.lotteryDrawDomainService = lotteryRepository != null
-                ? new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new java.util.Random())
-                : null;
+        this.orderService = orderService;
         this.notificationService = notificationService;
+        this.random = new java.util.Random();
     }
 
     // ── Event CRUD ──────────────────────────────────────────────────
@@ -223,16 +220,8 @@ public class EventService {
         event.cancel();
         saveEvent(event);
 
-        if (orderCheckoutDomainService != null) {
-            List<CompletedPurchase> refunds = orderCheckoutDomainService.refundEventPurchases(eventId);
-            if (notificationService != null) {
-                for (CompletedPurchase p : refunds) {
-                    if (p.memberId() != null) {
-                        notificationService.notify(p.memberId().toString(),
-                                "The event you purchased tickets for has been cancelled and you have been refunded.");
-                    }
-                }
-            }
+        if (orderService != null) {
+            orderService.refundEventPurchases(eventId);
         }
         if (notificationService != null) {
             notificationService.notify(memberId.toString(), "Event was cancelled successfully.");
@@ -352,18 +341,65 @@ public class EventService {
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
-    public List<com.ticketing.domain.order.ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
+    public List<ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
-        UUID memberId = authenticateMember(token);
-        List<com.ticketing.domain.order.ActiveOrder> winners = lotteryDrawDomainService.draw(eventId, capacity);
+        authenticateMember(token);
+
+        if (capacity < 0) {
+            throw new IllegalArgumentException("Capacity cannot be negative");
+        }
+
+        List<LotteryEntry> allEntries = lotteryRepository.findByEventId(eventId);
+        List<LotteryEntry> winners = selectLotteryWinners(allEntries, capacity);
+
+        if (winners.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+
+        List<ActiveOrder> createdOrders = new ArrayList<>();
+
+        for (LotteryEntry winner : winners) {
+            UUID sessionId = UUID.randomUUID();
+            ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, winner.memberId(), eventId, systemClock.now());
+
+            InventoryZone zone = event.findZone(winner.zoneId());
+            zone.lockGA(winner.quantity());
+
+            OrderItem item = OrderItem.forGA(UUID.randomUUID(), winner.zoneId(), winner.quantity(), zone.getPricePerTicket());
+            order.addItem(item);
+
+            try {
+                orderRepository.save(order);
+            } catch (OptimisticLockException ex) {
+                throw new IllegalStateException("Lottery draw order changed concurrently. Please retry.", ex);
+            }
+            createdOrders.add(order);
+        }
+
+        saveEvent(event);
+
         if (notificationService != null) {
-            for (com.ticketing.domain.order.ActiveOrder order : winners) {
+            for (ActiveOrder order : createdOrders) {
                 if (order.getMemberId() != null) {
                     notificationService.notify(order.getMemberId().toString(),
                             "You have won the lottery! You can now purchase tickets for the event.");
                 }
             }
+        }
+        return createdOrders;
+    }
+
+    private List<LotteryEntry> selectLotteryWinners(List<LotteryEntry> entries, int capacity) {
+        List<LotteryEntry> pool = new ArrayList<>(entries);
+        List<LotteryEntry> winners = new ArrayList<>();
+        int numWinners = Math.min(pool.size(), capacity);
+        for (int i = 0; i < numWinners; i++) {
+            int index = random.nextInt(pool.size());
+            winners.add(pool.remove(index));
         }
         return winners;
     }

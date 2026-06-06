@@ -1,6 +1,11 @@
 package com.ticketing.application.services;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -14,12 +19,30 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
+import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.PolicyResult;
+import com.ticketing.domain.event.PurchaseContext;
+import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.domain.gateway.CustomerInfo;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.domain.gateway.ITicketSupplyGateway;
+import com.ticketing.domain.gateway.PaymentDetails;
+import com.ticketing.domain.gateway.PaymentResult;
+import com.ticketing.domain.gateway.RefundResult;
+import com.ticketing.domain.gateway.SupplyResult;
+import com.ticketing.domain.gateway.TicketRequest;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.Member;
 import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.BuyerContactSnapshot;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
-import com.ticketing.domain.order.TicketReservationDomainService;
+import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.domain.order.OrderItem;
+import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.queue.IQueueRepository;
 import com.ticketing.domain.queue.QueueConfig;
 import com.ticketing.domain.queue.QueueEntry;
@@ -32,59 +55,77 @@ public class OrderService {
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
     private final ISessionTokenService sessionTokenService;
-    private final TicketReservationDomainService ticketReservationDomainService;
-    private final OrderCheckoutDomainService orderCheckoutDomainService;
-    private final IQueueRepository queueRepository;
+    private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
+    private final IMemberRepository memberRepository;
+    private final List<IPaymentGateway> paymentGateways;
+    private final List<ITicketSupplyGateway> ticketSupplyGateways;
     private final ISystemClock systemClock;
+    private final IQueueRepository queueRepository;
     private final OrderTimeDomainService orderTimeDomainService;
     private final INotificationService notificationService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public OrderService(ISessionTokenService sessionTokenService,
-            TicketReservationDomainService ticketReservationDomainService,
-            OrderCheckoutDomainService orderCheckoutDomainService,
-            IQueueRepository queueRepository,
+            IOrderRepository orderRepository,
             IEventRepository eventRepository,
+            IMemberRepository memberRepository,
+            List<IPaymentGateway> paymentGateways,
+            List<ITicketSupplyGateway> ticketSupplyGateways,
             ISystemClock systemClock,
+            IQueueRepository queueRepository,
             OrderTimeDomainService orderTimeDomainService,
             @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         if (sessionTokenService == null)
             throw new IllegalArgumentException("sessionTokenService is required");
-        if (ticketReservationDomainService == null)
-            throw new IllegalArgumentException("ticketReservationService is required");
-        if (orderCheckoutDomainService == null)
-            throw new IllegalArgumentException("orderCheckoutService is required");
+        if (orderRepository == null)
+            throw new IllegalArgumentException("orderRepository is required");
+        if (eventRepository == null)
+            throw new IllegalArgumentException("eventRepository is required");
 
         this.sessionTokenService = sessionTokenService;
-        this.ticketReservationDomainService = ticketReservationDomainService;
-        this.orderCheckoutDomainService = orderCheckoutDomainService;
-        this.queueRepository = queueRepository;
+        this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
+        this.memberRepository = memberRepository;
+        this.paymentGateways = paymentGateways != null ? paymentGateways : List.of();
+        this.ticketSupplyGateways = ticketSupplyGateways != null ? ticketSupplyGateways : List.of();
         this.systemClock = systemClock;
+        this.queueRepository = queueRepository;
         this.orderTimeDomainService = orderTimeDomainService;
         this.notificationService = notificationService;
     }
+
+    // ── Order creation & ticket reservation ─────────────────────────
 
     public UUID createOrder(String token, UUID eventId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        return ticketReservationDomainService.createOrder(sessionId, memberId, eventId);
+        return findOrCreateActiveOrder(sessionId, memberId, eventId).getId();
     }
 
     public UUID addSeatToOrder(String token, UUID eventId, UUID zoneId, UUID seatId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        return ticketReservationDomainService.addSeatToOrder(sessionId, memberId, eventId, zoneId, seatId);
+        ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
+        validateOrderOwnership(sessionId, order);
+        return addSelectionToOrder(sessionId, order,
+                new com.ticketing.domain.order.SelectionRequest(order.getEventId(),
+                        List.of(new com.ticketing.domain.order.SelectionRequest.SeatPick(zoneId, seatId)),
+                        List.of())).get(0);
     }
 
     public UUID addGATicketsToOrder(String token, UUID eventId, UUID zoneId, int quantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        return ticketReservationDomainService.addGATicketsToOrder(sessionId, memberId, eventId, zoneId, quantity);
+        ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
+        validateOrderOwnership(sessionId, order);
+        return addSelectionToOrder(sessionId, order,
+                new com.ticketing.domain.order.SelectionRequest(order.getEventId(),
+                        List.of(),
+                        List.of(new com.ticketing.domain.order.SelectionRequest.GAPick(zoneId, quantity)))).get(0);
     }
 
     public List<UUID> addSelectionToOrder(String token, SelectionRequest request) {
@@ -93,8 +134,7 @@ public class OrderService {
             throw new IllegalArgumentException("request is required");
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ActiveOrder order = ticketReservationDomainService.findOrCreateActiveOrder(sessionId, memberId,
-                request.eventId());
+        ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, request.eventId());
         com.ticketing.domain.order.SelectionRequest domainRequest = new com.ticketing.domain.order.SelectionRequest(
                 request.eventId(),
                 request.seats().stream()
@@ -103,68 +143,78 @@ public class OrderService {
                 request.gaQuantities().stream()
                         .map(g -> new com.ticketing.domain.order.SelectionRequest.GAPick(g.zoneId(), g.quantity()))
                         .toList());
-        return ticketReservationDomainService.addSelectionToOrder(sessionId, order, domainRequest);
-    }
-
-    public UUID checkout(String token, String couponCode) {
-        validateToken(token);
-        UUID memberId = sessionTokenService.extractMemberId(token);
-        UUID sessionId = sessionTokenService.extractSessionId(token);
-        ActiveOrder order = ticketReservationDomainService.getValidatedActiveOrder(sessionId, memberId);
-        UUID purchaseId;
-        try {
-            purchaseId = orderCheckoutDomainService.checkout(sessionId, order.getId(), memberId, couponCode);
-        } catch (IllegalStateException e) {
-            if (notificationService != null && memberId != null) {
-                notificationService.notify(memberId.toString(), "Checkout failed: " + e.getMessage());
-            }
-            throw e;
-        }
-        if (notificationService != null && memberId != null) {
-            notificationService.notify(memberId.toString(), "Your checkout was completed successfully.");
-        }
-        return purchaseId;
-    }
-
-    public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
-        List<CompletedPurchase> purchases = orderCheckoutDomainService.refundEventPurchases(eventId);
-        if (notificationService != null) {
-            for (CompletedPurchase purchase : purchases) {
-                if (purchase.memberId() != null) {
-                    notificationService.notify(purchase.memberId().toString(),
-                            "The event you purchased tickets for has been cancelled and you have been refunded.");
-                }
-            }
-        }
-        return purchases;
+        return addSelectionToOrder(sessionId, order, domainRequest);
     }
 
     public void removeItemFromOrder(String token, UUID itemId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ticketReservationDomainService.removeItemFromOrder(sessionId, memberId, itemId);
+
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
+        validateOrderOwnership(sessionId, order);
+        Event event = findEvent(order.getEventId());
+
+        OrderItem item = order.getItems().stream()
+                .filter(i -> i.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> {
+                    log.warn("Item not found: itemId={}", itemId);
+                    return new IllegalArgumentException("Item not found: " + itemId);
+                });
+
+        releaseInventoryForItem(event, item);
+        saveEvent(event);
+
+        order.removeItem(itemId);
+        saveOrder(order);
+        log.info("Item removed from order: orderId={}, itemId={}", order.getId(), itemId);
     }
 
     public void updateGAQuantity(String token, UUID zoneId, int newQuantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ticketReservationDomainService.updateGAQuantity(sessionId, memberId, zoneId, newQuantity);
+
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
+        validateOrderOwnership(sessionId, order);
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+
+        updateGAQuantityInternal(order, event, zoneId, newQuantity);
+        saveEvent(event);
+        saveOrder(order);
+        log.info("GA quantity updated: orderId={}, zoneId={}", order.getId(), zoneId);
     }
 
     public void cancelOrder(String token) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ticketReservationDomainService.cancelOrder(sessionId, memberId);
+
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
+        validateOrderOwnership(sessionId, order);
+        if (order.getStatus() == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+
+        Event event = findEvent(order.getEventId());
+        releaseAllInventory(event, order);
+        saveEvent(event);
+
+        order.cancel();
+        saveOrder(order);
+        log.info("Order cancelled: orderId={}", order.getId());
     }
 
     public ActiveOrderDto getActiveOrder(String token) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
-        ActiveOrder order = ticketReservationDomainService.getActiveOrder(sessionId, memberId);
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null)
             return null;
         return new ActiveOrderDto(
@@ -178,14 +228,83 @@ public class OrderService {
                 order.getTotalPrice());
     }
 
+    // ── Checkout ────────────────────────────────────────────────────
+
+    public UUID checkout(String token, String couponCode) {
+        validateToken(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
+        validateOrderOwnership(sessionId, order);
+
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+
+        if (order.getItems().isEmpty()) {
+            log.warn("Failed to checkout order {}: no items in order", order.getId());
+            throw new IllegalStateException("Cannot checkout an empty order");
+        }
+
+        BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
+        LocalDate buyerDob = getBuyerDateOfBirth(memberId);
+
+        CompletedPurchase purchase;
+        try {
+            purchase = processCheckout(order, event, buyerContact, couponCode, buyerDob);
+        } catch (IllegalStateException e) {
+            saveOrder(order);
+            if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
+                releaseAllInventory(event, order);
+                saveEvent(event);
+            }
+            log.warn("Failed to checkout order {}: {}", order.getId(), e.getMessage());
+            if (notificationService != null && memberId != null) {
+                notificationService.notify(memberId.toString(), "Checkout failed: " + e.getMessage());
+            }
+            throw e;
+        }
+
+        sellAllInventory(event, order);
+        saveEvent(event);
+        saveOrder(order);
+        orderRepository.save(purchase);
+
+        checkAndPublishSoldOut(event);
+        log.info("Checkout complete: orderId={}, purchaseId={}, amount={}",
+                order.getId(), purchase.purchaseId(), purchase.amount());
+
+        if (notificationService != null && memberId != null) {
+            notificationService.notify(memberId.toString(), "Your checkout was completed successfully.");
+        }
+        return purchase.purchaseId();
+    }
+
+    public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
+        for (CompletedPurchase purchase : purchases) {
+            refundPayment(purchase.transactionId(), purchase.amount());
+        }
+        if (notificationService != null) {
+            for (CompletedPurchase purchase : purchases) {
+                if (purchase.memberId() != null) {
+                    notificationService.notify(purchase.memberId().toString(),
+                            "The event you purchased tickets for has been cancelled and you have been refunded.");
+                }
+            }
+        }
+        return purchases;
+    }
+
     public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         if (memberId == null) {
             throw new SecurityException("User must be logged in to view purchase history");
         }
-        List<CompletedPurchase> purchases = orderCheckoutDomainService.getPurchaseHistory(memberId);
-        List<PurchaseRecordDTO> result = new java.util.ArrayList<>();
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByMemberId(memberId);
+        List<PurchaseRecordDTO> result = new ArrayList<>();
         for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));
         }
@@ -197,13 +316,11 @@ public class OrderService {
     public UUID createQueue(String token, UUID eventId, int threshold, int flowRate) {
         validateToken(token);
 
-        if (eventRepository != null) {
-            eventRepository.findById(eventId)
-                    .orElseThrow(() -> {
-                        log.warn("Event not found: eventId={}", eventId);
-                        return new IllegalArgumentException("Event not found: " + eventId);
-                    });
-        }
+        eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
 
         queueRepository.findByEventId(eventId).ifPresent(existing -> {
             log.warn("A virtual queue already exists for this event: eventId={}", eventId);
@@ -291,6 +408,414 @@ public class OrderService {
         }
     }
 
+    // ── Reservation internals ───────────────────────────────────────
+
+    public ActiveOrder findOrCreateActiveOrder(UUID sessionId, UUID memberId, UUID eventId) {
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order != null) {
+            if (!order.getEventId().equals(eventId)) {
+                throw new IllegalStateException("You already have an active order for another event. Please checkout or clear your cart first.");
+            }
+            return order;
+        }
+
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId is required to create a new order");
+        }
+        Event event = findEvent(eventId);
+        if (!event.isPublished()) {
+            throw new IllegalStateException("Event is not available for purchase");
+        }
+
+        order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
+        saveOrder(order);
+        log.info("Order created: orderId={}, sessionId={}, eventId={}", order.getId(), sessionId, eventId);
+        return order;
+    }
+
+    public ActiveOrder getActiveOrder(UUID sessionId, UUID memberId) {
+        ActiveOrder order = null;
+        if (memberId != null) {
+            order = orderRepository.findActiveByMemberId(memberId).orElse(null);
+            if (order != null && !order.getSessionId().equals(sessionId)) {
+                order.updateSessionId(sessionId);
+                saveOrder(order);
+            }
+        }
+        if (order == null) {
+            order = orderRepository.findActiveBySessionId(sessionId).orElse(null);
+            if (order != null && memberId != null && order.getMemberId() == null) {
+                order.updateMemberId(memberId);
+                saveOrder(order);
+            }
+        }
+        if (order != null) {
+            Event event = findEvent(order.getEventId());
+            if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
+                releaseAllInventory(event, order);
+                order.expire();
+                saveEvent(event);
+                saveOrder(order);
+                return null;
+            }
+        }
+        return order;
+    }
+
+    public ActiveOrder getValidatedActiveOrder(UUID sessionId, UUID memberId) {
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) throw new IllegalArgumentException("No active order found");
+        validateOrderOwnership(sessionId, order);
+        return order;
+    }
+
+    public List<UUID> addSelectionToOrder(UUID sessionId, ActiveOrder order, com.ticketing.domain.order.SelectionRequest request) {
+        validateOrderOwnership(sessionId, order);
+        if (!order.getEventId().equals(request.eventId())) {
+            log.warn("Failed to add selection to order: selection event {} does not match order event {}", request.eventId(), order.getEventId());
+            throw new IllegalArgumentException("Selection event does not match order event");
+        }
+
+        Event event = findEvent(order.getEventId());
+        validateOrderNotExpired(order, event);
+        validateSelection(request, event);
+        validatePurchasePolicyOnReservation(event, order, request);
+
+        List<UUID> itemIds = new ArrayList<>();
+        for (com.ticketing.domain.order.SelectionRequest.SeatPick pick : request.seats()) {
+            itemIds.add(lockSeat(order, event, pick.zoneId(), pick.seatId()));
+        }
+        for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
+            itemIds.add(lockGA(order, event, pick.zoneId(), pick.quantity()));
+        }
+
+        saveEvent(event);
+        saveOrder(order);
+        checkAndPublishSoldOut(event);
+        return itemIds;
+    }
+
+    // ── Inventory lock/release ──────────────────────────────────────
+
+    private UUID lockSeat(ActiveOrder order, Event event, UUID zoneId, UUID seatId) {
+        InventoryZone zone = event.findZone(zoneId);
+        zone.lockSeat(seatId);
+        OrderItem item = OrderItem.forSeat(UUID.randomUUID(), zoneId, seatId, zone.getPricePerTicket());
+        order.addItem(item);
+        log.info("Seat added to order: orderId={}, seatId={}", order.getId(), seatId);
+        return item.getId();
+    }
+
+    private UUID lockGA(ActiveOrder order, Event event, UUID zoneId, int quantity) {
+        InventoryZone zone = event.findZone(zoneId);
+        OrderItem item = order.findItemByZoneId(zoneId).orElse(null);
+        if (item == null) {
+            zone.lockGA(quantity);
+            item = OrderItem.forGA(UUID.randomUUID(), zoneId, quantity, zone.getPricePerTicket());
+            order.addItem(item);
+        } else {
+            zone.lockGA(quantity);
+            item.updateQuantity(item.getQuantity() + quantity);
+        }
+        log.info("GA tickets added: orderId={}, zoneId={}, quantity={}", order.getId(), zoneId, quantity);
+        return item.getId();
+    }
+
+    private void updateGAQuantityInternal(ActiveOrder order, Event event, UUID zoneId, int newQuantity) {
+        OrderItem item = order.findItemByZoneId(zoneId)
+                .orElseThrow(() -> new IllegalArgumentException("No GA item found for zone: " + zoneId));
+
+        InventoryZone zone = event.findZone(zoneId);
+        int oldQuantity = item.getQuantity();
+        int diff = newQuantity - oldQuantity;
+
+        if (diff > 0) {
+            zone.lockGA(diff);
+        } else if (diff < 0) {
+            zone.releaseGA(-diff);
+        }
+
+        item.updateQuantity(newQuantity);
+    }
+
+    private void releaseInventoryForItem(Event event, OrderItem item) {
+        InventoryZone zone = event.findZone(item.getZoneId());
+        if (item.isAssignedSeat()) {
+            zone.releaseSeat(item.getSeatId());
+        } else {
+            zone.releaseGA(item.getQuantity());
+        }
+    }
+
+    private void releaseAllInventory(Event event, ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            try {
+                releaseInventoryForItem(event, item);
+            } catch (Exception e) {
+                log.error("Failed to release inventory for item: {}", item.getId(), e);
+            }
+        }
+    }
+
+    private void sellAllInventory(Event event, ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            InventoryZone zone = event.findZone(item.getZoneId());
+            if (item.isAssignedSeat()) {
+                zone.sellSeat(item.getSeatId());
+            } else {
+                zone.sellGA(item.getQuantity());
+            }
+        }
+    }
+
+    private void checkAndPublishSoldOut(Event event) {
+        if (!event.hasAvailableTickets() && event.isPublished()) {
+            event.markSoldOut();
+            saveEvent(event);
+        }
+    }
+
+    // ── Checkout internals ──────────────────────────────────────────
+
+    private CompletedPurchase processCheckout(ActiveOrder order, Event event,
+                                               BuyerContactSnapshot buyerContact, String couponCode,
+                                               LocalDate buyerDateOfBirth) {
+        validatePurchasePolicy(event, order, order.getMemberId(), buyerDateOfBirth);
+
+        BigDecimal finalAmount = event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
+
+        order.startCheckout();
+
+        PaymentResult payment = chargePayment(order, event, buyerContact, finalAmount);
+        if (payment == null || !payment.success()) {
+            order.revertToActive();
+            throw new IllegalStateException("Payment failed: " + (payment != null ? payment.errorMessage() : "All gateways failed"));
+        }
+
+        SupplyResult supply = supplyTickets(order, event, buyerContact);
+        if (supply == null || !supply.success()) {
+            refundPayment(payment.transactionId(), finalAmount);
+            order.cancel();
+            throw new IllegalStateException("Ticket generation failed. Payment has been refunded: "
+                    + (supply != null ? supply.errorMessage() : "All gateways failed"));
+        }
+
+        order.complete();
+
+        return new CompletedPurchase(
+                UUID.randomUUID(),
+                event.getId(),
+                event.getName(),
+                event.getCompanyName(),
+                order.getMemberId(),
+                payment.transactionId(),
+                finalAmount,
+                systemClock.now());
+    }
+
+    public void refundPayment(String transactionId, BigDecimal amount) {
+        RefundResult refund = null;
+        for (IPaymentGateway gateway : paymentGateways) {
+            try {
+                refund = gateway.refund(transactionId, amount.doubleValue());
+                if (refund != null && refund.success()) {
+                    break;
+                }
+            } catch (Exception e) {
+                log.error("Refund Gateway failed with exception", e);
+            }
+        }
+        if (refund == null || !refund.success()) {
+            log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
+                    refund != null ? refund.errorMessage() : "All gateways failed");
+        }
+    }
+
+    private void validatePurchasePolicy(Event event, ActiveOrder order, UUID memberId, LocalDate buyerDateOfBirth) {
+        PurchaseContext ctx = new PurchaseContext(order, memberId, buyerDateOfBirth);
+        PolicyResult validation = event.getEventPurchasePolicy().isAllowed(ctx);
+        if (!validation.allowed()) {
+            throw new IllegalStateException("Purchase policy violation: "
+                    + validation.errorCode() + " — " + validation.reason());
+        }
+    }
+
+    private void validatePurchasePolicyOnReservation(Event event, ActiveOrder order, com.ticketing.domain.order.SelectionRequest request) {
+        int additionalTickets = 0;
+        for (com.ticketing.domain.order.SelectionRequest.SeatPick ignored : request.seats()) {
+            additionalTickets++;
+        }
+        for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
+            additionalTickets += pick.quantity();
+        }
+
+        ActiveOrder simulatedOrder = order.simulateWithAdditionalTickets(additionalTickets);
+        LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
+        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob);
+        PolicyResult result = event.getEventPurchasePolicy().isAllowed(ctx);
+        if (!result.allowed()) {
+            throw new IllegalStateException(result.reason());
+        }
+    }
+
+    private PaymentResult chargePayment(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact, BigDecimal finalAmount) {
+        PaymentResult payment = null;
+        for (IPaymentGateway gateway : paymentGateways) {
+            try {
+                payment = gateway.charge(finalAmount,
+                        new PaymentDetails(order.getId(), event.getId(), order.getMemberId(), buyerContact.getEmail()));
+                if (payment != null && payment.success()) {
+                    break;
+                }
+            } catch (Exception e) {
+                log.error("Payment Gateway failed with exception", e);
+            }
+        }
+        return payment;
+    }
+
+    private SupplyResult supplyTickets(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact) {
+        SupplyResult supply = null;
+        for (ITicketSupplyGateway gateway : ticketSupplyGateways) {
+            try {
+                supply = gateway.issueTickets(ticketRequests(order, event),
+                        new CustomerInfo(order.getMemberId() == null ? null : order.getMemberId().toString(),
+                                buyerContact.getEmail(), buyerContact.getUsername()));
+                if (supply != null && supply.success()) {
+                    break;
+                } else if (supply != null && supply.issuedTicketCodes() != null && !supply.issuedTicketCodes().isEmpty()) {
+                    gateway.cancelTickets(supply.issuedTicketCodes());
+                }
+            } catch (Exception e) {
+                log.error("Gateway failed with exception", e);
+            }
+        }
+        return supply;
+    }
+
+    private List<TicketRequest> ticketRequests(ActiveOrder order, Event event) {
+        List<TicketRequest> tickets = new ArrayList<>();
+        for (OrderItem item : order.getItems()) {
+            if (item.isAssignedSeat()) {
+                tickets.add(new TicketRequest(event.getId().toString(),
+                        item.getId().toString(), item.getSeatId().toString()));
+            } else {
+                for (int i = 0; i < item.getQuantity(); i++) {
+                    tickets.add(new TicketRequest(event.getId().toString(),
+                            item.getId() + "-" + (i + 1), null));
+                }
+            }
+        }
+        return tickets;
+    }
+
+    private BuyerContactSnapshot buyerContactFor(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return BuyerContactSnapshot.empty();
+        }
+        return memberRepository.findById(memberId)
+                .map(member -> new BuyerContactSnapshot(
+                        member.getEmail(),
+                        member.getUsername(),
+                        member.getPhoneNumber()))
+                .orElseGet(BuyerContactSnapshot::empty);
+    }
+
+    private LocalDate getBuyerDateOfBirth(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return null;
+        }
+        return memberRepository.findById(memberId).map(Member::getDateOfBirth).orElse(null);
+    }
+
+    // ── Selection validation ────────────────────────────────────────
+
+    private void validateSelection(com.ticketing.domain.order.SelectionRequest request, Event event) {
+        if (request == null) throw new IllegalArgumentException("request is required");
+        if (request.isEmpty()) {
+            throw new IllegalArgumentException("selection must include at least one seat or quantity");
+        }
+
+        if (event.getStatus() != EventStatus.PUBLISHED) {
+            throw new IllegalStateException("Event is not selectable in status: " + event.getStatus());
+        }
+
+        for (com.ticketing.domain.order.SelectionRequest.SeatPick pick : request.seats()) {
+            InventoryZone zone = findZoneInEvent(event, pick.zoneId());
+            if (!zone.isAssigned()) {
+                throw new IllegalArgumentException(
+                        "Zone " + zone.getName() + " is GA — use a quantity, not a seat id");
+            }
+            Seat seat;
+            try {
+                seat = zone.findSeat(pick.seatId());
+            } catch (IllegalArgumentException notFound) {
+                throw new IllegalArgumentException(
+                        "Seat " + pick.seatId() + " not found in zone " + zone.getName());
+            }
+            if (!seat.isAvailable()) {
+                throw new IllegalStateException(
+                        "Seat " + seat.getRow() + "-" + seat.getSeatNumber()
+                        + " is not available (status=" + seat.getStatus() + ")");
+            }
+        }
+
+        Map<UUID, Integer> totalsByZone = new HashMap<>();
+        for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
+            totalsByZone.merge(pick.zoneId(), pick.quantity(), Integer::sum);
+        }
+        for (var entry : totalsByZone.entrySet()) {
+            InventoryZone zone = findZoneInEvent(event, entry.getKey());
+            int requested = entry.getValue();
+            if (!zone.isGA()) {
+                throw new IllegalArgumentException(
+                        "Zone " + zone.getName() + " is assigned-seating — pick specific seats, not a quantity");
+            }
+            if (zone.getAvailableCount() < requested) {
+                throw new IllegalStateException(
+                        "Not enough tickets in zone " + zone.getName()
+                        + " (requested " + requested + ", available " + zone.getAvailableCount() + ")");
+            }
+        }
+    }
+
+    private static InventoryZone findZoneInEvent(Event event, UUID zoneId) {
+        try {
+            return event.findZone(zoneId);
+        } catch (IllegalArgumentException notFound) {
+            throw new IllegalArgumentException(
+                    "Zone " + zoneId + " is not part of event " + event.getId());
+        }
+    }
+
+    // ── Persistence helpers ─────────────────────────────────────────
+
+    private Event findEvent(UUID eventId) {
+        return eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
+    }
+
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict: eventId={}", event.getId());
+            throw new IllegalStateException("Event inventory changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveOrder(ActiveOrder order) {
+        try {
+            orderRepository.save(order);
+        } catch (OptimisticLockException ex) {
+            log.warn("Order save conflict: orderId={}", order.getId());
+            throw new IllegalStateException("Order changed concurrently. Please retry.", ex);
+        }
+    }
+
     private void saveQueue(VirtualQueue queue) {
         try {
             queueRepository.save(queue);
@@ -311,6 +836,19 @@ public class OrderService {
         }
         if (!sessionTokenService.isValid(token)) {
             throw new IllegalArgumentException("Authentication token is invalid");
+        }
+    }
+
+    private void validateOrderOwnership(UUID sessionId, ActiveOrder order) {
+        if (!order.getSessionId().equals(sessionId)) {
+            throw new IllegalStateException("Order does not belong to this session");
+        }
+    }
+
+    private void validateOrderNotExpired(ActiveOrder order, Event event) {
+        if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
+            log.warn("Order has expired: orderId={}, eventId={}", order.getId(), event.getId());
+            throw new IllegalStateException("Order has expired");
         }
     }
 }
