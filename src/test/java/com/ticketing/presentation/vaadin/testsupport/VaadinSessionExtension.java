@@ -12,6 +12,7 @@ import java.util.Map;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 
 import com.vaadin.flow.internal.CurrentInstance;
 import com.vaadin.flow.server.VaadinSession;
@@ -31,8 +32,22 @@ import com.vaadin.flow.server.VaadinSession;
  *
  * <p>The session's {@code getAttribute}/{@code setAttribute} are backed by a real
  * map, so {@code SessionContext} setters/getters behave like a real session.
+ *
+ * <p><b>Why the session is stashed in the JUnit store:</b> {@code VaadinSession.getCurrent()}
+ * is backed by Vaadin's {@link CurrentInstance}, which holds the value through a
+ * {@link java.lang.ref.WeakReference}. If the only strong reference to the mock is a
+ * local variable in {@link #beforeEach}, the garbage collector is free to collect it
+ * any time after {@code beforeEach} returns, after which {@code getCurrent()} silently
+ * returns {@code null} and {@code SessionContext} reads come back empty. Whether that
+ * GC happens mid-test depends on memory pressure from other tests, which is why it
+ * surfaces as intermittent, order-dependent failures. Keeping the mock in the
+ * per-test store holds a strong reference for the whole test (through {@code afterEach}),
+ * so the session cannot be collected while the test is running.
  */
 public final class VaadinSessionExtension implements BeforeEachCallback, AfterEachCallback {
+
+    private static final Namespace NAMESPACE = Namespace.create(VaadinSessionExtension.class);
+    private static final String SESSION_KEY = "session";
 
     @Override
     public void beforeEach(ExtensionContext context) {
@@ -48,6 +63,7 @@ public final class VaadinSessionExtension implements BeforeEachCallback, AfterEa
                 attributes.get(invocation.getArgument(0, String.class)));
 
         VaadinSession.setCurrent(session);
+        context.getStore(NAMESPACE).put(SESSION_KEY, session);
     }
 
     @Override
