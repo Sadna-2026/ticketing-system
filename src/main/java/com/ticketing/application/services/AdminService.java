@@ -22,7 +22,7 @@ import com.ticketing.domain.services.AdminDomainService;
 @Service
 public class AdminService {
 
-    private final AdminDomainService domainService;
+    private final AdminDomainService adminDomainService;
     private final INotificationService notificationService;
 
     // Backward compatibility
@@ -31,31 +31,32 @@ public class AdminService {
             ICompanyRepository companyRepository,
             ISessionTokenService sessionTokenService,
             IAdminRepository adminRepository,
-            IOrderRepository orderRepository
-    ) {
-        this(new AdminDomainService(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository), null);
+            IOrderRepository orderRepository) {
+        this(new AdminDomainService(memberRepository, companyRepository, sessionTokenService, adminRepository,
+                orderRepository), null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public AdminService(
-            AdminDomainService domainService,
+            AdminDomainService adminDomainService,
             @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
-        this.domainService = domainService;
+        this.adminDomainService = adminDomainService;
         this.notificationService = notificationService;
     }
 
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {
-        domainService.removeMember(adminToken, targetMemberId);
+        adminDomainService.removeMember(adminToken, targetMemberId);
     }
 
     /**
      * UC-II.6.7 — System admin suspends a user.
      */
     public Suspension suspendUser(String adminToken, UUID targetMemberId,
-                                   Duration duration, String reason) {
-        Suspension suspension = domainService.suspendUser(adminToken, targetMemberId, duration, reason);
+            Duration duration, String reason) {
+        Suspension suspension = adminDomainService.suspendUser(adminToken, targetMemberId, duration, reason);
         if (notificationService != null) {
-            notificationService.notify(targetMemberId.toString(), "Your account has been suspended" + (reason != null ? ": " + reason : "."));
+            notificationService.notify(targetMemberId.toString(),
+                    "Your account has been suspended" + (reason != null ? ": " + reason : "."));
         }
         return suspension;
     }
@@ -64,8 +65,8 @@ public class AdminService {
      * UC-II.6.8 — System admin cancels (lifts) an active suspension.
      */
     public void cancelSuspension(String adminToken, UUID targetMemberId,
-                                  UUID suspensionId) {
-        domainService.cancelSuspension(adminToken, targetMemberId, suspensionId);
+            UUID suspensionId) {
+        adminDomainService.cancelSuspension(adminToken, targetMemberId, suspensionId);
         if (notificationService != null) {
             notificationService.notify(targetMemberId.toString(), "Your account suspension has been lifted.");
         }
@@ -75,22 +76,22 @@ public class AdminService {
      * UC-II.6.9 — System admin views user suspensions.
      */
     public List<SuspensionDTO> listSuspensions(String adminToken, boolean activeOnly) {
-        return domainService.listSuspensions(adminToken, activeOnly);
+        return adminDomainService.listSuspensions(adminToken, activeOnly);
     }
 
     public List<MemberSummaryDTO> searchMembers(String adminToken, String usernameQuery) {
-        return domainService.searchMembers(adminToken, usernameQuery);
+        return adminDomainService.searchMembers(adminToken, usernameQuery);
     }
 
     public List<PurchaseRecordDTO> getGlobalPurchaseHistory(String adminToken, UUID buyerId, String companyName) {
-        return domainService.getGlobalPurchaseHistory(adminToken, buyerId, companyName);
+        return adminDomainService.getGlobalPurchaseHistory(adminToken, buyerId, companyName);
     }
 
     public LoginResponse adminLogin(LoginRequest request, String guestToken) {
-        return domainService.adminLogin(request, guestToken);
+        return adminDomainService.adminLogin(request, guestToken);
     }
 
     public boolean registerAdmin(UUID adminId, String username, String email, String password) {
-        return domainService.registerAdmin(adminId, username, email, password);
+        return adminDomainService.registerAdmin(adminId, username, email, password);
     }
 }
