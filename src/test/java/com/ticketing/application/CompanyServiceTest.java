@@ -37,6 +37,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.application.services.CompanyService;
@@ -1021,9 +1022,67 @@ class CompanyServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("CompanyService.searchCompanies")
+    class SearchCompanies {
 
+        private InMemoryCompanyRepository companyRepository;
+        private CompanyService companyService;
 
+        @BeforeEach
+        void setUp() {
+            companyRepository = new InMemoryCompanyRepository();
+            companyService = new CompanyService(companyRepository, null, null, null, new InMemoryEventRepository(), null, null);
+        }
 
+        @Test
+        void GivenActiveCompanies_WhenSearchingWithBlankQuery_ThenAllActiveCompaniesReturnedSortedByName() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+            companyRepository.save(new Company("Beta", "desc", UUID.randomUUID()));
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("");
+
+            assertEquals(List.of("Acme", "Beta"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenPartialQuery_WhenSearchingCompanies_ThenOnlyMatchingNamesReturned() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+            companyRepository.save(new Company("Beta", "desc", UUID.randomUUID()));
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("be");
+
+            assertEquals(List.of("Beta"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenMixedCaseQuery_WhenSearchingCompanies_ThenMatchIsCaseInsensitive() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("ACME");
+
+            assertEquals(List.of("Acme"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenSuspendedCompany_WhenSearchingCompanies_ThenInactiveCompaniesAreExcluded() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+            Company suspended = new Company("Beta", "desc", UUID.randomUUID());
+            suspended.suspend();
+            companyRepository.save(suspended);
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("");
+
+            assertEquals(List.of("Acme"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenNoMatch_WhenSearchingCompanies_ThenEmptyListReturned() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+
+            assertTrue(companyService.searchCompanies("zzz").isEmpty());
+        }
+    }
 
 
 }
