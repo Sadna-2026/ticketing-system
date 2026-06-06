@@ -277,6 +277,54 @@ class OrdersViewTest {
         verify(presenter).removeItem(itemId);
     }
 
+    @Test
+    void GivenMixedOrder_WhenManagingItems_ThenGaQuantityActionIsScopedToGaItemsAndMutationsFlowThroughPresenter() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID gaZoneId = UUID.randomUUID();
+        UUID gaItemId = UUID.randomUUID();
+        UUID seatZoneId = UUID.randomUUID();
+        UUID seatItemId = UUID.randomUUID();
+        OrderItemDto gaItem = gaItem(gaItemId, gaZoneId, 2);
+        OrderItemDto seat = seatItem(seatItemId, seatZoneId, UUID.randomUUID());
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem, seat));
+        ActiveOrderDto afterUpdate = activeOrder(orderId, eventId, List.of(gaItem(gaItemId, gaZoneId, 5), seat));
+        ActiveOrderDto afterRemove = activeOrder(orderId, eventId, List.of(seat));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.updateGAQuantity(gaZoneId, 5))
+                .thenReturn(OrderMutationResult.success("GA quantity updated.", null, afterUpdate));
+        when(presenter.removeItem(gaItemId))
+                .thenReturn(OrderMutationResult.success("Order item removed.", gaItemId, afterRemove));
+        OrdersView view = new OrdersView(presenter);
+
+        // Nothing selected: both item actions are disabled.
+        assertFalse(findButton(view, "Remove selected item").isEnabled());
+        assertFalse(findButton(view, "Update selected GA quantity").isEnabled());
+
+        // Selecting the GA item enables both actions, then updating its quantity succeeds.
+        findOrderItemsGrid(view).asSingleSelect().setValue(gaItem);
+        assertTrue(findButton(view, "Remove selected item").isEnabled());
+        assertTrue(findButton(view, "Update selected GA quantity").isEnabled());
+        findIntegerField(view, "New GA quantity").setValue(5);
+        clickButton(view, "Update selected GA quantity");
+        assertTrue(hasText(view, "GA quantity updated."));
+
+        // Selecting the assigned-seat row keeps Remove available but disables the GA-quantity action.
+        findOrderItemsGrid(view).asSingleSelect().setValue(afterUpdate.getItems().get(1));
+        assertTrue(findButton(view, "Remove selected item").isEnabled());
+        assertFalse(findButton(view, "Update selected GA quantity").isEnabled());
+
+        // Removing the GA item succeeds, leaving only the assigned seat.
+        findOrderItemsGrid(view).asSingleSelect().setValue(afterUpdate.getItems().get(0));
+        clickButton(view, "Remove selected item");
+        assertTrue(hasText(view, "Order item removed."));
+        assertEquals(List.of(seat), findOrderItemsGrid(view).getDataProvider().fetch(new Query<>()).toList());
+
+        verify(presenter).updateGAQuantity(gaZoneId, 5);
+        verify(presenter).removeItem(gaItemId);
+    }
+
     private OrdersPresenter mockPresenter() {
         OrdersPresenter presenter = mock(OrdersPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
