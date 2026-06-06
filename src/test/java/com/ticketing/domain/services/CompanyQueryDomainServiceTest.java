@@ -19,12 +19,12 @@ import com.ticketing.infrastructure.InMemoryEventRepository;
 class CompanyQueryDomainServiceTest {
 
     private InMemoryCompanyRepository companyRepository;
-    private CompanyQueryDomainService service;
+    private CompanyQueryDomainService companyQueryDomainService;
 
     @BeforeEach
     void setUp() {
         companyRepository = new InMemoryCompanyRepository();
-        service = new CompanyQueryDomainService(companyRepository, new InMemoryEventRepository());
+        companyQueryDomainService = new CompanyQueryDomainService(companyRepository, new InMemoryEventRepository());
     }
 
     @Test
@@ -32,7 +32,7 @@ class CompanyQueryDomainServiceTest {
         companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
         companyRepository.save(new Company("Beta", "desc", UUID.randomUUID()));
 
-        List<CompanySummaryDTO> results = service.searchCompanies("");
+        List<CompanySummaryDTO> results = companyQueryDomainService.searchCompanies("");
 
         assertEquals(List.of("Acme", "Beta"), results.stream().map(CompanySummaryDTO::name).toList());
     }
@@ -42,7 +42,7 @@ class CompanyQueryDomainServiceTest {
         companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
         companyRepository.save(new Company("Beta", "desc", UUID.randomUUID()));
 
-        List<CompanySummaryDTO> results = service.searchCompanies("be");
+        List<CompanySummaryDTO> results = companyQueryDomainService.searchCompanies("be");
 
         assertEquals(List.of("Beta"), results.stream().map(CompanySummaryDTO::name).toList());
     }
@@ -51,7 +51,7 @@ class CompanyQueryDomainServiceTest {
     void GivenMixedCaseQuery_WhenSearchingCompanies_ThenMatchIsCaseInsensitive() {
         companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
 
-        List<CompanySummaryDTO> results = service.searchCompanies("ACME");
+        List<CompanySummaryDTO> results = companyQueryDomainService.searchCompanies("ACME");
 
         assertEquals(List.of("Acme"), results.stream().map(CompanySummaryDTO::name).toList());
     }
@@ -63,7 +63,7 @@ class CompanyQueryDomainServiceTest {
         suspended.suspend();
         companyRepository.save(suspended);
 
-        List<CompanySummaryDTO> results = service.searchCompanies("");
+        List<CompanySummaryDTO> results = companyQueryDomainService.searchCompanies("");
 
         assertEquals(List.of("Acme"), results.stream().map(CompanySummaryDTO::name).toList());
     }
@@ -72,6 +72,6 @@ class CompanyQueryDomainServiceTest {
     void GivenNoMatch_WhenSearchingCompanies_ThenEmptyListReturned() {
         companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
 
-        assertTrue(service.searchCompanies("zzz").isEmpty());
+        assertTrue(companyQueryDomainService.searchCompanies("zzz").isEmpty());
     }
 }

@@ -26,12 +26,12 @@ import com.ticketing.infrastructure.InMemoryEventRepository;
 class EventSearchDomainServiceTest {
 
     private InMemoryEventRepository eventRepository;
-    private EventSearchDomainService service;
+    private EventSearchDomainService eventSearchDomainService;
 
     @BeforeEach
     void setUp() {
         eventRepository = new InMemoryEventRepository();
-        service = new EventSearchDomainService(eventRepository, new InMemoryCompanyRepository());
+        eventSearchDomainService = new EventSearchDomainService(eventRepository, new InMemoryCompanyRepository());
     }
 
     @Test
@@ -40,7 +40,7 @@ class EventSearchDomainServiceTest {
         eventRepository.save(draftEvent("Acme", "Autumn Show"));
         eventRepository.save(draftEvent("Other", "Beta Show"));
 
-        List<EventSummaryDTO> results = service.findCompanyEvents("Acme");
+        List<EventSummaryDTO> results = eventSearchDomainService.findCompanyEvents("Acme");
 
         assertEquals(List.of("Autumn Show", "Spring Show"), results.stream().map(EventSummaryDTO::name).toList());
     }
@@ -52,7 +52,7 @@ class EventSearchDomainServiceTest {
         cancelled.cancel();
         eventRepository.save(cancelled);
 
-        List<EventSummaryDTO> results = service.findCompanyEvents("Acme");
+        List<EventSummaryDTO> results = eventSearchDomainService.findCompanyEvents("Acme");
 
         // Unlike the public searchEvents, management listing must surface drafts/cancelled so
         // they can be published or managed.
@@ -65,8 +65,8 @@ class EventSearchDomainServiceTest {
     void GivenBlankCompanyName_WhenFindingCompanyEvents_ThenEmptyListReturned() {
         eventRepository.save(draftEvent("Acme", "Spring Show"));
 
-        assertTrue(service.findCompanyEvents("  ").isEmpty());
-        assertTrue(service.findCompanyEvents(null).isEmpty());
+        assertTrue(eventSearchDomainService.findCompanyEvents("  ").isEmpty());
+        assertTrue(eventSearchDomainService.findCompanyEvents(null).isEmpty());
     }
 
     private static Event draftEvent(String companyName, String name) {

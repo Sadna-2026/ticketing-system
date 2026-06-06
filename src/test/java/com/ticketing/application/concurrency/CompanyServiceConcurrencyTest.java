@@ -217,13 +217,13 @@ public class CompanyServiceConcurrencyTest {
     }
 
     private CompanyService newCompanyServiceWithLifecycle(ICompanyRepository repo) {
-        CompanyLifecycleDomainService lifecycleDomainService = new CompanyLifecycleDomainService(
+        CompanyLifecycleDomainService companyLifecycleDomainService = new CompanyLifecycleDomainService(
                 repo,
                 new InMemoryEventRepository(),
                 memberRepository,
                 new InMemoryOrderRepository(),
                 mock(IPaymentGateway.class));
-        return new CompanyService(repo, null, sessionTokenService, memberRepository, null, lifecycleDomainService, null);
+        return new CompanyService(repo, null, sessionTokenService, memberRepository, null, companyLifecycleDomainService, null);
     }
 
     private static void runSuspend(

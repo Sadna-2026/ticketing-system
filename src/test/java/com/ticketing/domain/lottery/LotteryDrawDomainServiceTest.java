@@ -39,7 +39,7 @@ public class LotteryDrawDomainServiceTest {
     private InMemoryOrderRepository orderRepository;
     private ISystemClock systemClock;
     
-    private LotteryDrawDomainService domainService;
+    private LotteryDrawDomainService lotteryDrawDomainService;
     
     private UUID eventId;
     private UUID zoneId;
@@ -78,8 +78,8 @@ public class LotteryDrawDomainServiceTest {
         }
         
         // Capacity 3 (less than registrants) -> 3 winners
-        domainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
-        List<ActiveOrder> winners3 = domainService.draw(eventId, 3);
+        lotteryDrawDomainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
+        List<ActiveOrder> winners3 = lotteryDrawDomainService.draw(eventId, 3);
         assertEquals(3, winners3.size());
         
         // Setup again
@@ -88,8 +88,8 @@ public class LotteryDrawDomainServiceTest {
             lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, UUID.randomUUID(), zoneId, 1, systemClock.now()));
         }
         // Capacity 5 (more than registrants) -> 3 winners
-        domainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
-        List<ActiveOrder> winnersAll = domainService.draw(eventId, 5);
+        lotteryDrawDomainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
+        List<ActiveOrder> winnersAll = lotteryDrawDomainService.draw(eventId, 5);
         assertEquals(3, winnersAll.size());
     }
 
@@ -100,8 +100,8 @@ public class LotteryDrawDomainServiceTest {
             lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, UUID.randomUUID(), zoneId, 1, systemClock.now()));
         }
         
-        domainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
-        List<ActiveOrder> winners = domainService.draw(eventId, 5);
+        lotteryDrawDomainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
+        List<ActiveOrder> winners = lotteryDrawDomainService.draw(eventId, 5);
         
         assertEquals(5, winners.size());
         
@@ -116,8 +116,8 @@ public class LotteryDrawDomainServiceTest {
         int requestedQuantity = 2;
         lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, zoneId, requestedQuantity, systemClock.now()));
         
-        domainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
-        List<ActiveOrder> winners = domainService.draw(eventId, 1);
+        lotteryDrawDomainService = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, new Random());
+        List<ActiveOrder> winners = lotteryDrawDomainService.draw(eventId, 1);
         
         assertEquals(1, winners.size());
         ActiveOrder order = winners.get(0);
@@ -153,8 +153,8 @@ public class LotteryDrawDomainServiceTest {
         entries.forEach(lotteryRepository::save);
         
         Random random1 = new Random(seed);
-        LotteryDrawDomainService service1 = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, random1);
-        List<ActiveOrder> winners1 = service1.draw(eventId, 5);
+        LotteryDrawDomainService lotteryDrawDomainService1 = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, random1);
+        List<ActiveOrder> winners1 = lotteryDrawDomainService1.draw(eventId, 5);
         
         // Reset the environment manually to preserve eventId and zoneId
         lotteryRepository = new InMemoryLotteryRepository();
@@ -178,8 +178,8 @@ public class LotteryDrawDomainServiceTest {
         entries.forEach(lotteryRepository::save);
         
         Random random2 = new Random(seed);
-        LotteryDrawDomainService service2 = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, random2);
-        List<ActiveOrder> winners2 = service2.draw(eventId, 5);
+        LotteryDrawDomainService lotteryDrawDomainService2 = new LotteryDrawDomainService(lotteryRepository, eventRepository, orderRepository, systemClock, random2);
+        List<ActiveOrder> winners2 = lotteryDrawDomainService2.draw(eventId, 5);
         
         // They should select the exact same member IDs in the same order
         List<UUID> memberIds1 = winners1.stream().map(ActiveOrder::getMemberId).toList();
