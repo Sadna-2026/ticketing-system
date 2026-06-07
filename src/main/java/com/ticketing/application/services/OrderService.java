@@ -866,12 +866,4 @@ public class OrderService {
             throw new IllegalStateException("Order has expired");
         }
     }
-
-    private void rejectIfMemberSuspended(UUID memberId) {
-        if (memberId == null || memberRepository == null) {
-            return;
-        }
-        memberRepository.findById(memberId)
-                .ifPresent(member -> member.rejectIfSuspended(systemClock.now()));
-    }
 }
