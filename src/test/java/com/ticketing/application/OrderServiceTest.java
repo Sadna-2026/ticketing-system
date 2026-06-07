@@ -49,6 +49,7 @@ import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.gateway.SupplyResult;
 import com.ticketing.domain.gateway.TicketRequest;
 import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
@@ -729,6 +730,49 @@ public class OrderServiceTest {
         
         // Ensure that the CompletedPurchase still exists but refund logic executed
         assertTrue(orderRepo.findCompletedById(purchaseId).isPresent());
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenCreateOrder_ThenRejectsWithSuspendedMessage() {
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "suspendedUser", "suspended@example.com", "pw",
+                "050-2222222", LocalDate.of(1995, 5, 5));
+        member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), null, "violation"));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.createOrder(memberToken, eventId));
+        assertTrue(ex.getMessage().contains("suspended"));
+
+        Event event = eventRepo.findById(eventId).orElseThrow();
+        assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
+        assertEquals(0, event.findZone(gaZoneId).getLockedCount());
+    }
+
+    @Test
+    void GivenMemberSuspendedAfterOrderCreated_WhenAddTickets_ThenRejectsAndInventoryUnchanged() {
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "laterSuspended", "later@example.com", "pw",
+                "050-3333333", LocalDate.of(1992, 3, 3));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        UUID orderId = orderService.createOrder(memberToken, eventId);
+        assertNotNull(orderId);
+
+        member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), null, "late violation"));
+        memberRepo.save(member);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 2));
+        assertTrue(ex.getMessage().contains("suspended"));
+
+        Event event = eventRepo.findById(eventId).orElseThrow();
+        assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
+        assertEquals(0, event.findZone(gaZoneId).getLockedCount());
     }
 
 }

@@ -411,6 +411,7 @@ public class OrderService {
     // ── Reservation internals ───────────────────────────────────────
 
     public ActiveOrder findOrCreateActiveOrder(UUID sessionId, UUID memberId, UUID eventId) {
+        rejectIfMemberSuspended(memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order != null) {
             if (!order.getEventId().equals(eventId)) {
@@ -470,6 +471,7 @@ public class OrderService {
     }
 
     public List<UUID> addSelectionToOrder(UUID sessionId, ActiveOrder order, com.ticketing.domain.order.SelectionRequest request) {
+        rejectIfMemberSuspended(order.getMemberId());
         validateOrderOwnership(sessionId, order);
         if (!order.getEventId().equals(request.eventId())) {
             log.warn("Failed to add selection to order: selection event {} does not match order event {}", request.eventId(), order.getEventId());
@@ -850,5 +852,13 @@ public class OrderService {
             log.warn("Order has expired: orderId={}, eventId={}", order.getId(), event.getId());
             throw new IllegalStateException("Order has expired");
         }
+    }
+
+    private void rejectIfMemberSuspended(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return;
+        }
+        memberRepository.findById(memberId)
+                .ifPresent(member -> member.rejectIfSuspended(systemClock.now()));
     }
 }
