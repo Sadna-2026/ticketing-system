@@ -1,5 +1,6 @@
 package com.ticketing.application.services;
 
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.Deque;
@@ -99,6 +100,7 @@ public class CompanyService {
         if (founderId == null) {
             throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
         }
+        rejectIfSuspended(founderId);
 
         if (companyRepository.existsByName(name)) {
             throw new IllegalArgumentException("A production company with this name already exists.");
@@ -129,6 +131,10 @@ public class CompanyService {
             Set<com.ticketing.domain.member.ManagerPermission> permissions
     ) {
         UUID appointerId = validateToken(token);
+        if (appointerId == null) {
+            throw new IllegalArgumentException("A guest user cannot offer role appointments. Please log in.");
+        }
+        rejectIfSuspended(appointerId);
 
         if (!companyRepository.existsByName(companyName)) {
             throw new IllegalArgumentException("Company not found");
@@ -153,6 +159,7 @@ public class CompanyService {
         if (callerId == null) {
             throw new IllegalArgumentException("A guest user cannot change manager permissions. Please log in.");
         }
+        rejectIfSuspended(callerId);
 
         if (targetMemberId == null) {
             throw new IllegalArgumentException("Target member ID is required");
@@ -176,6 +183,10 @@ public class CompanyService {
             boolean accepted
     ) {
         UUID responderId = validateToken(token);
+        if (responderId == null) {
+            throw new IllegalArgumentException("A guest user cannot respond to role appointments. Please log in.");
+        }
+        rejectIfSuspended(responderId);
 
         RoleAppointmentOfferResponseEvent event = new RoleAppointmentOfferResponseEvent(
             appointmentOfferId,
@@ -194,6 +205,7 @@ public class CompanyService {
         if (revokerId == null) {
             throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
         }
+        rejectIfSuspended(revokerId);
 
         Company company = companyRepository.findByName(companyName)
             .orElseThrow(() -> new IllegalArgumentException("Company not found"));
@@ -215,6 +227,7 @@ public class CompanyService {
         if (ownerId == null) {
             throw new IllegalArgumentException("A guest user cannot relinquish ownership. Please log in.");
         }
+        rejectIfSuspended(ownerId);
 
         Company company = companyRepository.findByName(companyName)
             .orElseThrow(() -> new IllegalArgumentException("Company not found"));
@@ -236,6 +249,7 @@ public class CompanyService {
         if (policy == null) throw new IllegalArgumentException("policy is required");
 
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
@@ -248,6 +262,7 @@ public class CompanyService {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
@@ -263,6 +278,7 @@ public class CompanyService {
         if (policy == null) throw new IllegalArgumentException("policy is required");
 
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
@@ -275,6 +291,7 @@ public class CompanyService {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
@@ -289,6 +306,7 @@ public class CompanyService {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
@@ -373,6 +391,7 @@ public class CompanyService {
 
     public void suspendCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
 
@@ -383,6 +402,7 @@ public class CompanyService {
 
     public void reopenCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
 
@@ -393,6 +413,7 @@ public class CompanyService {
 
     public void permanentCloseByFounder(String token, String companyName) {
         UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
         synchronized (companyLock(companyName)) {
             Company company = loadCompany(companyName);
             requireFounder(memberId, company);
@@ -401,7 +422,8 @@ public class CompanyService {
     }
 
     public void permanentCloseByAdmin(String token, String companyName) {
-        requireMember(token);
+        UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
         if (!isAdmin(token)) {
             log.warn("Permanent close by admin ignored: insufficient permissions");
             throw new SecurityException("System admin permission required");
@@ -526,6 +548,11 @@ public class CompanyService {
             throw new SecurityException("Guests cannot manage policies");
         }
         return memberId;
+    }
+
+    private void rejectIfSuspended(UUID memberId) {
+        memberRepository.findById(memberId)
+                .ifPresent(member -> member.rejectIfSuspended(Instant.now()));
     }
 
     private void authorizePolicy(UUID memberId, String companyName) {

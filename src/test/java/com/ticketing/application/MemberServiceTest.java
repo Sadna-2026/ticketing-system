@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Base64;
@@ -41,6 +42,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.request.UpdateMemberDetailsRequest;
@@ -1019,6 +1021,32 @@ class MemberServiceTest {
             assertTrue(response.success());
             assertNotNull(response.member());
             assertEquals("MemberDto", response.member().getClass().getSimpleName());
+        }
+
+        @Test
+        @DisplayName("Suspended member cannot update details but can still read profile")
+        void GivenSuspendedMember_WhenUpdateOwnDetails_ThenDeniedAndReadOnlyDetailsStillAvailable() {
+            RegisterResponse registerResponse = registerMember("tamar", "tamar@example.com");
+            UUID memberId = registerResponse.member().memberId();
+            Member member = memberRepository.findById(memberId).orElseThrow();
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(member);
+
+            UpdateMemberDetailsResponse response =
+                    memberService.updateIdentifyingDetails(
+                            registerResponse.sessionToken(),
+                            memberId,
+                            updateRequest("tamar-new", "new@example.com", "0527654321", "1999-05-06")
+                    );
+
+            assertFalse(response.success());
+            assertTrue(response.message().contains("suspended"));
+            assertNull(response.member());
+            assertNotNull(memberService.getMemberDetails(registerResponse.sessionToken()));
+
+            Member savedMember = memberRepository.findById(memberId).orElseThrow();
+            assertEquals("tamar", savedMember.getUsername());
+            assertEquals("tamar@example.com", savedMember.getEmail());
         }
 
         private RegisterResponse registerMember(String username, String email) {

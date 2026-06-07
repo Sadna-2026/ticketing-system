@@ -234,6 +234,12 @@ public class MemberService {
             logger.warn("Failed to update member details: member not found " + memberId);
             return UpdateMemberDetailsResponse.failure("Member not found.");
         }
+        try {
+            member.rejectIfSuspended(java.time.Instant.now());
+        } catch (IllegalStateException ex) {
+            logger.warn("Failed to update member details: member suspended {}", memberId);
+            return UpdateMemberDetailsResponse.failure(ex.getMessage());
+        }
 
         String username = request.username() == null ? member.getUsername() : request.username();
         String email = request.email() == null ? member.getEmail() : request.email();

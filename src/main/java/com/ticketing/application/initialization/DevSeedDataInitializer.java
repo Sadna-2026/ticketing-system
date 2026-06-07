@@ -37,6 +37,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @Component
@@ -53,6 +54,10 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID TEEN_ID = UUID.fromString("00000000-0000-0000-0000-000000000005");
     public static final UUID INVENTORY_MANAGER_ID = UUID.fromString("00000000-0000-0000-0000-000000000006");
     public static final UUID SECOND_OWNER_ID = UUID.fromString("00000000-0000-0000-0000-000000000007");
+    public static final UUID SUSPENDED_MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000008");
+    public static final String SUSPENDED_MEMBER_REASON = "Manual QA — policy violation";
+    /** Keeps the seeded member suspended through the next calendar year. */
+    public static final Duration SUSPENDED_MEMBER_DURATION = Duration.ofDays(365);
     public static final UUID CONCERT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     public static final UUID ADULT_EVENT_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     public static final UUID ASSIGNED_EVENT_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -113,7 +118,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         seedMembersAndAdmin();
         seedCompanies();
         seedEvents();
-        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2, companies '{}' and '{}'",
+        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended, companies '{}' and '{}'",
                 COMPANY_NAME, SECOND_COMPANY_NAME);
     }
 
@@ -132,8 +137,24 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 "050-000-0006", LocalDate.of(1992, 7, 7));
         saveMemberIfMissing(SECOND_OWNER_ID, "owner2", "owner2@ticketing.local", "owner2123",
                 "050-000-0007", LocalDate.of(1984, 4, 12));
+        saveMemberIfMissing(SUSPENDED_MEMBER_ID, "suspended", "suspended@ticketing.local", "suspended123",
+                "050-000-0008", LocalDate.of(1993, 3, 15));
+        ensureSuspendedMemberSeed();
 
         adminService.registerAdmin(ADMIN_ID, "admin", "admin@ticketing.local", "admin123");
+    }
+
+    private void ensureSuspendedMemberSeed() {
+        Member member = memberRepository.findById(SUSPENDED_MEMBER_ID).orElse(null);
+        if (member == null) {
+            return;
+        }
+        if (member.isSuspended(Instant.now())) {
+            return;
+        }
+        member.addSuspension(new Suspension(ADMIN_ID, Instant.now(), SUSPENDED_MEMBER_DURATION, SUSPENDED_MEMBER_REASON));
+        memberRepository.save(member);
+        log.info("Seeded suspended member '{}' until {}", member.getUsername(), Instant.now().plus(SUSPENDED_MEMBER_DURATION));
     }
 
     private void saveMemberIfMissing(

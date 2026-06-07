@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -33,6 +34,7 @@ import com.ticketing.domain.event.LotteryWindow;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
@@ -195,6 +197,21 @@ public class LotteryRegistrationTest {
         assertFalse(response.success());
         assertTrue(response.message().contains("closed"));
         assertTrue(lotteryRepository.findByEventId(closedEventId).isEmpty());
+    }
+
+    @Test
+    @DisplayName("SuspendedLotteryRegistration — suspended member cannot register for lottery")
+    void GivenSuspendedMember_WhenRegisterForLottery_ThenRejectedAndEntryNotPersisted() {
+        Member suspended = memberRepository.findById(memberId).orElseThrow();
+        suspended.addSuspension(new Suspension(UUID.randomUUID(), NOW.minus(1, ChronoUnit.HOURS),
+                Duration.ofDays(7), "blocked"));
+        memberRepository.save(suspended);
+
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId, zoneId, 2);
+
+        assertThrows(IllegalStateException.class,
+                () -> eventService.registerForLottery(VALID_TOKEN, request));
+        assertTrue(lotteryRepository.findByEventAndMember(eventId, memberId).isEmpty());
     }
 
     // --- helpers ---
