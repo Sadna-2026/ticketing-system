@@ -157,6 +157,42 @@ public class LotteryNotificationTest {
         assertTrue(pendingRepository.getPendingNotifications(memberBId.toString()).isEmpty());
     }
 
+    @Test
+    @DisplayName("LotteryDelayedNotification — logged-out registrant's result is stored and delivered once on re-login")
+    void GivenRegistrantLoggedOutBeforeDraw_WhenDrawThenReconnect_ThenResultDeliveredOnceFromPending()
+            throws Exception {
+        // Given: member A is connected; member B is logged out (no listener) before the draw.
+        List<String> inboxA = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch deliveredToA = new CountDownLatch(1);
+        notificationService.registerListener(memberAId.toString(), msg -> { inboxA.add(msg); deliveredToA.countDown(); });
+        // B intentionally does NOT register a listener — simulating a logged-out user.
+
+        // When: the draw runs.
+        eventService.drawLottery(ORGANIZER_TOKEN, eventId, 1);
+
+        // Then: the connected member received their result in real time...
+        assertTrue(deliveredToA.await(2, TimeUnit.SECONDS), "connected member should get a real-time result");
+        assertEquals(1, inboxA.size());
+
+        // ...and the logged-out member's result was stored (not dropped), exactly once.
+        List<String> pendingForB = pendingRepository.getPendingNotifications(memberBId.toString());
+        assertEquals(1, pendingForB.size(), "offline member's result must be queued, not dropped");
+        String storedResult = pendingForB.get(0);
+        assertTrue(storedResult.toLowerCase().contains("won") || storedResult.toLowerCase().contains("not selected"),
+                "stored message should be a lottery result, was: " + storedResult);
+
+        // And: when member B logs back in, the stored result is flushed exactly once (no duplication).
+        List<String> inboxB = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch deliveredToB = new CountDownLatch(1);
+        notificationService.registerListener(memberBId.toString(), msg -> { inboxB.add(msg); deliveredToB.countDown(); });
+
+        assertTrue(deliveredToB.await(2, TimeUnit.SECONDS), "stored result should flush on re-login");
+        assertEquals(1, inboxB.size(), "result delivered exactly once on re-login");
+        assertEquals(storedResult, inboxB.get(0), "the same stored result is delivered");
+        assertTrue(pendingRepository.getPendingNotifications(memberBId.toString()).isEmpty(),
+                "pending store is cleared after delivery — not delivered twice");
+    }
+
     private UUID registerForLottery(String username) {
         UUID memberId = UUID.randomUUID();
         memberRepository.save(new Member(memberId, username, username + "@example.com", "encryptedPw"));
