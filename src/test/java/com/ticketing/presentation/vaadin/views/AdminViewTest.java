@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -116,6 +117,39 @@ class AdminViewTest {
 
         verify(presenter).removeMember(member.id());
         assertTrue(hasText(view, "Member removed."));
+    }
+
+    @Test
+    void GivenSuccessfulRemoval_WhenRemoveClicked_ThenPickerSelectionIsClearedAndReloaded() {
+        AdminPresenter presenter = mockPresenter();
+        MemberSummaryDTO member = new MemberSummaryDTO(UUID.randomUUID(), "alice");
+        when(presenter.searchMembers("")).thenReturn(List.of(member));
+        when(presenter.removeMember(member.id())).thenReturn(ActionResult.success("Member removed."));
+        AdminView view = new AdminView(presenter);
+        ComboBox<MemberSummaryDTO> picker = findComboBox(view, "Target member");
+        picker.setValue(member);
+
+        clickButton(view, "Remove member");
+
+        assertNull(picker.getValue());
+        // Picker is reloaded after removal: once during construction, once after the successful remove.
+        verify(presenter, times(2)).searchMembers("");
+    }
+
+    @Test
+    void GivenSelectedMember_WhenRemoveFails_ThenSpecificFailureReasonIsDisplayed() {
+        AdminPresenter presenter = mockPresenter();
+        MemberSummaryDTO member = new MemberSummaryDTO(UUID.randomUUID(), "alice");
+        when(presenter.searchMembers("")).thenReturn(List.of(member));
+        when(presenter.removeMember(member.id()))
+                .thenReturn(ActionResult.failure("Cannot remove the sole owner of a company."));
+        AdminView view = new AdminView(presenter);
+        findComboBox(view, "Target member").setValue(member);
+
+        clickButton(view, "Remove member");
+
+        verify(presenter).removeMember(member.id());
+        assertTrue(hasText(view, "Cannot remove the sole owner of a company."));
     }
 
     @Test

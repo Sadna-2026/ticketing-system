@@ -219,7 +219,12 @@ public class AdminView extends VerticalLayout {
         if (target == null) {
             return;
         }
-        handleMemberResult(presenter.removeMember(target.id()));
+        ActionResult result = presenter.removeMember(target.id());
+        handleMemberResult(result);
+        if (result.success()) {
+            removeMemberPicker.clear();
+            loadMemberPickerItems();
+        }
     }
 
     private void suspendMember() {
