@@ -37,6 +37,16 @@ class MainLayoutTest {
     }
 
     @Test
+    @DisplayName("Global event search (Events) is reachable for both guest and member sessions, not just one role")
+    void GivenGuestOrMemberSession_WhenRendered_ThenEventsSearchNavigationIsReachableForBoth() {
+        List<String> guestLabels = labelsFor(new SessionContext.UiState(true, true, false, false, null, "Guest"));
+        List<String> memberLabels = labelsFor(new SessionContext.UiState(true, false, true, false, "alice", "Member"));
+
+        assertTrue(guestLabels.contains("Events"));
+        assertTrue(memberLabels.contains("Events"));
+    }
+
+    @Test
     void GivenSystemAdminSession_WhenRendered_ThenAdminNavigationIsVisible() {
         List<String> labels = labelsFor(new SessionContext.UiState(true, false, true, true, "root", "Member"));
 

@@ -150,6 +150,22 @@ class EventsPresenterTest {
     }
 
     @Test
+    void GivenInvalidPriceRange_WhenSearchingEvents_ThenSpecificValidationReasonIsReturned() {
+        // An invalid filter (min > max) is rejected by SearchEventsRequest with a specific
+        // IllegalArgumentException; the presenter surfaces that exact reason, not the generic message.
+        SearchResult result = presenter.searchEvents(
+                null, null, null, null,
+                new BigDecimal("90.00"),
+                new BigDecimal("10.00"),
+                null, null
+        );
+
+        assertFalse(result.success());
+        assertTrue(result.empty());
+        assertEquals("minPrice (90.00) cannot be greater than maxPrice (10.00)", result.message());
+    }
+
+    @Test
     void GivenCompaniesExist_WhenSearchingCompanies_ThenApplicationServiceResultsAreReturned() {
         when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
 
