@@ -82,6 +82,36 @@ class AuthViewTest {
     }
 
     @Test
+    void GivenEnterGuestClicked_WhenSuccess_ThenShowsSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: none", "Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(none(), guest());
+        when(presenter.startGuestSession()).thenReturn(AuthResult.success("Guest session started."));
+
+        try (var uiMessagesMock = org.mockito.Mockito.mockStatic(com.ticketing.presentation.vaadin.util.UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Enter as guest");
+
+            uiMessagesMock.verify(() -> com.ticketing.presentation.vaadin.util.UiMessages.success("Guest session started."));
+        }
+    }
+
+    @Test
+    void GivenEnterGuestClicked_WhenFailure_ThenShowsErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: none");
+        when(presenter.currentSessionState()).thenReturn(none());
+        when(presenter.startGuestSession()).thenReturn(AuthResult.failure("Could not start guest session."));
+
+        try (var uiMessagesMock = org.mockito.Mockito.mockStatic(com.ticketing.presentation.vaadin.util.UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Enter as guest");
+
+            uiMessagesMock.verify(() -> com.ticketing.presentation.vaadin.util.UiMessages.error("Could not start guest session."));
+        }
+    }
+
+    @Test
     void GivenAuthView_WhenRendered_ThenMandatoryFieldsShowRequiredIndicatorAndOptionalFieldsDoNot() {
         AuthView view = new AuthView(mockPresenter(guest()));
 

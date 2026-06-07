@@ -16,3 +16,4 @@ src/main/bundles/
 .context/
 HANDOFF.md
 rewrite.yml
+requirements/
