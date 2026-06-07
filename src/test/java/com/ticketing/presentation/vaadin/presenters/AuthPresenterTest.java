@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.MemberService;
+import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
@@ -39,14 +40,16 @@ class AuthPresenterTest {
     private MemberService memberService;
     private ISessionTokenService sessionTokenService;
     private AuthPresenter presenter;
-    AdminService adminService;
+    private AdminService adminService;
+    private OrderService orderService;
 
     @BeforeEach
     void setUp() {
         memberService = mock(MemberService.class);
         sessionTokenService = mock(ISessionTokenService.class);
         adminService = mock(AdminService.class);
-        presenter = new AuthPresenter(memberService,adminService, sessionTokenService);
+        orderService = mock(OrderService.class);
+        presenter = new AuthPresenter(memberService, adminService, sessionTokenService, orderService);
     }
 
     @Test

@@ -55,7 +55,7 @@ class AuthViewTest {
         assertFalse(hasVisibleButton(view, "Enter as guest"));
         assertTrue(hasVisibleButton(view, "Log in"));
         assertTrue(hasVisibleButton(view, "Register"));
-        assertFalse(hasVisibleButton(view, "Log out"));
+        assertTrue(hasVisibleButton(view, "Log out"));
     }
 
     @Test
@@ -110,6 +110,23 @@ class AuthViewTest {
             clickButton(view, "Enter as guest");
 
             uiMessagesMock.verify(() -> UiMessages.error("Could not start guest session."));
+        }
+    }
+
+    @Test
+    void GivenLogoutClicked_WhenGuestSession_ThenSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest", "Current session: none");
+        when(presenter.currentSessionState()).thenReturn(guest(), none());
+        when(presenter.logout()).thenReturn(AuthResult.success("Guest session ended."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log out");
+
+            uiMessagesMock.verify(() -> UiMessages.success("Guest session ended."));
+            assertFalse(hasVisibleButton(view, "Log out"));
+            assertTrue(hasVisibleButton(view, "Enter as guest"));
         }
     }
 
