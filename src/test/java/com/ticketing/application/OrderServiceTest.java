@@ -1,5 +1,6 @@
 package com.ticketing.application;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -346,26 +347,75 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenSuspendedMember_WhenCheckout_ThenRejectedAndNoPaymentAttempted() {
+    void GivenSuspendedMember_WhenCreateOrAddToCart_ThenRejectedAndNoPaymentAttempted() {
         UUID memberId = UUID.randomUUID();
         Member member = new Member(memberId, "suspendedUser", "suspended@example.com", "pw",
+                "050-1111111", LocalDate.of(1990, 1, 1));
+        member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), Duration.ofDays(7), "fraud"));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        IllegalStateException createEx = assertThrows(IllegalStateException.class,
+                () -> orderService.createOrder(memberToken, eventId));
+        assertTrue(createEx.getMessage().contains("suspended"));
+
+        IllegalStateException addEx = assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1));
+        assertTrue(addEx.getMessage().contains("suspended"));
+
+        IllegalStateException addSeatEx = assertThrows(IllegalStateException.class,
+                () -> orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId));
+        assertTrue(addSeatEx.getMessage().contains("suspended"));
+
+        SelectionRequest selection = new SelectionRequest(eventId,
+                List.of(new SelectionRequest.SeatPick(assignedZoneId, seatId)),
+                List.of(new SelectionRequest.GAPick(gaZoneId, 1)));
+        IllegalStateException addSelectionEx = assertThrows(IllegalStateException.class,
+                () -> orderService.addSelectionToOrder(memberToken, selection));
+        assertTrue(addSelectionEx.getMessage().contains("suspended"));
+
+        assertEquals(0, paymentGateway.chargeCalls);
+        assertEquals(0, ticketSupplyGateway.issueCalls);
+        assertNull(orderService.getActiveOrder(memberToken));
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+    }
+
+    @Test
+    void GivenMemberSuspendedAfterCartBuilt_WhenMutatingCart_ThenRejectedAndReadOnlyCartStillVisible() {
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "cartUser", "cart@example.com", "pw",
                 "050-1111111", LocalDate.of(1990, 1, 1));
         memberRepo.save(member);
         String memberToken = sessionService.generateMemberToken(new SessionTokenData(
                 UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
 
         UUID orderId = orderService.createOrder(memberToken, eventId);
-        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        UUID itemId = orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
 
-        // Suspend the member after the order was built but before checkout
         member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), Duration.ofDays(7), "fraud"));
         memberRepo.save(member);
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(memberToken, null));
-        assertTrue(ex.getMessage().contains("suspended"));
+        assertDoesNotThrow(() -> orderService.getActiveOrder(memberToken));
+        assertEquals(orderId, orderService.getActiveOrder(memberToken).getId());
 
-        // No payment was attempted and the order is still active
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1));
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId));
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addSelectionToOrder(memberToken, new SelectionRequest(eventId,
+                        List.of(new SelectionRequest.SeatPick(assignedZoneId, seatId)),
+                        List.of(new SelectionRequest.GAPick(gaZoneId, 1)))));
+        assertThrows(IllegalStateException.class,
+                () -> orderService.updateGAQuantity(memberToken, gaZoneId, 2));
+        assertThrows(IllegalStateException.class,
+                () -> orderService.removeItemFromOrder(memberToken, itemId));
+        assertThrows(IllegalStateException.class,
+                () -> orderService.cancelOrder(memberToken));
+        assertThrows(IllegalStateException.class,
+                () -> orderService.checkout(memberToken, null));
+
         assertEquals(0, paymentGateway.chargeCalls);
         assertEquals(0, ticketSupplyGateway.issueCalls);
         assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());

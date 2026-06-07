@@ -59,6 +59,7 @@ import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
@@ -137,6 +138,71 @@ class CompanyServiceTest {
         }
 
         @Test
+        public void GivenSuspendedMember_WhenOpenProductionCompany_ThenThrowsAndCompanyIsNotCreated() {
+            UUID memberId = UUID.randomUUID();
+            String token = "valid-token";
+            String companyName = "BlockedCompany";
+
+            when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(memberId);
+
+            Member member = new Member(memberId, "blocked", "blocked@test.com", "pass");
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.saveIfUsernameAndEmailAvailable(member);
+
+            assertThrows(IllegalStateException.class,
+                    () -> companyService.openProductionCompany(token, companyName, "Description"));
+            assertFalse(companyRepository.existsByName(companyName));
+        }
+
+        @Test
+        public void GivenSuspendedOwner_WhenReadingCompanyPolicy_ThenAllowed() {
+            UUID memberId = UUID.randomUUID();
+            String token = "valid-token";
+            String companyName = "ReadableCompany";
+
+            when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(memberId);
+
+            Member member = new Member(memberId, "owner", "owner@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(member);
+            companyService.openProductionCompany(token, companyName, "Description");
+
+            Member saved = memberRepository.findById(memberId).orElseThrow();
+            saved.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "read-only"));
+            memberRepository.save(saved);
+
+            assertDoesNotThrow(() -> companyService.getCompanyPurchasePolicy(token, companyName));
+        }
+
+        @Test
+        public void GivenSuspendedOwner_WhenOfferRoleAppointment_ThenThrowsAndNoOfferIsCreated() {
+            UUID ownerId = UUID.randomUUID();
+            UUID targetId = UUID.randomUUID();
+            String companyName = "SuspendedOfferCo";
+            String ownerToken = "valid-" + ownerId.toString();
+
+            when(sessionTokenServiceMock.isValid(ownerToken)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(ownerToken)).thenReturn(ownerId);
+
+            Member owner = new Member(ownerId, "owner", "owner@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(owner);
+            companyService.openProductionCompany(ownerToken, companyName, "Desc");
+
+            Member target = new Member(targetId, "target", "target@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+            Member suspendedOwner = memberRepository.findById(ownerId).orElseThrow();
+            suspendedOwner.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(suspendedOwner);
+
+            assertThrows(IllegalStateException.class,
+                    () -> companyService.offerRoleAppointment(ownerToken, companyName, targetId,
+                            StaffAppointment.StaffRole.MANAGER, Collections.singleton(ManagerPermission.PERSONNEL_MGMT)));
+            assertTrue(memberRepository.findById(targetId).orElseThrow().getPendingOffers().isEmpty());
+        }
+
+        @Test
         public void GivenAcceptedResponse_WhenRespondToRoleAppointment_ThenNotifiesAppointee() {
             UUID appointerId = UUID.randomUUID();
             UUID targetId = UUID.randomUUID();
@@ -194,6 +260,41 @@ class CompanyServiceTest {
 
             assertNull(memberRepository.findById(targetId).get().getStaffAppointment(companyName));
             verify(notificationService).notify(eq(appointerId.toString()), contains("declined the manager role offer"));
+        }
+
+        @Test
+        public void GivenSuspendedTarget_WhenRespondToRoleAppointment_ThenThrowsAndOfferRemainsPending() {
+            UUID appointerId = UUID.randomUUID();
+            UUID targetId = UUID.randomUUID();
+            String companyName = "SuspendedResponseCo";
+            String appointerToken = "valid-" + appointerId.toString();
+            String targetToken = "valid-" + targetId.toString();
+
+            when(sessionTokenServiceMock.isValid(appointerToken)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(appointerToken)).thenReturn(appointerId);
+            when(sessionTokenServiceMock.isValid(targetToken)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(targetToken)).thenReturn(targetId);
+
+            Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(appointer);
+            companyService.openProductionCompany(appointerToken, companyName, "Desc");
+
+            Member target = new Member(targetId, "target", "target@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(target);
+            companyService.offerRoleAppointment(appointerToken, companyName, targetId,
+                    StaffAppointment.StaffRole.MANAGER, Collections.singleton(ManagerPermission.PERSONNEL_MGMT));
+
+            PendingRoleOffer offer = memberRepository.findById(targetId).orElseThrow().getPendingOffers().get(0);
+            Member suspendedTarget = memberRepository.findById(targetId).orElseThrow();
+            suspendedTarget.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(suspendedTarget);
+
+            assertThrows(IllegalStateException.class,
+                    () -> companyService.respondToRoleAppointment(targetToken, offer.getOfferId(), true));
+
+            Member after = memberRepository.findById(targetId).orElseThrow();
+            assertNull(after.getStaffAppointment(companyName));
+            assertEquals(1, after.getPendingOffers().size());
         }
 
         @Test

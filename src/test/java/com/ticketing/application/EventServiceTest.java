@@ -56,6 +56,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
@@ -129,6 +130,17 @@ class EventServiceTest {
         }
 
         @Test
+        public void GivenSuspendedOwner_WhenCreateEvent_ThenRejectedBeforeEventIsSaved() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(member);
+
+            assertThrows(IllegalStateException.class,
+                    () -> eventService.createEvent(VALID_TOKEN, validRequest()));
+            assertTrue(eventRepository.findAll().isEmpty());
+        }
+
+        @Test
         public void GivenOwnerAndDraftEvent_WhenPublishEvent_ThenEventBecomesPublished() {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
@@ -137,6 +149,18 @@ class EventServiceTest {
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
             assertEquals(EventStatus.PUBLISHED, saved.getStatus());
+        }
+
+        @Test
+        public void GivenSuspendedOwner_WhenPublishEvent_ThenRejectedAndEventStaysDraft() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(member);
+
+            assertThrows(IllegalStateException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
+            assertEquals(EventStatus.DRAFT, eventRepository.findById(eventId).orElseThrow().getStatus());
         }
 
         @Test
