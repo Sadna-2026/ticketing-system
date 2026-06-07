@@ -17,6 +17,19 @@ import com.ticketing.presentation.vaadin.util.SessionContext;
 class MainLayoutTest {
 
     @Test
+    void GivenNoSession_WhenRendered_ThenOnlyAuthNavigationIsVisible() {
+        List<String> labels = labelsFor(new SessionContext.UiState(false, false, false, false, null, null));
+
+        assertTrue(labels.contains("Auth"));
+        assertFalse(labels.contains("Home"));
+        assertFalse(labels.contains("Events"));
+        assertFalse(labels.contains("Orders"));
+        assertFalse(labels.contains("Notifications"));
+        assertFalse(labels.contains("Company"));
+        assertFalse(labels.contains("Admin"));
+    }
+
+    @Test
     void GivenGuestSession_WhenRendered_ThenOwnerAndAdminNavigationAreHidden() {
         List<String> labels = labelsFor(new SessionContext.UiState(true, true, false, false, null, "Guest"));
 
