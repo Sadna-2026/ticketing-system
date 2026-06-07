@@ -151,6 +151,7 @@ public class EventService {
             throw new IllegalArgumentException("request cannot be null");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
 
         Company company = loadActiveCompany(request.companyName());
         StaffAppointment appointment = loadAppointment(memberId, company.getName());
@@ -197,6 +198,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> {
@@ -234,6 +236,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> {
@@ -255,6 +258,7 @@ public class EventService {
             throw new IllegalArgumentException("request cannot be null");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
 
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> {
@@ -305,6 +309,7 @@ public class EventService {
             throw new IllegalArgumentException("request cannot be null");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
         Instant now = systemClock.now();
@@ -344,7 +349,8 @@ public class EventService {
     public List<ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
 
         if (capacity < 0) {
             throw new IllegalArgumentException("Capacity cannot be negative");
@@ -412,6 +418,7 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
@@ -424,6 +431,7 @@ public class EventService {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
@@ -438,6 +446,7 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
@@ -458,6 +467,7 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
@@ -470,6 +480,7 @@ public class EventService {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
@@ -484,6 +495,7 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
         StaffAppointment appt = loadAppointment(memberId, company.getName());
@@ -520,6 +532,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(memberId, eventId);
             InventoryZone zone = event.findZone(zoneId);
@@ -540,6 +553,7 @@ public class EventService {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(memberId, eventId);
             InventoryZone zone = event.findZone(zoneId);
@@ -557,6 +571,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(memberId, eventId);
             event.findZone(zoneId).increaseCapacity(delta);
@@ -571,6 +586,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(memberId, eventId);
             event.findZone(zoneId).decreaseCapacity(delta);
@@ -586,6 +602,7 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
         synchronized (lockFor(eventId)) {
             Event event = loadEventForInventoryEdit(memberId, eventId);
             event.findZone(zoneId).setPricePerTicket(newPrice);
@@ -823,6 +840,11 @@ public class EventService {
             throw new SecurityException("Guests cannot perform this action");
         }
         return memberId;
+    }
+
+    private void rejectIfSuspended(UUID memberId) {
+        memberRepository.findById(memberId)
+                .ifPresent(member -> member.rejectIfSuspended(systemClock.now()));
     }
 
     // ── Search filter helpers ───────────────────────────────────────

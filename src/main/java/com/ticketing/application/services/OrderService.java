@@ -101,6 +101,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        rejectIfMemberSuspended(memberId);
         return findOrCreateActiveOrder(sessionId, memberId, eventId).getId();
     }
 
@@ -108,6 +109,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
         return addSelectionToOrder(sessionId, order,
@@ -120,6 +122,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
         return addSelectionToOrder(sessionId, order,
@@ -134,6 +137,7 @@ public class OrderService {
             throw new IllegalArgumentException("request is required");
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, request.eventId());
         com.ticketing.domain.order.SelectionRequest domainRequest = new com.ticketing.domain.order.SelectionRequest(
                 request.eventId(),
@@ -150,6 +154,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        rejectIfMemberSuspended(memberId);
 
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) throw new IllegalArgumentException("No active order found");
@@ -176,6 +181,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        rejectIfMemberSuspended(memberId);
 
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) throw new IllegalArgumentException("No active order found");
@@ -193,6 +199,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        rejectIfMemberSuspended(memberId);
 
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) throw new IllegalArgumentException("No active order found");
