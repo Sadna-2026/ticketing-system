@@ -499,6 +499,7 @@ public class CompanyView extends VerticalLayout {
         Button editEvent = new Button("Edit event details", event -> editEvent());
         Button publishEvent = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(selectedEventId(eventId))));
         Button cancelEvent = new Button("Cancel event", event -> handleEventAction(presenter.cancelEvent(selectedEventId(eventId))));
+        Button designHall = new Button("Design hall layout (visual)", event -> openVenueDesigner());
 
         FormLayout createForm = new FormLayout(
                 eventCompanyName,
@@ -519,7 +520,7 @@ public class CompanyView extends VerticalLayout {
         FormLayout editForm = new FormLayout(eventId, newEventName, newEventDescription, newArtist, newStartTime, newEndTime, newDoorsOpenTime);
         editForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
-        HorizontalLayout actions = new HorizontalLayout(createEvent, editEvent, publishEvent, cancelEvent);
+        HorizontalLayout actions = new HorizontalLayout(createEvent, editEvent, publishEvent, cancelEvent, designHall);
         actions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
@@ -1006,6 +1007,15 @@ public class CompanyView extends VerticalLayout {
             inventoryCompanyName.setValue(company);
             selectEventInPicker(inventoryEventId, company.name(), result.eventId());
         }
+    }
+
+    private void openVenueDesigner() {
+        String company = companyNameOf(eventCompanyName);
+        if (company == null) {
+            UiMessages.error("Select a company first.");
+            return;
+        }
+        new VenueDesignerDialog(presenter, company).open();
     }
 
     private void selectEventInPicker(ComboBox<EventSummaryDTO> picker, String companyName, UUID eventId) {
