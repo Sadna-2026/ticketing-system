@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter.AuthResult;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
+import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasLabel;
 import com.vaadin.flow.component.HasValueAndElement;
@@ -79,6 +81,36 @@ class AuthViewTest {
         assertFalse(hasVisibleButton(view, "Enter as guest"));
         assertTrue(hasVisibleButton(view, "Log in"));
         assertTrue(hasVisibleButton(view, "Register"));
+    }
+
+    @Test
+    void GivenEnterGuestClicked_WhenSuccess_ThenShowsSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: none", "Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(none(), guest());
+        when(presenter.startGuestSession()).thenReturn(AuthResult.success("Guest session started."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Enter as guest");
+
+            uiMessagesMock.verify(() -> UiMessages.success("Guest session started."));
+        }
+    }
+
+    @Test
+    void GivenEnterGuestClicked_WhenFailure_ThenShowsErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: none");
+        when(presenter.currentSessionState()).thenReturn(none());
+        when(presenter.startGuestSession()).thenReturn(AuthResult.failure("Could not start guest session."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Enter as guest");
+
+            uiMessagesMock.verify(() -> UiMessages.error("Could not start guest session."));
+        }
     }
 
     @Test

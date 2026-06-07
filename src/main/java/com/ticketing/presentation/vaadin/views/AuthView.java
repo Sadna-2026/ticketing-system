@@ -57,10 +57,20 @@ public class AuthView extends VerticalLayout {
         refreshSessionStatus();
     }
 
+    /**
+     * Renders the guest section.
+     * When a user successfully starts a guest session, they are automatically redirected to the Home page.
+     * 
+     * @return the layout containing the guest actions
+     */
     private HorizontalLayout guestSection() {
         Button startGuestSession = new Button("Enter as guest", event -> {
-            handle(presenter.startGuestSession());
+            AuthResult result = presenter.startGuestSession();
+            handle(result);
             refreshSessionStatus();
+            if (result.success()) {
+                getUI().ifPresent(ui -> ui.navigate(HomeView.class));
+            }
         });
 
         HorizontalLayout layout = new HorizontalLayout(startGuestSession);
