@@ -13,15 +13,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
@@ -29,17 +29,8 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.server.Command;
 
 @DisplayName("NotificationsView")
+@ExtendWith(VaadinSessionExtension.class)
 class NotificationsViewTest {
-
-    @BeforeEach
-    void setUp() {
-        UI.setCurrent(new UI());
-    }
-
-    @AfterEach
-    void tearDown() {
-        UI.setCurrent(null);
-    }
 
     @Test
     void GivenNotificationsView_WhenRendered_ThenNotificationActionsAreAvailable() {
@@ -151,8 +142,8 @@ class NotificationsViewTest {
 
     private void attachViewToCurrentUi(Component view) {
         UI ui = new UI();
-        UI.setCurrent(ui);
         ui.add(view);
+        UI.setCurrent(ui);
     }
 
     /**
@@ -170,8 +161,8 @@ class NotificationsViewTest {
                 return CompletableFuture.completedFuture(null);
             }
         };
-        UI.setCurrent(ui);
         ui.add(view);
+        UI.setCurrent(ui);
     }
 
     private boolean hasButton(Component root, String text) {
