@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.MemberService;
+import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
@@ -34,11 +35,13 @@ public class AuthPresenter {
     private final MemberService memberService;
     private final AdminService adminService;
     private final ISessionTokenService sessionTokenService;
+    private final OrderService orderService;
 
-    public AuthPresenter(MemberService memberService, AdminService adminService, ISessionTokenService sessionTokenService) {
+    public AuthPresenter(MemberService memberService, AdminService adminService, ISessionTokenService sessionTokenService, OrderService orderService) {
         this.memberService = memberService;
         this.adminService = adminService;
         this.sessionTokenService = sessionTokenService;
+        this.orderService = orderService;
     }
 
     public AuthResult startGuestSession() {
@@ -143,12 +146,30 @@ public class AuthPresenter {
         }
     }
 
+    /**
+     * Terminates the current session for both Members and Guests.
+     * <p>
+     * - For Members: Logs the member out, invalidating their token, and transitions them back to a guest session.
+     * - For Guests: Cancels any active orders to immediately release reserved materials, then terminates the guest session.
+     * 
+     * @return AuthResult containing the success or failure message.
+     */
     public AuthResult logout() {
         String sessionToken = SessionContext.getSessionToken();
-        if (sessionToken == null || sessionToken.isBlank() || !SessionContext.isLoggedInMember()) {
-            return AuthResult.failure(NO_MEMBER_SESSION_MESSAGE);
+        if (sessionToken == null || sessionToken.isBlank()) {
+            return AuthResult.failure("No active session exists.");
         }
 
+        if (SessionContext.isLoggedInMember()) {
+            return logoutMember(sessionToken);
+        } else if (SessionContext.currentUiState().guest()) {
+            return exitGuestSession(sessionToken);
+        } else {
+            return AuthResult.failure("Cannot log out from the current state.");
+        }
+    }
+
+    private AuthResult logoutMember(String sessionToken) {
         try {
             LogoutResponse response = memberService.logout(sessionToken);
             if (!response.success()) {
@@ -159,6 +180,22 @@ public class AuthPresenter {
             return AuthResult.success(response.message());
         } catch (RuntimeException ex) {
             return safeFailure("Logout failed. Please try again.", ex);
+        }
+    }
+
+    private AuthResult exitGuestSession(String sessionToken) {
+        try {
+            if (orderService.getActiveOrder(sessionToken) != null) {
+                orderService.cancelOrder(sessionToken);
+            }
+            boolean success = sessionTokenService.endSession(sessionToken);
+            if (!success) {
+                return AuthResult.failure("Failed to exit guest session.");
+            }
+            SessionContext.clear();
+            return AuthResult.success("Guest session ended.");
+        } catch (RuntimeException ex) {
+            return safeFailure("Could not exit guest session.", ex);
         }
     }
 
