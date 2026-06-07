@@ -383,10 +383,19 @@ public class EventService {
         saveEvent(event);
 
         if (notificationService != null) {
+            Set<UUID> winnerMemberIds = new HashSet<>();
             for (ActiveOrder order : createdOrders) {
                 if (order.getMemberId() != null) {
+                    winnerMemberIds.add(order.getMemberId());
                     notificationService.notify(order.getMemberId().toString(),
                             "You have won the lottery! You can now purchase tickets for the event.");
+                }
+            }
+            // Non-winners (registrants who were not selected) receive a result notification too.
+            for (LotteryEntry entry : allEntries) {
+                if (entry.memberId() != null && !winnerMemberIds.contains(entry.memberId())) {
+                    notificationService.notify(entry.memberId().toString(),
+                            "The lottery draw has concluded. Unfortunately, you were not selected this time.");
                 }
             }
         }
