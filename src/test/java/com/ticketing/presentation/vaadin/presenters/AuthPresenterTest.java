@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -20,8 +22,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.MemberService;
+import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
@@ -39,14 +43,16 @@ class AuthPresenterTest {
     private MemberService memberService;
     private ISessionTokenService sessionTokenService;
     private AuthPresenter presenter;
-    AdminService adminService;
+    private AdminService adminService;
+    private OrderService orderService;
 
     @BeforeEach
     void setUp() {
         memberService = mock(MemberService.class);
         sessionTokenService = mock(ISessionTokenService.class);
         adminService = mock(AdminService.class);
-        presenter = new AuthPresenter(memberService,adminService, sessionTokenService);
+        orderService = mock(OrderService.class);
+        presenter = new AuthPresenter(memberService, adminService, sessionTokenService, orderService);
     }
 
     @Test
@@ -285,6 +291,47 @@ class AuthPresenterTest {
 
         assertFalse(result.success());
         assertEquals("Logout failed. Please try again.", result.message());
+    }
+
+    @Test
+    void GivenGuestSessionWithActiveOrder_WhenLogout_ThenOrderIsCancelled() {
+        SessionContext.setSessionToken("guest-token");
+        SessionContext.setRole("Guest");
+        when(orderService.getActiveOrder("guest-token")).thenReturn(mock(ActiveOrderDto.class));
+        when(sessionTokenService.endSession("guest-token")).thenReturn(true);
+
+        AuthResult result = presenter.logout();
+
+        assertTrue(result.success());
+        verify(orderService).cancelOrder("guest-token");
+        verify(sessionTokenService).endSession("guest-token");
+    }
+
+    @Test
+    void GivenGuestSessionWithoutActiveOrder_WhenLogout_ThenOrderIsNotCancelled() {
+        SessionContext.setSessionToken("guest-token");
+        SessionContext.setRole("Guest");
+        when(orderService.getActiveOrder("guest-token")).thenReturn(null);
+        when(sessionTokenService.endSession("guest-token")).thenReturn(true);
+
+        AuthResult result = presenter.logout();
+
+        assertTrue(result.success());
+        verify(orderService, never()).cancelOrder(any());
+        verify(sessionTokenService).endSession("guest-token");
+    }
+
+    @Test
+    void GivenGuestSession_WhenEndSessionFails_ThenFailureMessageReturned() {
+        SessionContext.setSessionToken("guest-token");
+        SessionContext.setRole("Guest");
+        when(orderService.getActiveOrder("guest-token")).thenReturn(null);
+        when(sessionTokenService.endSession("guest-token")).thenReturn(false);
+
+        AuthResult result = presenter.logout();
+
+        assertFalse(result.success());
+        assertEquals("Failed to exit guest session.", result.message());
     }
 
     @Test

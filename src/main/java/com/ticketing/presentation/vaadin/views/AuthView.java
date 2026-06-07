@@ -146,9 +146,22 @@ public class AuthView extends VerticalLayout {
 
     private HorizontalLayout logoutSection() {
         Button logout = new Button("Log out", event -> {
-            handle(presenter.logout());
+            // Attempt to end the session (for both guests and members)
+            AuthResult result = presenter.logout();
+            
+            // Display a success or error notification based on the result
+            handle(result);
+            
+            // Re-evaluate what UI sections are visible based on the new session state
             refreshSessionStatus();
             MainLayout.refreshCurrentNavigation();
+            
+            // On a successful logout or guest exit, explicitly redirect the user 
+            // back to the AuthView. This ensures a clean state and clears out any 
+            // previous application context they might have been viewing.
+            if (result.success()) {
+                getUI().ifPresent(ui -> ui.navigate(AuthView.class));
+            }
         });
 
         HorizontalLayout layout = new HorizontalLayout(logout);
@@ -171,6 +184,6 @@ public class AuthView extends VerticalLayout {
         loginForm.setVisible(session.guest());
         adminLoginForm.setVisible(session.guest());
         registerForm.setVisible(session.guest());
-        logoutActions.setVisible(session.loggedInMember());
+        logoutActions.setVisible(session.loggedInMember() || session.guest());
     }
 }
