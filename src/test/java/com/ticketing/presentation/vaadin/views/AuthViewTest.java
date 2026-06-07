@@ -131,6 +131,23 @@ class AuthViewTest {
     }
 
     @Test
+    void GivenLogoutClicked_WhenGuestSessionFails_ThenErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest", "Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest(), guest());
+        when(presenter.logout()).thenReturn(AuthResult.failure("Failed to exit guest session."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log out");
+
+            uiMessagesMock.verify(() -> UiMessages.error("Failed to exit guest session."));
+            assertTrue(hasVisibleButton(view, "Log out"));
+            assertFalse(hasVisibleButton(view, "Enter as guest"));
+        }
+    }
+
+    @Test
     void GivenAuthView_WhenRendered_ThenMandatoryFieldsShowRequiredIndicatorAndOptionalFieldsDoNot() {
         AuthView view = new AuthView(mockPresenter(guest()));
 
