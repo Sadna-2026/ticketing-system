@@ -346,6 +346,46 @@ public class OrderServiceTest {
     }
 
     @Test
+    void GivenSuccessfulMemberCheckout_WhenCompleted_ThenReceiptWrittenToHistoryRepositoryWithBuyerAmountAndItems() {
+        // Given: a member with a multi-item order (2 GA @ 50.00 + 1 assigned seat @ 150.00)
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "receiptUser", "receipt@example.com", "pw",
+                "050-2222222", LocalDate.of(1990, 1, 1));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        UUID orderId = orderService.createOrder(memberToken, eventId);
+        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 2);
+        orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId);
+
+        // When: the order is checked out successfully
+        UUID purchaseId = orderService.checkout(memberToken, null);
+
+        // Then: the receipt is persisted in the history repository, keyed by its id
+        CompletedPurchase receipt = orderRepo.findCompletedById(purchaseId).orElseThrow();
+        assertEquals(purchaseId, receipt.purchaseId());
+        assertEquals(memberId, receipt.memberId());                 // buyer
+        assertEquals(new BigDecimal("250.00"), receipt.amount());   // final amount: 2*50.00 + 150.00
+        assertEquals(eventId, receipt.eventId());
+        assertEquals("Summer Concert", receipt.eventName());
+        assertEquals(companyName, receipt.companyName());
+
+        // And: it surfaces through the buyer's purchase-history query
+        List<PurchaseRecordDTO> history = orderService.getPurchaseHistory(memberToken);
+        assertEquals(1, history.size());
+        assertEquals(purchaseId, history.get(0).purchaseId());
+        assertEquals(new BigDecimal("250.00"), history.get(0).amount());
+
+        // And: the purchased items are recorded on the now-completed order.
+        // (CompletedPurchase carries no line-item snapshot, so items are asserted on the order.)
+        ActiveOrder completed = orderRepo.findById(orderId).orElseThrow();
+        assertEquals(OrderStatus.COMPLETED, completed.getStatus());
+        assertEquals(2, completed.getItems().size());
+        assertEquals(3, completed.getTotalTicketCount());
+    }
+
+    @Test
     void GivenSuspendedMember_WhenCheckout_ThenRejectedAndNoPaymentAttempted() {
         UUID memberId = UUID.randomUUID();
         Member member = new Member(memberId, "suspendedUser", "suspended@example.com", "pw",
