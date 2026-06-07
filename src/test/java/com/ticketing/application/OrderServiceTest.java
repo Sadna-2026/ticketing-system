@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -48,6 +49,7 @@ import com.ticketing.domain.gateway.PaymentResult;
 import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.gateway.SupplyResult;
 import com.ticketing.domain.gateway.TicketRequest;
+import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.ActiveOrder;
@@ -343,6 +345,67 @@ public class OrderServiceTest {
         assertEquals("memberUser", ticketSupplyGateway.lastCustomer.fullName());
     }
 
+    @Test
+    void GivenSuspendedMember_WhenCheckout_ThenRejectedAndNoPaymentAttempted() {
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "suspendedUser", "suspended@example.com", "pw",
+                "050-1111111", LocalDate.of(1990, 1, 1));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        UUID orderId = orderService.createOrder(memberToken, eventId);
+        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+
+        // Suspend the member after the order was built but before checkout
+        member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), Duration.ofDays(7), "fraud"));
+        memberRepo.save(member);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.checkout(memberToken, null));
+        assertTrue(ex.getMessage().contains("suspended"));
+
+        // No payment was attempted and the order is still active
+        assertEquals(0, paymentGateway.chargeCalls);
+        assertEquals(0, ticketSupplyGateway.issueCalls);
+        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+    }
+
+    @Test
+    void GivenMemberSuspendedMidCheckout_WhenCheckout_ThenRejectedBeforePayment() {
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "raceUser", "race@example.com", "pw",
+                "050-1111111", LocalDate.of(1990, 1, 1));
+        memberRepo.save(member);
+
+        // This repo lets the initial checkout guard pass, then suspends the member
+        // before the payment step — simulating an admin suspending mid-checkout.
+        MidCheckoutSuspendingRepository racingRepo =
+                new MidCheckoutSuspendingRepository(memberRepo, memberId, clock.now());
+        OrderService racingService = new OrderService(sessionService, orderRepo, eventRepo, racingRepo,
+                List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null, null, null);
+
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        UUID orderId = racingService.createOrder(memberToken, eventId);
+        racingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+
+        // Arm: the next checkout passes the initial guard, then the member is suspended.
+        racingRepo.arm();
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> racingService.checkout(memberToken, null));
+        assertTrue(ex.getMessage().contains("suspended"));
+
+        // The mid-checkout re-check fired before any payment/issuance side effect.
+        assertEquals(0, paymentGateway.chargeCalls);
+        assertEquals(0, ticketSupplyGateway.issueCalls);
+        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+    }
+
     private void setUpPublishedEvent() {
         eventId = UUID.randomUUID();
         companyName = "Test Company";
@@ -387,6 +450,56 @@ public class OrderServiceTest {
             failures.incrementAndGet();
             caughtException.set(e);
         }
+    }
+
+    /**
+     * Delegating member repository that, once armed, returns the (still un-suspended)
+     * member to the first lookup — the initial checkout guard — and then suspends the
+     * stored member so every subsequent lookup sees the suspension. This deterministically
+     * reproduces an admin suspending the member after checkout starts.
+     */
+    private static class MidCheckoutSuspendingRepository implements IMemberRepository {
+        private final IMemberRepository delegate;
+        private final UUID targetId;
+        private final Instant suspendAt;
+        private boolean armed = false;
+        private boolean suspensionApplied = false;
+
+        MidCheckoutSuspendingRepository(IMemberRepository delegate, UUID targetId, Instant suspendAt) {
+            this.delegate = delegate;
+            this.targetId = targetId;
+            this.suspendAt = suspendAt;
+        }
+
+        void arm() {
+            this.armed = true;
+        }
+
+        @Override
+        public Optional<Member> findById(UUID memberId) {
+            Optional<Member> result = delegate.findById(memberId);
+            if (armed && !suspensionApplied && targetId.equals(memberId)) {
+                suspensionApplied = true;
+                delegate.findById(memberId).ifPresent(stored -> {
+                    stored.addSuspension(new Suspension(UUID.randomUUID(), suspendAt,
+                            Duration.ofDays(7), "mid-checkout"));
+                    delegate.save(stored);
+                });
+            }
+            return result;
+        }
+
+        @Override public void save(Member member) { delegate.save(member); }
+        @Override public Optional<Member> findByUsername(String username) { return delegate.findByUsername(username); }
+        @Override public Optional<Member> findByEmail(String email) { return delegate.findByEmail(email); }
+        @Override public boolean existsByUsername(String username) { return delegate.existsByUsername(username); }
+        @Override public boolean existsByEmail(String email) { return delegate.existsByEmail(email); }
+        @Override public boolean saveIfUsernameAndEmailAvailable(Member member) { return delegate.saveIfUsernameAndEmailAvailable(member); }
+        @Override public boolean updateIfUsernameAndEmailAvailable(Member member, String username, String email) { return delegate.updateIfUsernameAndEmailAvailable(member, username, email); }
+        @Override public long count() { return delegate.count(); }
+        @Override public List<Member> findByCompanyAppointment(String companyName) { return delegate.findByCompanyAppointment(companyName); }
+        @Override public void delete(Member member) { delegate.delete(member); }
+        @Override public List<Member> findAll() { return delegate.findAll(); }
     }
 
     private static class TestPaymentGateway implements IPaymentGateway {

@@ -235,6 +235,8 @@ public class OrderService {
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
 
+        rejectIfMemberSuspended(memberId);
+
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) throw new IllegalArgumentException("No active order found");
         validateOrderOwnership(sessionId, order);
@@ -582,6 +584,9 @@ public class OrderService {
     private CompletedPurchase processCheckout(ActiveOrder order, Event event,
                                                BuyerContactSnapshot buyerContact, String couponCode,
                                                LocalDate buyerDateOfBirth) {
+        // Re-check suspension as late as possible: a member could have been suspended
+        // after checkout began but before any payment/issuance side effect runs.
+        rejectIfMemberSuspended(order.getMemberId());
         validatePurchasePolicy(event, order, order.getMemberId(), buyerDateOfBirth);
 
         BigDecimal finalAmount = event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
@@ -721,6 +726,14 @@ public class OrderService {
                         member.getUsername(),
                         member.getPhoneNumber()))
                 .orElseGet(BuyerContactSnapshot::empty);
+    }
+
+    private void rejectIfMemberSuspended(UUID memberId) {
+        if (memberId == null || memberRepository == null) {
+            return;
+        }
+        memberRepository.findById(memberId)
+                .ifPresent(member -> member.rejectIfSuspended(systemClock.now()));
     }
 
     private LocalDate getBuyerDateOfBirth(UUID memberId) {
