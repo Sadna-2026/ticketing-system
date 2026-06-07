@@ -1,10 +1,18 @@
 package com.ticketing.application.services;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,21 +27,30 @@ import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.MaxCompositeDiscount;
+import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.SumCompositeDiscount;
+import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
-import com.ticketing.domain.lottery.LotteryDrawDomainService;
 import com.ticketing.domain.lottery.LotteryEntry;
-import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
-import com.ticketing.domain.services.EventDomainService;
-import com.ticketing.domain.services.EventSearchDomainService;
+import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.domain.order.OrderItem;
 
 @org.springframework.stereotype.Service
 public class EventService {
@@ -41,41 +58,44 @@ public class EventService {
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
 
     private final IEventRepository eventRepository;
+    private final ICompanyRepository companyRepository;
+    private final IMemberRepository memberRepository;
+    private final IOrderRepository orderRepository;
     private final ILotteryRepository lotteryRepository;
     private final ISessionTokenService sessionTokenService;
     private final ISystemClock systemClock;
 
-    private final OrderCheckoutDomainService orderCheckoutDomainService;
-    private final EventDomainService eventDomainService;
-    private final LotteryDrawDomainService lotteryDrawDomainService;
-    private final EventSearchDomainService eventSearchDomainService;
+    private final OrderService orderService;
     private final INotificationService notificationService;
+    private final java.util.Random random;
 
-    // For backwards compatibility with tests
+    private final ConcurrentHashMap<UUID, Object> eventLocks = new ConcurrentHashMap<>();
+
+    // Backward compat constructors for tests
     public EventService(IEventRepository eventRepository,
-            com.ticketing.domain.company.ICompanyRepository companyRepository,
-            com.ticketing.domain.member.IMemberRepository memberRepository,
-            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ICompanyRepository companyRepository,
+            IMemberRepository memberRepository,
+            IOrderRepository orderRepository,
             ISessionTokenService sessionTokenService,
             ILotteryRepository lotteryRepository,
             ISystemClock systemClock,
             OrderService orderService) {
         this.eventRepository = eventRepository;
+        this.companyRepository = companyRepository;
+        this.memberRepository = memberRepository;
+        this.orderRepository = orderRepository;
         this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
-        this.orderCheckoutDomainService = null;
-        this.eventDomainService = new EventDomainService(eventRepository, companyRepository, memberRepository,
-                orderRepository);
-        this.lotteryDrawDomainService = null;
-        this.eventSearchDomainService = new EventSearchDomainService(eventRepository, companyRepository);
+        this.orderService = orderService;
         this.notificationService = null;
+        this.random = new java.util.Random();
     }
 
     public EventService(IEventRepository eventRepository,
-            com.ticketing.domain.company.ICompanyRepository companyRepository,
-            com.ticketing.domain.member.IMemberRepository memberRepository,
-            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ICompanyRepository companyRepository,
+            IMemberRepository memberRepository,
+            IOrderRepository orderRepository,
             ISessionTokenService sessionTokenService,
             ILotteryRepository lotteryRepository,
             ISystemClock systemClock) {
@@ -84,9 +104,9 @@ public class EventService {
     }
 
     public EventService(IEventRepository eventRepository,
-            com.ticketing.domain.company.ICompanyRepository companyRepository,
-            com.ticketing.domain.member.IMemberRepository memberRepository,
-            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ICompanyRepository companyRepository,
+            IMemberRepository memberRepository,
+            IOrderRepository orderRepository,
             ISessionTokenService sessionTokenService,
             OrderService orderService) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
@@ -94,9 +114,9 @@ public class EventService {
     }
 
     public EventService(IEventRepository eventRepository,
-            com.ticketing.domain.company.ICompanyRepository companyRepository,
-            com.ticketing.domain.member.IMemberRepository memberRepository,
-            com.ticketing.domain.order.IOrderRepository orderRepository,
+            ICompanyRepository companyRepository,
+            IMemberRepository memberRepository,
+            IOrderRepository orderRepository,
             ISessionTokenService sessionTokenService) {
         this(eventRepository, companyRepository, memberRepository, orderRepository,
                 sessionTokenService, null, Instant::now, null);
@@ -104,33 +124,181 @@ public class EventService {
 
     @org.springframework.beans.factory.annotation.Autowired
     public EventService(IEventRepository eventRepository,
+            ICompanyRepository companyRepository,
+            IMemberRepository memberRepository,
+            IOrderRepository orderRepository,
             ISessionTokenService sessionTokenService,
             ILotteryRepository lotteryRepository,
-            OrderCheckoutDomainService orderCheckoutService,
-            EventDomainService domainService,
-            EventSearchDomainService eventSearchDomainService,
-            com.ticketing.domain.order.IOrderRepository orderRepository,
             ISystemClock systemClock,
+            OrderService orderService,
             @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this.eventRepository = eventRepository;
+        this.companyRepository = companyRepository;
+        this.memberRepository = memberRepository;
+        this.orderRepository = orderRepository;
         this.lotteryRepository = lotteryRepository;
         this.sessionTokenService = sessionTokenService;
         this.systemClock = systemClock;
-        this.orderCheckoutDomainService = orderCheckoutService;
-        this.eventDomainService = domainService;
-        this.lotteryDrawDomainService = new com.ticketing.domain.lottery.LotteryDrawDomainService(lotteryRepository,
-                eventRepository, orderRepository, systemClock, new java.util.Random());
-        this.eventSearchDomainService = eventSearchDomainService;
+        this.orderService = orderService;
         this.notificationService = notificationService;
+        this.random = new java.util.Random();
     }
+
+    // ── Event CRUD ──────────────────────────────────────────────────
 
     public UUID createEvent(String token, CreateEventRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
         }
         UUID memberId = authenticateMember(token);
-        return eventDomainService.createEvent(memberId, request).getId();
+
+        Company company = loadActiveCompany(request.companyName());
+        StaffAppointment appointment = loadAppointment(memberId, company.getName());
+        authorizeEventCreation(appointment);
+
+        log.info("Creating event: companyName={}, memberId={}, name={}",
+                company.getName(), memberId, request.name());
+
+        Event event = new Event(
+                UUID.randomUUID(),
+                company.getName(),
+                request.name(),
+                request.description(),
+                request.category(),
+                request.schedule(),
+                request.lockTimerDuration(),
+                company.getPurchasePolicy(),
+                company.getDiscountPolicy(),
+                request.saleMethod(),
+                request.lotteryWindow());
+
+        Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
+        for (CreateEventRequest.ZoneSpec spec : request.zones()) {
+            InventoryZone zone = buildZone(spec);
+            if (zoneIdsByName.put(spec.name(), zone.getId()) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate zone name in request: " + spec.name());
+            }
+            event.addZone(zone);
+        }
+
+        VenueMap venueMap = buildVenueMap(request.sectionToZoneName(), zoneIdsByName);
+        event.setVenueMap(venueMap);
+
+        saveEvent(event);
+        log.info("Event created: eventId={}, companyName={}, status=DRAFT",
+                event.getId(), company.getName());
+        return event.getId();
     }
+
+    public void cancelEvent(String token, UUID eventId) {
+        if (eventId == null) {
+            log.warn("Event cancellation denied: missing eventId");
+            throw new IllegalArgumentException("eventId is required");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("No event with id " + eventId);
+                });
+
+        Company company = companyRepository.findByName(event.getCompanyName())
+                .orElseThrow(() -> {
+                    log.warn("Company not found: companyName={}", event.getCompanyName());
+                    return new IllegalArgumentException(
+                            "Company not found: " + event.getCompanyName());
+                });
+
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {
+            throw new SecurityException("Insufficient permissions to cancel events");
+        }
+
+        log.info("Cancelling event: eventId={}, companyName={}", eventId, company.getName());
+        event.cancel();
+        saveEvent(event);
+
+        if (orderService != null) {
+            orderService.refundEventPurchases(eventId);
+        }
+        if (notificationService != null) {
+            notificationService.notify(memberId.toString(), "Event was cancelled successfully.");
+        }
+    }
+
+    public void publishEvent(String token, UUID eventId) {
+        if (eventId == null) {
+            log.warn("Event publishing denied: missing eventId");
+            throw new IllegalArgumentException("eventId is required");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE)) {
+            throw new SecurityException("Insufficient permissions to publish events");
+        }
+        log.info("Publishing event: eventId={}, companyName={}", eventId, company.getName());
+        event.publish();
+        saveEvent(event);
+    }
+
+    public EventDetailsDTO editEvent(String token, EditEventRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+        UUID memberId = authenticateMember(token);
+
+        Event event = eventRepository.findById(request.eventId())
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", request.eventId());
+                    return new IllegalArgumentException("Event not found: " + request.eventId());
+                });
+
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizeEventCreation(appt);
+
+        if (hasActiveReservations(event.getId())) {
+            throw new IllegalStateException("Cannot edit event with active reservations");
+        }
+
+        if (!request.hasAnyChange()) {
+            return EventDetailsDTO.from(event);
+        }
+
+        if (request.name() != null) {
+            log.info("editEvent: eventId={} name '{}' -> '{}'", event.getId(), event.getName(), request.name());
+            event.setName(request.name());
+        }
+        if (request.description() != null) {
+            log.info("editEvent: eventId={} description updated", event.getId());
+            event.setDescription(request.description());
+        }
+        if (request.artist() != null) {
+            log.info("editEvent: eventId={} artist '{}' -> '{}'", event.getId(), event.getArtist(), request.artist());
+            event.setArtist(request.artist());
+        }
+        if (request.schedule() != null) {
+            log.info("editEvent: eventId={} schedule updated to start={}",
+                    event.getId(), request.schedule().getStartTime());
+            event.setSchedule(request.schedule());
+        }
+
+        saveEvent(event);
+        log.info("Event edited: eventId={}, companyName={}, by={}",
+                event.getId(), company.getName(), memberId);
+        return EventDetailsDTO.from(event);
+    }
+
+    // ── Lottery ─────────────────────────────────────────────────────
 
     public LotteryRegistrationResponse registerForLottery(String token, LotteryRegistrationRequest request) {
         if (request == null) {
@@ -173,61 +341,67 @@ public class EventService {
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
-    public List<com.ticketing.domain.order.ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
+    public List<ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
-        UUID memberId = authenticateMember(token);
-        // Authorize if needed
-        List<com.ticketing.domain.order.ActiveOrder> winners = lotteryDrawDomainService.draw(eventId, capacity);
+        authenticateMember(token);
+
+        if (capacity < 0) {
+            throw new IllegalArgumentException("Capacity cannot be negative");
+        }
+
+        List<LotteryEntry> allEntries = lotteryRepository.findByEventId(eventId);
+        List<LotteryEntry> winners = selectLotteryWinners(allEntries, capacity);
+
+        if (winners.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+
+        List<ActiveOrder> createdOrders = new ArrayList<>();
+
+        for (LotteryEntry winner : winners) {
+            UUID sessionId = UUID.randomUUID();
+            ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, winner.memberId(), eventId, systemClock.now());
+
+            InventoryZone zone = event.findZone(winner.zoneId());
+            zone.lockGA(winner.quantity());
+
+            OrderItem item = OrderItem.forGA(UUID.randomUUID(), winner.zoneId(), winner.quantity(), zone.getPricePerTicket());
+            order.addItem(item);
+
+            try {
+                orderRepository.save(order);
+            } catch (OptimisticLockException ex) {
+                throw new IllegalStateException("Lottery draw order changed concurrently. Please retry.", ex);
+            }
+            createdOrders.add(order);
+        }
+
+        saveEvent(event);
+
         if (notificationService != null) {
-            for (com.ticketing.domain.order.ActiveOrder order : winners) {
+            for (ActiveOrder order : createdOrders) {
                 if (order.getMemberId() != null) {
                     notificationService.notify(order.getMemberId().toString(),
                             "You have won the lottery! You can now purchase tickets for the event.");
                 }
             }
         }
+        return createdOrders;
+    }
+
+    private List<LotteryEntry> selectLotteryWinners(List<LotteryEntry> entries, int capacity) {
+        List<LotteryEntry> pool = new ArrayList<>(entries);
+        List<LotteryEntry> winners = new ArrayList<>();
+        int numWinners = Math.min(pool.size(), capacity);
+        for (int i = 0; i < numWinners; i++) {
+            int index = random.nextInt(pool.size());
+            winners.add(pool.remove(index));
+        }
         return winners;
-    }
-
-    public void cancelEvent(String token, UUID eventId) {
-        if (eventId == null) {
-            log.warn("Event cancellation denied: missing eventId");
-            throw new IllegalArgumentException("eventId is required");
-        }
-        UUID memberId = authenticateMember(token);
-        eventDomainService.cancelEvent(memberId, eventId);
-        if (orderCheckoutDomainService != null) {
-            List<CompletedPurchase> refunds = orderCheckoutDomainService.refundEventPurchases(eventId);
-            if (notificationService != null) {
-                for (CompletedPurchase p : refunds) {
-                    if (p.memberId() != null) {
-                        notificationService.notify(p.memberId().toString(),
-                                "The event you purchased tickets for has been cancelled and you have been refunded.");
-                    }
-                }
-            }
-        }
-        if (notificationService != null) {
-            notificationService.notify(memberId.toString(), "Event was cancelled successfully.");
-        }
-    }
-
-    public void publishEvent(String token, UUID eventId) {
-        if (eventId == null) {
-            log.warn("Event publishing denied: missing eventId");
-            throw new IllegalArgumentException("eventId is required");
-        }
-        UUID memberId = authenticateMember(token);
-        eventDomainService.publishEvent(memberId, eventId);
-    }
-
-    public EventDetailsDTO editEvent(String token, EditEventRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("request cannot be null");
-        }
-        UUID memberId = authenticateMember(token);
-        return eventDomainService.editEvent(memberId, request);
     }
 
     // ── Event-scoped purchase policy ────────────────────────────────
@@ -238,14 +412,24 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        eventDomainService.setEventPurchasePolicy(memberId, eventId, policy);
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setPurchasePolicy(policy);
+        saveEvent(event);
     }
 
     public void removeEventPurchasePolicy(String token, UUID eventId) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
-        eventDomainService.removeEventPurchasePolicy(memberId, eventId);
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setPurchasePolicy(company.getPurchasePolicy());
+        saveEvent(event);
     }
 
     public void addEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy, boolean useOr) {
@@ -254,7 +438,16 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        eventDomainService.addEventPurchasePolicy(memberId, eventId, policy, useOr);
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        IPurchasePolicy current = event.getEventPurchasePolicy();
+        IPurchasePolicy composed = useOr
+                ? new OrPolicy(List.of(current, policy))
+                : new AndPolicy(List.of(current, policy));
+        event.setPurchasePolicy(composed);
+        saveEvent(event);
     }
 
     // ── Event-scoped discount policy ────────────────────────────────
@@ -265,14 +458,24 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        eventDomainService.setEventDiscountPolicy(memberId, eventId, policy);
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setDiscountPolicy(policy);
+        saveEvent(event);
     }
 
     public void removeEventDiscountPolicy(String token, UUID eventId) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
-        eventDomainService.removeEventDiscountPolicy(memberId, eventId);
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        event.setDiscountPolicy(company.getDiscountPolicy());
+        saveEvent(event);
     }
 
     public void addEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy, boolean useStacking) {
@@ -281,25 +484,34 @@ public class EventService {
         if (policy == null)
             throw new IllegalArgumentException("policy is required");
         UUID memberId = authenticateMember(token);
-        eventDomainService.addEventDiscountPolicy(memberId, eventId, policy, useStacking);
+        Event event = eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizePolicy(appt);
+        IDiscountPolicy current = event.getEventDiscountPolicy();
+        IDiscountPolicy composed = useStacking
+                ? new SumCompositeDiscount(List.of(current, policy))
+                : new MaxCompositeDiscount(List.of(current, policy));
+        event.setDiscountPolicy(composed);
+        saveEvent(event);
     }
 
     // ── Read helpers (event policy queries) ─────────────────────────
 
     public IPurchasePolicy getEventPurchasePolicy(String token, UUID eventId) {
         authenticateMember(token);
-        return eventDomainService.getEventPurchasePolicy(eventId);
+        return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventPurchasePolicy();
     }
 
     public IDiscountPolicy getEventDiscountPolicy(String token, UUID eventId) {
         authenticateMember(token);
-        return eventDomainService.getEventDiscountPolicy(eventId);
+        return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventDiscountPolicy();
     }
 
-    // --- UC-C.1: layout & inventory ---
+    // ── Inventory management ────────────────────────────────────────
 
     public void addSeatsToZone(String token, UUID eventId, UUID zoneId,
-            java.util.List<CreateEventRequest.SeatSpec> seats) {
+            List<CreateEventRequest.SeatSpec> seats) {
         if (seats == null || seats.isEmpty()) {
             throw new IllegalArgumentException("seats list is required");
         }
@@ -308,11 +520,19 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        eventDomainService.addSeatsToZone(memberId, eventId, zoneId, seats);
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(memberId, eventId);
+            InventoryZone zone = event.findZone(zoneId);
+            for (CreateEventRequest.SeatSpec spec : seats) {
+                zone.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.seatNumber()));
+            }
+            saveEvent(event);
+            log.info("Inventory: added {} seats to zone={} event={}", seats.size(), zoneId, eventId);
+        }
     }
 
     public void removeSeats(String token, UUID eventId, UUID zoneId,
-            java.util.List<UUID> seatIds) {
+            List<UUID> seatIds) {
         if (seatIds == null || seatIds.isEmpty()) {
             log.warn("Invalid seatIds list: {}", seatIds);
             throw new IllegalArgumentException("seatIds list is required");
@@ -320,7 +540,15 @@ public class EventService {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
-        eventDomainService.removeSeats(memberId, eventId, zoneId, seatIds);
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(memberId, eventId);
+            InventoryZone zone = event.findZone(zoneId);
+            for (UUID seatId : seatIds) {
+                zone.removeSeat(seatId);
+            }
+            saveEvent(event);
+            log.info("Inventory: removed {} seats from zone={} event={}", seatIds.size(), zoneId, eventId);
+        }
     }
 
     public void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
@@ -329,7 +557,12 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        eventDomainService.increaseGACapacity(memberId, eventId, zoneId, delta);
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(memberId, eventId);
+            event.findZone(zoneId).increaseCapacity(delta);
+            saveEvent(event);
+            log.info("Inventory: GA capacity +{} on zone={} event={}", delta, zoneId, eventId);
+        }
     }
 
     public void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
@@ -338,7 +571,12 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        eventDomainService.decreaseGACapacity(memberId, eventId, zoneId, delta);
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(memberId, eventId);
+            event.findZone(zoneId).decreaseCapacity(delta);
+            saveEvent(event);
+            log.info("Inventory: GA capacity -{} on zone={} event={}", delta, zoneId, eventId);
+        }
     }
 
     public void setZonePrice(String token, UUID eventId, UUID zoneId,
@@ -348,10 +586,15 @@ public class EventService {
             throw new IllegalArgumentException("eventId is required");
         }
         UUID memberId = authenticateMember(token);
-        eventDomainService.setZonePrice(memberId, eventId, zoneId, newPrice);
+        synchronized (lockFor(eventId)) {
+            Event event = loadEventForInventoryEdit(memberId, eventId);
+            event.findZone(zoneId).setPricePerTicket(newPrice);
+            saveEvent(event);
+            log.info("Inventory: price={} on zone={} event={}", newPrice, zoneId, eventId);
+        }
     }
 
-    // ── Query (from EventQueryService) ───────────────────────────────
+    // ── Query (event map) ───────────────────────────────────────────
 
     public Optional<EventMapDTO> getEventMap(UUID eventId) {
         if (eventId == null)
@@ -385,24 +628,166 @@ public class EventService {
                 zoneDtos));
     }
 
-    // ── Search (from EventSearchService) ──────────────────────────────
+    // ── Search (inlined from EventSearchDomainService) ──────────────
 
     public List<EventSummaryDTO> searchEvents(SearchEventsRequest req) {
-        return eventSearchDomainService.searchEvents(req);
+        log.info("Event search requested: text={}, category={}, company={}",
+                req == null ? null : req.text(), req == null ? null : req.category(), req == null ? null : req.companyName());
+        SearchEventsRequest q = req == null ? SearchEventsRequest.empty() : req;
+        Set<String> activeCompanyNames = activeCompanyNames();
+
+        List<EventSummaryDTO> hits = eventRepository.findAll().stream()
+                .filter(e -> isBrowsable(e))
+                .filter(e -> activeCompanyNames.contains(e.getCompanyName()))
+                .filter(e -> matchesText(e, q.text()))
+                .filter(e -> matchesRegion(e, q.region()))
+                .filter(e -> matchesCategory(e, q.category()))
+                .filter(e -> matchesCompanyName(e, q.companyName()))
+                .filter(e -> matchesPriceRange(e, q.minPrice(), q.maxPrice()))
+                .filter(e -> matchesDateRange(e, q.fromDate(), q.toDate()))
+                .map(EventSummaryDTO::from)
+                .toList();
+
+        log.info("Event search: text={}, category={}, company={}, hits={}",
+                q.text(), q.category(), q.companyName(), hits.size());
+        return hits;
     }
 
-    /**
-     * Lists all events of a company (any status) for management pickers. Requires a
-     * valid
-     * member session; the per-action services still enforce company-management
-     * authorization.
-     */
     public List<EventSummaryDTO> listCompanyEvents(String token, String companyName) {
         authenticateMember(token);
-        return eventSearchDomainService.findCompanyEvents(companyName);
+        if (companyName == null || companyName.isBlank()) {
+            return List.of();
+        }
+        return eventRepository.findByCompanyName(companyName).stream()
+                .map(EventSummaryDTO::from)
+                .sorted(Comparator.comparing(EventSummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 
-    // ── Private helpers (query) ───────────────────────────────────────
+    // ── Private helpers ─────────────────────────────────────────────
+
+    private Object lockFor(UUID eventId) {
+        return eventLocks.computeIfAbsent(eventId, k -> new Object());
+    }
+
+    private Event loadEventForInventoryEdit(UUID memberId, UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> {
+                    log.warn("Event not found: eventId={}", eventId);
+                    return new IllegalArgumentException("Event not found: " + eventId);
+                });
+        if (event.isCancelled()) {
+            log.warn("Cannot edit inventory on a cancelled event: eventId={}", eventId);
+            throw new IllegalStateException("Cannot edit inventory on a cancelled event");
+        }
+        if (event.getStatus() == EventStatus.SOLD_OUT) {
+            log.warn("Cannot edit inventory on a sold-out event: eventId={}", eventId);
+            throw new IllegalStateException("Cannot edit inventory on a sold-out event");
+        }
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizeInventory(appt);
+        return event;
+    }
+
+    private void authorizeInventory(StaffAppointment appt) {
+        boolean allowed = appt.isOwner()
+                || (appt.isManager()
+                    && (appt.hasPermission(ManagerPermission.INVENTORY_MGMT)
+                        || appt.hasPermission(ManagerPermission.MAP_DEFINITION)));
+        if (!allowed) {
+            log.warn("Insufficient permissions to edit inventory");
+            throw new SecurityException(
+                    "Inventory edits require INVENTORY_MGMT or MAP_DEFINITION permission");
+        }
+    }
+
+    private void authorizeEventCreation(StaffAppointment appointment) {
+        boolean allowed = appointment.isOwner()
+                || (appointment.isManager()
+                    && appointment.hasPermission(ManagerPermission.MAP_DEFINITION)
+                    && appointment.hasPermission(ManagerPermission.INVENTORY_MGMT));
+        if (!allowed) {
+            throw new SecurityException(
+                    "Insufficient permissions to create events");
+        }
+    }
+
+    private void authorizePolicy(StaffAppointment appt) {
+        boolean allowed = appt.isOwner()
+                || (appt.isManager() && appt.hasPermission(ManagerPermission.POLICY_MODIFICATION));
+        if (!allowed) {
+            throw new SecurityException("Insufficient permissions: POLICY_MODIFICATION required");
+        }
+    }
+
+    private Company loadActiveCompany(String companyName) {
+        Company company = companyRepository.findByName(companyName)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Company not found: " + companyName));
+        if (!company.isActive()) {
+            throw new IllegalStateException(
+                    "Company is suspended or closed: " + companyName);
+        }
+        return company;
+    }
+
+    private StaffAppointment loadAppointment(UUID memberId, String companyName) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Member not found: " + memberId));
+        StaffAppointment appointment = member.getStaffAppointment(companyName);
+        if (appointment == null) {
+            throw new SecurityException(
+                    "Caller is not a staff member of company: " + companyName);
+        }
+        return appointment;
+    }
+
+    private boolean hasActiveReservations(UUID eventId) {
+        return !orderRepository.findActiveByEventId(eventId).isEmpty();
+    }
+
+    private InventoryZone buildZone(CreateEventRequest.ZoneSpec spec) {
+        return switch (spec) {
+            case CreateEventRequest.GAZoneSpec ga -> InventoryZone.createGA(
+                    UUID.randomUUID(), ga.name(), ga.pricePerTicket(), ga.maxCapacity());
+            case CreateEventRequest.AssignedZoneSpec a -> {
+                InventoryZone zone = InventoryZone.createAssigned(
+                        UUID.randomUUID(), a.name(), a.pricePerTicket());
+                for (CreateEventRequest.SeatSpec seatSpec : a.seats()) {
+                    zone.addSeat(new Seat(UUID.randomUUID(),
+                            seatSpec.row(), seatSpec.seatNumber()));
+                }
+                yield zone;
+            }
+        };
+    }
+
+    private VenueMap buildVenueMap(Map<String, String> sectionToZoneName,
+                                   Map<String, UUID> zoneIdsByName) {
+        Map<String, UUID> sectionToZoneId = new HashMap<>(sectionToZoneName.size());
+        for (Map.Entry<String, String> e : sectionToZoneName.entrySet()) {
+            String zoneName = e.getValue();
+            UUID zoneId = zoneIdsByName.get(zoneName);
+            if (zoneId == null) {
+                throw new IllegalArgumentException(
+                        "Venue map section '" + e.getKey()
+                                + "' references unknown zone: " + zoneName);
+            }
+            sectionToZoneId.put(e.getKey(), zoneId);
+        }
+        return new VenueMap(sectionToZoneId);
+    }
+
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict: eventId={}", event.getId());
+            throw new IllegalStateException("Event changed concurrently. Please retry.", ex);
+        }
+    }
 
     private static boolean isBrowsable(Event e) {
         return e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT;
@@ -438,5 +823,62 @@ public class EventService {
             throw new SecurityException("Guests cannot perform this action");
         }
         return memberId;
+    }
+
+    // ── Search filter helpers ───────────────────────────────────────
+
+    private Set<String> activeCompanyNames() {
+        Set<String> names = new HashSet<>();
+        for (Company c : companyRepository.getAll()) {
+            if (c.isActive()) names.add(c.getName());
+        }
+        return names;
+    }
+
+    private static boolean matchesText(Event e, String text) {
+        if (text == null || text.isBlank()) return true;
+        String needle = text.toLowerCase();
+        return contains(e.getName(), needle)
+                || contains(e.getArtist(), needle)
+                || contains(e.getDescription(), needle);
+    }
+
+    private static boolean contains(String haystack, String needleLower) {
+        return haystack != null && haystack.toLowerCase().contains(needleLower);
+    }
+
+    private static boolean matchesRegion(Event e, String region) {
+        if (region == null) return true;
+        return region.equalsIgnoreCase(e.getRegion());
+    }
+
+    private static boolean matchesCategory(Event e, com.ticketing.domain.event.EventCategory category) {
+        if (category == null) return true;
+        return category == e.getCategory();
+    }
+
+    private static boolean matchesCompanyName(Event e, String companyName) {
+        if (companyName == null) return true;
+        return companyName.equals(e.getCompanyName());
+    }
+
+    private static boolean matchesPriceRange(Event e, BigDecimal min, BigDecimal max) {
+        if (min == null && max == null) return true;
+        for (InventoryZone z : e.getZones()) {
+            BigDecimal p = z.getPricePerTicket();
+            if (p == null) continue;
+            if (min != null && p.compareTo(min) < 0) continue;
+            if (max != null && p.compareTo(max) > 0) continue;
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean matchesDateRange(Event e, Instant from, Instant to) {
+        if (from == null && to == null) return true;
+        Instant start = e.getSchedule().getStartTime();
+        if (from != null && start.isBefore(from)) return false;
+        if (to != null && start.isAfter(to)) return false;
+        return true;
     }
 }

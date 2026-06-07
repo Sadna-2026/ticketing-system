@@ -1,9 +1,14 @@
 package com.ticketing.application.services;
 
+import java.util.ArrayDeque;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,16 +16,23 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.CompanySummaryDTO;
+import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.CompanyStatus;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.CompanyOpenedEvent;
+import com.ticketing.domain.event.Event;
+import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventPublisher;
+import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.exception.OptimisticLockException;
+import com.ticketing.domain.gateway.IPaymentGateway;
+import com.ticketing.domain.gateway.RefundResult;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -30,9 +42,8 @@ import com.ticketing.domain.member.communication.RelinquishOwnershipEvent;
 import com.ticketing.domain.member.communication.RevokePersonnelEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferRequestedEvent;
 import com.ticketing.domain.member.communication.RoleAppointmentOfferResponseEvent;
-import com.ticketing.domain.services.CompanyHistoryDomainService;
-import com.ticketing.domain.services.CompanyLifecycleDomainService;
-import com.ticketing.domain.services.CompanyQueryDomainService;
+import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.IOrderRepository;
 
 @org.springframework.stereotype.Service
 public class CompanyService {
@@ -43,9 +54,12 @@ public class CompanyService {
     private final IEventPublisher eventPublisher;
     private final ISessionTokenService sessionTokenService;
     private final IMemberRepository memberRepository;
-    private final CompanyHistoryDomainService companyHistoryDomainService;
-    private final CompanyLifecycleDomainService companyLifecycleDomainService;
-    private final CompanyQueryDomainService companyQueryDomainService;
+    private final IEventRepository eventRepository;
+    private final IOrderRepository orderRepository;
+    private final IPaymentGateway paymentGateway;
+
+    private final ConcurrentHashMap<String, Deque<RefundJob>> pendingRefunds = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Object> companyLocks = new ConcurrentHashMap<>();
 
     public CompanyService(
             ICompanyRepository companyRepository,
@@ -53,13 +67,7 @@ public class CompanyService {
             ISessionTokenService sessionTokenService,
             IMemberRepository memberRepository
     ) {
-        this.companyRepository = companyRepository;
-        this.eventPublisher = eventPublisher;
-        this.sessionTokenService = sessionTokenService;
-        this.memberRepository = memberRepository;
-        this.companyHistoryDomainService = null;
-        this.companyLifecycleDomainService = null;
-        this.companyQueryDomainService = null;
+        this(companyRepository, eventPublisher, sessionTokenService, memberRepository, null, null, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -68,29 +76,21 @@ public class CompanyService {
             IEventPublisher eventPublisher,
             ISessionTokenService sessionTokenService,
             IMemberRepository memberRepository,
-            CompanyHistoryDomainService companyHistoryDomainService,
-            CompanyLifecycleDomainService companyLifecycleDomainService,
-            CompanyQueryDomainService companyQueryDomainService
+            IEventRepository eventRepository,
+            IOrderRepository orderRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) IPaymentGateway paymentGateway
     ) {
         this.companyRepository = companyRepository;
         this.eventPublisher = eventPublisher;
         this.sessionTokenService = sessionTokenService;
         this.memberRepository = memberRepository;
-        this.companyHistoryDomainService = companyHistoryDomainService;
-        this.companyLifecycleDomainService = companyLifecycleDomainService;
-        this.companyQueryDomainService = companyQueryDomainService;
+        this.eventRepository = eventRepository;
+        this.orderRepository = orderRepository;
+        this.paymentGateway = paymentGateway;
     }
 
-    /**
-     * Creates a new production company. The creating member becomes the Founder
-     * and initial Owner (via a Founder StaffAppointment in the Member aggregate).
-     * Publishes a CompanyOpenedEvent for listeners (e.g., MemberService) to handle.
-     *
-     * @param token token of the member creating the company
-     * @param name the company name
-     * @param description optional company description
-     * @return the new company's name (unique identifier)
-     */
+    // ── Company creation ───────────────────────────────────────────────
+
     public String openProductionCompany(String token, String name, String description) {
         UUID founderId = validateToken(token);
 
@@ -122,24 +122,23 @@ public class CompanyService {
     }
 
     public void offerRoleAppointment(
-            String token, 
-            String companyName, 
-            UUID targetMemberId, 
-            StaffAppointment.StaffRole role, 
-            Set<ManagerPermission> permissions
+            String token,
+            String companyName,
+            UUID targetMemberId,
+            StaffAppointment.StaffRole role,
+            Set<com.ticketing.domain.member.ManagerPermission> permissions
     ) {
         UUID appointerId = validateToken(token);
-        
+
         if (!companyRepository.existsByName(companyName)) {
             throw new IllegalArgumentException("Company not found");
         }
 
-        // Publish event for MemberService to handle authorization and offer creation
-        RoleAppointmentOfferRequestedEvent event = 
+        RoleAppointmentOfferRequestedEvent event =
             new RoleAppointmentOfferRequestedEvent(appointerId, targetMemberId, companyName, role, permissions);
         eventPublisher.publish(event);
 
-        log.info("Role appointment requested: company={}, appointer={}, target={}, role={}", 
+        log.info("Role appointment requested: company={}, appointer={}, target={}, role={}",
             companyName, appointerId, targetMemberId, role);
     }
 
@@ -147,7 +146,7 @@ public class CompanyService {
             String token,
             String companyName,
             UUID targetMemberId,
-            Set<ManagerPermission> newPermissions
+            Set<com.ticketing.domain.member.ManagerPermission> newPermissions
     ) {
         UUID callerId = validateToken(token);
 
@@ -163,12 +162,11 @@ public class CompanyService {
             throw new IllegalArgumentException("Company not found: " + companyName);
         }
 
-        // Publish event for MemberService/Handler to handle authorization and update
-        ManagerPermissionsChangedEvent event = 
+        ManagerPermissionsChangedEvent event =
             new ManagerPermissionsChangedEvent(callerId, targetMemberId, companyName, newPermissions);
         eventPublisher.publish(event);
 
-        log.info("Manager permissions change requested: company={}, caller={}, target={}", 
+        log.info("Manager permissions change requested: company={}, caller={}, target={}",
             companyName, callerId, targetMemberId);
     }
 
@@ -179,7 +177,6 @@ public class CompanyService {
     ) {
         UUID responderId = validateToken(token);
 
-        // Let the handler take care of member related stuff, just publish the response event
         RoleAppointmentOfferResponseEvent event = new RoleAppointmentOfferResponseEvent(
             appointmentOfferId,
             responderId,
@@ -193,17 +190,14 @@ public class CompanyService {
 
     public void revokePersonnel(String token, String companyName, UUID targetMemberId) {
         UUID revokerId = validateToken(token);
-        
-        // Authorization check
+
         if (revokerId == null) {
             throw new IllegalArgumentException("A guest user cannot create a production company. Please log in.");
         }
 
-        // Check if the company exists
         Company company = companyRepository.findByName(companyName)
             .orElseThrow(() -> new IllegalArgumentException("Company not found"));
 
-        // Check that company is active
         if (!company.isActive()) {
             throw new IllegalArgumentException("Cannot revoke personnel from a suspended or closed company");
         }
@@ -211,23 +205,20 @@ public class CompanyService {
         RevokePersonnelEvent event = new RevokePersonnelEvent(company, revokerId, targetMemberId);
         eventPublisher.publish(event);
 
-        log.info("Personnel revocation requested: company={}, revoker={}, target={}", 
+        log.info("Personnel revocation requested: company={}, revoker={}, target={}",
             companyName, revokerId, targetMemberId);
     }
 
     public void relinquishOwnership(String token, String companyName) {
         UUID ownerId = validateToken(token);
 
-        // Authorization check
         if (ownerId == null) {
             throw new IllegalArgumentException("A guest user cannot relinquish ownership. Please log in.");
         }
 
-        // Check if the company exists
         Company company = companyRepository.findByName(companyName)
             .orElseThrow(() -> new IllegalArgumentException("Company not found"));
 
-        // Check that company is active
         if (!company.isActive()) {
             throw new IllegalArgumentException("Cannot relinquish ownership from a suspended or closed company");
         }
@@ -245,7 +236,7 @@ public class CompanyService {
         if (policy == null) throw new IllegalArgumentException("policy is required");
 
         UUID memberId = authenticateMember(token);
-        Company company = loadActiveCompany(companyName);
+        Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
         company.setPurchasePolicy(policy);
@@ -257,7 +248,7 @@ public class CompanyService {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
         UUID memberId = authenticateMember(token);
-        Company company = loadActiveCompany(companyName);
+        Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
         company.setPurchasePolicy(new AlwaysAllowPolicy());
@@ -272,7 +263,7 @@ public class CompanyService {
         if (policy == null) throw new IllegalArgumentException("policy is required");
 
         UUID memberId = authenticateMember(token);
-        Company company = loadActiveCompany(companyName);
+        Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
         company.setDiscountPolicy(policy);
@@ -284,7 +275,7 @@ public class CompanyService {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
         UUID memberId = authenticateMember(token);
-        Company company = loadActiveCompany(companyName);
+        Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
         company.setDiscountPolicy(new NoDiscountPolicy());
@@ -298,7 +289,7 @@ public class CompanyService {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
         UUID memberId = authenticateMember(token);
-        Company company = loadActiveCompany(companyName);
+        Company company = loadActiveCompanyForPolicy(companyName);
         authorizePolicy(memberId, company.getName());
 
         company.setAllowDiscountStacking(allow);
@@ -323,37 +314,90 @@ public class CompanyService {
         return loadCompany(companyName).getDiscountPolicy();
     }
 
-    // ── Query (from CompanyQueryService) ─────────────────────────────
+    // ── Query (inlined from CompanyQueryDomainService) ──────────────
 
     public Optional<CompanyPublicDTO> getCompanyInfo(String companyName) {
-        return companyQueryDomainService.getCompanyInfo(companyName);
+        log.info("Company info requested: name={}", companyName);
+        if (companyName == null || companyName.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<Company> maybe = companyRepository.findByName(companyName);
+        if (maybe.isEmpty() || !maybe.get().isActive()) {
+            log.info("Company info request denied: name={}, reason={}",
+                    companyName, maybe.isEmpty() ? "unknown" : "not-active");
+            return Optional.empty();
+        }
+        Company company = maybe.get();
+        List<EventSummaryDTO> active = eventRepository.findByCompanyName(company.getName()).stream()
+                .filter(e -> e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT)
+                .map(EventSummaryDTO::from)
+                .toList();
+        log.info("Company info provided: name={}", company.getName());
+        return Optional.of(new CompanyPublicDTO(company.getName(), company.getDescription(), active));
     }
 
     public List<CompanySummaryDTO> searchCompanies(String query) {
-        return companyQueryDomainService.searchCompanies(query);
+        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        return companyRepository.getAll().stream()
+                .filter(Company::isActive)
+                .filter(c -> needle.isEmpty() || c.getName().toLowerCase(Locale.ROOT).contains(needle))
+                .map(c -> new CompanySummaryDTO(c.getName()))
+                .sorted(Comparator.comparing(CompanySummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 
-    // ── History (from CompanyHistoryService) ───────────────────────
+    // ── History (inlined from CompanyHistoryDomainService) ───────────
 
     public List<PurchaseRecordDTO> getPurchaseHistory(String token, String companyName) {
-        return companyHistoryDomainService.getPurchaseHistory(token, companyName);
+        UUID memberId = requireMember(token);
+        Company company = companyRepository.findByName(companyName)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
+        Member m = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("Member not found: " + memberId));
+        StaffAppointment appt = m.getStaffAppointment(company.getName());
+        boolean allowed = appt != null
+                && (appt.isOwner() || appt.hasPermission(ManagerPermission.VIEW_REPORTS));
+        if (!allowed) {
+            log.warn("Purchase history request denied: company={}, by={}", company.getName(), memberId);
+            throw new SecurityException(
+                    "Viewing purchase history requires Owner role or VIEW_REPORTS permission");
+        }
+
+        log.info("Purchase history requested: company={}, by={}", company.getName(), memberId);
+        return orderRepository.findCompletedByCompanyName(company.getName()).stream()
+                .map(PurchaseRecordDTO::from)
+                .toList();
     }
 
-    // ── Lifecycle (from CompanyLifecycleService) ───────────────────
+    // ── Lifecycle (inlined from CompanyLifecycleDomainService) ───────
 
     public void suspendCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
-        companyLifecycleDomainService.suspendCompany(memberId, companyName);
+        Company company = loadCompany(companyName);
+        requireFounder(memberId, company);
+
+        company.suspend();
+        saveCompany(company);
+        log.info("Company suspended: name={}, by={}", companyName, memberId);
     }
 
     public void reopenCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
-        companyLifecycleDomainService.reopenCompany(memberId, companyName);
+        Company company = loadCompany(companyName);
+        requireFounder(memberId, company);
+
+        company.reopen();
+        saveCompany(company);
+        log.info("Company reopened: name={}, by={}", companyName, memberId);
     }
 
     public void permanentCloseByFounder(String token, String companyName) {
         UUID memberId = requireMember(token);
-        companyLifecycleDomainService.permanentCloseByFounder(memberId, companyName);
+        synchronized (companyLock(companyName)) {
+            Company company = loadCompany(companyName);
+            requireFounder(memberId, company);
+            runClose(company, false);
+        }
     }
 
     public void permanentCloseByAdmin(String token, String companyName) {
@@ -362,14 +406,109 @@ public class CompanyService {
             log.warn("Permanent close by admin ignored: insufficient permissions");
             throw new SecurityException("System admin permission required");
         }
-        companyLifecycleDomainService.permanentCloseByAdmin(companyName);
+        synchronized (companyLock(companyName)) {
+            Company company = loadCompany(companyName);
+            runClose(company, true);
+        }
     }
 
     public void retryPendingRefunds(String companyName) {
-        companyLifecycleDomainService.retryPendingRefunds(companyName);
+        synchronized (companyLock(companyName)) {
+            Company company = loadCompany(companyName);
+            if (company.getStatus() != CompanyStatus.PENDING_CLOSURE) {
+                log.warn("Retry pending refunds ignored: company is not pending closure");
+                throw new IllegalStateException("Company is not pending closure");
+            }
+
+            String key = normalizeCompanyKey(companyName);
+            Deque<RefundJob> queue = pendingRefunds.get(key);
+            if (queue == null || queue.isEmpty()) {
+                queue = new ArrayDeque<>();
+                for (CompletedPurchase p : orderRepository.findCompletedByCompanyName(companyName)) {
+                    queue.add(new RefundJob(p.transactionId(), p.amount()));
+                }
+            }
+
+            while (!queue.isEmpty()) {
+                RefundJob job = queue.peek();
+                RefundResult r = paymentGateway.refund(job.transactionId(), job.amount().doubleValue());
+                if (!r.success()) {
+                    log.warn("Retry refund still failing for company={}", companyName);
+                    pendingRefunds.put(key, queue);
+                    return;
+                }
+                queue.poll();
+            }
+
+            pendingRefunds.remove(key);
+            company.completeClosure();
+            saveCompany(company);
+            log.info("Pending closure completed: company={}", companyName);
+        }
     }
 
     // ── Internal helpers ────────────────────────────────────────────
+
+    private void runClose(Company company, boolean revokeRoles) {
+        List<Event> events = eventRepository.findByCompanyName(company.getName());
+        for (Event e : events) {
+            if (e.isCancelled()) continue;
+            e.cancel();
+            saveEvent(e);
+        }
+
+        Deque<RefundJob> failed = new ArrayDeque<>();
+        List<CompletedPurchase> purchases = orderRepository.findCompletedByCompanyName(company.getName());
+        for (CompletedPurchase p : purchases) {
+            RefundResult result;
+            try {
+                result = paymentGateway.refund(p.transactionId(), p.amount().doubleValue());
+            } catch (RuntimeException ex) {
+                log.warn("Refund threw for company={}: {}", p.companyName(), ex.getMessage());
+                result = RefundResult.failed(ex.getMessage());
+            }
+            if (!result.success()) {
+                failed.add(new RefundJob(p.transactionId(), p.amount()));
+            }
+        }
+
+        if (!failed.isEmpty()) {
+            pendingRefunds.put(normalizeCompanyKey(company.getName()), failed);
+            company.markPendingClosure();
+            saveCompany(company);
+            log.warn("Closure pending due to refund failures: company={}, failed={}",
+                    company.getName(), failed.size());
+            return;
+        }
+
+        if (revokeRoles) {
+            revokeAllAppointments(company.getName());
+        }
+
+        company.close();
+        saveCompany(company);
+        log.info("Company permanently closed: name={}, revokedRoles={}", company.getName(), revokeRoles);
+    }
+
+    private void revokeAllAppointments(String companyName) {
+        log.info("Revoking all staff appointments for company: {}", companyName);
+        for (Member m : memberRepository.findByCompanyAppointment(companyName)) {
+            m.removeStaffAppointment(companyName);
+            saveMember(m);
+        }
+    }
+
+    private void requireFounder(UUID memberId, Company company) {
+        if (!memberId.equals(company.getFounderId())) {
+            throw new SecurityException("Only the founder can perform this lifecycle action");
+        }
+        Member m = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("Member not found: " + memberId));
+        StaffAppointment appt = m.getStaffAppointment(company.getName());
+        if (appt == null || !appt.isOwner()) {
+            throw new SecurityException("Founder appointment missing or not owner");
+        }
+    }
 
     private UUID validateToken(String token) {
         if (token == null || token.isBlank()) {
@@ -400,7 +539,7 @@ public class CompanyService {
                 .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
     }
 
-    private Company loadActiveCompany(String companyName) {
+    private Company loadActiveCompanyForPolicy(String companyName) {
         Company company = loadCompany(companyName);
         if (!company.isActive()) {
             throw new IllegalStateException(
@@ -416,6 +555,32 @@ public class CompanyService {
             log.warn("Company save conflict: company={}", company.getName());
             throw new IllegalStateException("Company changed concurrently. Please retry.", ex);
         }
+    }
+
+    private void saveEvent(Event event) {
+        try {
+            eventRepository.save(event);
+        } catch (OptimisticLockException ex) {
+            log.warn("Event save conflict during company lifecycle: eventId={}", event.getId());
+            throw new IllegalStateException("Event changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private void saveMember(Member member) {
+        try {
+            memberRepository.save(member);
+        } catch (OptimisticLockException ex) {
+            log.warn("Member save conflict during company lifecycle: memberId={}", member.getId());
+            throw new IllegalStateException("Member changed concurrently. Please retry.", ex);
+        }
+    }
+
+    private Object companyLock(String companyName) {
+        return companyLocks.computeIfAbsent(normalizeCompanyKey(companyName), k -> new Object());
+    }
+
+    private static String normalizeCompanyKey(String companyName) {
+        return companyName.toLowerCase().trim();
     }
 
     private UUID requireMember(String token) {
@@ -436,5 +601,6 @@ public class CompanyService {
         Set<String> perms = sessionTokenService.extractPermissions(token);
         return perms != null && perms.contains(ADMIN_PERMISSION);
     }
-}
 
+    private record RefundJob(String transactionId, java.math.BigDecimal amount) {}
+}

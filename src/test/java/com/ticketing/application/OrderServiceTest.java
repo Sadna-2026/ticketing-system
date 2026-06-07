@@ -51,9 +51,7 @@ import com.ticketing.domain.gateway.TicketRequest;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
 import com.ticketing.domain.order.OrderStatus;
-import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.domain.services.OrderTimeDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
@@ -91,10 +89,8 @@ public class OrderServiceTest {
                 "01234567890123456789012345678901".getBytes(StandardCharsets.UTF_8));
         sessionService = new SessionTokenService(secret, 120, new InMemorySessionTokenRepository());
 
-        TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock);
         OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
-        orderService = new OrderService(sessionService, ticketReservationDomainService, orderCheckoutDomainService, null, orderTimeDomainService, null);
+        orderService = new OrderService(sessionService, orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null, orderTimeDomainService, null);
 
         guestToken = sessionService.generateGuestToken();
         setUpPublishedEvent();
@@ -546,9 +542,7 @@ public class OrderServiceTest {
         primaryGateway.failIssue = true; // Primary fails
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
 
-        TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null);
+        OrderService failoverService = new OrderService(sessionService, orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
@@ -570,9 +564,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway secondaryGateway = new TestTicketSupplyGateway();
         secondaryGateway.failIssue = true;
 
-        TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null);
+        OrderService failoverService = new OrderService(sessionService, orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway, secondaryGateway), clock, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
@@ -595,9 +587,7 @@ public class OrderServiceTest {
         TestTicketSupplyGateway primaryGateway = new TestTicketSupplyGateway();
         primaryGateway.partialIssue = true; // Returns true with empty success code instead of total success
 
-        TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway), clock);
-        OrderService partialService = new OrderService(sessionService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null);
+        OrderService partialService = new OrderService(sessionService, orderRepo, eventRepo, memberRepo, List.of(paymentGateway), List.of(primaryGateway), clock, null, null, null);
 
         UUID orderId = partialService.createOrder(guestToken, eventId);
         partialService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
@@ -685,9 +675,7 @@ public class OrderServiceTest {
         primaryPayment.failCharges = true;
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
 
-        TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null);
+        OrderService failoverService = new OrderService(sessionService, orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
@@ -707,9 +695,7 @@ public class OrderServiceTest {
         TestPaymentGateway secondaryPayment = new TestPaymentGateway();
         secondaryPayment.failCharges = true;
 
-        TicketReservationDomainService ticketReservationDomainService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutDomainService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock);
-        OrderService failoverService = new OrderService(sessionService, ticketReservationDomainService, orderCheckoutDomainService, null, null, null);
+        OrderService failoverService = new OrderService(sessionService, orderRepo, eventRepo, memberRepo, List.of(primaryPayment, secondaryPayment), List.of(ticketSupplyGateway), clock, null, null, null);
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
