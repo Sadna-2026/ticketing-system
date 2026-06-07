@@ -3,6 +3,9 @@ package com.ticketing.application.services;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.ticketing.application.SelectionRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
@@ -18,6 +21,8 @@ import com.ticketing.domain.services.QueueDomainService;
 
 @org.springframework.stereotype.Service
 public class OrderService {
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
     private final ISessionTokenService sessionTokenService;
     private final TicketReservationDomainService ticketReservationDomainService;
     private final OrderCheckoutDomainService orderCheckoutDomainService;
@@ -215,7 +220,10 @@ public class OrderService {
     @org.springframework.scheduling.annotation.Scheduled(fixedRate = 10_000)
     public void expireOrders() {
         if (orderTimeDomainService != null) {
-            orderTimeDomainService.expireOrders();
+            int expiredCount = orderTimeDomainService.expireOrders();
+            if (expiredCount > 0) {
+                log.info("Expired {} orders", expiredCount);
+            }
         }
     }
 
