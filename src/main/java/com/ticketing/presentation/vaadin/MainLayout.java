@@ -66,6 +66,11 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
 
     static List<NavigationItem> navigationItems(SessionContext.UiState session) {
         List<NavigationItem> items = new ArrayList<>();
+        if (session.noSession()) {
+            items.add(new NavigationItem("Auth", AuthView.class));
+            return List.copyOf(items);
+        }
+
         items.add(new NavigationItem("Home", HomeView.class));
         items.add(new NavigationItem("Auth", AuthView.class));
         items.add(new NavigationItem("Events", EventsView.class));
