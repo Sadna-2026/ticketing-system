@@ -32,6 +32,7 @@ import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -521,6 +522,84 @@ public class CompanyPresenter {
             return EventActionResult.created("Event created.", eventId);
         } catch (RuntimeException ex) {
             return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    // ── Visual hall designer (FIX-V2-25) ────────────────────────────
+
+    /** Creates a DRAFT event from zones the visual designer derived from painted cells. */
+    public EventActionResult createDesignedEvent(
+            String companyName, String name, String description, EventCategory category,
+            Instant startTime, Instant endTime, Instant doorsOpenTime, Integer lockMinutes,
+            List<CreateEventRequest.ZoneSpec> zones, Map<String, String> sectionToZoneName) {
+        String token = memberToken();
+        if (token == null) {
+            return EventActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (category == null) {
+            return EventActionResult.failure("Event category is required.");
+        }
+        if (lockMinutes == null || lockMinutes <= 0) {
+            return EventActionResult.failure("Lock minutes must be positive.");
+        }
+        if (zones == null || zones.isEmpty()) {
+            return EventActionResult.failure("Design at least one seat or general-admission area.");
+        }
+        String normalizedCompanyName = blankToNull(companyName);
+        if (normalizedCompanyName == null) {
+            return EventActionResult.failure("Company name is required.");
+        }
+        String normalizedEventName = blankToNull(name);
+        if (normalizedEventName == null) {
+            return EventActionResult.failure("Event name is required.");
+        }
+        try {
+            CreateEventRequest request = new CreateEventRequest(
+                    normalizedCompanyName, normalizedEventName, blankToNull(description), category,
+                    new EventSchedule(startTime, endTime, doorsOpenTime),
+                    new LockTimerDuration(Duration.ofMinutes(lockMinutes)),
+                    zones, sectionToZoneName);
+            UUID eventId = eventService.createEvent(token, request);
+            return EventActionResult.created("Event created as draft.", eventId);
+        } catch (RuntimeException ex) {
+            return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    /** Saves the visual grid layout on a DRAFT event ("save draft"). */
+    public ActionResult setEventLayout(UUID eventId, VenueLayout layout) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        if (layout == null) {
+            return ActionResult.failure("Layout is required.");
+        }
+        try {
+            eventService.setEventLayout(token, eventId, layout);
+            return ActionResult.success("Hall layout saved.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    /** Validates the event's saved layout before publishing. */
+    public ActionResult validateEventLayout(UUID eventId) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            eventService.validateEventLayout(token, eventId);
+            return ActionResult.success("Layout is valid.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
         }
     }
 

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -14,6 +15,7 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventCategory;
+import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.components.SeatMapComponent;
@@ -31,6 +33,7 @@ import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.details.Details;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
@@ -316,6 +319,67 @@ public class EventsView extends VerticalLayout {
             zones.add(zoneDetails(zone));
         }
         mapDisplay.add(zones);
+
+        if (eventMap.layout() != null && !eventMap.layout().cells().isEmpty()) {
+            mapDisplay.add(renderLayoutGrid(eventMap.layout()));
+        }
+    }
+
+    private Component renderLayoutGrid(EventMapDTO.LayoutInfo layout) {
+        Div gridBox = new Div();
+        gridBox.getStyle()
+                .set("display", "grid")
+                .set("grid-template-columns", "repeat(" + layout.cols() + ", 26px)")
+                .set("gap", "2px")
+                .set("margin-top", "var(--lumo-space-s)");
+        Map<Long, EventMapDTO.CellInfo> byPos = new HashMap<>();
+        for (EventMapDTO.CellInfo cell : layout.cells()) {
+            byPos.put((long) cell.row() * layout.cols() + cell.col(), cell);
+        }
+        for (int r = 0; r < layout.rows(); r++) {
+            for (int c = 0; c < layout.cols(); c++) {
+                EventMapDTO.CellInfo cell = byPos.get((long) r * layout.cols() + c);
+                Div d = new Div();
+                d.getStyle()
+                        .set("width", "26px").set("height", "26px")
+                        .set("border", "1px solid var(--lumo-contrast-20pct)")
+                        .set("font-size", "10px").set("text-align", "center")
+                        .set("line-height", "26px").set("color", "white");
+                if (cell == null) {
+                    d.getStyle().set("background", "var(--lumo-contrast-5pct)");
+                } else {
+                    d.setText(glyphFor(cell.type()));
+                    d.getStyle().set("background", colorFor(cell.type()));
+                    if (cell.label() != null) {
+                        d.setTitle(cell.label());
+                    }
+                }
+                gridBox.add(d);
+            }
+        }
+        VerticalLayout box = new VerticalLayout(new H4("Hall layout"), gridBox);
+        box.setPadding(false);
+        return box;
+    }
+
+    private static String glyphFor(LayoutCellType type) {
+        return switch (type) {
+            case SEAT -> "S";
+            case GENERAL_ADMISSION -> "G";
+            case BLOCKED -> "X";
+            case STAGE -> "ST";
+            case OBJECT -> "O";
+        };
+    }
+
+    private static String colorFor(LayoutCellType type) {
+        return switch (type) {
+            case SEAT -> "#1976d2";
+            case GENERAL_ADMISSION -> "#2e7d32";
+            case BLOCKED -> "#616161";
+            case STAGE -> "#6a1b9a";
+            case OBJECT -> "#ef6c00";
+        };
     }
 
     private Details zoneDetails(EventMapDTO.ZoneInfo zone) {

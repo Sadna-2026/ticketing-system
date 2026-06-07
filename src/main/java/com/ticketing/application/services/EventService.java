@@ -36,10 +36,12 @@ import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.MaxCompositeDiscount;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.SumCompositeDiscount;
+import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.lottery.ILotteryRepository;
@@ -634,7 +636,97 @@ public class EventService {
                 event.getCompanyName(),
                 event.getStatus(),
                 event.getVenueMap().getSectionToZone(),
-                zoneDtos));
+                zoneDtos,
+                toLayoutInfo(event.getVenueLayout())));
+    }
+
+    // ── Visual hall layout (FIX-V2-25) ──────────────────────────────
+
+    /**
+     * Saves a visual grid layout for a DRAFT event ("save draft"). Validates that every
+     * sellable cell points at a real zone/seat before persisting. DRAFT-only is enforced
+     * by {@link Event#setVenueLayout}.
+     */
+    public void setEventLayout(String token, UUID eventId, VenueLayout layout) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        if (layout == null) throw new IllegalArgumentException("layout is required");
+        UUID memberId = authenticateMember(token);
+        synchronized (lockFor(eventId)) {
+            Event event = eventRepository.findById(eventId)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+            Company company = loadActiveCompany(event.getCompanyName());
+            StaffAppointment appt = loadAppointment(memberId, company.getName());
+            authorizeMapDefinition(appt);
+            validateLayoutReferences(event, layout);
+            event.setVenueLayout(layout);
+            saveEvent(event);
+            log.info("Event layout saved: eventId={}, grid={}x{}, cells={}",
+                    eventId, layout.getRows(), layout.getCols(), layout.getCells().size());
+        }
+    }
+
+    /**
+     * Validates the event's saved layout (used by the "Validate" action before publishing).
+     * Throws {@link IllegalStateException} with the reason if the layout is missing, empty,
+     * or references unknown zones/seats.
+     */
+    public void validateEventLayout(String token, UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId is required");
+        UUID memberId = authenticateMember(token);
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        authorizeMapDefinition(appt);
+        VenueLayout layout = event.getVenueLayout();
+        if (layout == null) {
+            throw new IllegalStateException("No layout has been saved for this event");
+        }
+        if (!layout.hasSellableCell()) {
+            throw new IllegalStateException("Layout must contain at least one seat or general-admission area");
+        }
+        validateLayoutReferences(event, layout);
+    }
+
+    private void validateLayoutReferences(Event event, VenueLayout layout) {
+        Set<UUID> zoneIds = new HashSet<>();
+        Set<UUID> seatIds = new HashSet<>();
+        for (InventoryZone z : event.getZones()) {
+            zoneIds.add(z.getId());
+            if (z.isAssigned()) {
+                for (Seat s : z.getSeats()) {
+                    seatIds.add(s.getId());
+                }
+            }
+        }
+        for (LayoutCell cell : layout.getCells()) {
+            if (cell.getZoneId() != null && !zoneIds.contains(cell.getZoneId())) {
+                throw new IllegalArgumentException("Layout references unknown zone: " + cell.getZoneId());
+            }
+            if (cell.getSeatId() != null && !seatIds.contains(cell.getSeatId())) {
+                throw new IllegalArgumentException("Layout references unknown seat: " + cell.getSeatId());
+            }
+        }
+    }
+
+    private void authorizeMapDefinition(StaffAppointment appt) {
+        boolean allowed = appt.isOwner()
+                || (appt.isManager() && appt.hasPermission(ManagerPermission.MAP_DEFINITION));
+        if (!allowed) {
+            throw new SecurityException("Map definition requires MAP_DEFINITION permission");
+        }
+    }
+
+    private static EventMapDTO.LayoutInfo toLayoutInfo(VenueLayout layout) {
+        if (layout == null) {
+            return null;
+        }
+        List<EventMapDTO.CellInfo> cells = new ArrayList<>();
+        for (LayoutCell c : layout.getCells()) {
+            cells.add(new EventMapDTO.CellInfo(
+                    c.getRow(), c.getCol(), c.getType(), c.getLabel(), c.getZoneId(), c.getSeatId()));
+        }
+        return new EventMapDTO.LayoutInfo(layout.getRows(), layout.getCols(), cells);
     }
 
     // ── Search (inlined from EventSearchDomainService) ──────────────

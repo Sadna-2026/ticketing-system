@@ -30,6 +30,7 @@ public class Event{
     private LockTimerDuration lockTimerDuration;
     private final List<InventoryZone> zones;
     private VenueMap venueMap;
+    private VenueLayout venueLayout;
   
     private IPurchasePolicy purchasePolicy;
     private IDiscountPolicy discountPolicy;
@@ -272,6 +273,24 @@ public class Event{
 
     public VenueMap getVenueMap() {
         return venueMap;
+    }
+
+    /**
+     * Attaches the visual grid layout. DRAFT-only (a structural change), so managers
+     * can iterate on the hall design and the layout is locked once published.
+     * Referential integrity (cells point at real zones/seats) is enforced by the
+     * application layer before this is called.
+     */
+    public void setVenueLayout(VenueLayout layout) {
+        validateModifiable();
+        if (layout == null) {
+            throw new IllegalArgumentException("VenueLayout cannot be null");
+        }
+        this.venueLayout = layout;
+    }
+
+    public VenueLayout getVenueLayout() {
+        return venueLayout;
     }
 
 }
