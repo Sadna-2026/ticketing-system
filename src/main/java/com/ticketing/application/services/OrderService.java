@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.ISystemClock;
 import com.ticketing.application.SelectionRequest;
@@ -49,7 +50,19 @@ import com.ticketing.domain.queue.QueueEntry;
 import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.domain.services.OrderTimeDomainService;
 
+/**
+ * Application service for orders, checkout and the virtual queue.
+ *
+ * <p>V3-10 (#268): each public use-case method is one atomic, isolated transaction.
+ * The class is {@code @Transactional(readOnly = true)} so query use cases run in a
+ * read-only transaction by default; mutating use cases override this with a
+ * read-write {@code @Transactional}. In {@code jpa} mode the auto-configured
+ * {@code JpaTransactionManager} commits the unit at the method boundary and rolls
+ * back on any thrown exception; in {@code memory} mode (no Spring proxy in unit
+ * tests) the annotations are inert and behavior is unchanged.
+ */
 @org.springframework.stereotype.Service
+@Transactional(readOnly = true)
 public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
@@ -97,6 +110,7 @@ public class OrderService {
 
     // ── Order creation & ticket reservation ─────────────────────────
 
+    @Transactional
     public UUID createOrder(String token, UUID eventId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -105,6 +119,7 @@ public class OrderService {
         return findOrCreateActiveOrder(sessionId, memberId, eventId).getId();
     }
 
+    @Transactional
     public UUID addSeatToOrder(String token, UUID eventId, UUID zoneId, UUID seatId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -118,6 +133,7 @@ public class OrderService {
                         List.of())).get(0);
     }
 
+    @Transactional
     public UUID addGATicketsToOrder(String token, UUID eventId, UUID zoneId, int quantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -131,6 +147,7 @@ public class OrderService {
                         List.of(new com.ticketing.domain.order.SelectionRequest.GAPick(zoneId, quantity)))).get(0);
     }
 
+    @Transactional
     public List<UUID> addSelectionToOrder(String token, SelectionRequest request) {
         validateToken(token);
         if (request == null)
@@ -150,6 +167,7 @@ public class OrderService {
         return addSelectionToOrder(sessionId, order, domainRequest);
     }
 
+    @Transactional
     public void removeItemFromOrder(String token, UUID itemId) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -177,6 +195,7 @@ public class OrderService {
         log.info("Item removed from order: orderId={}, itemId={}", order.getId(), itemId);
     }
 
+    @Transactional
     public void updateGAQuantity(String token, UUID zoneId, int newQuantity) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -195,6 +214,7 @@ public class OrderService {
         log.info("GA quantity updated: orderId={}, zoneId={}", order.getId(), zoneId);
     }
 
+    @Transactional
     public void cancelOrder(String token) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -217,6 +237,11 @@ public class OrderService {
         log.info("Order cancelled: orderId={}", order.getId());
     }
 
+    // Read-WRITE despite being a "get": getActiveOrder(sessionId, memberId) lazily
+    // reconciles the session/member id and releases inventory for an expired order,
+    // so this use case must run in a read-write transaction (not the class-level
+    // readOnly default) or those writes would fail to flush in jpa mode.
+    @Transactional
     public ActiveOrderDto getActiveOrder(String token) {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -237,6 +262,24 @@ public class OrderService {
 
     // ── Checkout ────────────────────────────────────────────────────
 
+    /**
+     * Checkout use case (V3-10 / #268): one atomic DB transaction wrapping all the
+     * persistent work — order status transition, inventory sell-down and the
+     * {@link CompletedPurchase} insert. In {@code jpa} mode the auto-configured
+     * transaction manager commits this unit only if the method returns normally.
+     *
+     * <p>EXTERNAL compensation is unchanged and independent of the DB transaction:
+     * {@code processCheckout} charges the payment gateway and issues tickets through
+     * the supply gateway, and on a supply failure it already refunds the payment
+     * (external side effect) before throwing. When that {@link IllegalStateException}
+     * propagates out of this method, Spring rolls back the DB transaction, so the
+     * partial DB writes done in the {@code catch} block ({@code saveOrder}/
+     * {@code saveEvent}) are discarded and the DB shows no partial sale — while the
+     * already-executed external refund/cancel remains in effect. The failure path is
+     * verified to actually re-throw (it does), so no explicit
+     * {@code setRollbackOnly()} is required.
+     */
+    @Transactional
     public UUID checkout(String token, String couponCode) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
@@ -290,6 +333,7 @@ public class OrderService {
         return purchase.purchaseId();
     }
 
+    @Transactional
     public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
         List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
         for (CompletedPurchase purchase : purchases) {
@@ -322,6 +366,7 @@ public class OrderService {
 
     // ── Virtual Queue methods ──────────────────────────────────────────
 
+    @Transactional
     public UUID createQueue(String token, UUID eventId, int threshold, int flowRate) {
         validateToken(token);
 
@@ -343,6 +388,7 @@ public class OrderService {
         return queue.getId();
     }
 
+    @Transactional
     public QueueEntryDto tryEnterOrQueue(UUID eventId, UUID sessionId) {
         log.info("Try enter or queue: eventId={}, sessionId={}", eventId, sessionId);
 
@@ -363,6 +409,7 @@ public class OrderService {
         }
     }
 
+    @Transactional
     public List<QueueEntryDto> admitNextBatch(String token, UUID eventId) {
         validateToken(token);
         VirtualQueue queue = findQueueByEvent(eventId);
@@ -374,6 +421,7 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional
     public void userLeft(UUID eventId) {
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue != null) {
@@ -382,6 +430,7 @@ public class OrderService {
         }
     }
 
+    @Transactional
     public void updateQueueConfig(String token, UUID eventId, int threshold, int flowRate) {
         validateToken(token);
         VirtualQueue queue = findQueueByEvent(eventId);
@@ -390,6 +439,7 @@ public class OrderService {
         log.info("Queue config updated: eventId={}", eventId);
     }
 
+    @Transactional
     public void flushQueue(String token, UUID eventId) {
         validateToken(token);
         VirtualQueue queue = findQueueByEvent(eventId);
@@ -411,6 +461,7 @@ public class OrderService {
     }
 
     @org.springframework.scheduling.annotation.Scheduled(fixedRate = 10_000)
+    @Transactional
     public void expireOrders() {
         if (orderTimeDomainService != null) {
             orderTimeDomainService.expireOrders();
@@ -419,6 +470,7 @@ public class OrderService {
 
     // ── Reservation internals ───────────────────────────────────────
 
+    @Transactional
     public ActiveOrder findOrCreateActiveOrder(UUID sessionId, UUID memberId, UUID eventId) {
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
@@ -443,6 +495,7 @@ public class OrderService {
         return order;
     }
 
+    @Transactional
     public ActiveOrder getActiveOrder(UUID sessionId, UUID memberId) {
         ActiveOrder order = null;
         if (memberId != null) {
@@ -472,6 +525,7 @@ public class OrderService {
         return order;
     }
 
+    @Transactional
     public ActiveOrder getValidatedActiveOrder(UUID sessionId, UUID memberId) {
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) throw new IllegalArgumentException("No active order found");
@@ -479,6 +533,7 @@ public class OrderService {
         return order;
     }
 
+    @Transactional
     public List<UUID> addSelectionToOrder(UUID sessionId, ActiveOrder order, com.ticketing.domain.order.SelectionRequest request) {
         rejectIfMemberSuspended(order.getMemberId());
         validateOrderOwnership(sessionId, order);

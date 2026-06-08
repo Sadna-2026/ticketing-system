@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
@@ -54,7 +55,16 @@ import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 
+/**
+ * Application service for event lifecycle, inventory, policies and the lottery.
+ *
+ * <p>V3-10 (#268): each public use-case method is one atomic transaction. The class
+ * default is {@code @Transactional(readOnly = true)} (queries); mutating use cases
+ * override it with a read-write {@code @Transactional}. Inert in {@code memory}-mode
+ * unit tests that build the service with {@code new} (no Spring proxy).
+ */
 @org.springframework.stereotype.Service
+@Transactional(readOnly = true)
 public class EventService {
 
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
@@ -148,6 +158,7 @@ public class EventService {
 
     // ── Event CRUD ──────────────────────────────────────────────────
 
+    @Transactional
     public UUID createEvent(String token, CreateEventRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
@@ -194,6 +205,7 @@ public class EventService {
         return event.getId();
     }
 
+    @Transactional
     public void cancelEvent(String token, UUID eventId) {
         if (eventId == null) {
             log.warn("Event cancellation denied: missing eventId");
@@ -232,6 +244,7 @@ public class EventService {
         }
     }
 
+    @Transactional
     public void publishEvent(String token, UUID eventId) {
         if (eventId == null) {
             log.warn("Event publishing denied: missing eventId");
@@ -255,6 +268,7 @@ public class EventService {
         saveEvent(event);
     }
 
+    @Transactional
     public EventDetailsDTO editEvent(String token, EditEventRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
@@ -306,6 +320,7 @@ public class EventService {
 
     // ── Lottery ─────────────────────────────────────────────────────
 
+    @Transactional
     public LotteryRegistrationResponse registerForLottery(String token, LotteryRegistrationRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
@@ -348,6 +363,7 @@ public class EventService {
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
+    @Transactional
     public List<ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
@@ -423,6 +439,7 @@ public class EventService {
 
     // ── Event-scoped purchase policy ────────────────────────────────
 
+    @Transactional
     public void setEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
@@ -438,6 +455,7 @@ public class EventService {
         saveEvent(event);
     }
 
+    @Transactional
     public void removeEventPurchasePolicy(String token, UUID eventId) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
@@ -451,6 +469,7 @@ public class EventService {
         saveEvent(event);
     }
 
+    @Transactional
     public void addEventPurchasePolicy(String token, UUID eventId, IPurchasePolicy policy, boolean useOr) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
@@ -472,6 +491,7 @@ public class EventService {
 
     // ── Event-scoped discount policy ────────────────────────────────
 
+    @Transactional
     public void setEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
@@ -487,6 +507,7 @@ public class EventService {
         saveEvent(event);
     }
 
+    @Transactional
     public void removeEventDiscountPolicy(String token, UUID eventId) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
@@ -500,6 +521,7 @@ public class EventService {
         saveEvent(event);
     }
 
+    @Transactional
     public void addEventDiscountPolicy(String token, UUID eventId, IDiscountPolicy policy, boolean useStacking) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
@@ -533,6 +555,7 @@ public class EventService {
 
     // ── Inventory management ────────────────────────────────────────
 
+    @Transactional
     public void addSeatsToZone(String token, UUID eventId, UUID zoneId,
             List<CreateEventRequest.SeatSpec> seats) {
         if (seats == null || seats.isEmpty()) {
@@ -555,6 +578,7 @@ public class EventService {
         }
     }
 
+    @Transactional
     public void removeSeats(String token, UUID eventId, UUID zoneId,
             List<UUID> seatIds) {
         if (seatIds == null || seatIds.isEmpty()) {
@@ -576,6 +600,7 @@ public class EventService {
         }
     }
 
+    @Transactional
     public void increaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
         if (eventId == null) {
             log.warn("Invalid eventId: {}", eventId);
@@ -591,6 +616,7 @@ public class EventService {
         }
     }
 
+    @Transactional
     public void decreaseGACapacity(String token, UUID eventId, UUID zoneId, int delta) {
         if (eventId == null) {
             log.warn("Invalid eventId: {}", eventId);
@@ -606,6 +632,7 @@ public class EventService {
         }
     }
 
+    @Transactional
     public void setZonePrice(String token, UUID eventId, UUID zoneId,
             java.math.BigDecimal newPrice) {
         if (eventId == null) {
@@ -664,6 +691,7 @@ public class EventService {
      * sellable cell points at a real zone/seat before persisting. DRAFT-only is enforced
      * by {@link Event#setVenueLayout}.
      */
+    @Transactional
     public void setEventLayout(String token, UUID eventId, VenueLayout layout) {
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
         if (layout == null) throw new IllegalArgumentException("layout is required");

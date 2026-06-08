@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.MemberSummaryDTO;
@@ -32,7 +33,14 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
+/**
+ * Application service for system-admin use cases.
+ *
+ * <p>V3-10 (#268): class default {@code @Transactional(readOnly = true)} for queries;
+ * mutating use cases override with read-write {@code @Transactional}.
+ */
 @Service
+@Transactional(readOnly = true)
 public class AdminService {
 
     private static final String ADMIN_PERMISSION = "SYSTEM_ADMIN";
@@ -74,6 +82,7 @@ public class AdminService {
         this.notificationService = notificationService;
     }
 
+    @Transactional
     public boolean registerAdmin(UUID adminId, String username, String email, String password) {
         if (adminId == null) {
             throw new IllegalArgumentException("adminId is required");
@@ -101,6 +110,7 @@ public class AdminService {
         return true;
     }
 
+    @Transactional
     public LoginResponse adminLogin(LoginRequest request, String guestToken) {
         if (request == null
                 || request.username() == null || request.username().isBlank()
@@ -141,6 +151,7 @@ public class AdminService {
         return LoginResponse.success(adminAsDto, adminToken);
     }
 
+    @Transactional
     public synchronized void removeMember(String adminToken, UUID targetMemberId) {
         log.info("Admin remove member requested: targetMemberId={}", targetMemberId);
         if (!isAdmin(adminToken)) {
@@ -177,6 +188,7 @@ public class AdminService {
         log.info("Admin remove member completed: targetMemberId={}", targetMemberId);
     }
 
+    @Transactional
     public Suspension suspendUser(String adminToken, UUID targetMemberId,
             Duration duration, String reason) {
         log.info("Admin suspend user requested: targetMemberId={}, permanent={}", targetMemberId, duration == null);
@@ -202,6 +214,7 @@ public class AdminService {
         return suspension;
     }
 
+    @Transactional
     public void cancelSuspension(String adminToken, UUID targetMemberId,
             UUID suspensionId) {
         log.info("Admin cancel suspension requested: targetMemberId={}, suspensionId={}", targetMemberId, suspensionId);
