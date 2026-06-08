@@ -1,11 +1,22 @@
 package com.ticketing.domain.event;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+
 /**
  * Rejects purchases when the total ticket count exceeds the allowed maximum.
  */
-public class MaxQuantityPolicy implements IPurchasePolicy {
+@Entity
+@DiscriminatorValue("MAX_QUANTITY")
+public class MaxQuantityPolicy extends AbstractPurchasePolicy {
 
-    private final int maxTickets;
+    @Column(name = "max_tickets")
+    private int maxTickets;
+
+    // Required by JPA; do not use directly.
+    protected MaxQuantityPolicy() {
+    }
 
     public MaxQuantityPolicy(int maxTickets) {
         if (maxTickets <= 0) throw new IllegalArgumentException("maxTickets must be positive");

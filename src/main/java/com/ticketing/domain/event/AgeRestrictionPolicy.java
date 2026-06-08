@@ -3,13 +3,24 @@ package com.ticketing.domain.event;
 import java.time.LocalDate;
 import java.time.Period;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+
 /**
  * Rejects purchases when the buyer is below the required minimum age.
  * Guest purchases (null dateOfBirth) are rejected — age cannot be verified.
  */
-public class AgeRestrictionPolicy implements IPurchasePolicy {
+@Entity
+@DiscriminatorValue("AGE_RESTRICTION")
+public class AgeRestrictionPolicy extends AbstractPurchasePolicy {
 
-    private final int minimumAge;
+    @Column(name = "minimum_age")
+    private int minimumAge;
+
+    // Required by JPA; do not use directly.
+    protected AgeRestrictionPolicy() {
+    }
 
     public AgeRestrictionPolicy(int minimumAge) {
         if (minimumAge < 0) throw new IllegalArgumentException("minimumAge cannot be negative");
