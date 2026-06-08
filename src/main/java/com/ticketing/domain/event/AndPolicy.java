@@ -26,6 +26,7 @@ public class AndPolicy extends AbstractPurchasePolicy {
 
     @OneToMany(targetEntity = AbstractPurchasePolicy.class,
             cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @jakarta.persistence.OrderColumn(name = "child_order")
     @JoinTable(name = "and_policy_children",
             joinColumns = @jakarta.persistence.JoinColumn(name = "parent_id"),
             inverseJoinColumns = @jakarta.persistence.JoinColumn(name = "child_id"))
