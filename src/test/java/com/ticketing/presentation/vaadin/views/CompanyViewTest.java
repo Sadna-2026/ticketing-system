@@ -348,6 +348,38 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenOwnerAndCompany_WhenLoadSalesReportClicked_ThenReportTotalsAreDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID memberId = UUID.randomUUID();
+        PurchaseRecordDTO purchase = purchase(memberId);
+        SalesReportDTO report = new SalesReportDTO("Acme", memberId, List.of(purchase), new BigDecimal("80.00"), 1);
+        when(presenter.loadSalesReport("Acme")).thenReturn(SalesReportResult.success("Sales report loaded.", report));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Reporting company name").setValue(company("Acme"));
+
+        clickButton(view, "Load sales report");
+
+        verify(presenter).loadSalesReport("Acme");
+        assertTrue(hasText(view, "Sales report loaded."));
+        assertTrue(hasText(view, "Total purchases: 1"));
+        assertTrue(hasText(view, "Total revenue: 80.00"));
+    }
+
+    @Test
+    void GivenInsufficientPermissions_WhenLoadSalesReportClicked_ThenFailureReasonIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadSalesReport("Acme")).thenReturn(SalesReportResult.failure(
+                "Viewing sales report requires Owner role or (Manager + VIEW_REPORTS permission)"));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Reporting company name").setValue(company("Acme"));
+
+        clickButton(view, "Load sales report");
+
+        verify(presenter).loadSalesReport("Acme");
+        assertTrue(hasText(view, "Viewing sales report requires Owner role or (Manager + VIEW_REPORTS permission)"));
+    }
+
+    @Test
     void GivenManagerRoleWithPermissions_WhenOfferRoleAppointmentClicked_ThenSuccessMessageIsDisplayed() {
         CompanyPresenter presenter = mockPresenter();
         UUID targetId = UUID.randomUUID();
