@@ -348,6 +348,40 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenManagerRoleWithPermissions_WhenOfferRoleAppointmentClicked_ThenSuccessMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID targetId = UUID.randomUUID();
+        when(presenter.offerRoleAppointment(eq("Acme"), eq(targetId), eq(StaffAppointment.StaffRole.MANAGER), any()))
+                .thenReturn(ActionResult.success("Role appointment offer sent."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+        findTextField(view, "Target member ID").setValue(targetId.toString());
+        findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.PERSONNEL_MGMT));
+
+        clickButton(view, "Offer role appointment");
+
+        verify(presenter).offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER,
+                Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.PERSONNEL_MGMT));
+        assertTrue(hasText(view, "Role appointment offer sent."));
+    }
+
+    @Test
+    void GivenTargetAlreadyOwner_WhenOfferRoleAppointmentClicked_ThenFailureReasonFromServiceIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID targetId = UUID.randomUUID();
+        when(presenter.offerRoleAppointment(eq("Acme"), eq(targetId), eq(StaffAppointment.StaffRole.MANAGER), any()))
+                .thenReturn(ActionResult.failure("Target is already an owner of this company"));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+        findTextField(view, "Target member ID").setValue(targetId.toString());
+
+        clickButton(view, "Offer role appointment");
+
+        verify(presenter).offerRoleAppointment(eq("Acme"), eq(targetId), eq(StaffAppointment.StaffRole.MANAGER), any());
+        assertTrue(hasText(view, "Target is already an owner of this company"));
+    }
+
+    @Test
     void GivenOwnerDirectlyAppointedTarget_WhenOriginalOwnerClicksRevokePersonnel_ThenSuccessMessageIsDisplayed() {
         CompanyPresenter presenter = mockPresenter();
         UUID targetId = UUID.randomUUID();

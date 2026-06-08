@@ -333,6 +333,34 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenOwnerAndManagerTarget_WhenOfferingManagerAppointmentWithPermissions_ThenServiceIsCalledWithTokenAndPermissions() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+        Set<ManagerPermission> perms = Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.PERSONNEL_MGMT);
+
+        ActionResult result = presenter.offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER, perms);
+
+        assertTrue(result.success());
+        assertEquals("Role appointment offer sent.", result.message());
+        verify(companyService).offerRoleAppointment("member-token", "Acme", targetId,
+                StaffAppointment.StaffRole.MANAGER, perms);
+    }
+
+    @Test
+    void GivenTargetIsAlreadyOwner_WhenOfferingManagerAppointment_ThenFailureReasonIsReturned() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+        doThrow(new IllegalArgumentException("Target is already an owner of this company"))
+                .when(companyService).offerRoleAppointment(eq("member-token"), eq("Acme"), eq(targetId),
+                        eq(StaffAppointment.StaffRole.MANAGER), any());
+
+        ActionResult result = presenter.offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER, Set.of());
+
+        assertFalse(result.success());
+        assertEquals("Target is already an owner of this company", result.message());
+    }
+
+    @Test
     void GivenOwnerDirectlyAppointedTarget_WhenOriginalOwnerRevokes_ThenServiceIsCalledAndSuccessReturned() {
         memberSession();
         UUID targetId = UUID.randomUUID();
