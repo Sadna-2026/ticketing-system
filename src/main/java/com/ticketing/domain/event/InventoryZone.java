@@ -3,6 +3,17 @@ package com.ticketing.domain.event;
 import java.math.BigDecimal;
 import java.util.*;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+
 /**
  * Entity within the Event aggregate.
  *
@@ -13,22 +24,47 @@ import java.util.*;
  * - GA zones: availableCount cannot exceed maxCapacity.
  * - Assigned zones: seats are individually managed.
  * - Price must be non-negative.
+ *
+ * <p>JPA mapping: mapped as an {@code @Entity} (it owns a seat collection). {@code seats}
+ * is a {@code @OneToMany(cascade=ALL, orphanRemoval=true)} to {@link Seat} and is loaded
+ * {@code LAZY} — an assigned zone can hold thousands of seats, so callers traverse them
+ * only inside a transaction. {@code final} was removed from {@code id}/{@code type}/{@code seats}
+ * so JPA can set them; the public API and static factories are unchanged.
  */
+@Entity
+@Table(name = "inventory_zones")
 public class InventoryZone {
 
-    private final UUID id;
+    @Id
+    @Column(name = "id")
+    private UUID id;
+    @Column(name = "name")
     private String name;
-    private final ZoneType type;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type")
+    private ZoneType type;
+    @Column(name = "price_per_ticket")
     private BigDecimal pricePerTicket;
 
     // GA fields
+    @Column(name = "max_capacity")
     private int maxCapacity;
+    @Column(name = "available_count")
     private int availableCount;
+    @Column(name = "locked_count")
     private int lockedCount;
+    @Column(name = "sold_count")
     private int soldCount;
 
     // Assigned seating fields
-    private final List<Seat> seats;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "zone_id")
+    private List<Seat> seats;
+
+    // Required by JPA; do not use directly.
+    protected InventoryZone() {
+        this.seats = new ArrayList<>();
+    }
 
     /**
      * Creates a General Admission zone.

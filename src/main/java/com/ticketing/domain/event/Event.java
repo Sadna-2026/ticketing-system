@@ -8,6 +8,21 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import jakarta.persistence.Version;
+
+@Entity
+@Table(name = "events")
 public class Event{
 
     /**
@@ -16,29 +31,66 @@ public class Event{
      * support lands (V2+), the default policy should be injected via the
      * constructor instead of read from this constant.
      */
+    @Transient
     public static final java.util.Currency DEFAULT_CURRENCY = java.util.Currency.getInstance("USD");
 
-    private final UUID id;
-    private final String companyName;
+    @Id
+    @Column(name = "id")
+    private UUID id;
+    @Column(name = "company_name")
+    private String companyName;
+    @Column(name = "name")
     private String name;
+    @Column(name = "description")
     private String description;
+    @Column(name = "artist")
     private String artist;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category")
     private EventCategory category;
+    @Column(name = "region")
     private String region;
+    @Embedded
     private EventSchedule schedule;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
     private EventStatus status;
+    @Embedded
     private LockTimerDuration lockTimerDuration;
-    private final List<InventoryZone> zones;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "event_id")
+    private List<InventoryZone> zones;
+    @Embedded
     private VenueMap venueMap;
+    @Embedded
     private VenueLayout venueLayout;
-  
+
+    // Policy hierarchies are mapped separately in V3-6 (#264); kept @Transient here and
+    // defaulted in the constructors so a reloaded Event is never null.
+    @Transient
     private IPurchasePolicy purchasePolicy;
+    @Transient
     private IDiscountPolicy discountPolicy;
 
-    private final SaleMethod saleMethod;
-    private final LotteryWindow lotteryWindow; // non-null only when saleMethod == LOTTERY
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sale_method")
+    private SaleMethod saleMethod;
+    // non-null only when saleMethod == LOTTERY. Embedded nullable; its instant columns
+    // are prefixed (lottery_*) so they don't clash with EventSchedule's instants.
+    @Embedded
+    private LotteryWindow lotteryWindow;
 
+    @Version
+    @Column(name = "version")
     private int version;
+
+    // Required by JPA; do not use directly. Defaults the @Transient policies so a
+    // reloaded Event never returns null from getPurchasePolicy()/getDiscountPolicy().
+    protected Event() {
+        this.zones = new ArrayList<>();
+        this.purchasePolicy = new AlwaysAllowPolicy();
+        this.discountPolicy = new NoDiscountPolicy();
+    }
 
     /**
      * Creates a new Event with required policies and sale method.

@@ -2,11 +2,30 @@ package com.ticketing.domain.event;
 
 import java.time.Instant;
 
-public final class EventSchedule {
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
 
-    private final Instant startTime;
-    private final Instant endTime;
-    private final Instant doorsOpenTime;
+/**
+ * Immutable value object: the event's start / end / doors-open instants.
+ *
+ * <p>Mapped as an {@code @Embeddable} embedded in {@link Event}. The {@code Instant}
+ * columns carry an explicit {@code schedule_*} prefix so they do not collide with the
+ * similarly-named instants on {@link LotteryWindow}. {@code final} was removed from the
+ * fields so JPA can set them via field access; the public API is unchanged.
+ */
+@Embeddable
+public class EventSchedule {
+
+    @Column(name = "schedule_start_time")
+    private Instant startTime;
+    @Column(name = "schedule_end_time")
+    private Instant endTime;
+    @Column(name = "schedule_doors_open_time")
+    private Instant doorsOpenTime;
+
+    // Required by JPA; do not use directly.
+    protected EventSchedule() {
+    }
 
     public EventSchedule(Instant startTime, Instant endTime, Instant doorsOpenTime) {
         if (startTime == null) throw new IllegalArgumentException("Start time is required");
