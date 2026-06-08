@@ -6,24 +6,13 @@ import java.time.Instant;
 
 import com.ticketing.domain.order.ActiveOrder;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.Entity;
-
 /**
  * A flat percentage discount applied unconditionally.
  * Example: "10% off the total price."
  */
-@Entity
-@DiscriminatorValue("SIMPLE")
-public class SimpleDiscount extends AbstractDiscountPolicy {
+public class SimpleDiscount implements IDiscountPolicy {
 
-    @Column(name = "percent_off")
-    private BigDecimal percentOff; // e.g. 10 means 10%
-
-    // Required by JPA; do not use directly.
-    protected SimpleDiscount() {
-    }
+    private final BigDecimal percentOff; // e.g. 10 means 10%
 
     public SimpleDiscount(BigDecimal percentOff) {
         if (percentOff == null || percentOff.compareTo(BigDecimal.ZERO) <= 0

@@ -6,29 +6,16 @@ import java.time.Instant;
 
 import com.ticketing.domain.order.ActiveOrder;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.Entity;
-
 /**
  * A percentage discount activated by a coupon code. The code must match exactly
  * (case-insensitive) and the coupon must not be expired at purchase time.
  * If the code is wrong or expired, the original price is returned.
  */
-@Entity
-@DiscriminatorValue("COUPON")
-public class CouponDiscount extends AbstractDiscountPolicy {
+public class CouponDiscount implements IDiscountPolicy {
 
-    @Column(name = "percent_off")
-    private BigDecimal percentOff;
-    @Column(name = "coupon_code")
-    private String couponCode;
-    @Column(name = "expires_at")
-    private Instant expiresAt;
-
-    // Required by JPA; do not use directly.
-    protected CouponDiscount() {
-    }
+    private final BigDecimal percentOff;
+    private final String couponCode;
+    private final Instant expiresAt;
 
     public CouponDiscount(BigDecimal percentOff, String couponCode, Instant expiresAt) {
         if (percentOff == null || percentOff.compareTo(BigDecimal.ZERO) <= 0
