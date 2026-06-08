@@ -312,8 +312,10 @@ class MemberBranchCoverageTest {
 
         assertTrue(owner.isOwner());
         assertTrue(owner.hasPermission(ManagerPermission.HANDLE_INQUIRIES));
-        assertThrows(IllegalStateException.class, owner::revoke);
         assertThrows(IllegalStateException.class, () -> owner.updateManagerPermissions(Set.of()));
+        owner.revoke();
+        assertFalse(owner.isActive());
+        assertThrows(IllegalStateException.class, owner::revoke);
 
         manager.updateAppointedBy(UUID.randomUUID());
         StaffAppointment copy = manager.detachedCopy();

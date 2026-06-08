@@ -107,7 +107,7 @@ public class StaffAppointment {
     }
 
     public boolean isOwner() {
-        return role == StaffRole.OWNER;
+        return role == StaffRole.OWNER && !revoked;
     }
 
     public boolean isManager() {
@@ -123,9 +123,6 @@ public class StaffAppointment {
     }
 
     public void revoke() {
-        if (isOwner()) {
-            throw new IllegalStateException("Cannot revoke an owner appointment.");
-        }
         if (revoked) {
             throw new IllegalStateException("Appointment is already revoked.");
         }
