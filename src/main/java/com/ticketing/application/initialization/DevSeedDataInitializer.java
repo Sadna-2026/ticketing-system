@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -27,11 +28,13 @@ import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
@@ -71,6 +74,9 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID SEAT_A1_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000001");
     public static final UUID SEAT_A2_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000002");
     public static final UUID SEAT_B1_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000003");
+    public static final UUID DESIGNER_DEMO_EVENT_ID = UUID.fromString("66666666-6666-6666-6666-666666666666");
+    public static final UUID DESIGNER_SEAT_ZONE_ID = UUID.fromString("66666666-0000-0000-0000-0000000000a1");
+    public static final UUID DESIGNER_GA_ZONE_ID = UUID.fromString("66666666-0000-0000-0000-0000000000a2");
 
     private final boolean initializePlatform;
     private final boolean seedEnabled;
@@ -214,6 +220,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 new BigDecimal("30.00"), 80);
         saveAssignedEventIfMissing();
         saveLargeAssignedEventIfMissing();
+        saveDesignerDemoEventIfMissing();
         saveGaEventIfMissing(CONFERENCE_EVENT_ID, SECOND_COMPANY_NAME, "Northwind Tech Summit",
                 "Second-company event with a max-quantity policy for permission and search QA.",
                 EventCategory.CONFERENCE, new MaxQuantityPolicy(4), CONFERENCE_GA_ZONE_ID, "Auditorium",
@@ -304,5 +311,72 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         event.publish();
         eventRepository.save(event);
         log.info("Seeded large assigned event '{}' with {} seats", event.getName(), rows * seatsPerRow);
+    }
+
+    // Event built the way the visual hall designer (FIX-V2-25) produces them: a mix of
+    // exact seats, a GA area, a stage, blocked aisle cells and an entrance object, with a
+    // VenueLayout so the buyer-facing event map renders the hall grid out of the box.
+    private void saveDesignerDemoEventIfMissing() {
+        if (eventRepository.findById(DESIGNER_DEMO_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(20));
+        Event event = new Event(DESIGNER_DEMO_EVENT_ID, COMPANY_NAME, "Designer Demo",
+                "Seeded hall built with the visual designer: seats + GA + stage + blocked + entrance.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new NoDiscountPolicy());
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+
+        // Reserved seating zone with 6 seats (A1-A3, B1-B3).
+        InventoryZone seating = InventoryZone.createAssigned(DESIGNER_SEAT_ZONE_ID, "Reserved Seating", new BigDecimal("120.00"));
+        Seat a1 = new Seat(UUID.randomUUID(), "A", "1");
+        Seat a2 = new Seat(UUID.randomUUID(), "A", "2");
+        Seat a3 = new Seat(UUID.randomUUID(), "A", "3");
+        Seat b1 = new Seat(UUID.randomUUID(), "B", "1");
+        Seat b2 = new Seat(UUID.randomUUID(), "B", "2");
+        Seat b3 = new Seat(UUID.randomUUID(), "B", "3");
+        seating.addSeat(a1);
+        seating.addSeat(a2);
+        seating.addSeat(a3);
+        seating.addSeat(b1);
+        seating.addSeat(b2);
+        seating.addSeat(b3);
+        event.addZone(seating);
+
+        // General-admission zone.
+        event.addZone(InventoryZone.createGA(DESIGNER_GA_ZONE_ID, "General Admission", new BigDecimal("50.00"), 200));
+
+        event.setVenueMap(new VenueMap(Map.of(
+                "Reserved Seating", DESIGNER_SEAT_ZONE_ID,
+                "General Admission", DESIGNER_GA_ZONE_ID)));
+
+        // 5x8 visual grid: stage (row 0), blocked aisle (row 1), seats (rows 2-3),
+        // entrance + GA (row 4).
+        List<LayoutCell> cells = List.of(
+                LayoutCell.stage(0, 3, "Main Stage"),
+                LayoutCell.stage(0, 4, "Main Stage"),
+                LayoutCell.blocked(1, 0),
+                LayoutCell.blocked(1, 1),
+                LayoutCell.blocked(1, 2),
+                LayoutCell.blocked(1, 3),
+                LayoutCell.seat(2, 1, DESIGNER_SEAT_ZONE_ID, a1.getId()),
+                LayoutCell.seat(2, 2, DESIGNER_SEAT_ZONE_ID, a2.getId()),
+                LayoutCell.seat(2, 3, DESIGNER_SEAT_ZONE_ID, a3.getId()),
+                LayoutCell.seat(3, 1, DESIGNER_SEAT_ZONE_ID, b1.getId()),
+                LayoutCell.seat(3, 2, DESIGNER_SEAT_ZONE_ID, b2.getId()),
+                LayoutCell.seat(3, 3, DESIGNER_SEAT_ZONE_ID, b3.getId()),
+                LayoutCell.object(4, 0, "Entrance"),
+                LayoutCell.ga(4, 5, DESIGNER_GA_ZONE_ID, "Floor"),
+                LayoutCell.ga(4, 6, DESIGNER_GA_ZONE_ID, "Floor"),
+                LayoutCell.ga(4, 7, DESIGNER_GA_ZONE_ID, "Floor"));
+        event.setVenueLayout(new VenueLayout(5, 8, cells));
+
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded designer-built event '{}' with a {}-cell hall layout", event.getName(), cells.size());
     }
 }
