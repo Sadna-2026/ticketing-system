@@ -2,6 +2,11 @@ package com.ticketing.domain.event;
 
 import java.util.UUID;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+
 /**
  * One cell in a visual {@link VenueLayout} grid.
  *
@@ -14,15 +19,31 @@ import java.util.UUID;
  *   <li>{@code BLOCKED}/{@code STAGE}/{@code OBJECT} — non-sellable; {@code zoneId}/{@code seatId} null,
  *       {@code label} optional (e.g. "Main Stage", "Entrance", "VIP").</li>
  * </ul>
+ *
+ * <p>Mapped as an {@code @Embeddable} (no nested collections) inside the
+ * {@link VenueLayout} {@code @ElementCollection}. {@code final} was removed from the
+ * fields so JPA can set them; the public API and static factories are unchanged.
  */
-public final class LayoutCell {
+@Embeddable
+public class LayoutCell {
 
-    private final int row;
-    private final int col;
-    private final LayoutCellType type;
-    private final String label;
-    private final UUID zoneId;
-    private final UUID seatId;
+    @Column(name = "cell_row")
+    private int row;
+    @Column(name = "cell_col")
+    private int col;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cell_type")
+    private LayoutCellType type;
+    @Column(name = "cell_label")
+    private String label;
+    @Column(name = "cell_zone_id")
+    private UUID zoneId;
+    @Column(name = "cell_seat_id")
+    private UUID seatId;
+
+    // Required by JPA; do not use directly.
+    protected LayoutCell() {
+    }
 
     public LayoutCell(int row, int col, LayoutCellType type, String label, UUID zoneId, UUID seatId) {
         if (row < 0 || col < 0) {

@@ -6,6 +6,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
+
 /**
  * A visual, grid-based description of a hall: a {@code rows × cols} grid where each
  * occupied {@link LayoutCell} is an exact seat, a general-admission area, a blocked
@@ -14,12 +21,32 @@ import java.util.Set;
  * <p>Immutable value object owned by an {@link Event}. It carries geometry only —
  * referential integrity against the event's real {@link InventoryZone}s/{@link Seat}s
  * is enforced by the application layer when the layout is attached.
+ *
+ * <p>Mapped as an {@code @Embeddable} embedded (nullable) in {@link Event}; the
+ * cells are an {@code @ElementCollection} of the {@link LayoutCell} embeddable.
+ * {@code final} was removed from the fields so JPA can set them via field access;
+ * the public API is unchanged.
  */
-public final class VenueLayout {
+@Embeddable
+public class VenueLayout {
 
-    private final int rows;
-    private final int cols;
-    private final List<LayoutCell> cells;
+    // Boxed so a fully-null embedded VenueLayout (an event with no layout) reloads as a
+    // null embeddable rather than failing to assign null to a primitive. The public
+    // getRows()/getCols() still return int (auto-unboxed).
+    @Column(name = "layout_rows")
+    private Integer rows;
+    @Column(name = "layout_cols")
+    private Integer cols;
+    @ElementCollection
+    @CollectionTable(
+            name = "venue_layout_cells",
+            joinColumns = @JoinColumn(name = "event_id"))
+    @OrderColumn(name = "cell_index")
+    private List<LayoutCell> cells;
+
+    // Required by JPA; do not use directly.
+    protected VenueLayout() {
+    }
 
     public VenueLayout(int rows, int cols, List<LayoutCell> cells) {
         if (rows <= 0 || cols <= 0) {
