@@ -445,6 +445,56 @@ class CompanyPresenterTest {
         assertEquals(List.of(event), presenter.searchBrowsableEvents());
     }
 
+    // ── UI-23: Define & edit purchase/discount policies ─────────────
+
+    @Test
+    void GivenMemberSession_WhenSettingCompanyPurchasePolicy_ThenServiceIsCalledWithTokenAndPolicy() {
+        memberSession();
+        com.ticketing.domain.event.AgeRestrictionPolicy policy = new com.ticketing.domain.event.AgeRestrictionPolicy(18);
+
+        ActionResult result = presenter.setCompanyPurchasePolicy("Acme", policy);
+
+        assertTrue(result.success());
+        assertEquals("Company purchase policy updated.", result.message());
+        verify(companyService).setCompanyPurchasePolicy("member-token", "Acme", policy);
+    }
+
+    @Test
+    void GivenBlankCompanyName_WhenSettingCompanyPurchasePolicy_ThenValidationFailureIsReturnedBeforeServiceCall() {
+        memberSession();
+
+        ActionResult result = presenter.setCompanyPurchasePolicy("   ", new com.ticketing.domain.event.AgeRestrictionPolicy(18));
+
+        assertFalse(result.success());
+        assertEquals("Company name is required.", result.message());
+        verifyNoInteractions(companyService);
+    }
+
+    @Test
+    void GivenMemberSession_WhenSettingCompanyDiscountPolicy_ThenServiceIsCalledWithTokenAndPolicy() {
+        memberSession();
+        com.ticketing.domain.event.SimpleDiscount policy = new com.ticketing.domain.event.SimpleDiscount(new BigDecimal("10"));
+
+        ActionResult result = presenter.setCompanyDiscountPolicy("Acme", policy);
+
+        assertTrue(result.success());
+        assertEquals("Company discount policy updated.", result.message());
+        verify(companyService).setCompanyDiscountPolicy("member-token", "Acme", policy);
+    }
+
+    @Test
+    void GivenInsufficientPermissions_WhenSettingCompanyDiscountPolicy_ThenFailureReasonIsReturned() {
+        memberSession();
+        com.ticketing.domain.event.SimpleDiscount policy = new com.ticketing.domain.event.SimpleDiscount(new BigDecimal("10"));
+        doThrow(new SecurityException("Insufficient permissions: POLICY_MODIFICATION required"))
+                .when(companyService).setCompanyDiscountPolicy("member-token", "Acme", policy);
+
+        ActionResult result = presenter.setCompanyDiscountPolicy("Acme", policy);
+
+        assertFalse(result.success());
+        assertEquals("Insufficient permissions: POLICY_MODIFICATION required", result.message());
+    }
+
     private void memberSession() {
         UUID memberId = UUID.randomUUID();
         SessionContext.setSessionToken("member-token");

@@ -471,6 +471,64 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Only non-founder owners may relinquish ownership."));
     }
 
+    // ── UI-23: Define & edit purchase/discount policies ─────────────
+
+    @Test
+    void GivenPolicyCompanySelected_WhenSetPurchasePolicyClicked_ThenSuccessMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.setCompanyPurchasePolicy(eq("Acme"), any()))
+                .thenReturn(ActionResult.success("Company purchase policy updated."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Policy company name").setValue(company("Acme"));
+
+        clickButton(view, "Set purchase policy");
+
+        verify(presenter).setCompanyPurchasePolicy(eq("Acme"), any());
+        assertTrue(hasText(view, "Company purchase policy updated."));
+    }
+
+    @Test
+    void GivenInsufficientPermissions_WhenSetPurchasePolicyClicked_ThenFailureReasonIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.setCompanyPurchasePolicy(eq("Acme"), any()))
+                .thenReturn(ActionResult.failure("Insufficient permissions: POLICY_MODIFICATION required"));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Policy company name").setValue(company("Acme"));
+
+        clickButton(view, "Set purchase policy");
+
+        verify(presenter).setCompanyPurchasePolicy(eq("Acme"), any());
+        assertTrue(hasText(view, "Insufficient permissions: POLICY_MODIFICATION required"));
+    }
+
+    @Test
+    void GivenPolicyCompanySelected_WhenSetDiscountPolicyClicked_ThenSuccessMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.setCompanyDiscountPolicy(eq("Acme"), any()))
+                .thenReturn(ActionResult.success("Company discount policy updated."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Policy company name").setValue(company("Acme"));
+
+        clickButton(view, "Set discount policy");
+
+        verify(presenter).setCompanyDiscountPolicy(eq("Acme"), any());
+        assertTrue(hasText(view, "Company discount policy updated."));
+    }
+
+    @Test
+    void GivenInsufficientPermissions_WhenSetDiscountPolicyClicked_ThenFailureReasonIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.setCompanyDiscountPolicy(eq("Acme"), any()))
+                .thenReturn(ActionResult.failure("Insufficient permissions: POLICY_MODIFICATION required"));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Policy company name").setValue(company("Acme"));
+
+        clickButton(view, "Set discount policy");
+
+        verify(presenter).setCompanyDiscountPolicy(eq("Acme"), any());
+        assertTrue(hasText(view, "Insufficient permissions: POLICY_MODIFICATION required"));
+    }
+
     private CompanyPresenter mockPresenter() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
