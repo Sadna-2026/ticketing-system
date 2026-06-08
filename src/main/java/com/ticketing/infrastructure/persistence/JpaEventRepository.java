@@ -100,10 +100,19 @@ public class JpaEventRepository implements IEventRepository {
                 // in-memory repo so a re-read event never reports version 0.
                 event.incrementVersion();
                 entityManager.persist(event);
+                entityManager.flush();
             } else {
-                entityManager.merge(event);
+                // merge() returns a MANAGED copy carrying the post-flush versions; the
+                // caller's detached `event` is left stale. Copy the new versions back so
+                // a second save of the SAME aggregate in the SAME transaction (V3-11 #269
+                // added @Version to InventoryZone/Seat, so e.g. reserve-then-sold-out now
+                // saves a versioned child twice) is not mistaken for a concurrent edit. A
+                // genuinely concurrent transaction holds a DIFFERENT detached snapshot
+                // that never gets this sync, so its stale child version still conflicts.
+                Event managed = entityManager.merge(event);
+                entityManager.flush();
+                event.syncVersionsFrom(managed);
             }
-            entityManager.flush();
         } catch (ObjectOptimisticLockingFailureException
                  | jakarta.persistence.OptimisticLockException ex) {
             throw new OptimisticLockException("Event", event.getId());

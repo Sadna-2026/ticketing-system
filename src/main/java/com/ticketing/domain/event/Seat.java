@@ -13,6 +13,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
+import jakarta.persistence.Version;
 
 /**
  * Entity within the InventoryZone (which is within the Event aggregate).
@@ -47,6 +48,14 @@ public class Seat {
     private String seatNumber;
     @Transient
     private final AtomicReference<SeatStatus> status = new AtomicReference<>(SeatStatus.AVAILABLE);
+    // V3-11 (#269): optimistic-lock guard. A concurrent change to THIS seat's status
+    // (two orders locking the same seat) bumps this version on flush, so the second
+    // (stale) merge is rejected with an OptimisticLockException → no double-sell. The
+    // in-memory path never reads this field (its CAS uses the Event aggregate version),
+    // so memory-mode behaviour is unchanged.
+    @Version
+    @Column(name = "version")
+    private int version;
 
     // Required by JPA; do not use directly.
     protected Seat() {
@@ -65,6 +74,21 @@ public class Seat {
     public String getRow() { return row; }
     public String getSeatNumber() { return seatNumber; }
     public SeatStatus getStatus() { return status.get(); }
+
+    /** Repository-internal (V3-11 #269): the JPA optimistic-lock version of this seat.
+     *  Not meant for domain/service use. */
+    public int getVersion() { return version; }
+
+    /** Repository-internal (V3-11 #269): after a successful merge+flush, the JPA repo
+     *  copies the post-flush version from the managed copy back into this (still
+     *  detached) instance, so a second save of the SAME aggregate in the SAME
+     *  transaction is not mistaken for a concurrent edit. A genuinely concurrent writer
+     *  holds a different snapshot that never receives this sync, so it still conflicts. */
+    public void syncVersionFrom(Seat managed) {
+        if (managed != null) {
+            this.version = managed.version;
+        }
+    }
 
     // --- JPA status mapping (property access) ---
     // The AtomicReference itself is @Transient; this accessor pair persists/reloads the
