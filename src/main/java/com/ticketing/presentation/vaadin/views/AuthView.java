@@ -68,6 +68,11 @@ public class AuthView extends VerticalLayout {
             AuthResult result = presenter.startGuestSession();
             handle(result);
             refreshSessionStatus();
+            
+            // Rebuild the navigation tabs to expose guest-accessible pages (Events, Orders)
+            // since the user transitions from no session to a guest session.
+            MainLayout.refreshCurrentNavigation();
+            
             if (result.success()) {
                 getUI().ifPresent(ui -> ui.navigate(HomeView.class));
             }
