@@ -159,7 +159,7 @@ public class Member {
 
     public boolean hasStaffAppointment(String companyId, StaffAppointment.StaffRole role) {
         StaffAppointment appointment = getStaffAppointment(companyId);
-        return appointment != null && appointment.getRole() == role;
+        return appointment != null && !appointment.isRevoked() && appointment.getRole() == role;
     }
 
     public void authorizePolicyModification(String companyName) {

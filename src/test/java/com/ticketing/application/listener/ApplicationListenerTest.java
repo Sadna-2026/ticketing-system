@@ -257,6 +257,34 @@ class ApplicationListenerTest {
             assertTrue(exception.getMessage().contains("Only the appointer can revoke their appointees"));
         }
 
+        @Test
+        public void GivenRevokedOwnerTriesToRevokeTheirAppointee_WhenHandle_ThenThrowsIllegalArgumentException() {
+            UUID founderId = UUID.randomUUID();
+            UUID revokedOwnerId = UUID.randomUUID();
+            UUID targetId = UUID.randomUUID();
+            String companyName = "TestCo";
+            Company company = new Company(companyName, "desc", founderId);
+
+            // revokedOwner was appointed by founder but has since been revoked
+            Member revokedOwner = new Member(revokedOwnerId, "revokedOwner", "ro@test.com", "pass");
+            StaffAppointment revokedOwnerAppt = new StaffAppointment(companyName, founderId, StaffAppointment.StaffRole.OWNER, Collections.emptySet());
+            revokedOwnerAppt.addAppointedStaffMember(targetId);
+            revokedOwnerAppt.revoke();
+            revokedOwner.addStaffAppointment(companyName, revokedOwnerAppt);
+
+            // target was appointed by revokedOwner
+            Member target = new Member(targetId, "target", "target@test.com", "pass");
+            StaffAppointment targetAppt = new StaffAppointment(companyName, revokedOwnerId, StaffAppointment.StaffRole.OWNER, Collections.emptySet());
+            target.addStaffAppointment(companyName, targetAppt);
+
+            when(memberRepository.findById(revokedOwnerId)).thenReturn(Optional.of(revokedOwner));
+            when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
+
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                    handler.handle(new RevokePersonnelEvent(company, revokedOwnerId, targetId)));
+            assertTrue(exception.getMessage().contains("Revoker's own appointment has been revoked"));
+        }
+
         /**
          * Fulfills Acceptance Test: "Hierarchy remains valid after non-cascading removal"
          * V1 fix: subordinates remain orphans under the revoked node (no re-parenting).

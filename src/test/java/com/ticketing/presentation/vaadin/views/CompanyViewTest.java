@@ -348,6 +348,37 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenOwnerDirectlyAppointedTarget_WhenOriginalOwnerClicksRevokePersonnel_ThenSuccessMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID targetId = UUID.randomUUID();
+        when(presenter.revokePersonnel("Acme", targetId)).thenReturn(ActionResult.success("Personnel revoked."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+        findTextField(view, "Target member ID").setValue(targetId.toString());
+
+        clickButton(view, "Revoke personnel");
+
+        verify(presenter).revokePersonnel("Acme", targetId);
+        assertTrue(hasText(view, "Personnel revoked."));
+    }
+
+    @Test
+    void GivenTargetAppointedByDifferentOwner_WhenOtherOwnerClicksRevokePersonnel_ThenOnlyAppointersCanRevokeMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID targetId = UUID.randomUUID();
+        when(presenter.revokePersonnel("Acme", targetId)).thenReturn(ActionResult.failure(
+                "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+        findTextField(view, "Target member ID").setValue(targetId.toString());
+
+        clickButton(view, "Revoke personnel");
+
+        verify(presenter).revokePersonnel("Acme", targetId);
+        assertTrue(hasText(view, "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."));
+    }
+
+    @Test
     void GivenOwnerMemberSession_WhenRelinquishOwnershipClicked_ThenPresenterIsCalledAndSuccessMessageIsDisplayed() {
         CompanyPresenter presenter = mockPresenter();
         when(presenter.relinquishOwnership("Acme")).thenReturn(ActionResult.success("Ownership relinquished for Acme."));

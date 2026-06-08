@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -329,6 +330,33 @@ class CompanyPresenterTest {
         memberSession();
 
         assertTrue(presenter.listCompanyEvents("   ").isEmpty());
+    }
+
+    @Test
+    void GivenOwnerDirectlyAppointedTarget_WhenOriginalOwnerRevokes_ThenServiceIsCalledAndSuccessReturned() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+
+        ActionResult result = presenter.revokePersonnel("Acme", targetId);
+
+        assertTrue(result.success());
+        assertEquals("Personnel revoked.", result.message());
+        verify(companyService).revokePersonnel("member-token", "Acme", targetId);
+    }
+
+    @Test
+    void GivenTargetWasAppointedByDifferentOwner_WhenOwnerTriesToRevoke_ThenOnlyAppointersCanRevokeMessageReturned() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+        doThrow(new IllegalArgumentException(
+                "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."))
+                .when(companyService).revokePersonnel("member-token", "Acme", targetId);
+
+        ActionResult result = presenter.revokePersonnel("Acme", targetId);
+
+        assertFalse(result.success());
+        assertEquals("Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees.",
+                result.message());
     }
 
     @Test
