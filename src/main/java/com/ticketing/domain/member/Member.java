@@ -7,21 +7,58 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKeyColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+@Entity
+@Table(name = "members")
 public class Member {
 
-    private final UUID memberId;
+    @Id
+    @Column(name = "member_id")
+    private UUID memberId;
+    @Column(name = "username")
     private String username;
-    private Hashtable<String,StaffAppointment> staffAppointments; // key is CompanyId
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "member_id")
+    @MapKeyColumn(name = "company_key")
+    private Map<String, StaffAppointment> staffAppointments; // key is CompanyId
+    @Column(name = "email")
     private String email;
+    @Column(name = "encrypted_password")
     private String encryptedPassword;
+    @Column(name = "phone_number")
     private String phoneNumber;
+    @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "member_id")
     private List<PendingRoleOffer> pendingOffers;
+    @ElementCollection
+    @CollectionTable(
+            name = "member_suspensions",
+            joinColumns = @JoinColumn(name = "member_id"))
     private List<Suspension> suspensions;
+    @Version
+    @Column(name = "version")
     private int version;
+
+    // Required by JPA; do not use directly.
+    protected Member() {
+    }
 
     public Member(UUID memberId, String username, String email, String encryptedPassword) {
         this(memberId, username, email, encryptedPassword, null, null);
