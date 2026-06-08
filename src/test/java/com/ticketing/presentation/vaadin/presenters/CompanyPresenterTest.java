@@ -333,6 +333,34 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenOwnerAndCompany_WhenLoadingSalesReport_ThenServiceIsCalledAndReportTotalsAreReturned() {
+        memberSession();
+        UUID memberId = SessionContext.getMemberId();
+        PurchaseRecordDTO purchase = purchase(memberId);
+        SalesReportDTO report = new SalesReportDTO("Acme", memberId, List.of(purchase), new BigDecimal("80.00"), 1);
+        when(completedPurchaseService.getHierarchicalSalesReport("member-token", "Acme")).thenReturn(report);
+
+        SalesReportResult result = presenter.loadSalesReport("Acme");
+
+        assertTrue(result.success());
+        assertEquals("Sales report loaded.", result.message());
+        assertSame(report, result.report());
+        verify(completedPurchaseService).getHierarchicalSalesReport("member-token", "Acme");
+    }
+
+    @Test
+    void GivenInsufficientPermissions_WhenLoadingSalesReport_ThenFailureReasonIsReturned() {
+        memberSession();
+        when(completedPurchaseService.getHierarchicalSalesReport("member-token", "Acme"))
+                .thenThrow(new SecurityException("Viewing sales report requires Owner role or (Manager + VIEW_REPORTS permission)"));
+
+        SalesReportResult result = presenter.loadSalesReport("Acme");
+
+        assertFalse(result.success());
+        assertEquals("Viewing sales report requires Owner role or (Manager + VIEW_REPORTS permission)", result.message());
+    }
+
+    @Test
     void GivenOwnerAndManagerTarget_WhenOfferingManagerAppointmentWithPermissions_ThenServiceIsCalledWithTokenAndPermissions() {
         memberSession();
         UUID targetId = UUID.randomUUID();
