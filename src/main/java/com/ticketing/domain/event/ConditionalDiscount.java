@@ -30,7 +30,9 @@ public class ConditionalDiscount extends AbstractDiscountPolicy {
     @Column(name = "percent_off")
     private BigDecimal percentOff;
 
-    @ManyToOne(targetEntity = AbstractDiscountCondition.class, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+     @ManyToOne(targetEntity = AbstractDiscountCondition.class, cascade = CascadeType.ALL)
+    @JoinColumn(name = "condition_id")
+    private IDiscountCondition condition;
 
     // Required by JPA; do not use directly.
     protected ConditionalDiscount() {
