@@ -71,6 +71,13 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!-- PostgreSQL driver on the classpath so H2<->Postgres is a config-only switch (V3-12) -->
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
     <!-- Vaadin UI -->
     <dependency>
       <groupId>com.vaadin</groupId>
