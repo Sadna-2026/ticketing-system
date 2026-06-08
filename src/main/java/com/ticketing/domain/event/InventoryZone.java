@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
  * Entity within the Event aggregate.
@@ -60,6 +61,17 @@ public class InventoryZone {
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JoinColumn(name = "zone_id")
     private List<Seat> seats;
+
+    // V3-11 (#269): optimistic-lock guard. GA counts (available/locked/sold) live on
+    // THIS zone entity, not on the Event ROOT, so a concurrent GA sell would not bump
+    // the Event's @Version. This per-zone version is bumped on flush whenever the zone's
+    // own state changes, so two concurrent decrements of the last GA ticket conflict —
+    // the second (stale) merge is rejected with an OptimisticLockException → no
+    // double-sell. The in-memory path never reads this field (its CAS uses the Event
+    // aggregate version), so memory-mode behaviour is unchanged.
+    @Version
+    @Column(name = "version")
+    private int version;
 
     // Required by JPA; do not use directly.
     protected InventoryZone() {
@@ -111,6 +123,29 @@ public class InventoryZone {
     public List<Seat> getSeats() { return Collections.unmodifiableList(seats); }
     public boolean isGA() { return type == ZoneType.GENERAL_ADMISSION; }
     public boolean isAssigned() { return type == ZoneType.ASSIGNED_SEATING; }
+
+    /** Repository-internal (V3-11 #269): the JPA optimistic-lock version of this zone.
+     *  Not meant for domain/service use. */
+    public int getVersion() { return version; }
+
+    /** Repository-internal (V3-11 #269): after a successful merge+flush, the JPA repo
+     *  copies the post-flush versions (this zone and its seats, matched by id) from the
+     *  managed copy back into this (still detached) instance, so a second save of the
+     *  SAME aggregate in the SAME transaction is not mistaken for a concurrent edit. A
+     *  genuinely concurrent writer holds a different snapshot that never receives this
+     *  sync, so it still conflicts. */
+    public void syncVersionFrom(InventoryZone managed) {
+        if (managed == null) {
+            return;
+        }
+        this.version = managed.version;
+        for (Seat seat : this.seats) {
+            managed.seats.stream()
+                    .filter(m -> m.getId().equals(seat.getId()))
+                    .findFirst()
+                    .ifPresent(seat::syncVersionFrom);
+        }
+    }
 
     public void setName(String name) { this.name = name; }
 

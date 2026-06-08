@@ -196,6 +196,27 @@ public class Event{
     public void incrementVersion() { this.version++; }
     public int getVersion() { return this.version; }
 
+    /** Repository-internal (V3-11 #269): after a successful merge+flush, the JPA repo
+     *  copies the post-flush optimistic-lock versions of the whole aggregate (root,
+     *  zones, seats — matched by id) from the managed copy back into this (still
+     *  detached) instance. This keeps a second save of the SAME aggregate within the
+     *  SAME transaction (e.g. reserve then mark-sold-out) from being misread as a
+     *  concurrent edit. A genuinely concurrent transaction holds a different detached
+     *  snapshot that never receives this sync, so it still conflicts. Service code must
+     *  not call this directly. */
+    public void syncVersionsFrom(Event managed) {
+        if (managed == null) {
+            return;
+        }
+        this.version = managed.version;
+        for (InventoryZone zone : this.zones) {
+            managed.zones.stream()
+                    .filter(m -> m.getId().equals(zone.getId()))
+                    .findFirst()
+                    .ifPresent(zone::syncVersionFrom);
+        }
+    }
+
     public void addZone(InventoryZone zone) {
         validateModifiable();
         if (zone == null) throw new IllegalArgumentException("Zone cannot be null");
