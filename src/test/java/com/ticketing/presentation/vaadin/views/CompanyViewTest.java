@@ -88,6 +88,7 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Reject role offer"));
         assertTrue(hasButton(view, "Revoke personnel"));
         assertTrue(hasButton(view, "Change manager permissions"));
+        assertTrue(hasButton(view, "Relinquish ownership"));
         assertTrue(hasButton(view, "Create company event"));
         assertTrue(hasButton(view, "Edit event details"));
         assertTrue(hasButton(view, "Publish event"));
@@ -122,6 +123,7 @@ class CompanyViewTest {
         assertTrue(hasVisibleButton(view, "Load event map"));
         assertFalse(hasVisibleButton(view, "Open company"));
         assertFalse(hasVisibleButton(view, "Offer role appointment"));
+        assertFalse(hasVisibleButton(view, "Relinquish ownership"));
         assertFalse(hasVisibleButton(view, "Create company event"));
         assertFalse(hasVisibleButton(view, "Add seat"));
         assertFalse(hasVisibleButton(view, "Suspend company"));
@@ -343,6 +345,33 @@ class CompanyViewTest {
         eventName.setValue("");
         assertTrue(eventName.isInvalid());
         assertEquals("Event name is required.", eventName.getErrorMessage());
+    }
+
+    @Test
+    void GivenOwnerMemberSession_WhenRelinquishOwnershipClicked_ThenPresenterIsCalledAndSuccessMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.relinquishOwnership("Acme")).thenReturn(ActionResult.success("Ownership relinquished for Acme."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        clickButton(view, "Relinquish ownership");
+
+        verify(presenter).relinquishOwnership("Acme");
+        assertTrue(hasText(view, "Ownership relinquished for Acme."));
+    }
+
+    @Test
+    void GivenNonOwnerMemberSession_WhenRelinquishOwnershipClicked_ThenFailureMessageFromServiceIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.relinquishOwnership("Acme"))
+                .thenReturn(ActionResult.failure("Only non-founder owners may relinquish ownership."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        clickButton(view, "Relinquish ownership");
+
+        verify(presenter).relinquishOwnership("Acme");
+        assertTrue(hasText(view, "Only non-founder owners may relinquish ownership."));
     }
 
     private CompanyPresenter mockPresenter() {

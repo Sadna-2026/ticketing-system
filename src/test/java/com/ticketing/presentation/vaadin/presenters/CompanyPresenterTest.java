@@ -332,6 +332,28 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenMemberSession_WhenRelinquishingOwnership_ThenCompanyServiceIsCalledWithTokenAndCompanyName() {
+        memberSession();
+
+        ActionResult result = presenter.relinquishOwnership("Acme");
+
+        assertTrue(result.success());
+        assertEquals("Ownership relinquished for Acme.", result.message());
+        verify(companyService).relinquishOwnership("member-token", "Acme");
+    }
+
+    @Test
+    void GivenBlankCompanyName_WhenRelinquishingOwnership_ThenValidationFailureIsReturnedBeforeServiceCall() {
+        memberSession();
+
+        ActionResult result = presenter.relinquishOwnership("   ");
+
+        assertFalse(result.success());
+        assertEquals("Company name is required.", result.message());
+        verifyNoInteractions(companyService);
+    }
+
+    @Test
     void GivenBrowsableEvents_WhenSearchingBrowsable_ThenSearchServiceResultsAreReturned() {
         EventSummaryDTO event = eventSummary();
         when(eventService.searchEvents(any())).thenReturn(List.of(event));
