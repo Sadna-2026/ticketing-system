@@ -4,14 +4,26 @@ import java.time.Instant;
 
 import com.ticketing.domain.order.ActiveOrder;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+
 /**
  * Condition: the current time falls within [from, to].
  * Example: "15% off for purchases made before May 15."
  */
-public class DateRangeCondition implements IDiscountCondition {
+@Entity
+@DiscriminatorValue("DATE_RANGE")
+public class DateRangeCondition extends AbstractDiscountCondition {
 
-    private final Instant from; // nullable = no lower bound
-    private final Instant to;   // nullable = no upper bound
+    @Column(name = "from_instant")
+    private Instant from; // nullable = no lower bound
+    @Column(name = "to_instant")
+    private Instant to;   // nullable = no upper bound
+
+    // Required by JPA; do not use directly.
+    protected DateRangeCondition() {
+    }
 
     public DateRangeCondition(Instant from, Instant to) {
         if (from != null && to != null && from.isAfter(to)) {
