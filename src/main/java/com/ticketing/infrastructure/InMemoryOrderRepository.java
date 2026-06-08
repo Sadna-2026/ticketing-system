@@ -7,12 +7,15 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 
 @org.springframework.stereotype.Component
+@ConditionalOnProperty(name = "ticketing.persistence", havingValue = "memory", matchIfMissing = true)
 public class InMemoryOrderRepository implements IOrderRepository {
 
     private final ConcurrentHashMap<UUID, ActiveOrder> activeOrders = new ConcurrentHashMap<>();
