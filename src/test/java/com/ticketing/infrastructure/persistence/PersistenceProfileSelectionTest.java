@@ -13,9 +13,15 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
 import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.lottery.ILotteryRepository;
 import com.ticketing.domain.member.IMemberRepository;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
+import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryLotteryRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.InMemoryOrderRepository;
 
 /**
  * V3-7: the repository backend is selected by the {@code ticketing.persistence}
@@ -36,8 +42,14 @@ class PersistenceProfileSelectionTest {
     @org.springframework.context.annotation.Import({
             InMemoryMemberRepository.class,
             InMemoryCompanyRepository.class,
+            InMemoryEventRepository.class,
+            InMemoryOrderRepository.class,
+            InMemoryLotteryRepository.class,
             JpaMemberRepository.class,
-            JpaCompanyRepository.class
+            JpaCompanyRepository.class,
+            JpaEventRepository.class,
+            JpaOrderRepository.class,
+            JpaLotteryRepository.class
     })
     @org.springframework.data.jpa.repository.config.EnableJpaRepositories(
             basePackageClasses = { MemberJpaRepository.class })
@@ -62,26 +74,13 @@ class PersistenceProfileSelectionTest {
 
     @Test
     void GivenDefaultConfig_WhenContextStarts_ThenInMemoryReposAreTheSingleActiveBeans() {
-        contextRunner.run(context -> {
-            assertThat(context).hasSingleBean(IMemberRepository.class);
-            assertThat(context).hasSingleBean(ICompanyRepository.class);
-            assertThat(context.getBean(IMemberRepository.class))
-                    .isInstanceOf(InMemoryMemberRepository.class);
-            assertThat(context.getBean(ICompanyRepository.class))
-                    .isInstanceOf(InMemoryCompanyRepository.class);
-        });
+        contextRunner.run(PersistenceProfileSelectionTest::assertInMemoryReposAreSingleActiveBeans);
     }
 
     @Test
     void GivenMemoryConfig_WhenContextStarts_ThenInMemoryReposAreTheSingleActiveBeans() {
-        contextRunner.withPropertyValues("ticketing.persistence=memory").run(context -> {
-            assertThat(context).hasSingleBean(IMemberRepository.class);
-            assertThat(context).hasSingleBean(ICompanyRepository.class);
-            assertThat(context.getBean(IMemberRepository.class))
-                    .isInstanceOf(InMemoryMemberRepository.class);
-            assertThat(context.getBean(ICompanyRepository.class))
-                    .isInstanceOf(InMemoryCompanyRepository.class);
-        });
+        contextRunner.withPropertyValues("ticketing.persistence=memory")
+                .run(PersistenceProfileSelectionTest::assertInMemoryReposAreSingleActiveBeans);
     }
 
     @Test
@@ -89,10 +88,38 @@ class PersistenceProfileSelectionTest {
         contextRunner.withPropertyValues("ticketing.persistence=jpa").run(context -> {
             assertThat(context).hasSingleBean(IMemberRepository.class);
             assertThat(context).hasSingleBean(ICompanyRepository.class);
+            assertThat(context).hasSingleBean(IEventRepository.class);
+            assertThat(context).hasSingleBean(IOrderRepository.class);
+            assertThat(context).hasSingleBean(ILotteryRepository.class);
             assertThat(context.getBean(IMemberRepository.class))
                     .isInstanceOf(JpaMemberRepository.class);
             assertThat(context.getBean(ICompanyRepository.class))
                     .isInstanceOf(JpaCompanyRepository.class);
+            assertThat(context.getBean(IEventRepository.class))
+                    .isInstanceOf(JpaEventRepository.class);
+            assertThat(context.getBean(IOrderRepository.class))
+                    .isInstanceOf(JpaOrderRepository.class);
+            assertThat(context.getBean(ILotteryRepository.class))
+                    .isInstanceOf(JpaLotteryRepository.class);
         });
+    }
+
+    private static void assertInMemoryReposAreSingleActiveBeans(
+            org.springframework.boot.test.context.assertj.AssertableApplicationContext context) {
+        assertThat(context).hasSingleBean(IMemberRepository.class);
+        assertThat(context).hasSingleBean(ICompanyRepository.class);
+        assertThat(context).hasSingleBean(IEventRepository.class);
+        assertThat(context).hasSingleBean(IOrderRepository.class);
+        assertThat(context).hasSingleBean(ILotteryRepository.class);
+        assertThat(context.getBean(IMemberRepository.class))
+                .isInstanceOf(InMemoryMemberRepository.class);
+        assertThat(context.getBean(ICompanyRepository.class))
+                .isInstanceOf(InMemoryCompanyRepository.class);
+        assertThat(context.getBean(IEventRepository.class))
+                .isInstanceOf(InMemoryEventRepository.class);
+        assertThat(context.getBean(IOrderRepository.class))
+                .isInstanceOf(InMemoryOrderRepository.class);
+        assertThat(context.getBean(ILotteryRepository.class))
+                .isInstanceOf(InMemoryLotteryRepository.class);
     }
 }
