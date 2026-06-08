@@ -25,6 +25,10 @@ security:
     expiration-minutes: 120
 
 ticketing:
+  # Repository backend selection (V3-7): "memory" uses the in-memory repositories
+  # (default, unchanged behavior); "jpa" activates the DB-backed JPA repositories.
+  # Exactly one implementation per repository interface is active per mode.
+  persistence: ${TICKETING_PERSISTENCE:memory}
   startup:
     initialize-platform: true
   seed:

@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.exception.OptimisticLockException;
@@ -15,6 +17,7 @@ import com.ticketing.domain.exception.OptimisticLockException;
  * Stored aggregates are detached from callers: reads return copies and saves persist copies.
  */
 @org.springframework.stereotype.Component
+@ConditionalOnProperty(name = "ticketing.persistence", havingValue = "memory", matchIfMissing = true)
 public class InMemoryCompanyRepository implements ICompanyRepository {
 
     private final ConcurrentHashMap<String, Company> companies;

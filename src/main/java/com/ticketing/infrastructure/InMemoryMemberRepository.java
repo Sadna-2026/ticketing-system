@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.domain.exception.OptimisticLockException;
@@ -13,6 +14,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 
 @Repository
+@ConditionalOnProperty(name = "ticketing.persistence", havingValue = "memory", matchIfMissing = true)
 public class InMemoryMemberRepository implements IMemberRepository {
 
     private final ConcurrentHashMap<UUID, Member> membersById = new ConcurrentHashMap<>();
