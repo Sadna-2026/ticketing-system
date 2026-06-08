@@ -2,6 +2,7 @@ package com.ticketing.application.services;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
@@ -16,7 +17,12 @@ import com.ticketing.domain.order.SelectionRequest;
  * selection is currently locked or sold. Does NOT mutate state — actual
  * locking is done by UC-II.9-10.
  */
+/**
+ * V3-10 (#268): the single pre-reservation validation use case is read-only, so the
+ * class runs as one read-only transaction.
+ */
 @org.springframework.stereotype.Service
+@Transactional(readOnly = true)
 public class TicketSelectionService {
 
     private static final Logger log = LoggerFactory.getLogger(TicketSelectionService.class);

@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
@@ -22,7 +23,14 @@ import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 
+/**
+ * Read-only application service for hierarchical sales reporting.
+ *
+ * <p>V3-10 (#268): the single use case is a read, so the whole class runs as one
+ * read-only transaction.
+ */
 @org.springframework.stereotype.Service
+@Transactional(readOnly = true)
 public class CompletedPurchaseService {
 
     private static final Logger log = LoggerFactory.getLogger(CompletedPurchaseService.class);

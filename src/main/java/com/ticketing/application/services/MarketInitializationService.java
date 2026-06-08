@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.MarketInitializationResponse;
 import com.ticketing.application.auth.ISessionTokenService;
@@ -14,7 +15,12 @@ import com.ticketing.domain.gateway.IPaymentGateway;
 import com.ticketing.domain.gateway.ITicketSupplyGateway;
 import com.ticketing.domain.system.StartupConfiguration;
 
+/**
+ * V3-10 (#268): {@code openMarket} only reads the admin repository and flips the
+ * in-memory startup configuration, so the class runs as one read-only transaction.
+ */
 @org.springframework.stereotype.Service
+@Transactional(readOnly = true)
 public class MarketInitializationService {
 
     private static final Logger log = LoggerFactory.getLogger(MarketInitializationService.class);

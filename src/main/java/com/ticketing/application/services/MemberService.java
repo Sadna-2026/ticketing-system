@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.auth.SessionTokenData;
@@ -31,9 +32,16 @@ import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.response.UpdateMemberDetailsResponse;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
+/**
+ * Application service for member registration, authentication and profile.
+ *
+ * <p>V3-10 (#268): class default {@code @Transactional(readOnly = true)} for queries;
+ * mutating use cases override with read-write {@code @Transactional}.
+ */
 @Service
+@Transactional(readOnly = true)
 public class MemberService {
-    
+
     private final IMemberRepository memberRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
     private final ISessionTokenService sessionTokenService;
@@ -63,6 +71,7 @@ public class MemberService {
 
     }
 
+    @Transactional
     public RegisterResponse register(RegisterRequest request, String guestToken) {
         if (request == null) {
             logger.warn("Registration attempt with null request");
@@ -136,6 +145,7 @@ public class MemberService {
         return RegisterResponse.success(MemberMapper.toDto(member), memberToken);
     }
 
+    @Transactional
     public LoginResponse login(LoginRequest request, String guestToken) {
 
         logger.info("Register requested: username={}", request == null ? null : request.username());
@@ -199,6 +209,7 @@ public class MemberService {
         return loginLocksByUsername.computeIfAbsent(username, ignored -> new Object());
     }
 
+    @Transactional
     public UpdateMemberDetailsResponse updateIdentifyingDetails(
             String sessionToken,
             UUID memberId,
@@ -274,6 +285,7 @@ public class MemberService {
     }
 
 
+    @Transactional
     public LogoutResponse logout(String sessionToken) {
         if (sessionToken == null || sessionToken.isBlank()) {
             return LogoutResponse.failure("No authenticated member session exists.");
@@ -311,6 +323,7 @@ public class MemberService {
         return MemberMapper.toDto(member);
     }
 
+    @Transactional
     public MemberExitResponse exitPlatform(String sessionToken) {
         if (sessionToken == null || sessionToken.isBlank()) {
             return MemberExitResponse.failure("No authenticated member session exists.");

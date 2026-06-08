@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
@@ -42,6 +43,8 @@ public class PlatformInitializationService {
         this.startupConfiguration = startupConfiguration;
     }
 
+    // Multi-step write use case (registers the system admin) → one transaction.
+    @Transactional
     public synchronized InitializationResult initialize() {
         recordEvent("Platform initialization started");
 

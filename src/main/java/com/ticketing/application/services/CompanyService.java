@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CompanyPublicDTO;
@@ -46,7 +47,17 @@ import com.ticketing.domain.member.communication.RoleAppointmentOfferResponseEve
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 
+/**
+ * Application service for company lifecycle, staffing and company-scoped policies.
+ *
+ * <p>V3-10 (#268): each public use-case method is one atomic transaction. The class
+ * default is {@code @Transactional(readOnly = true)}; mutating use cases override it
+ * with a read-write {@code @Transactional}. Use cases that only publish a domain
+ * event (role-appointment workflow) are still annotated read-write so the
+ * synchronous listener's writes commit/roll back together with the publish.
+ */
 @org.springframework.stereotype.Service
+@Transactional(readOnly = true)
 public class CompanyService {
     private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
     private static final String ADMIN_PERMISSION = "SYSTEM_ADMIN";
@@ -92,6 +103,7 @@ public class CompanyService {
 
     // ── Company creation ───────────────────────────────────────────────
 
+    @Transactional
     public String openProductionCompany(String token, String name, String description) {
         UUID founderId = validateToken(token);
 
@@ -123,6 +135,7 @@ public class CompanyService {
         return company.getName();
     }
 
+    @Transactional
     public void offerRoleAppointment(
             String token,
             String companyName,
@@ -148,6 +161,7 @@ public class CompanyService {
             companyName, appointerId, targetMemberId, role);
     }
 
+    @Transactional
     public void changeManagerPermissions(
             String token,
             String companyName,
@@ -177,6 +191,7 @@ public class CompanyService {
             companyName, callerId, targetMemberId);
     }
 
+    @Transactional
     public void respondToRoleAppointment(
             String token,
             UUID appointmentOfferId,
@@ -199,6 +214,7 @@ public class CompanyService {
             responderId, appointmentOfferId, accepted);
     }
 
+    @Transactional
     public void revokePersonnel(String token, String companyName, UUID targetMemberId) {
         UUID revokerId = validateToken(token);
 
@@ -221,6 +237,7 @@ public class CompanyService {
             companyName, revokerId, targetMemberId);
     }
 
+    @Transactional
     public void relinquishOwnership(String token, String companyName) {
         UUID ownerId = validateToken(token);
 
@@ -244,6 +261,7 @@ public class CompanyService {
 
     // ── Company-scoped purchase policy ──────────────────────────────
 
+    @Transactional
     public void setCompanyPurchasePolicy(String token, String companyName, IPurchasePolicy policy) {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
         if (policy == null) throw new IllegalArgumentException("policy is required");
@@ -258,6 +276,7 @@ public class CompanyService {
         log.info("Company purchase policy updated: company={}, by={}", companyName, memberId);
     }
 
+    @Transactional
     public void removeCompanyPurchasePolicy(String token, String companyName) {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
@@ -273,6 +292,7 @@ public class CompanyService {
 
     // ── Company-scoped discount policy ──────────────────────────────
 
+    @Transactional
     public void setCompanyDiscountPolicy(String token, String companyName, IDiscountPolicy policy) {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
         if (policy == null) throw new IllegalArgumentException("policy is required");
@@ -287,6 +307,7 @@ public class CompanyService {
         log.info("Company discount policy updated: company={}, by={}", companyName, memberId);
     }
 
+    @Transactional
     public void removeCompanyDiscountPolicy(String token, String companyName) {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
@@ -302,6 +323,7 @@ public class CompanyService {
 
     // ── Discount stacking ────────────────────────────────────────────
 
+    @Transactional
     public void setDiscountStacking(String token, String companyName, boolean allow) {
         if (companyName == null || companyName.isBlank()) throw new IllegalArgumentException("companyName is required");
 
@@ -389,6 +411,7 @@ public class CompanyService {
 
     // ── Lifecycle (inlined from CompanyLifecycleDomainService) ───────
 
+    @Transactional
     public void suspendCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
         rejectIfSuspended(memberId);
@@ -400,6 +423,7 @@ public class CompanyService {
         log.info("Company suspended: name={}, by={}", companyName, memberId);
     }
 
+    @Transactional
     public void reopenCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
         rejectIfSuspended(memberId);
@@ -411,6 +435,7 @@ public class CompanyService {
         log.info("Company reopened: name={}, by={}", companyName, memberId);
     }
 
+    @Transactional
     public void permanentCloseByFounder(String token, String companyName) {
         UUID memberId = requireMember(token);
         rejectIfSuspended(memberId);
@@ -421,6 +446,7 @@ public class CompanyService {
         }
     }
 
+    @Transactional
     public void permanentCloseByAdmin(String token, String companyName) {
         UUID memberId = requireMember(token);
         rejectIfSuspended(memberId);
@@ -434,6 +460,7 @@ public class CompanyService {
         }
     }
 
+    @Transactional
     public void retryPendingRefunds(String companyName) {
         synchronized (companyLock(companyName)) {
             Company company = loadCompany(companyName);
