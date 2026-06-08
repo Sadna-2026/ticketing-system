@@ -17,3 +17,5 @@ src/main/bundles/
 HANDOFF.md
 rewrite.yml
 requirements/
+node_modules
+.vscode/
