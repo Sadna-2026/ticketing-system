@@ -6,20 +6,44 @@ import java.util.UUID;
 
 import com.ticketing.application.dto.OrderItemDto;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
 /**
  * Entity within the ActiveOrder aggregate.
  *
  * Represents a single item in an active order.
  * For assigned seating: references a specific seatId.
  * For GA: seatId is null, and quantity represents how many tickets from that zone.
+ *
+ * <p>JPA mapping: field access. A nullable {@code seat_id} column distinguishes the two
+ * ticket modes exactly as the in-memory model does — {@link #isAssignedSeat()} stays
+ * {@code seatId != null} and {@link #isGA()} stays {@code seatId == null}, so no extra
+ * discriminator column is needed. {@code final} was removed from {@code id}/{@code zoneId}/
+ * {@code seatId}/{@code pricePerTicket} so JPA can set them; the factory methods and all
+ * behaviour are unchanged.
  */
+@Entity
+@Table(name = "order_items")
 public class OrderItem {
 
-    private final UUID id;
-    private final UUID zoneId;
-    private final UUID seatId;
+    @Id
+    @Column(name = "id")
+    private UUID id;
+    @Column(name = "zone_id")
+    private UUID zoneId;
+    @Column(name = "seat_id")
+    private UUID seatId;
+    @Column(name = "quantity")
     private int quantity;
-    private final BigDecimal pricePerTicket;
+    @Column(name = "price_per_ticket")
+    private BigDecimal pricePerTicket;
+
+    // Required by JPA; do not use directly.
+    protected OrderItem() {
+    }
 
     /**
      * Creates an order item for an assigned seat.
