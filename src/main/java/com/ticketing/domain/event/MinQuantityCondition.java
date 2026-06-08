@@ -4,24 +4,13 @@ import java.time.Instant;
 
 import com.ticketing.domain.order.ActiveOrder;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.Entity;
-
 /**
  * Condition: order has at least {@code minTickets} tickets.
  * Example: "10% off when buying 2 or more tickets."
  */
-@Entity
-@DiscriminatorValue("MIN_QUANTITY")
-public class MinQuantityCondition extends AbstractDiscountCondition {
+public class MinQuantityCondition implements IDiscountCondition {
 
-    @Column(name = "min_tickets")
-    private int minTickets;
-
-    // Required by JPA; do not use directly.
-    protected MinQuantityCondition() {
-    }
+    private final int minTickets;
 
     public MinQuantityCondition(int minTickets) {
         if (minTickets <= 0) throw new IllegalArgumentException("minTickets must be positive");

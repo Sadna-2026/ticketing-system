@@ -1,22 +1,11 @@
 package com.ticketing.domain.event;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.Entity;
-
 /**
  * Rejects purchases when the total ticket count is below the required minimum.
  */
-@Entity
-@DiscriminatorValue("MIN_QUANTITY")
-public class MinQuantityPolicy extends AbstractPurchasePolicy {
+public class MinQuantityPolicy implements IPurchasePolicy {
 
-    @Column(name = "min_tickets")
-    private int minTickets;
-
-    // Required by JPA; do not use directly.
-    protected MinQuantityPolicy() {
-    }
+    private final int minTickets;
 
     public MinQuantityPolicy(int minTickets) {
         if (minTickets <= 0) throw new IllegalArgumentException("minTickets must be positive");
