@@ -150,6 +150,38 @@ class AuthViewTest {
     }
 
     @Test
+    void GivenLoginClicked_WhenSuccess_ThenShowsSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
+        when(presenter.login(anyString(), anyString()))
+                .thenReturn(AuthResult.success("Login successful."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log in");
+
+            uiMessagesMock.verify(() -> UiMessages.success("Login successful."));
+        }
+    }
+
+    @Test
+    void GivenLoginClicked_WhenFailure_ThenShowsErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
+        when(presenter.login(anyString(), anyString()))
+                .thenReturn(AuthResult.failure("Login failed."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log in");
+
+            uiMessagesMock.verify(() -> UiMessages.error("Login failed."));
+        }
+    }
+
+    @Test
     void GivenRegisterClicked_WhenSuccess_ThenShowsSuccessMessage() {
         AuthPresenter presenter = mock(AuthPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
