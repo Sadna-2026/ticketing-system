@@ -3,6 +3,8 @@ package com.ticketing.presentation.vaadin.views;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
@@ -144,6 +146,38 @@ class AuthViewTest {
             uiMessagesMock.verify(() -> UiMessages.error("Failed to exit guest session."));
             assertTrue(hasVisibleButton(view, "Log out"));
             assertFalse(hasVisibleButton(view, "Enter as guest"));
+        }
+    }
+
+    @Test
+    void GivenRegisterClicked_WhenSuccess_ThenShowsSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
+        when(presenter.register(anyString(), anyString(), anyString(), anyString(), any()))
+                .thenReturn(AuthResult.success("Registration successful."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Register");
+
+            uiMessagesMock.verify(() -> UiMessages.success("Registration successful."));
+        }
+    }
+
+    @Test
+    void GivenRegisterClicked_WhenFailure_ThenShowsErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
+        when(presenter.register(anyString(), anyString(), anyString(), anyString(), any()))
+                .thenReturn(AuthResult.failure("Registration failed."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Register");
+
+            uiMessagesMock.verify(() -> UiMessages.error("Registration failed."));
         }
     }
 
