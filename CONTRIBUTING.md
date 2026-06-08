@@ -46,3 +46,14 @@ To generate the code coverage report locally:
 In the CI pipeline, the coverage report is generated automatically on every push to `main`/`develop` and PRs. It is uploaded as a build artifact named `jacoco-report`, which you can download directly from the GitHub Actions run summary.
 
 The required JaCoCo threshold is **75% line coverage** over the Domain and Application bundle. The build fails during `mvn verify` when coverage is below `0.75`, so every contributor must keep the covered Domain/Application scope at or above 75%.
+
+## Persistence (V3): transient data stays in memory
+
+Per the V3 spec and lecture, **transient runtime state must not be stored in the database.** The clearest case is the **virtual purchase queue** (`VirtualQueue`, `QueueEntry`, `QueueConfig`): it is short-lived admission-control state that is rebuilt as users arrive, has no value after a restart, and would only add write contention to the DB.
+
+Therefore, while the persistent aggregates (member, company, event, order, lottery) gained JPA mappings and DB-backed repositories selectable via `ticketing.persistence=jpa` (V3-7/V3-8), the queue is deliberately **excluded from persistence**:
+
+- The queue domain types carry **no JPA annotations** (`@Entity`/`@Embeddable`/`@MappedSuperclass`).
+- `IQueueRepository` has **only** the in-memory implementation (`InMemoryQueueRepository`) — there is intentionally **no** JPA queue repository, and `InMemoryQueueRepository` stays active in both `memory` and `jpa` persistence modes (no `@ConditionalOnProperty`).
+
+`QueueTransiencyTest` guards this: it fails if a JPA annotation is ever added to a queue type.
