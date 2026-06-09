@@ -378,16 +378,20 @@ public class MemberService {
         Map<UUID, List<Member>> subordinatesByAppointer = companyMembers.stream()
                 .filter(m -> {
                     StaffAppointment sa = m.getStaffAppointment(companyName);
-                    return sa != null && sa.getAppointedByMemberId() != null;
+                    return sa != null
+                            && sa.getAppointedByMemberId() != null
+                            && !m.getId().equals(sa.getAppointedByMemberId());
                 })
                 .collect(Collectors.groupingBy(m -> m.getStaffAppointment(companyName).getAppointedByMemberId()));
 
-        // Identify roots: no appointer, or appointer is not in the company
+        // Identify roots: no appointer, self-appointed founder, or appointer is not in the company
         List<Member> roots = companyMembers.stream()
                 .filter(m -> {
                     StaffAppointment sa = m.getStaffAppointment(companyName);
                     UUID appointerId = sa.getAppointedByMemberId();
-                    return appointerId == null || !memberIdsInCompany.contains(appointerId);
+                    return appointerId == null
+                            || m.getId().equals(appointerId)
+                            || !memberIdsInCompany.contains(appointerId);
                 })
                 .sorted(Comparator.comparing(Member::getUsername))
                 .toList();
