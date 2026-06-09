@@ -203,10 +203,13 @@ class AdminViewTest {
         List<String> headers = columnHeaders(grid);
         assertFalse(headers.contains("Purchase ID"), headers.toString());
         assertTrue(headers.contains("Event"), headers.toString());
+        assertTrue(headers.contains("Buyer"), headers.toString());
         assertTrue(headers.contains("Purchased at"), headers.toString());
-        // The purchase id is still carried by the bound row even though it is no longer a column.
+        // The purchase id is still carried by the bound row even though it is no longer a column,
+        // and the buyer is identified by the snapshotted username rather than a raw UUID.
         List<PurchaseRecordDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
         assertEquals(purchase.purchaseId(), rows.get(0).purchaseId());
+        assertEquals("bob", rows.get(0).buyerUsername());
     }
 
     @Test
@@ -315,6 +318,7 @@ class AdminViewTest {
                 "Spring Concert",
                 "Acme",
                 memberId,
+                "bob",
                 "TXN-1",
                 new BigDecimal("80.00"),
                 Instant.parse("2026-05-26T12:00:00Z")

@@ -7,9 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.application.dto.MemberSummaryDTO;
@@ -54,9 +52,6 @@ public class AdminView extends VerticalLayout {
     private VerticalLayout memberControls;
     private VerticalLayout purchaseHistoryControls;
     private VerticalLayout suspensionControls;
-
-    /** Resolves buyer UUIDs to usernames for the global purchase grid, reusing the members already loaded for the pickers. */
-    private final Map<UUID, String> memberUsernamesById = new HashMap<>();
 
     private final Span memberStatus = new Span("Remove members using system admin authorization.");
     private final ComboBox<MemberSummaryDTO> removeMemberPicker = new ComboBox<>("Target member");
@@ -125,7 +120,7 @@ public class AdminView extends VerticalLayout {
         purchaseHistoryGrid.setId("admin-global-purchases-grid");
         purchaseHistoryGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
-        purchaseHistoryGrid.addColumn(this::formatBuyer).setHeader("Buyer").setAutoWidth(true);
+        purchaseHistoryGrid.addColumn(purchase -> valueOrEmpty(purchase.buyerUsername())).setHeader("Buyer").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(purchase -> formatInstant(purchase.purchasedAt())).setHeader("Purchased at").setAutoWidth(true);
         purchaseHistoryGrid.setMinHeight("180px");
@@ -354,19 +349,6 @@ public class AdminView extends VerticalLayout {
         removeMemberPicker.setItems(members);
         historyBuyerPicker.setItems(members);
         suspensionTargetPicker.setItems(members);
-
-        memberUsernamesById.clear();
-        for (MemberSummaryDTO member : members) {
-            memberUsernamesById.put(member.id(), member.username());
-        }
-    }
-
-    private String formatBuyer(PurchaseRecordDTO purchase) {
-        UUID memberId = purchase.memberId();
-        if (memberId == null) {
-            return "";
-        }
-        return memberUsernamesById.getOrDefault(memberId, memberId.toString());
     }
 
     private String formatInstant(Instant instant) {
@@ -383,5 +365,9 @@ public class AdminView extends VerticalLayout {
         }
         long days = duration.toDays();
         return days > 0 ? days + " day(s)" : duration.toString();
+    }
+
+    private String valueOrEmpty(Object value) {
+        return value == null ? "" : value.toString();
     }
 }

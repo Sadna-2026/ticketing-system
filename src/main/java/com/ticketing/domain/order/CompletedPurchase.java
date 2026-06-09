@@ -12,8 +12,8 @@ import jakarta.persistence.Table;
 
 /**
  * A frozen record of a completed purchase. Snapshot fields (eventName, companyName,
- * amount, purchasedAt) are captured at checkout time and never reflect later changes
- * to the underlying Event.
+ * buyerUsername, amount, purchasedAt) are captured at checkout time and never reflect
+ * later changes to the underlying Event or buyer (e.g. a rename or member removal).
  *
  * <p>JPA mapping: an immutable {@code @Entity} (field access) whose snapshot fields are
  * stored as PLAIN COPIED COLUMNS. There is deliberately NO {@code @ManyToOne} to
@@ -25,7 +25,8 @@ import jakarta.persistence.Table;
  * <p>Was a {@code record} in V2; converted to a class because JPA cannot instantiate a
  * record (no no-arg constructor / final components). The record-style accessors
  * ({@link #purchaseId()}, {@link #eventId()}, {@link #eventName()}, {@link #companyName()},
- * {@link #memberId()}, {@link #transactionId()}, {@link #amount()}, {@link #purchasedAt()})
+ * {@link #memberId()}, {@link #buyerUsername()}, {@link #transactionId()}, {@link #amount()},
+ * {@link #purchasedAt()})
  * plus {@code equals}/{@code hashCode} are preserved so all call sites compile unchanged
  * and the public API is identical.
  *
@@ -48,6 +49,8 @@ public class CompletedPurchase {
     private String companyName;
     @Column(name = "member_id")
     private UUID memberId;
+    @Column(name = "buyer_username")
+    private String buyerUsername;
     @Column(name = "transaction_id")
     private String transactionId;
     @Column(name = "amount")
@@ -59,12 +62,31 @@ public class CompletedPurchase {
     protected CompletedPurchase() {
     }
 
+    /**
+     * Backward-compatible constructor without a buyer-username snapshot. Existing call
+     * sites (tests, legacy flows) keep compiling; {@code buyerUsername} is left null and
+     * the purchase grids fall back to showing nothing for the buyer.
+     */
     public CompletedPurchase(
             UUID purchaseId,
             UUID eventId,
             String eventName,
             String companyName,
             UUID memberId,
+            String transactionId,
+            BigDecimal amount,
+            Instant purchasedAt) {
+        this(purchaseId, eventId, eventName, companyName, memberId, null,
+                transactionId, amount, purchasedAt);
+    }
+
+    public CompletedPurchase(
+            UUID purchaseId,
+            UUID eventId,
+            String eventName,
+            String companyName,
+            UUID memberId,
+            String buyerUsername,
             String transactionId,
             BigDecimal amount,
             Instant purchasedAt) {
@@ -90,6 +112,7 @@ public class CompletedPurchase {
         this.eventName = eventName;
         this.companyName = companyName;
         this.memberId = memberId;
+        this.buyerUsername = buyerUsername;
         this.transactionId = transactionId;
         this.amount = amount;
         this.purchasedAt = purchasedAt;
@@ -101,6 +124,7 @@ public class CompletedPurchase {
     public String eventName() { return eventName; }
     public String companyName() { return companyName; }
     public UUID memberId() { return memberId; }
+    public String buyerUsername() { return buyerUsername; }
     public String transactionId() { return transactionId; }
     public BigDecimal amount() { return amount; }
     public Instant purchasedAt() { return purchasedAt; }
@@ -115,6 +139,7 @@ public class CompletedPurchase {
                 && Objects.equals(eventName, that.eventName)
                 && Objects.equals(companyName, that.companyName)
                 && Objects.equals(memberId, that.memberId)
+                && Objects.equals(buyerUsername, that.buyerUsername)
                 && Objects.equals(transactionId, that.transactionId)
                 && Objects.equals(amount, that.amount)
                 && Objects.equals(purchasedAt, that.purchasedAt);
@@ -123,7 +148,7 @@ public class CompletedPurchase {
     @Override
     public int hashCode() {
         return Objects.hash(purchaseId, eventId, eventName, companyName, memberId,
-                transactionId, amount, purchasedAt);
+                buyerUsername, transactionId, amount, purchasedAt);
     }
 
     @Override
@@ -133,6 +158,7 @@ public class CompletedPurchase {
                 + ", eventName=" + eventName
                 + ", companyName=" + companyName
                 + ", memberId=" + memberId
+                + ", buyerUsername=" + buyerUsername
                 + ", transactionId=" + transactionId
                 + ", amount=" + amount
                 + ", purchasedAt=" + purchasedAt + "]";
