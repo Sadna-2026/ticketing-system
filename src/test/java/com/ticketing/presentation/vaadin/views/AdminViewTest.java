@@ -186,6 +186,30 @@ class AdminViewTest {
     }
 
     @Test
+    void GivenHistoryRows_WhenRendered_ThenGridShowsEventAndDateNotRawPurchaseId() {
+        AdminPresenter presenter = mockPresenter();
+        MemberSummaryDTO buyer = new MemberSummaryDTO(UUID.randomUUID(), "bob");
+        when(presenter.searchMembers("")).thenReturn(List.of(buyer));
+        PurchaseRecordDTO purchase = purchase(buyer.id());
+        when(presenter.loadGlobalPurchaseHistory(buyer.id(), "Acme"))
+                .thenReturn(PurchaseHistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
+        AdminView view = new AdminView(presenter);
+        findComboBox(view, "Buyer member").setValue(buyer);
+        findTextField(view, "Company name").setValue("Acme");
+
+        clickButton(view, "Load global purchase history");
+
+        Grid<PurchaseRecordDTO> grid = findPurchaseHistoryGrid(view);
+        List<String> headers = columnHeaders(grid);
+        assertFalse(headers.contains("Purchase ID"), headers.toString());
+        assertTrue(headers.contains("Event"), headers.toString());
+        assertTrue(headers.contains("Purchased at"), headers.toString());
+        // The purchase id is still carried by the bound row even though it is no longer a column.
+        List<PurchaseRecordDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(purchase.purchaseId(), rows.get(0).purchaseId());
+    }
+
+    @Test
     void GivenNoBuyerSelected_WhenLoadGlobalHistoryClicked_ThenHistoryLoadedWithNullBuyer() {
         AdminPresenter presenter = mockPresenter();
         when(presenter.loadGlobalPurchaseHistory(null, "Acme"))
@@ -226,6 +250,28 @@ class AdminViewTest {
         verify(presenter).listSuspensions(true);
         assertTrue(hasText(view, "Loaded 1 suspension(s)."));
         assertEquals(List.of(suspension), findSuspensionsGrid(view).getDataProvider().fetch(new Query<>()).toList());
+    }
+
+    @Test
+    void GivenSuspensions_WhenRendered_ThenGridShowsMemberUsernameNotRawMemberId() {
+        AdminPresenter presenter = mockPresenter();
+        MemberSummaryDTO target = new MemberSummaryDTO(UUID.randomUUID(), "carol");
+        UUID memberId = UUID.randomUUID();
+        SuspensionDTO suspension = suspension(memberId, UUID.randomUUID());
+        when(presenter.searchMembers("")).thenReturn(List.of(target));
+        when(presenter.listSuspensions(true)).thenReturn(SuspensionListResult.success("Loaded 1 suspension(s).", List.of(suspension)));
+        AdminView view = new AdminView(presenter);
+        findCheckbox(view, "Active suspensions only").setValue(true);
+
+        clickButton(view, "Load suspensions");
+
+        Grid<SuspensionDTO> grid = findSuspensionsGrid(view);
+        List<String> headers = columnHeaders(grid);
+        assertFalse(headers.contains("Member ID"), headers.toString());
+        assertTrue(headers.contains("Member"), headers.toString());
+        // The member id is still carried by the bound row even though it is no longer a column.
+        List<SuspensionDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(memberId, rows.get(0).memberId());
     }
 
     @Test
@@ -377,6 +423,12 @@ class AdminViewTest {
                 .filter(grid -> grid.getId().map(id::equals).orElse(false))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Grid not found: " + id));
+    }
+
+    private static List<String> columnHeaders(Grid<?> grid) {
+        return grid.getColumns().stream()
+                .map(Grid.Column::getHeaderText)
+                .toList();
     }
 
     private static List<Grid<?>> findGrids(Component root) {

@@ -278,6 +278,27 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenCompanyPurchases_WhenRendered_ThenGridShowsEventAndDateNotRawPurchaseId() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID memberId = UUID.randomUUID();
+        PurchaseRecordDTO purchase = purchase(memberId);
+        when(presenter.loadPurchaseHistory("Acme")).thenReturn(PurchaseHistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Reporting company name").setValue(company("Acme"));
+
+        clickButton(view, "Load company purchase history");
+
+        Grid<PurchaseRecordDTO> grid = findPurchasesGrid(view);
+        List<String> headers = columnHeaders(grid);
+        assertFalse(headers.contains("Purchase ID"), headers.toString());
+        assertTrue(headers.contains("Event"), headers.toString());
+        assertTrue(headers.contains("Purchased at"), headers.toString());
+        // The purchase id is still carried by the bound row even though it is no longer a column.
+        List<PurchaseRecordDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(purchase.purchaseId(), rows.get(0).purchaseId());
+    }
+
+    @Test
     void GivenUnauthorizedApplicationResponse_WhenManagerActionClicked_ThenMessageIsDisplayed() {
         CompanyPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
@@ -712,6 +733,12 @@ class CompanyViewTest {
                 .filter(grid -> grid.getId().map(id::equals).orElse(false))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Grid not found: " + id));
+    }
+
+    private static List<String> columnHeaders(Grid<?> grid) {
+        return grid.getColumns().stream()
+                .map(Grid.Column::getHeaderText)
+                .toList();
     }
 
     private static List<Grid<?>> findGrids(Component root) {
