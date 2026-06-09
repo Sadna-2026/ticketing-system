@@ -120,12 +120,14 @@ public class CompanyView extends VerticalLayout {
     private final ComboBox<EventSummaryDTO> lookupEventPicker = new ComboBox<>("Published event");
 
     private final ComboBox<CompanySummaryDTO> personnelCompanyName = new ComboBox<>("Personnel company name");
-    private final TextField targetMemberId = new TextField("Target member ID");
+    private final ComboBox<PersonnelTarget> targetMember = new ComboBox<>("Target member");
     private final ComboBox<StaffAppointment.StaffRole> role = new ComboBox<>("Role");
     private final CheckboxGroup<ManagerPermission> permissions = new CheckboxGroup<>("Manager permissions");
     private final TextField offerId = new TextField("Role offer ID");
     private final Span personnelStatus = new Span("Manage owner and manager appointments.");
+    private final Span personnelAccessHint = new Span("Select a company to show owner-only permission controls.");
     private final VerticalLayout orgChartDisplay = new VerticalLayout();
+    private Button changeManagerPermissionsButton;
 
     private final ComboBox<CompanySummaryDTO> eventCompanyName = new ComboBox<>("Event company name");
     private final TextField eventName = new TextField("Event name");
@@ -289,6 +291,8 @@ public class CompanyView extends VerticalLayout {
         role.setItemLabelGenerator(StaffAppointment.StaffRole::name);
         role.setValue(StaffAppointment.StaffRole.MANAGER);
         permissions.setItems(ManagerPermission.values());
+        targetMember.setItemLabelGenerator(PersonnelTarget::label);
+        targetMember.setPlaceholder("Select personnel after choosing a company");
 
         eventCategory.setItems(EventCategory.values());
         eventCategory.setItemLabelGenerator(EventCategory::name);
@@ -311,7 +315,7 @@ public class CompanyView extends VerticalLayout {
         markRequired(openCompanyName, "Company name is required.");
 
         markRequired(personnelCompanyName, "Select a company.");
-        markRequired(targetMemberId, "Target member ID is required.");
+        markRequired(targetMember, "Target member is required.");
         markRequired(role, "Select a role.");
 
         markRequired(eventCompanyName, "Select a company.");
@@ -346,6 +350,7 @@ public class CompanyView extends VerticalLayout {
         policyEventId.setClearButtonVisible(true);
 
         // Event pickers cascade from the company selected in their section.
+        personnelCompanyName.addValueChangeListener(e -> refreshPersonnelContext());
         eventCompanyName.addValueChangeListener(e -> reloadCompanyEvents(eventId, e.getValue()));
         inventoryCompanyName.addValueChangeListener(e -> reloadCompanyEvents(inventoryEventId, e.getValue()));
         policyCompanyName.addValueChangeListener(e -> reloadCompanyEvents(policyEventId, e.getValue()));
@@ -456,7 +461,7 @@ public class CompanyView extends VerticalLayout {
     private VerticalLayout personnelSection() {
         Button offerRole = new Button("Offer role appointment", event -> handlePersonnelResult(presenter.offerRoleAppointment(
                 companyNameOf(personnelCompanyName),
-                parseUuid(targetMemberId, "target member"),
+                selectedTargetMemberId(),
                 role.getValue(),
                 permissions.getSelectedItems()
         )));
@@ -466,26 +471,28 @@ public class CompanyView extends VerticalLayout {
                 presenter.respondToRoleOffer(parseUuid(offerId, "role offer"), false)));
         Button revoke = new Button("Revoke personnel", event -> handlePersonnelResult(presenter.revokePersonnel(
                 companyNameOf(personnelCompanyName),
-                parseUuid(targetMemberId, "target member")
+                selectedTargetMemberId()
         )));
-        Button changePermissions = new Button("Change manager permissions", event -> handlePersonnelResult(
-                presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), parseUuid(targetMemberId, "target member"),
+        changeManagerPermissionsButton = new Button("Change manager permissions", event -> handlePersonnelResult(
+                presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), selectedTargetMemberId(),
                         permissions.getSelectedItems())));
         Button relinquish = new Button("Relinquish ownership", event -> handlePersonnelResult(
                 presenter.relinquishOwnership(companyNameOf(personnelCompanyName))));
         Button loadOrgChart = new Button("Load organization chart", event -> loadOrganizationChart());
 
-        FormLayout form = new FormLayout(personnelCompanyName, targetMemberId, role, permissions, offerId);
+        FormLayout form = new FormLayout(personnelCompanyName, targetMember, role, permissions, offerId);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
-        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revoke, changePermissions, relinquish, loadOrgChart);
+        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revoke, changeManagerPermissionsButton, relinquish, loadOrgChart);
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
+        refreshPersonnelAccess();
 
         VerticalLayout section = new VerticalLayout(
                 new H3("Personnel and roles"),
-                new Paragraph("Owners appoint managers and other owners. Managers accept offers and manage permissions."),
+                new Paragraph("Owners appoint managers and other owners. Members can accept or reject role offers."),
                 new H4("Role appointment and personnel"),
                 form,
+                personnelAccessHint,
                 actions,
                 personnelStatus,
                 orgChartDisplay
@@ -969,11 +976,13 @@ public class CompanyView extends VerticalLayout {
         if (!result.success()) {
             personnelStatus.setText(result.message());
             orgChartDisplay.add(new Paragraph(result.message()));
+            setPersonnelTargetItems(List.of());
             UiMessages.error(result.message());
             return;
         }
 
         personnelStatus.setText(result.message());
+        setPersonnelTargetItems(result.roots());
         if (result.roots().isEmpty()) {
             orgChartDisplay.add(new Paragraph("No personnel found."));
         } else {
@@ -982,6 +991,80 @@ public class CompanyView extends VerticalLayout {
             }
         }
         UiMessages.success(result.message());
+    }
+
+    private void refreshPersonnelContext() {
+        CompanyPresenter.PersonnelAccessResult access = refreshPersonnelAccess();
+        if (access.canChangeManagerPermissions()) {
+            targetMember.setEnabled(true);
+            reloadPersonnelTargets();
+        } else {
+            setPersonnelTargetsUnavailable("Owner-only personnel list unavailable");
+        }
+    }
+
+    private void reloadPersonnelTargets() {
+        String companyName = companyNameOf(personnelCompanyName);
+        if (companyName == null) {
+            setPersonnelTargetItems(List.of());
+            return;
+        }
+
+        OrgChartResult result = presenter.loadOrganizationChart(companyName);
+        setPersonnelTargetItems(result.success() ? result.roots() : List.of());
+    }
+
+    private void setPersonnelTargetItems(List<OrgNodeDTO> roots) {
+        List<PersonnelTarget> targets = new ArrayList<>();
+        collectPersonnelTargets(roots, targets);
+        targetMember.clear();
+        targetMember.setItems(targets);
+        targetMember.setEnabled(true);
+        targetMember.setPlaceholder(targets.isEmpty()
+                ? "No personnel available"
+                : "Select personnel");
+    }
+
+    private void setPersonnelTargetsUnavailable(String placeholder) {
+        targetMember.clear();
+        targetMember.setItems(List.of());
+        targetMember.setInvalid(false);
+        targetMember.setEnabled(false);
+        targetMember.setPlaceholder(placeholder);
+    }
+
+    private void collectPersonnelTargets(List<OrgNodeDTO> nodes, List<PersonnelTarget> targets) {
+        if (nodes == null) {
+            return;
+        }
+        for (OrgNodeDTO node : nodes) {
+            targets.add(new PersonnelTarget(node.memberId(), node.username(), node.role()));
+            collectPersonnelTargets(node.subordinates(), targets);
+        }
+    }
+
+    private CompanyPresenter.PersonnelAccessResult refreshPersonnelAccess() {
+        if (changeManagerPermissionsButton == null) {
+            return CompanyPresenter.PersonnelAccessResult.denied("Select a company to show owner-only permission controls.");
+        }
+        String companyName = companyNameOf(personnelCompanyName);
+        if (companyName == null) {
+            changeManagerPermissionsButton.setVisible(false);
+            personnelAccessHint.setText("Select a company to show owner-only permission controls.");
+            personnelAccessHint.setVisible(true);
+            return CompanyPresenter.PersonnelAccessResult.denied("Select a company to show owner-only permission controls.");
+        }
+
+        CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess(companyName);
+        changeManagerPermissionsButton.setVisible(result.canChangeManagerPermissions());
+        personnelAccessHint.setText(result.message());
+        personnelAccessHint.setVisible(!result.canChangeManagerPermissions());
+        return result;
+    }
+
+    private UUID selectedTargetMemberId() {
+        PersonnelTarget selected = targetMember.getValue();
+        return selected == null ? null : selected.memberId();
     }
 
     private void createEvent() {
@@ -1239,5 +1322,16 @@ public class CompanyView extends VerticalLayout {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private record PersonnelTarget(UUID memberId, String username, StaffAppointment.StaffRole role) {
+        private String label() {
+            return username + " | " + memberId + " | " + role;
+        }
+
+        @Override
+        public String toString() {
+            return label();
+        }
     }
 }

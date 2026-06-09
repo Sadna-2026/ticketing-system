@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +30,7 @@ import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
 import com.ticketing.domain.event.EventCategory;
@@ -42,6 +44,8 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResul
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PersonnelAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
@@ -53,6 +57,7 @@ import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -105,7 +110,7 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Load company purchase history"));
         assertTrue(hasButton(view, "Load sales report"));
         assertNotNull(findTextField(view, "New company name"));
-        assertNotNull(findTextField(view, "Target member ID"));
+        assertNotNull(findTargetMemberCombo(view));
         assertNotNull(findEventCombo(view, "Event to manage"));
         assertNotNull(findCompanyCombo(view, "Event company name"));
         assertEquals(2, findGrids(view).size());
@@ -173,9 +178,11 @@ class CompanyViewTest {
         when(presenter.revokePersonnel("Acme", targetId)).thenReturn(ActionResult.success("Personnel revoked."));
         when(presenter.changeManagerPermissions(eq("Acme"), eq(targetId), any()))
                 .thenReturn(ActionResult.success("Manager permissions updated."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        findTextField(view, "Target member ID").setValue(targetId.toString());
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
         findTextField(view, "Role offer ID").setValue(offerId.toString());
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS));
 
@@ -192,6 +199,96 @@ class CompanyViewTest {
         verify(presenter).revokePersonnel("Acme", targetId);
         verify(presenter).changeManagerPermissions("Acme", targetId, Set.of(ManagerPermission.VIEW_REPORTS));
         assertTrue(hasText(view, "Manager permissions updated."));
+    }
+
+    @Test
+    void GivenOwnerForSelectedCompany_WhenPersonnelCompanySelected_ThenChangeManagerPermissionsIsReachable() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.allowed("Owner permissions available for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        assertTrue(hasVisibleButton(view, "Change manager permissions"));
+        assertFalse(hasText(view, "Only a company owner can change manager permissions for Acme."));
+    }
+
+    @Test
+    void GivenNonOwnerForSelectedCompany_WhenPersonnelCompanySelected_ThenChangeManagerPermissionsIsHiddenWithReason() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.denied("Only a company owner can change manager permissions for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        assertFalse(hasVisibleButton(view, "Change manager permissions"));
+        assertTrue(hasText(view, "Only a company owner can change manager permissions for Acme."));
+    }
+
+    @Test
+    void GivenNonOwnerForSelectedCompany_WhenPersonnelCompanySelected_ThenPersonnelTargetsAreDisabledWithOwnerOnlyReason() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.denied(
+                        "Access denied. Only company owners can view the organization chart."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        ComboBox<Object> target = findTargetMemberCombo(view);
+        assertFalse(target.isEnabled());
+        assertFalse(target.isInvalid());
+        assertEquals("Owner-only personnel list unavailable", target.getPlaceholder());
+        assertTrue(targetMemberLabels(view).isEmpty());
+        assertTrue(hasText(view, "Access denied. Only company owners can view the organization chart."));
+        verify(presenter, never()).loadOrganizationChart("Acme");
+    }
+
+    @Test
+    void GivenPersonnelCompanySelected_WhenOrganizationChartLoads_ThenTargetMemberDropdownShowsUsernameIdAndRole() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID ownerId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.",
+                        List.of(new OrgNodeDTO(ownerId, "owner", StaffAppointment.StaffRole.OWNER,
+                                Set.of(), false, List.of(personnel("manager", managerId))))));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        List<String> targets = targetMemberLabels(view);
+        assertTrue(targets.contains(personnelLabel("owner", ownerId, StaffAppointment.StaffRole.OWNER)));
+        assertTrue(targets.contains(personnelLabel("manager", managerId, StaffAppointment.StaffRole.MANAGER)));
+    }
+
+    @Test
+    void GivenOwnerAndServiceRejectsPermissionChange_WhenChangeManagerPermissionsClicked_ThenSpecificReasonIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID targetId = UUID.randomUUID();
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.allowed("Owner permissions available for Acme."));
+        when(presenter.changeManagerPermissions(eq("Acme"), eq(targetId), any()))
+                .thenReturn(ActionResult.failure("Only the founder or the direct appointer can modify manager permissions."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
+        findCheckboxGroup(view).setValue(Set.of(ManagerPermission.EVENT_LIFECYCLE));
+
+        clickButton(view, "Change manager permissions");
+
+        verify(presenter).changeManagerPermissions("Acme", targetId, Set.of(ManagerPermission.EVENT_LIFECYCLE));
+        assertTrue(hasText(view, "Only the founder or the direct appointer can modify manager permissions."));
     }
 
     @Test
@@ -315,7 +412,7 @@ class CompanyViewTest {
 
         assertTrue(findTextField(view, "New company name").isRequiredIndicatorVisible());
         assertTrue(findCompanyCombo(view, "Personnel company name").isRequiredIndicatorVisible());
-        assertTrue(findTextField(view, "Target member ID").isRequiredIndicatorVisible());
+        assertTrue(findTargetMemberCombo(view).isRequiredIndicatorVisible());
         assertTrue(findComboByLabel(view, "Role").isRequiredIndicatorVisible());
         assertTrue(findCompanyCombo(view, "Event company name").isRequiredIndicatorVisible());
         assertTrue(findTextField(view, "Event name").isRequiredIndicatorVisible());
@@ -385,9 +482,11 @@ class CompanyViewTest {
         UUID targetId = UUID.randomUUID();
         when(presenter.offerRoleAppointment(eq("Acme"), eq(targetId), eq(StaffAppointment.StaffRole.MANAGER), any()))
                 .thenReturn(ActionResult.success("Role appointment offer sent."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        findTextField(view, "Target member ID").setValue(targetId.toString());
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.PERSONNEL_MGMT));
 
         clickButton(view, "Offer role appointment");
@@ -403,9 +502,11 @@ class CompanyViewTest {
         UUID targetId = UUID.randomUUID();
         when(presenter.offerRoleAppointment(eq("Acme"), eq(targetId), eq(StaffAppointment.StaffRole.MANAGER), any()))
                 .thenReturn(ActionResult.failure("Target is already an owner of this company"));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        findTextField(view, "Target member ID").setValue(targetId.toString());
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
         clickButton(view, "Offer role appointment");
 
@@ -418,9 +519,11 @@ class CompanyViewTest {
         CompanyPresenter presenter = mockPresenter();
         UUID targetId = UUID.randomUUID();
         when(presenter.revokePersonnel("Acme", targetId)).thenReturn(ActionResult.success("Personnel revoked."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        findTextField(view, "Target member ID").setValue(targetId.toString());
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
         clickButton(view, "Revoke personnel");
 
@@ -434,9 +537,11 @@ class CompanyViewTest {
         UUID targetId = UUID.randomUUID();
         when(presenter.revokePersonnel("Acme", targetId)).thenReturn(ActionResult.failure(
                 "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        findTextField(view, "Target member ID").setValue(targetId.toString());
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
         clickButton(view, "Revoke personnel");
 
@@ -533,6 +638,10 @@ class CompanyViewTest {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
         when(presenter.currentSessionState()).thenReturn(member());
+        when(presenter.loadPersonnelAccess(any()))
+                .thenReturn(PersonnelAccessResult.allowed("Owner permissions available."));
+        when(presenter.loadOrganizationChart(any()))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of()));
         return presenter;
     }
 
@@ -586,6 +695,37 @@ class CompanyViewTest {
         );
     }
 
+    private static OrgNodeDTO personnel(String username, UUID memberId) {
+        return new OrgNodeDTO(memberId, username, StaffAppointment.StaffRole.MANAGER,
+                Set.of(ManagerPermission.VIEW_REPORTS), false, List.of());
+    }
+
+    private static String personnelLabel(String username, UUID memberId, StaffAppointment.StaffRole role) {
+        return username + " | " + memberId + " | " + role;
+    }
+
+    private static List<String> targetMemberLabels(CompanyView view) {
+        return findTargetMemberCombo(view).getDataProvider()
+                .fetch(new Query<>())
+                .map(String::valueOf)
+                .toList();
+    }
+
+    private static void selectTargetMember(
+            CompanyView view,
+            String username,
+            UUID memberId,
+            StaffAppointment.StaffRole role
+    ) {
+        String label = personnelLabel(username, memberId, role);
+        Object option = findTargetMemberCombo(view).getDataProvider()
+                .fetch(new Query<>())
+                .filter(item -> label.equals(String.valueOf(item)))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Target member option not found: " + label));
+        findTargetMemberCombo(view).setValue(option);
+    }
+
     private static boolean hasButton(Component root, String text) {
         return components(root).stream()
                 .filter(Button.class::isInstance)
@@ -619,6 +759,11 @@ class CompanyViewTest {
     @SuppressWarnings("unchecked")
     private static ComboBox<EventSummaryDTO> findEventCombo(Component root, String label) {
         return (ComboBox<EventSummaryDTO>) findComboByLabel(root, label);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ComboBox<Object> findTargetMemberCombo(Component root) {
+        return (ComboBox<Object>) findComboByLabel(root, "Target member");
     }
 
     private static ComboBox<?> findComboByLabel(Component root, String label) {
@@ -697,6 +842,25 @@ class CompanyViewTest {
                 .map(component -> (CheckboxGroup<ManagerPermission>) component)
                 .findFirst()
                 .orElseThrow();
+    }
+
+    private static void selectTab(Component root, String label) {
+        components(root).stream()
+                .filter(Tab.class::isInstance)
+                .map(Tab.class::cast)
+                .filter(tab -> label.equals(tab.getLabel()))
+                .findFirst()
+                .orElseThrow()
+                .getParent()
+                .filter(com.vaadin.flow.component.tabs.Tabs.class::isInstance)
+                .map(com.vaadin.flow.component.tabs.Tabs.class::cast)
+                .orElseThrow()
+                .setSelectedTab(components(root).stream()
+                        .filter(Tab.class::isInstance)
+                        .map(Tab.class::cast)
+                        .filter(tab -> label.equals(tab.getLabel()))
+                        .findFirst()
+                        .orElseThrow());
     }
 
     private static Grid<EventSummaryDTO> findEventGrid(Component root) {

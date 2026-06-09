@@ -178,7 +178,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 phoneNumber, dateOfBirth);
         if (OWNER_ID.equals(id)) {
             member.addStaffAppointment(COMPANY_NAME,
-                    new StaffAppointment(COMPANY_NAME, OWNER_ID, StaffAppointment.StaffRole.OWNER, Set.of()));
+                    new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Set.of()));
         }
         if (MANAGER_ID.equals(id)) {
             member.addStaffAppointment(COMPANY_NAME,
@@ -194,7 +194,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         }
         if (SECOND_OWNER_ID.equals(id)) {
             member.addStaffAppointment(SECOND_COMPANY_NAME,
-                    new StaffAppointment(SECOND_COMPANY_NAME, SECOND_OWNER_ID, StaffAppointment.StaffRole.OWNER, Set.of()));
+                    new StaffAppointment(SECOND_COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Set.of()));
         }
         memberRepository.save(member);
     }

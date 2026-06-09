@@ -150,6 +150,49 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenOwnerInCompanyOrgChart_WhenLoadingPersonnelAccess_ThenPermissionChangeIsAllowed() {
+        UUID ownerId = UUID.randomUUID();
+        memberSession(ownerId);
+        when(memberService.getOrganizationChart("member-token", "Acme"))
+                .thenReturn(List.of(new OrgNodeDTO(ownerId, "alice", StaffAppointment.StaffRole.OWNER,
+                        Set.of(), false, List.of())));
+
+        CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
+
+        assertTrue(result.canChangeManagerPermissions());
+        assertEquals("Owner permissions available for Acme.", result.message());
+        verify(memberService).getOrganizationChart("member-token", "Acme");
+    }
+
+    @Test
+    void GivenManagerInCompanyOrgChart_WhenLoadingPersonnelAccess_ThenPermissionChangeIsDenied() {
+        UUID managerId = UUID.randomUUID();
+        memberSession(managerId);
+        when(memberService.getOrganizationChart("member-token", "Acme"))
+                .thenReturn(List.of(new OrgNodeDTO(UUID.randomUUID(), "owner", StaffAppointment.StaffRole.OWNER,
+                        Set.of(), false, List.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
+                                Set.of(ManagerPermission.PERSONNEL_MGMT), false, List.of())))));
+
+        CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
+
+        assertFalse(result.canChangeManagerPermissions());
+        assertEquals("Only a company owner can change manager permissions for Acme.", result.message());
+    }
+
+    @Test
+    void GivenOrganizationChartFails_WhenLoadingPersonnelAccess_ThenSpecificReasonIsReturned() {
+        UUID memberId = UUID.randomUUID();
+        memberSession(memberId);
+        doThrow(new SecurityException("Viewing organization chart requires company staff permissions."))
+                .when(memberService).getOrganizationChart("member-token", "Acme");
+
+        CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
+
+        assertFalse(result.canChangeManagerPermissions());
+        assertEquals("Viewing organization chart requires company staff permissions.", result.message());
+    }
+
+    @Test
     void GivenEventInputs_WhenCreatingEditingPublishingAndCancellingEvents_ThenEventServiceIsCalledDirectly() {
         memberSession();
         UUID eventId = UUID.randomUUID();
@@ -495,8 +538,13 @@ class CompanyPresenterTest {
         assertEquals("Insufficient permissions: POLICY_MODIFICATION required", result.message());
     }
 
-    private void memberSession() {
+    private UUID memberSession() {
         UUID memberId = UUID.randomUUID();
+        memberSession(memberId);
+        return memberId;
+    }
+
+    private void memberSession(UUID memberId) {
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(memberId);
         SessionContext.setUsername("alice");

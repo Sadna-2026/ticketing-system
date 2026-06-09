@@ -227,6 +227,32 @@ public class CompanyPresenter {
         }
     }
 
+    public PersonnelAccessResult loadPersonnelAccess(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return PersonnelAccessResult.denied(MEMBER_SESSION_REQUIRED);
+        }
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return PersonnelAccessResult.denied("Select a company to manage personnel.");
+        }
+        UUID memberId = SessionContext.getMemberId();
+        if (memberId == null) {
+            return PersonnelAccessResult.denied(MEMBER_SESSION_REQUIRED);
+        }
+
+        try {
+            List<OrgNodeDTO> nodes = memberService.getOrganizationChart(token, normalizedName);
+            OrgNodeDTO currentMember = findNode(nodes, memberId);
+            if (currentMember != null && currentMember.role() == StaffAppointment.StaffRole.OWNER && !currentMember.revoked()) {
+                return PersonnelAccessResult.allowed("Owner permissions available for " + normalizedName + ".");
+            }
+            return PersonnelAccessResult.denied("Only a company owner can change manager permissions for " + normalizedName + ".");
+        } catch (RuntimeException ex) {
+            return PersonnelAccessResult.denied(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+        }
+    }
+
     public ActionResult relinquishOwnership(String companyName) {
         String token = memberToken();
         if (token == null) {
@@ -879,6 +905,22 @@ public class CompanyPresenter {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    private static OrgNodeDTO findNode(List<OrgNodeDTO> nodes, UUID memberId) {
+        if (nodes == null || memberId == null) {
+            return null;
+        }
+        for (OrgNodeDTO node : nodes) {
+            if (memberId.equals(node.memberId())) {
+                return node;
+            }
+            OrgNodeDTO child = findNode(node.subordinates(), memberId);
+            if (child != null) {
+                return child;
+            }
+        }
+        return null;
+    }
+
     @FunctionalInterface
     private interface LifecycleCall {
         void run(String token, String companyName);
@@ -891,6 +933,16 @@ public class CompanyPresenter {
 
         public static ActionResult failure(String message) {
             return new ActionResult(false, message);
+        }
+    }
+
+    public record PersonnelAccessResult(boolean canChangeManagerPermissions, String message) {
+        public static PersonnelAccessResult allowed(String message) {
+            return new PersonnelAccessResult(true, message);
+        }
+
+        public static PersonnelAccessResult denied(String message) {
+            return new PersonnelAccessResult(false, message);
         }
     }
 

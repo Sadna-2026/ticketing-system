@@ -1300,6 +1300,30 @@ class MemberServiceTest {
         }
 
         @Test
+        void GivenSelfAppointedOwnerAndStaff_WhenGetOrganizationChart_ThenOwnerIsRoot() {
+            Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
+            owner.addStaffAppointment(COMPANY_NAME,
+                    new StaffAppointment(COMPANY_NAME, ownerId, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+
+            UUID managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "m@test.com", "pass");
+            manager.addStaffAppointment(COMPANY_NAME,
+                    new StaffAppointment(COMPANY_NAME, ownerId, StaffAppointment.StaffRole.MANAGER,
+                            Set.of(ManagerPermission.VIEW_REPORTS)));
+
+            when(memberRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+            when(memberRepository.findByCompanyAppointment(COMPANY_NAME)).thenReturn(List.of(owner, manager));
+
+            List<OrgNodeDTO> chart = memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME);
+
+            assertEquals(1, chart.size());
+            OrgNodeDTO root = chart.get(0);
+            assertEquals(ownerId, root.memberId());
+            assertEquals(1, root.subordinates().size());
+            assertEquals(managerId, root.subordinates().get(0).memberId());
+        }
+
+        @Test
         void GivenRevokedManagerWithSubordinate_WhenGetOrganizationChart_ThenRevokedNodeMarkedWithSubtree() {
             Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
             owner.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
