@@ -69,6 +69,7 @@ public class CompanyService {
     private final IEventRepository eventRepository;
     private final IOrderRepository orderRepository;
     private final IPaymentGateway paymentGateway;
+    private final INotificationService notificationService;
 
     private final ConcurrentHashMap<String, Deque<RefundJob>> pendingRefunds = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Object> companyLocks = new ConcurrentHashMap<>();
@@ -79,7 +80,20 @@ public class CompanyService {
             ISessionTokenService sessionTokenService,
             IMemberRepository memberRepository
     ) {
-        this(companyRepository, eventPublisher, sessionTokenService, memberRepository, null, null, null);
+        this(companyRepository, eventPublisher, sessionTokenService, memberRepository, null, null, null, null);
+    }
+
+    public CompanyService(
+            ICompanyRepository companyRepository,
+            IEventPublisher eventPublisher,
+            ISessionTokenService sessionTokenService,
+            IMemberRepository memberRepository,
+            IEventRepository eventRepository,
+            IOrderRepository orderRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) IPaymentGateway paymentGateway
+    ) {
+        this(companyRepository, eventPublisher, sessionTokenService, memberRepository,
+                eventRepository, orderRepository, paymentGateway, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -90,7 +104,8 @@ public class CompanyService {
             IMemberRepository memberRepository,
             IEventRepository eventRepository,
             IOrderRepository orderRepository,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) IPaymentGateway paymentGateway
+            @org.springframework.beans.factory.annotation.Autowired(required = false) IPaymentGateway paymentGateway,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService
     ) {
         this.companyRepository = companyRepository;
         this.eventPublisher = eventPublisher;
@@ -99,6 +114,7 @@ public class CompanyService {
         this.eventRepository = eventRepository;
         this.orderRepository = orderRepository;
         this.paymentGateway = paymentGateway;
+        this.notificationService = notificationService;
     }
 
     // ── Company creation ───────────────────────────────────────────────
@@ -420,6 +436,7 @@ public class CompanyService {
 
         company.suspend();
         saveCompany(company);
+        notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has been suspended.");
         log.info("Company suspended: name={}, by={}", companyName, memberId);
     }
 
@@ -432,6 +449,7 @@ public class CompanyService {
 
         company.reopen();
         saveCompany(company);
+        notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has returned to activity.");
         log.info("Company reopened: name={}, by={}", companyName, memberId);
     }
 
@@ -492,6 +510,7 @@ public class CompanyService {
             pendingRefunds.remove(key);
             company.completeClosure();
             saveCompany(company);
+            notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has been closed.");
             log.info("Pending closure completed: company={}", companyName);
         }
     }
@@ -536,7 +555,20 @@ public class CompanyService {
 
         company.close();
         saveCompany(company);
+        notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has been closed.");
         log.info("Company permanently closed: name={}, revokedRoles={}", company.getName(), revokeRoles);
+    }
+
+    private void notifyCompanyStaff(String companyName, String message) {
+        if (notificationService == null) {
+            return;
+        }
+        for (Member member : memberRepository.findByCompanyAppointment(companyName)) {
+            StaffAppointment appointment = member.getStaffAppointment(companyName);
+            if (appointment != null && !appointment.isRevoked()) {
+                notificationService.notify(member.getId().toString(), message);
+            }
+        }
     }
 
     private void revokeAllAppointments(String companyName) {
