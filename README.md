@@ -96,13 +96,58 @@ Rules:
 ### Example
 
 ```
-# Bring the platform up with one company and a member.
-login(rina, pw);
+# Bring the platform up with two members, a company and a manager offer.
+guest-registration(rina, rina@example.com, secret1, 050-000-0000, 1990-01-01);
+guest-registration(dana, dana@example.com, secret2);
+login(rina, secret1);
 open-production-company(
     rina_token,
     "Demo Co",
     "A demo company, with a comma in its description"
 );
-refresh();   // zero-arg call
+# offer dana a manager role at Demo Co (rina is the owner)
+appoint-manager(rina_token, "Demo Co", dana);
 ```
+
+### Execution (V3-15)
+
+When enabled, the parsed operations are executed **in order** against the application layer
+by `com.ticketing.application.initialization.InitialStateExecutor`, threading session tokens
+between operations. Execution is **all-or-nothing**: the first failure (unknown operation,
+wrong argument count, an unbound token reference, or an underlying use case throwing) aborts
+the whole run with an `InitialStateExecutionException` that names the failing operation, and —
+in `jpa` mode — rolls back everything applied so far (the executor's `execute` is
+`@Transactional`, so the per-use-case service transactions join one transaction).
+
+**Token threading.** A successful `login(X, ...)` or `guest-registration(X, ...)` binds the
+member's session token under the symbol `X_token`. When a later operation's argument equals a
+bound symbol, the real token is substituted; any other argument is passed through literally.
+So `login(rina, pw)` makes `rina_token` usable by `open-production-company(rina_token, ...)`.
+
+**Supported operations.** The executor maps each operation name to a real use case:
+
+| Operation (aliases) | Arguments | Use case |
+| --- | --- | --- |
+| `guest-registration` (`register`) | `username, email, password[, phone, dateOfBirth]` | `MemberService.register` (mints a guest token first) → binds `username_token` |
+| `login` | `username, password` | `MemberService.login` (mints a guest token first) → binds `username_token` |
+| `open-production-company` | `token, name[, description]` | `CompanyService.openProductionCompany` |
+| `appoint-manager` (`offer-manager-role`) | `token, companyName, targetUsername[, permission...]` | `CompanyService.offerRoleAppointment` (MANAGER role; target resolved by username; optional `ManagerPermission` names) |
+
+### Enabling it
+
+Execution is **off by default**. Set `ticketing.initial-state.file` to a readable path and the
+`InitialStateRunner` (an `ApplicationRunner`) will load, parse and execute it on startup:
+
+```
+TICKETING_INITIAL_STATE_FILE=/path/to/initial-state.txt
+```
+
+or in `application.yml` / on the command line:
+
+```
+--ticketing.initial-state.file=/path/to/initial-state.txt
+```
+
+When the property is unset (the default) the runner is a no-op: normal startup, the existing
+tests and `DevSeedDataInitializer` are unaffected.
     
