@@ -367,6 +367,7 @@ public class OrderServiceTest {
         CompletedPurchase receipt = orderRepo.findCompletedById(purchaseId).orElseThrow();
         assertEquals(purchaseId, receipt.purchaseId());
         assertEquals(memberId, receipt.memberId());                 // buyer
+        assertEquals("receiptUser", receipt.buyerUsername());       // buyer username snapshotted at checkout
         assertEquals(new BigDecimal("250.00"), receipt.amount());   // final amount: 2*50.00 + 150.00
         assertEquals(eventId, receipt.eventId());
         assertEquals("Summer Concert", receipt.eventName());
@@ -376,6 +377,7 @@ public class OrderServiceTest {
         List<PurchaseRecordDTO> history = orderService.getPurchaseHistory(memberToken);
         assertEquals(1, history.size());
         assertEquals(purchaseId, history.get(0).purchaseId());
+        assertEquals("receiptUser", history.get(0).buyerUsername());
         assertEquals(new BigDecimal("250.00"), history.get(0).amount());
 
         // And: the purchased items are recorded on the now-completed order.

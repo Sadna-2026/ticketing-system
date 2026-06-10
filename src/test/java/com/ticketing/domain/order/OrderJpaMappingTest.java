@@ -104,7 +104,7 @@ class OrderJpaMappingTest {
 
         CompletedPurchase purchase = new CompletedPurchase(
                 purchaseId, eventId, "Summer Fest", "Acme Productions",
-                memberId, "txn-123", new BigDecimal("174.00"), purchasedAt);
+                memberId, "buyerBob", "txn-123", new BigDecimal("174.00"), purchasedAt);
 
         // --- When: persisted, flushed, cleared, and reloaded ----------------------
         em.persistAndFlush(purchase);
@@ -118,6 +118,7 @@ class OrderJpaMappingTest {
         assertThat(reloaded.eventName()).isEqualTo("Summer Fest");
         assertThat(reloaded.companyName()).isEqualTo("Acme Productions");
         assertThat(reloaded.memberId()).isEqualTo(memberId);
+        assertThat(reloaded.buyerUsername()).isEqualTo("buyerBob");
         assertThat(reloaded.transactionId()).isEqualTo("txn-123");
         assertThat(reloaded.amount()).isEqualByComparingTo("174.00");
         assertThat(reloaded.purchasedAt()).isEqualTo(purchasedAt);

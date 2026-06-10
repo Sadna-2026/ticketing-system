@@ -696,6 +696,7 @@ public class OrderService {
                 event.getName(),
                 event.getCompanyName(),
                 order.getMemberId(),
+                buyerContact.getUsername(),
                 payment.transactionId(),
                 finalAmount,
                 systemClock.now());

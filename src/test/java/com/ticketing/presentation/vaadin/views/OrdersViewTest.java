@@ -121,6 +121,48 @@ class OrdersViewTest {
     }
 
     @Test
+    void GivenOrder_WhenRendered_ThenCartHidesRawItemIdButKeepsItOnTheBoundRow() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        OrderItemDto item = gaItem(itemId, UUID.randomUUID(), 2);
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        OrdersView view = new OrdersView(presenter);
+
+        Grid<OrderItemDto> grid = findOrderItemsGrid(view);
+        List<String> headers = columnHeaders(grid);
+        assertFalse(headers.contains("Item ID"), headers.toString());
+        assertTrue(headers.contains("Zone"), headers.toString());
+        assertTrue(headers.contains("Quantity"), headers.toString());
+        // The id is dropped from the columns but stays on the bound row so remove/update act on the right item.
+        List<OrderItemDto> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(itemId, rows.get(0).getId());
+    }
+
+    @Test
+    void GivenPurchaseHistory_WhenRendered_ThenGridShowsEventAndDateNotRawPurchaseId() {
+        OrdersPresenter presenter = mockPresenter();
+        PurchaseRecordDTO purchase = purchase();
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
+        when(presenter.loadPurchaseHistory()).thenReturn(HistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
+        OrdersView view = new OrdersView(presenter);
+
+        clickButton(view, "Load purchase history");
+
+        Grid<PurchaseRecordDTO> grid = findHistoryGrid(view);
+        List<String> headers = columnHeaders(grid);
+        assertFalse(headers.contains("Purchase ID"), headers.toString());
+        assertTrue(headers.contains("Event"), headers.toString());
+        assertTrue(headers.contains("Purchased at"), headers.toString());
+        // The purchase id is still carried by the bound row even though it is no longer a column.
+        List<PurchaseRecordDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(purchase.purchaseId(), rows.get(0).purchaseId());
+    }
+
+    @Test
     void GivenEmptiedOrderPinnedToEvent_WhenClearCartClicked_ThenOrderIsClearedViaPresenter() {
         OrdersPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();

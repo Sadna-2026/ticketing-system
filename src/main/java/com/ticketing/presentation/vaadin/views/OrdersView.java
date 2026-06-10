@@ -103,7 +103,6 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void configureOrderItemsGrid() {
-        orderItemsGrid.addColumn(item -> item.getId().toString()).setHeader("Item ID").setAutoWidth(true);
         orderItemsGrid.addColumn(this::formatZone).setHeader("Zone").setAutoWidth(true);
         orderItemsGrid.addColumn(this::formatSeat).setHeader("Seat").setAutoWidth(true);
         orderItemsGrid.addColumn(OrderItemDto::getQuantity).setHeader("Quantity").setAutoWidth(true);
@@ -118,7 +117,6 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void configureHistoryGrid() {
-        historyGrid.addColumn(purchase -> purchase.purchaseId().toString()).setHeader("Purchase ID").setAutoWidth(true);
         historyGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         historyGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
         historyGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);
