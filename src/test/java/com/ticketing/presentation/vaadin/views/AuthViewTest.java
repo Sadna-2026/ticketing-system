@@ -214,6 +214,38 @@ class AuthViewTest {
     }
 
     @Test
+    void GivenAdminLoginClicked_WhenSuccess_ThenShowsSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
+        when(presenter.adminLogin(anyString(), anyString()))
+                .thenReturn(AuthResult.success("Admin logged in."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log in as admin");
+
+            uiMessagesMock.verify(() -> UiMessages.success("Admin logged in."));
+        }
+    }
+
+    @Test
+    void GivenAdminLoginClicked_WhenFailure_ThenShowsErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Guest");
+        when(presenter.currentSessionState()).thenReturn(guest());
+        when(presenter.adminLogin(anyString(), anyString()))
+                .thenReturn(AuthResult.failure("Invalid admin credentials."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log in as admin");
+
+            uiMessagesMock.verify(() -> UiMessages.error("Invalid admin credentials."));
+        }
+    }
+
+    @Test
     void GivenAuthView_WhenRendered_ThenMandatoryFieldsShowRequiredIndicatorAndOptionalFieldsDoNot() {
         AuthView view = new AuthView(mockPresenter(guest()));
 

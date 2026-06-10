@@ -222,6 +222,7 @@ public class EventsView extends VerticalLayout {
         viewMap.setEnabled(false);
         resultsStatus.setText("Search for events to see results.");
         resetMapDisplay();
+        UiMessages.info("Filters cleared.");
     }
 
     private void loadSelectedEventMap() {
