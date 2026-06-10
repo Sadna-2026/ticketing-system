@@ -189,8 +189,8 @@ class CompanyViewTest {
         clickButton(view, "Offer role appointment");
         clickButton(view, "Accept role offer");
         clickButton(view, "Reject role offer");
-        clickButton(view, "Revoke personnel");
         clickButton(view, "Change manager permissions");
+        clickButton(view, "Revoke personnel");
 
         verify(presenter).offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER,
                 Set.of(ManagerPermission.VIEW_REPORTS));
@@ -198,35 +198,37 @@ class CompanyViewTest {
         verify(presenter).respondToRoleOffer(offerId, false);
         verify(presenter).revokePersonnel("Acme", targetId);
         verify(presenter).changeManagerPermissions("Acme", targetId, Set.of(ManagerPermission.VIEW_REPORTS));
-        assertTrue(hasText(view, "Manager permissions updated."));
+        assertTrue(hasText(view, "Personnel revoked."));
     }
 
     @Test
     void GivenOwnerForSelectedCompany_WhenPersonnelCompanySelected_ThenChangeManagerPermissionsIsReachable() {
         CompanyPresenter presenter = mockPresenter();
         when(presenter.loadPersonnelAccess("Acme"))
-                .thenReturn(PersonnelAccessResult.allowed("Owner permissions available for Acme."));
+                .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available for Acme."));
 
         CompanyView view = new CompanyView(presenter);
         selectTab(view, "Personnel");
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
 
         assertTrue(hasVisibleButton(view, "Change manager permissions"));
-        assertFalse(hasText(view, "Only a company owner can change manager permissions for Acme."));
+        assertTrue(hasVisibleButton(view, "Revoke personnel"));
+        assertFalse(hasText(view, "Only a company owner can manage personnel for Acme."));
     }
 
     @Test
-    void GivenNonOwnerForSelectedCompany_WhenPersonnelCompanySelected_ThenChangeManagerPermissionsIsHiddenWithReason() {
+    void GivenNonOwnerForSelectedCompany_WhenPersonnelCompanySelected_ThenOwnerOnlyPersonnelActionsAreHiddenWithReason() {
         CompanyPresenter presenter = mockPresenter();
         when(presenter.loadPersonnelAccess("Acme"))
-                .thenReturn(PersonnelAccessResult.denied("Only a company owner can change manager permissions for Acme."));
+                .thenReturn(PersonnelAccessResult.denied("Only a company owner can manage personnel for Acme."));
 
         CompanyView view = new CompanyView(presenter);
         selectTab(view, "Personnel");
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
 
         assertFalse(hasVisibleButton(view, "Change manager permissions"));
-        assertTrue(hasText(view, "Only a company owner can change manager permissions for Acme."));
+        assertFalse(hasVisibleButton(view, "Revoke personnel"));
+        assertTrue(hasText(view, "Only a company owner can manage personnel for Acme."));
     }
 
     @Test
@@ -269,11 +271,30 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenPersonnelCompanySelected_WhenOrganizationChartContainsRevokedManager_ThenTargetDropdownSkipsRevokedPersonnel() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID activeManagerId = UUID.randomUUID();
+        UUID revokedManagerId = UUID.randomUUID();
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.",
+                        List.of(personnel("activeManager", activeManagerId),
+                                personnel("revokedManager", revokedManagerId, true))));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        List<String> targets = targetMemberLabels(view);
+        assertTrue(targets.contains(personnelLabel("activeManager", activeManagerId, StaffAppointment.StaffRole.MANAGER)));
+        assertFalse(targets.contains(personnelLabel("revokedManager", revokedManagerId, StaffAppointment.StaffRole.MANAGER)));
+    }
+
+    @Test
     void GivenOwnerAndServiceRejectsPermissionChange_WhenChangeManagerPermissionsClicked_ThenSpecificReasonIsDisplayed() {
         CompanyPresenter presenter = mockPresenter();
         UUID targetId = UUID.randomUUID();
         when(presenter.loadPersonnelAccess("Acme"))
-                .thenReturn(PersonnelAccessResult.allowed("Owner permissions available for Acme."));
+                .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available for Acme."));
         when(presenter.changeManagerPermissions(eq("Acme"), eq(targetId), any()))
                 .thenReturn(ActionResult.failure("Only the founder or the direct appointer can modify manager permissions."));
         when(presenter.loadOrganizationChart("Acme"))
@@ -289,6 +310,52 @@ class CompanyViewTest {
 
         verify(presenter).changeManagerPermissions("Acme", targetId, Set.of(ManagerPermission.EVENT_LIFECYCLE));
         assertTrue(hasText(view, "Only the founder or the direct appointer can modify manager permissions."));
+    }
+
+    @Test
+    void GivenOwnerAndManagerTarget_WhenRevokePersonnelClicked_ThenManagerRemovalSucceedsThroughUi() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID targetId = UUID.randomUUID();
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available for Acme."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
+        when(presenter.revokePersonnel("Acme", targetId))
+                .thenReturn(ActionResult.success("Personnel revoked."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
+
+        clickButton(view, "Revoke personnel");
+
+        verify(presenter).revokePersonnel("Acme", targetId);
+        assertTrue(hasText(view, "Personnel revoked."));
+    }
+
+    @Test
+    void GivenOwnerAndServiceRejectsManagerRemoval_WhenRevokePersonnelClicked_ThenSpecificReasonIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID targetId = UUID.randomUUID();
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available for Acme."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
+        when(presenter.revokePersonnel("Acme", targetId))
+                .thenReturn(ActionResult.failure(
+                        "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
+
+        clickButton(view, "Revoke personnel");
+
+        verify(presenter).revokePersonnel("Acme", targetId);
+        assertTrue(hasText(view,
+                "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."));
     }
 
     @Test
@@ -639,7 +706,7 @@ class CompanyViewTest {
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
         when(presenter.currentSessionState()).thenReturn(member());
         when(presenter.loadPersonnelAccess(any()))
-                .thenReturn(PersonnelAccessResult.allowed("Owner permissions available."));
+                .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available."));
         when(presenter.loadOrganizationChart(any()))
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of()));
         return presenter;
@@ -696,8 +763,12 @@ class CompanyViewTest {
     }
 
     private static OrgNodeDTO personnel(String username, UUID memberId) {
+        return personnel(username, memberId, false);
+    }
+
+    private static OrgNodeDTO personnel(String username, UUID memberId, boolean revoked) {
         return new OrgNodeDTO(memberId, username, StaffAppointment.StaffRole.MANAGER,
-                Set.of(ManagerPermission.VIEW_REPORTS), false, List.of());
+                Set.of(ManagerPermission.VIEW_REPORTS), revoked, List.of());
     }
 
     private static String personnelLabel(String username, UUID memberId, StaffAppointment.StaffRole role) {

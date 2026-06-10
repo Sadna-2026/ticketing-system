@@ -184,6 +184,36 @@ class ApplicationListenerTest {
 
             assertThrows(IllegalArgumentException.class, () -> handler.handle(event));
         }
+
+        @Test
+        public void GivenRevokedManager_WhenHandlePermissionsChange_ThenIllegalArgumentException() {
+            UUID founderId = UUID.randomUUID();
+            Member founder = new Member(founderId, "founder", "f@test.com", "pass");
+            founder.addStaffAppointment(COMPANY_NAME,
+                    new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+
+            UUID managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "m@test.com", "pass");
+            StaffAppointment managerAppointment = new StaffAppointment(
+                    COMPANY_NAME, founderId, StaffAppointment.StaffRole.MANAGER, Collections.emptySet());
+            managerAppointment.revoke();
+            manager.addStaffAppointment(COMPANY_NAME, managerAppointment);
+
+            Company company = new Company(COMPANY_NAME, "desc", founderId);
+
+            when(memberRepository.findById(founderId)).thenReturn(Optional.of(founder));
+            when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
+            when(companyRepository.findByName(COMPANY_NAME)).thenReturn(Optional.of(company));
+
+            ManagerPermissionsChangedEvent event = new ManagerPermissionsChangedEvent(
+                    founderId, managerId, COMPANY_NAME, Set.of(ManagerPermission.VIEW_REPORTS));
+
+            IllegalArgumentException exception = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> handler.handle(event));
+            assertEquals("Cannot modify permissions for a revoked manager appointment.", exception.getMessage());
+            verify(memberRepository, never()).save(any());
+        }
     }
 
     @Nested

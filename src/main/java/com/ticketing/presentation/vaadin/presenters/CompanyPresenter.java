@@ -245,9 +245,9 @@ public class CompanyPresenter {
             List<OrgNodeDTO> nodes = memberService.getOrganizationChart(token, normalizedName);
             OrgNodeDTO currentMember = findNode(nodes, memberId);
             if (currentMember != null && currentMember.role() == StaffAppointment.StaffRole.OWNER && !currentMember.revoked()) {
-                return PersonnelAccessResult.allowed("Owner permissions available for " + normalizedName + ".");
+                return PersonnelAccessResult.allowed("Owner personnel controls available for " + normalizedName + ".");
             }
-            return PersonnelAccessResult.denied("Only a company owner can change manager permissions for " + normalizedName + ".");
+            return PersonnelAccessResult.denied("Only a company owner can manage personnel for " + normalizedName + ".");
         } catch (RuntimeException ex) {
             return PersonnelAccessResult.denied(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
         }
@@ -936,7 +936,7 @@ public class CompanyPresenter {
         }
     }
 
-    public record PersonnelAccessResult(boolean canChangeManagerPermissions, String message) {
+    public record PersonnelAccessResult(boolean canManagePersonnel, String message) {
         public static PersonnelAccessResult allowed(String message) {
             return new PersonnelAccessResult(true, message);
         }
