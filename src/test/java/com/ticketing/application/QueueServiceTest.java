@@ -93,6 +93,17 @@ class QueueServiceTest {
     }
 
     @Test
+    void GivenNoExplicitParams_WhenCreateQueue_ThenUsesConfigDefaultThresholdAndFlowRate() {
+        // V3-13: the no-param overload uses the config-driven defaults
+        // (ticketing.queue.threshold/flow-rate = 100/10; field-initializer fallback here).
+        UUID queueId = orderService.createQueue(adminToken, eventId);
+        com.ticketing.domain.queue.VirtualQueue queue = queueRepo.findByEventId(eventId).orElseThrow();
+        assertEquals(queueId, queue.getId());
+        assertEquals(100, queue.getConfig().getThreshold());
+        assertEquals(10, queue.getConfig().getFlowRate());
+    }
+
+    @Test
     void GivenExistingQueue_WhenCreateDuplicate_ThenThrows() {
         orderService.createQueue(adminToken, eventId, 10, 5);
         assertThrows(IllegalStateException.class,

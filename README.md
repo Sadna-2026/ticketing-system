@@ -44,4 +44,17 @@ H2_CONSOLE_ENABLED=false
 
 > **Never commit real credentials.** Supply remote-DB credentials via the environment /
 > deployment secrets, not via `application.yml`.
+
+## Startup parameters
+
+Runtime startup parameters are externalized to config (V3-13) — not hard-coded. The
+virtual-queue admission settings (used as the default when a queue is created) are:
+
+| Env var | Default | `application.yml` key | Purpose |
+|---------|---------|-----------------------|---------|
+| `TICKETING_QUEUE_THRESHOLD` | `100` | `ticketing.queue.threshold` | how many users may hold reservations concurrently before the virtual queue kicks in |
+| `TICKETING_QUEUE_FLOW_RATE` | `10` | `ticketing.queue.flow-rate` | how many waiting users are admitted per batch |
+
+`OrderService.createQueue(token, eventId)` uses these defaults; the explicit overload
+`createQueue(token, eventId, threshold, flowRate)` still allows a per-event override.
     
