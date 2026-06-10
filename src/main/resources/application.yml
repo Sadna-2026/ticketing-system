@@ -29,6 +29,13 @@ ticketing:
   # (default, unchanged behavior); "jpa" activates the DB-backed JPA repositories.
   # Exactly one implementation per repository interface is active per mode.
   persistence: ${TICKETING_PERSISTENCE:memory}
+  # Virtual-queue startup parameters (V3-13): how many users may hold reservations
+  # concurrently before the queue kicks in (threshold), and how many waiting users are
+  # admitted per batch (flow-rate). Used as the default when a queue is created without
+  # explicit values; override per environment via the env vars below.
+  queue:
+    threshold: ${TICKETING_QUEUE_THRESHOLD:100}
+    flow-rate: ${TICKETING_QUEUE_FLOW_RATE:10}
   startup:
     initialize-platform: true
   seed:
