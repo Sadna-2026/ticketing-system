@@ -159,8 +159,8 @@ class CompanyPresenterTest {
 
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
 
-        assertTrue(result.canChangeManagerPermissions());
-        assertEquals("Owner permissions available for Acme.", result.message());
+        assertTrue(result.canManagePersonnel());
+        assertEquals("Owner personnel controls available for Acme.", result.message());
         verify(memberService).getOrganizationChart("member-token", "Acme");
     }
 
@@ -175,8 +175,8 @@ class CompanyPresenterTest {
 
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
 
-        assertFalse(result.canChangeManagerPermissions());
-        assertEquals("Only a company owner can change manager permissions for Acme.", result.message());
+        assertFalse(result.canManagePersonnel());
+        assertEquals("Only a company owner can manage personnel for Acme.", result.message());
     }
 
     @Test
@@ -188,7 +188,7 @@ class CompanyPresenterTest {
 
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
 
-        assertFalse(result.canChangeManagerPermissions());
+        assertFalse(result.canManagePersonnel());
         assertEquals("Viewing organization chart requires company staff permissions.", result.message());
     }
 

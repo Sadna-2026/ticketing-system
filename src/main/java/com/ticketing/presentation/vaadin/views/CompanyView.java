@@ -127,6 +127,7 @@ public class CompanyView extends VerticalLayout {
     private final Span personnelStatus = new Span("Manage owner and manager appointments.");
     private final Span personnelAccessHint = new Span("Select a company to show owner-only permission controls.");
     private final VerticalLayout orgChartDisplay = new VerticalLayout();
+    private Button revokePersonnelButton;
     private Button changeManagerPermissionsButton;
 
     private final ComboBox<CompanySummaryDTO> eventCompanyName = new ComboBox<>("Event company name");
@@ -469,10 +470,13 @@ public class CompanyView extends VerticalLayout {
                 presenter.respondToRoleOffer(parseUuid(offerId, "role offer"), true)));
         Button rejectOffer = new Button("Reject role offer", event -> handlePersonnelResult(
                 presenter.respondToRoleOffer(parseUuid(offerId, "role offer"), false)));
-        Button revoke = new Button("Revoke personnel", event -> handlePersonnelResult(presenter.revokePersonnel(
-                companyNameOf(personnelCompanyName),
-                selectedTargetMemberId()
-        )));
+        revokePersonnelButton = new Button("Revoke personnel", event -> {
+            ActionResult result = presenter.revokePersonnel(companyNameOf(personnelCompanyName), selectedTargetMemberId());
+            handlePersonnelResult(result);
+            if (result.success()) {
+                refreshPersonnelContext();
+            }
+        });
         changeManagerPermissionsButton = new Button("Change manager permissions", event -> handlePersonnelResult(
                 presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), selectedTargetMemberId(),
                         permissions.getSelectedItems())));
@@ -482,7 +486,7 @@ public class CompanyView extends VerticalLayout {
 
         FormLayout form = new FormLayout(personnelCompanyName, targetMember, role, permissions, offerId);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
-        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revoke, changeManagerPermissionsButton, relinquish, loadOrgChart);
+        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revokePersonnelButton, changeManagerPermissionsButton, relinquish, loadOrgChart);
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
         refreshPersonnelAccess();
@@ -995,7 +999,7 @@ public class CompanyView extends VerticalLayout {
 
     private void refreshPersonnelContext() {
         CompanyPresenter.PersonnelAccessResult access = refreshPersonnelAccess();
-        if (access.canChangeManagerPermissions()) {
+        if (access.canManagePersonnel()) {
             targetMember.setEnabled(true);
             reloadPersonnelTargets();
         } else {
@@ -1038,17 +1042,20 @@ public class CompanyView extends VerticalLayout {
             return;
         }
         for (OrgNodeDTO node : nodes) {
-            targets.add(new PersonnelTarget(node.memberId(), node.username(), node.role()));
+            if (!node.revoked()) {
+                targets.add(new PersonnelTarget(node.memberId(), node.username(), node.role()));
+            }
             collectPersonnelTargets(node.subordinates(), targets);
         }
     }
 
     private CompanyPresenter.PersonnelAccessResult refreshPersonnelAccess() {
-        if (changeManagerPermissionsButton == null) {
+        if (changeManagerPermissionsButton == null || revokePersonnelButton == null) {
             return CompanyPresenter.PersonnelAccessResult.denied("Select a company to show owner-only permission controls.");
         }
         String companyName = companyNameOf(personnelCompanyName);
         if (companyName == null) {
+            revokePersonnelButton.setVisible(false);
             changeManagerPermissionsButton.setVisible(false);
             personnelAccessHint.setText("Select a company to show owner-only permission controls.");
             personnelAccessHint.setVisible(true);
@@ -1056,9 +1063,10 @@ public class CompanyView extends VerticalLayout {
         }
 
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess(companyName);
-        changeManagerPermissionsButton.setVisible(result.canChangeManagerPermissions());
+        revokePersonnelButton.setVisible(result.canManagePersonnel());
+        changeManagerPermissionsButton.setVisible(result.canManagePersonnel());
         personnelAccessHint.setText(result.message());
-        personnelAccessHint.setVisible(!result.canChangeManagerPermissions());
+        personnelAccessHint.setVisible(!result.canManagePersonnel());
         return result;
     }
 

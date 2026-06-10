@@ -54,6 +54,10 @@ public class ManagerPermissionsChangedHandler implements IEventListener {
             throw new IllegalArgumentException("Target is not a staff member of company: " + changeEvent.getCompanyName());
         }
 
+        if (targetAppt.isRevoked()) {
+            throw new IllegalArgumentException("Cannot modify permissions for a revoked manager appointment.");
+        }
+
         if (!targetAppt.isManager()) {
             throw new IllegalArgumentException("Only manager permissions can be modified.");
         }
