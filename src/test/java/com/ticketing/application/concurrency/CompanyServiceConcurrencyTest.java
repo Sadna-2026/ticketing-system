@@ -300,6 +300,11 @@ public class CompanyServiceConcurrencyTest {
         }
 
         @Override
+        public List<Company> findFounderLifecycleCompanies(UUID founderId, String query) {
+            return delegate.findFounderLifecycleCompanies(founderId, query);
+        }
+
+        @Override
         public void delete(String id) {
             delegate.delete(id);
         }

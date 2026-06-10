@@ -755,10 +755,12 @@ class CompanyServiceTest {
         private InMemoryMemberRepository memberRepo;
         private InMemoryOrderRepository orderRepo;
         private IPaymentGateway paymentGateway;
+        private INotificationService notificationService;
         private ISessionTokenService tokens;
         private CompanyService service;
 
         private UUID founderId;
+        private UUID managerId;
         private Member founder;
         private Company company;
 
@@ -769,8 +771,10 @@ class CompanyServiceTest {
             memberRepo = new InMemoryMemberRepository();
             orderRepo = new InMemoryOrderRepository();
             paymentGateway = mock(IPaymentGateway.class);
+            notificationService = mock(INotificationService.class);
             tokens = mock(ISessionTokenService.class);
-            service = new CompanyService(companyRepo, null, tokens, memberRepo, eventRepo, orderRepo, paymentGateway);
+            service = new CompanyService(companyRepo, null, tokens, memberRepo,
+                eventRepo, orderRepo, paymentGateway, notificationService);
 
             founderId = UUID.randomUUID();
             founder = new Member(founderId, "founder", "founder@x.com", "pw");
@@ -778,6 +782,12 @@ class CompanyServiceTest {
                 COMPANY, founderId, StaffAppointment.StaffRole.OWNER, Set.of());
             founder.addStaffAppointment(COMPANY, ownerAppt);
             memberRepo.save(founder);
+
+            managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "manager@x.com", "pw");
+            manager.addStaffAppointment(COMPANY, new StaffAppointment(
+                COMPANY, founderId, StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.VIEW_REPORTS)));
+            memberRepo.save(manager);
 
             company = new Company(COMPANY, "desc", founderId);
             companyRepo.save(company);
@@ -797,6 +807,29 @@ class CompanyServiceTest {
 
             Company saved = companyRepo.findByName(COMPANY).orElseThrow();
             assertEquals(CompanyStatus.SUSPENDED, saved.getStatus());
+            verify(notificationService).notify(eq(founderId.toString()), contains("suspended"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("suspended"));
+        }
+
+        @Test
+        public void GivenFounder_WhenSearchingLifecycleCompanies_ThenActiveAndSuspendedCompaniesAreReturned() {
+            Company suspended = new Company("Suspended Co", "desc", founderId);
+            suspended.suspend();
+            companyRepo.save(suspended);
+            Company closed = new Company("Closed Co", "desc", founderId);
+            closed.close();
+            companyRepo.save(closed);
+            Company otherFounderCompany = new Company("Other Founder Co", "desc", UUID.randomUUID());
+            companyRepo.save(otherFounderCompany);
+
+            List<String> names = service.searchFounderLifecycleCompanies(FOUNDER_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name)
+                    .toList();
+
+            assertTrue(names.contains(COMPANY));
+            assertTrue(names.contains("Suspended Co"));
+            assertFalse(names.contains("Closed Co"));
+            assertFalse(names.contains("Other Founder Co"));
         }
 
         @Test
@@ -806,6 +839,8 @@ class CompanyServiceTest {
             service.reopenCompany(FOUNDER_TOKEN, COMPANY);
 
             assertEquals(CompanyStatus.ACTIVE, companyRepo.findByName(COMPANY).orElseThrow().getStatus());
+            verify(notificationService).notify(eq(founderId.toString()), contains("returned to activity"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("returned to activity"));
         }
 
         @Test
@@ -833,6 +868,8 @@ class CompanyServiceTest {
             // Founder's appointment must be preserved per the V0 spec
             Member f = memberRepo.findById(founderId).orElseThrow();
             assertNotNull(f.getStaffAppointment(COMPANY));
+            verify(notificationService).notify(eq(founderId.toString()), contains("closed"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("closed"));
         }
 
         @Test
@@ -840,8 +877,8 @@ class CompanyServiceTest {
             Event e1 = seedEvent(UUID.randomUUID());
 
             // seed a second staff member (manager) appointed to the same company
-            UUID managerId = UUID.randomUUID();
-            Member manager = new Member(managerId, "managerUser", "manager@x.com", "pw");
+            UUID adminClosedManagerId = UUID.randomUUID();
+            Member manager = new Member(adminClosedManagerId, "adminClosedManager", "admin-closed-manager@x.com", "pw");
             manager.addStaffAppointment(COMPANY, new StaffAppointment(
                 COMPANY, founderId, StaffAppointment.StaffRole.MANAGER,
                 Set.of(ManagerPermission.EVENT_LIFECYCLE)));
@@ -858,7 +895,7 @@ class CompanyServiceTest {
             // BOTH founder and manager appointments must be gone
             assertNull(memberRepo.findById(founderId).orElseThrow().getStaffAppointment(COMPANY),
                 "Admin close revokes founder appointment");
-            assertNull(memberRepo.findById(managerId).orElseThrow().getStaffAppointment(COMPANY),
+            assertNull(memberRepo.findById(adminClosedManagerId).orElseThrow().getStaffAppointment(COMPANY),
                 "Admin close revokes manager appointment");
         }
 
@@ -916,7 +953,8 @@ class CompanyServiceTest {
                 companyRepo.findByName(COMPANY).orElseThrow().getStatus());
 
             // 3) simulate a service restart: build a fresh service whose in-memory queue is empty
-            CompanyService freshService = new CompanyService(companyRepo, null, tokens, memberRepo, eventRepo, orderRepo, paymentGateway);
+            CompanyService freshService = new CompanyService(companyRepo, null, tokens, memberRepo,
+                eventRepo, orderRepo, paymentGateway, notificationService);
 
             // 4) gateway recovers; retry must rehydrate the queue from completedPurchaseRepo
             when(paymentGateway.refund(anyString(), anyDouble()))
@@ -926,6 +964,8 @@ class CompanyServiceTest {
 
             assertEquals(CompanyStatus.CLOSED,
                 companyRepo.findByName(COMPANY).orElseThrow().getStatus());
+            verify(notificationService).notify(eq(founderId.toString()), contains("closed"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("closed"));
         }
 
         @Test

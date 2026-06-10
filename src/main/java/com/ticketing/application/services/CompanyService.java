@@ -404,6 +404,14 @@ public class CompanyService {
 
     // ── History (inlined from CompanyHistoryDomainService) ───────────
 
+    public List<CompanySummaryDTO> searchFounderLifecycleCompanies(String token, String query) {
+        UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
+        return companyRepository.findFounderLifecycleCompanies(memberId, query).stream()
+                .map(c -> new CompanySummaryDTO(c.getName()))
+                .toList();
+    }
+
     public List<PurchaseRecordDTO> getPurchaseHistory(String token, String companyName) {
         UUID memberId = requireMember(token);
         Company company = companyRepository.findByName(companyName)
@@ -426,6 +434,13 @@ public class CompanyService {
     }
 
     // ── Lifecycle (inlined from CompanyLifecycleDomainService) ───────
+
+    public void verifyFounderLifecycleAccess(String token, String companyName) {
+        UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
+        Company company = loadCompany(companyName);
+        requireFounder(memberId, company);
+    }
 
     @Transactional
     public void suspendCompany(String token, String companyName) {
