@@ -58,6 +58,32 @@ virtual-queue admission settings (used as the default when a queue is created) a
 `OrderService.createQueue(token, eventId)` uses these defaults; the explicit overload
 `createQueue(token, eventId, threshold, flowRate)` still allows a per-event override.
 
+## External systems
+
+The platform connects to the real **external payment + ticket systems** (WSEP, reqs I.3/I.4) via
+a single HTTP `POST` endpoint whose behaviour is selected by an `action_type` form parameter; the
+`handshake` action returns the literal `OK`. The HTTP client is
+`com.ticketing.infrastructure.gateway.HttpExternalSystemsClient` (implements `IExternalSystemsClient`).
+
+The **base URL is config-driven** and, when set, the `ExternalSystemsHandshakeRunner` performs a
+**startup handshake** to verify availability (integrity rule: a live connection must exist after
+init) — a failed handshake halts startup. When the base URL is **unset (default)** the handshake is
+skipped, so local dev, the existing stub gateways and the test suite are unaffected.
+
+| Env var | Default | `application.yml` key | Purpose |
+|---------|---------|-----------------------|---------|
+| `TICKETING_EXTERNAL_BASE_URL` | *(empty → handshake skipped)* | `ticketing.external.base-url` | base URL of the WSEP external endpoint |
+| `TICKETING_EXTERNAL_CONNECT_TIMEOUT_MS` | `5000` | `ticketing.external.connect-timeout-ms` | TCP connect timeout (ms) |
+| `TICKETING_EXTERNAL_READ_TIMEOUT_MS` | `5000` | `ticketing.external.read-timeout-ms` | response read timeout (ms) |
+
+```
+TICKETING_EXTERNAL_BASE_URL=https://<wsep-host>/
+```
+
+> The payment and ticket-supply gateways are wired onto this client in V3-17 / V3-18; V3-16
+> delivers the client and the startup handshake. Tests exercise the client against a stubbed
+> endpoint (`MockRestServiceServer`), never the live system.
+
 ## Initial-state file
 
 The platform can optionally be started from an **initial-state file** (V3-14): a plain-text
