@@ -108,6 +108,19 @@ public class CompanyPresenter {
         }
     }
 
+    public List<CompanySummaryDTO> searchLifecycleCompanies(String query) {
+        String token = memberToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return companyService.searchFounderLifecycleCompanies(token, query);
+        } catch (RuntimeException ex) {
+            logger.warn("Lifecycle company search failed", ex);
+            return List.of();
+        }
+    }
+
     /** All events of a company (any status) for management pickers; empty if no member session. */
     public List<EventSummaryDTO> listCompanyEvents(String companyName) {
         String token = memberToken();
@@ -794,6 +807,24 @@ public class CompanyPresenter {
         return lifecycle(companyName, "Company closed.", (token, name) -> companyService.permanentCloseByFounder(token, name));
     }
 
+    public LifecycleAccessResult loadLifecycleAccess(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return LifecycleAccessResult.denied(MEMBER_SESSION_REQUIRED);
+        }
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return LifecycleAccessResult.denied("Select a company to show founder-only lifecycle controls.");
+        }
+
+        try {
+            companyService.verifyFounderLifecycleAccess(token, normalizedName);
+            return LifecycleAccessResult.allowed("Founder lifecycle controls available for " + normalizedName + ".");
+        } catch (RuntimeException ex) {
+            return LifecycleAccessResult.denied(userMessage(ex, LIFECYCLE_FAILURE_MESSAGE));
+        }
+    }
+
     public PurchaseHistoryResult loadPurchaseHistory(String companyName) {
         String token = memberToken();
         if (token == null) {
@@ -943,6 +974,16 @@ public class CompanyPresenter {
 
         public static PersonnelAccessResult denied(String message) {
             return new PersonnelAccessResult(false, message);
+        }
+    }
+
+    public record LifecycleAccessResult(boolean canManageLifecycle, String message) {
+        public static LifecycleAccessResult allowed(String message) {
+            return new LifecycleAccessResult(true, message);
+        }
+
+        public static LifecycleAccessResult denied(String message) {
+            return new LifecycleAccessResult(false, message);
         }
     }
 

@@ -146,6 +146,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         saveMemberIfMissing(SUSPENDED_MEMBER_ID, "suspended", "suspended@ticketing.local", "suspended123",
                 "050-000-0008", LocalDate.of(1993, 3, 15));
         ensureSuspendedMemberSeed();
+        ensureManualQaAppointments();
 
         adminService.registerAdmin(ADMIN_ID, "admin", "admin@ticketing.local", "admin123");
     }
@@ -161,6 +162,28 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         member.addSuspension(new Suspension(ADMIN_ID, Instant.now(), SUSPENDED_MEMBER_DURATION, SUSPENDED_MEMBER_REASON));
         memberRepository.save(member);
         log.info("Seeded suspended member '{}' until {}", member.getUsername(), Instant.now().plus(SUSPENDED_MEMBER_DURATION));
+    }
+
+    private void ensureManualQaAppointments() {
+        ensureStaffAppointment(MANAGER_ID, SECOND_COMPANY_NAME, SECOND_OWNER_ID,
+                StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.VIEW_REPORTS));
+    }
+
+    private void ensureStaffAppointment(
+            UUID memberId,
+            String companyName,
+            UUID appointedByMemberId,
+            StaffAppointment.StaffRole role,
+            Set<ManagerPermission> permissions
+    ) {
+        Member member = memberRepository.findById(memberId).orElse(null);
+        if (member == null || member.getStaffAppointment(companyName) != null) {
+            return;
+        }
+        member.addStaffAppointment(companyName,
+                new StaffAppointment(companyName, appointedByMemberId, role, permissions));
+        memberRepository.save(member);
+        log.info("Seeded {} appointment for '{}' in '{}'", role, member.getUsername(), companyName);
     }
 
     private void saveMemberIfMissing(
@@ -183,6 +206,9 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         if (MANAGER_ID.equals(id)) {
             member.addStaffAppointment(COMPANY_NAME,
                     new StaffAppointment(COMPANY_NAME, OWNER_ID, StaffAppointment.StaffRole.MANAGER,
+                            Set.of(ManagerPermission.VIEW_REPORTS)));
+            member.addStaffAppointment(SECOND_COMPANY_NAME,
+                    new StaffAppointment(SECOND_COMPANY_NAME, SECOND_OWNER_ID, StaffAppointment.StaffRole.MANAGER,
                             Set.of(ManagerPermission.VIEW_REPORTS)));
         }
         if (INVENTORY_MANAGER_ID.equals(id)) {

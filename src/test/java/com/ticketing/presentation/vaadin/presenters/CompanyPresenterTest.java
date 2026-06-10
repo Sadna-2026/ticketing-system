@@ -52,6 +52,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResul
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
@@ -315,6 +316,29 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenFounderLifecycleAccess_WhenLoadingLifecycleAccess_ThenAllowedResultIsReturned() {
+        memberSession();
+
+        LifecycleAccessResult result = presenter.loadLifecycleAccess("Acme");
+
+        assertTrue(result.canManageLifecycle());
+        assertEquals("Founder lifecycle controls available for Acme.", result.message());
+        verify(companyService).verifyFounderLifecycleAccess("member-token", "Acme");
+    }
+
+    @Test
+    void GivenNonFounderLifecycleAccess_WhenLoadingLifecycleAccess_ThenSpecificReasonIsReturned() {
+        memberSession();
+        doThrow(new SecurityException("Only the founder can perform this lifecycle action"))
+                .when(companyService).verifyFounderLifecycleAccess("member-token", "Acme");
+
+        LifecycleAccessResult result = presenter.loadLifecycleAccess("Acme");
+
+        assertFalse(result.canManageLifecycle());
+        assertEquals("Only the founder can perform this lifecycle action", result.message());
+    }
+
+    @Test
     void GivenMissingMemberSession_WhenCompanyActionRuns_ThenNoServiceIsCalledAndUserMessageIsReturned() {
         SessionContext.setSessionToken("guest-token");
 
@@ -350,6 +374,16 @@ class CompanyPresenterTest {
         when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
 
         assertTrue(presenter.searchCompanies("a").isEmpty());
+    }
+
+    @Test
+    void GivenMemberSession_WhenSearchingLifecycleCompanies_ThenFounderLifecycleCompaniesAreReturned() {
+        memberSession();
+        when(companyService.searchFounderLifecycleCompanies("member-token", "ac"))
+                .thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchLifecycleCompanies("ac"));
+        verify(companyService).searchFounderLifecycleCompanies("member-token", "ac");
     }
 
     @Test

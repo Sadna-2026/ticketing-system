@@ -3,9 +3,11 @@ package com.ticketing.presentation.vaadin.views;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +46,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResul
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PersonnelAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
@@ -442,6 +445,98 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenFounderForSelectedCompany_WhenLifecycleCompanySelected_ThenLifecycleActionsAreReachable() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Lifecycle");
+        findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
+
+        assertTrue(hasVisibleButton(view, "Suspend company"));
+        assertTrue(hasVisibleButton(view, "Reopen company"));
+        assertTrue(hasVisibleButton(view, "Close company"));
+        assertFalse(hasText(view, "Only the founder can perform this lifecycle action"));
+    }
+
+    @Test
+    void GivenSuspendedFounderCompany_WhenRendered_ThenLifecyclePickerIncludesIt() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.searchCompanies("")).thenReturn(List.of(company("Active Public")));
+        when(presenter.searchLifecycleCompanies("")).thenReturn(List.of(company("Suspended Co")));
+
+        CompanyView view = new CompanyView(presenter);
+
+        assertEquals(List.of("Suspended Co"), companyNames(findCompanyCombo(view, "Lifecycle company name")));
+        assertEquals(List.of("Active Public"), companyNames(findCompanyCombo(view, "Company info name")));
+    }
+
+    @Test
+    void GivenCompanySuspended_WhenLifecycleActionSucceeds_ThenSuspendedCompanyRemainsSelectableForReopen() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.searchLifecycleCompanies(""))
+                .thenReturn(List.of(company("Acme")))
+                .thenReturn(List.of(company("Acme")));
+        when(presenter.suspendCompany("Acme")).thenReturn(ActionResult.success("Company suspended."));
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Lifecycle");
+        ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
+        lifecyclePicker.setValue(company("Acme"));
+
+        clickButton(view, "Suspend company");
+
+        assertEquals(List.of("Acme"), companyNames(lifecyclePicker));
+        assertEquals("Acme", lifecyclePicker.getValue().name());
+        assertTrue(hasVisibleButton(view, "Reopen company"));
+        verify(presenter).suspendCompany("Acme");
+        verify(presenter, atLeast(2)).searchLifecycleCompanies("");
+    }
+
+    @Test
+    void GivenCompanyClosed_WhenLifecycleActionSucceeds_ThenClosedCompanyIsRemovedFromLifecyclePicker() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.searchLifecycleCompanies(""))
+                .thenReturn(List.of(company("Acme")))
+                .thenReturn(List.of());
+        when(presenter.closeCompany("Acme")).thenReturn(ActionResult.success("Company closed."));
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Lifecycle");
+        ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
+        lifecyclePicker.setValue(company("Acme"));
+
+        clickButton(view, "Close company");
+
+        assertEquals(List.of(), companyNames(lifecyclePicker));
+        assertNull(lifecyclePicker.getValue());
+        assertFalse(hasVisibleButton(view, "Reopen company"));
+        assertTrue(hasText(view, "Select a company to show founder-only lifecycle controls."));
+        verify(presenter).closeCompany("Acme");
+    }
+
+    @Test
+    void GivenNonFounderForSelectedCompany_WhenLifecycleCompanySelected_ThenLifecycleActionsAreHiddenWithReason() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.denied("Only the founder can perform this lifecycle action"));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Lifecycle");
+        findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
+
+        assertFalse(hasVisibleButton(view, "Suspend company"));
+        assertFalse(hasVisibleButton(view, "Reopen company"));
+        assertFalse(hasVisibleButton(view, "Close company"));
+        assertTrue(hasText(view, "Only the founder can perform this lifecycle action"));
+    }
+
+    @Test
     void GivenUnauthorizedApplicationResponse_WhenManagerActionClicked_ThenMessageIsDisplayed() {
         CompanyPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
@@ -707,6 +802,12 @@ class CompanyViewTest {
         when(presenter.currentSessionState()).thenReturn(member());
         when(presenter.loadPersonnelAccess(any()))
                 .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available."));
+        when(presenter.loadLifecycleAccess(any()))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available."));
+        when(presenter.searchCompanies(any()))
+                .thenReturn(List.of(company("Acme")));
+        when(presenter.searchLifecycleCompanies(any()))
+                .thenReturn(List.of(company("Acme")));
         when(presenter.loadOrganizationChart(any()))
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of()));
         return presenter;
@@ -779,6 +880,13 @@ class CompanyViewTest {
         return findTargetMemberCombo(view).getDataProvider()
                 .fetch(new Query<>())
                 .map(String::valueOf)
+                .toList();
+    }
+
+    private static List<String> companyNames(ComboBox<CompanySummaryDTO> combo) {
+        return combo.getDataProvider()
+                .fetch(new Query<>())
+                .map(CompanySummaryDTO::name)
                 .toList();
     }
 
