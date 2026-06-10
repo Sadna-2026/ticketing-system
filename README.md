@@ -57,4 +57,52 @@ virtual-queue admission settings (used as the default when a queue is created) a
 
 `OrderService.createQueue(token, eventId)` uses these defaults; the explicit overload
 `createQueue(token, eventId, threshold, flowRate)` still allows a per-event override.
+
+## Initial-state file
+
+The platform can optionally be started from an **initial-state file** (V3-14): a plain-text
+sequence of use-case calls that bring the system into a known state. The file format and its
+parser (`com.ticketing.application.initialization.InitialStateParser`) are independent of
+execution — parsing turns the text into an **ordered** list of
+`InitialStateOperation(name, args)` values; running them against the application layer is a
+separate concern.
+
+### Format
+
+One operation per statement, terminated by `;`:
+
+```
+operation-name(arg1, arg2, ...);
+```
+
+Grammar (one line):
+`file := (operation | comment | blank-line)*` where
+`operation := name '(' [ arg (',' arg)* ] ')' ';'` and `arg := "quoted-string" | bare-token`.
+
+Rules:
+- **Order is preserved** — operations are returned in the order they appear.
+- **Whitespace and newlines** between tokens are insignificant; a single operation may span
+  multiple lines.
+- **Comments** — a line starting with `#` or `//` (after optional leading whitespace) is
+  skipped, as are blank lines.
+- **Quoted arguments** — wrap an argument in double quotes so it may contain commas, spaces,
+  semicolons or `//`; the surrounding quotes are stripped. Inside a quoted string, `\"` and
+  `\\` are escapes. **Unquoted (bare)** arguments are trimmed of surrounding whitespace.
+- **Zero-arg calls** are written `op()` and yield an empty argument list.
+- **Malformed input** (unterminated call, missing parenthesis, unbalanced quote) throws
+  `InitialStateParseException` with the offending line number and a snippet. Empty,
+  whitespace-only or comment-only content yields an empty list.
+
+### Example
+
+```
+# Bring the platform up with one company and a member.
+login(rina, pw);
+open-production-company(
+    rina_token,
+    "Demo Co",
+    "A demo company, with a comma in its description"
+);
+refresh();   // zero-arg call
+```
     
