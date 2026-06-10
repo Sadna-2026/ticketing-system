@@ -153,14 +153,19 @@ public class CompanyView extends VerticalLayout {
 
     private final ComboBox<CompanySummaryDTO> inventoryCompanyName = new ComboBox<>("Inventory company name");
     private final ComboBox<EventSummaryDTO> inventoryEventId = new ComboBox<>("Inventory event");
-    private final TextField inventoryZoneId = new TextField("Inventory zone ID");
+    private final ComboBox<EventMapDTO.ZoneInfo> inventoryZonePicker = new ComboBox<>("Inventory zone");
     private final TextField seatRow = new TextField("Seat row");
     private final TextField seatNumber = new TextField("Seat number");
-    private final TextField seatId = new TextField("Seat ID");
+    private final ComboBox<EventMapDTO.SeatInfo> seatPicker = new ComboBox<>("Seat");
     private final IntegerField capacityDelta = new IntegerField("Capacity delta");
     private final BigDecimalField zonePriceUpdate = new BigDecimalField("Zone price update");
     private final Span inventoryStatus = new Span("Load or manage supported inventory actions.");
     private final VerticalLayout eventMapDisplay = new VerticalLayout();
+    private Button addSeatButton;
+    private Button removeSeatButton;
+    private Button increaseCapacityButton;
+    private Button decreaseCapacityButton;
+    private Button setPriceButton;
 
     private final ComboBox<CompanySummaryDTO> lifecycleCompanyName = new ComboBox<>("Lifecycle company name");
     private final Span lifecycleStatus = new Span("Suspend, reopen, or close companies.");
@@ -306,9 +311,6 @@ public class CompanyView extends VerticalLayout {
         capacityDelta.setMin(1);
         capacityDelta.setValue(1);
 
-        inventoryZoneId.setPlaceholder("Zone UUID");
-        seatId.setPlaceholder("Assigned seat UUID");
-
         markRequiredFields();
     }
 
@@ -350,11 +352,78 @@ public class CompanyView extends VerticalLayout {
         policyEventId.setPlaceholder("Optional — leave empty for company-level");
         policyEventId.setClearButtonVisible(true);
 
+        inventoryZonePicker.setItemLabelGenerator(zone -> zone.name() + " — " + zone.type());
+        inventoryZonePicker.setPlaceholder("Select an event to list zones");
+        seatPicker.setItemLabelGenerator(seat -> "Row " + seat.row() + " · Seat " + seat.seatNumber());
+        seatPicker.setPlaceholder("Select a zone to list seats");
+
         // Event pickers cascade from the company selected in their section.
         personnelCompanyName.addValueChangeListener(e -> refreshPersonnelContext());
         eventCompanyName.addValueChangeListener(e -> reloadCompanyEvents(eventId, e.getValue()));
         inventoryCompanyName.addValueChangeListener(e -> reloadCompanyEvents(inventoryEventId, e.getValue()));
         policyCompanyName.addValueChangeListener(e -> reloadCompanyEvents(policyEventId, e.getValue()));
+
+        // Inventory zone/seat pickers replace typed UUIDs: selecting the event lists its zones,
+        // selecting a zone lists its seats, and actions stay disabled until a valid selection exists.
+        inventoryEventId.addValueChangeListener(e -> loadInventoryZones(e.getValue()));
+        inventoryZonePicker.addValueChangeListener(e -> {
+            EventMapDTO.ZoneInfo zone = e.getValue();
+            seatPicker.clear();
+            seatPicker.setItems(zone == null ? List.of() : zone.seats());
+            refreshInventoryActionState();
+        });
+        seatPicker.addValueChangeListener(e -> refreshInventoryActionState());
+    }
+
+    private void loadInventoryZones(EventSummaryDTO event) {
+        inventoryZonePicker.clear();
+        seatPicker.clear();
+        seatPicker.setItems(List.of());
+        if (event == null) {
+            inventoryZonePicker.setItems(List.of());
+            refreshInventoryActionState();
+            return;
+        }
+        EventMapResult result = presenter.loadEventMap(event.id());
+        if (!result.success()) {
+            inventoryZonePicker.setItems(List.of());
+            inventoryStatus.setText(result.message());
+            UiMessages.error(result.message());
+            refreshInventoryActionState();
+            return;
+        }
+        inventoryZonePicker.setItems(result.eventMap().zones());
+        refreshInventoryActionState();
+    }
+
+    private void refreshInventoryActionState() {
+        boolean hasZone = inventoryZonePicker.getValue() != null;
+        boolean hasSeat = seatPicker.getValue() != null;
+        if (addSeatButton != null) {
+            addSeatButton.setEnabled(hasZone);
+        }
+        if (increaseCapacityButton != null) {
+            increaseCapacityButton.setEnabled(hasZone);
+        }
+        if (decreaseCapacityButton != null) {
+            decreaseCapacityButton.setEnabled(hasZone);
+        }
+        if (setPriceButton != null) {
+            setPriceButton.setEnabled(hasZone);
+        }
+        if (removeSeatButton != null) {
+            removeSeatButton.setEnabled(hasSeat);
+        }
+    }
+
+    private UUID selectedZoneId() {
+        EventMapDTO.ZoneInfo zone = inventoryZonePicker.getValue();
+        return zone == null ? null : zone.id();
+    }
+
+    private UUID selectedSeatId() {
+        EventMapDTO.SeatInfo seat = seatPicker.getValue();
+        return seat == null ? null : seat.id();
     }
 
     private void reloadCompanyEvents(ComboBox<EventSummaryDTO> picker, CompanySummaryDTO company) {
@@ -547,36 +616,37 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout inventorySection() {
-        Button addSeat = new Button("Add seat", event -> handleInventoryResult(presenter.addSeat(
+        addSeatButton = new Button("Add seat", event -> handleInventoryResult(presenter.addSeat(
                 selectedEventId(inventoryEventId),
-                parseUuid(inventoryZoneId, "zone"),
+                selectedZoneId(),
                 seatRow.getValue(),
                 seatNumber.getValue()
         )));
-        Button removeSeat = new Button("Remove seat", event -> handleInventoryResult(presenter.removeSeat(
+        removeSeatButton = new Button("Remove seat", event -> handleInventoryResult(presenter.removeSeat(
                 selectedEventId(inventoryEventId),
-                parseUuid(inventoryZoneId, "zone"),
-                parseUuid(seatId, "seat")
+                selectedZoneId(),
+                selectedSeatId()
         )));
-        Button increaseCapacity = new Button("Increase GA capacity", event -> handleInventoryResult(presenter.increaseGACapacity(
+        increaseCapacityButton = new Button("Increase GA capacity", event -> handleInventoryResult(presenter.increaseGACapacity(
                 selectedEventId(inventoryEventId),
-                parseUuid(inventoryZoneId, "zone"),
+                selectedZoneId(),
                 capacityDelta.getValue()
         )));
-        Button decreaseCapacity = new Button("Decrease GA capacity", event -> handleInventoryResult(presenter.decreaseGACapacity(
+        decreaseCapacityButton = new Button("Decrease GA capacity", event -> handleInventoryResult(presenter.decreaseGACapacity(
                 selectedEventId(inventoryEventId),
-                parseUuid(inventoryZoneId, "zone"),
+                selectedZoneId(),
                 capacityDelta.getValue()
         )));
-        Button setPrice = new Button("Set zone price", event -> handleInventoryResult(presenter.setZonePrice(
+        setPriceButton = new Button("Set zone price", event -> handleInventoryResult(presenter.setZonePrice(
                 selectedEventId(inventoryEventId),
-                parseUuid(inventoryZoneId, "zone"),
+                selectedZoneId(),
                 zonePriceUpdate.getValue()
         )));
+        refreshInventoryActionState();
 
-        FormLayout form = new FormLayout(inventoryCompanyName, inventoryEventId, inventoryZoneId, seatRow, seatNumber, seatId, capacityDelta, zonePriceUpdate);
+        FormLayout form = new FormLayout(inventoryCompanyName, inventoryEventId, inventoryZonePicker, seatRow, seatNumber, seatPicker, capacityDelta, zonePriceUpdate);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
-        HorizontalLayout actions = new HorizontalLayout(addSeat, removeSeat, increaseCapacity, decreaseCapacity, setPrice);
+        HorizontalLayout actions = new HorizontalLayout(addSeatButton, removeSeatButton, increaseCapacityButton, decreaseCapacityButton, setPriceButton);
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
         inventoryManagementControls = new VerticalLayout(actions);
