@@ -40,3 +40,9 @@ ticketing:
     initialize-platform: true
   seed:
     enabled: true
+  # Optional initial-state file (V3-15): when set to a readable path, InitialStateRunner
+  # parses it and executes the operations against the application layer on startup
+  # (all-or-nothing). Unset (default) => no-op; normal startup and DevSeedDataInitializer
+  # are unaffected. See README "Initial-state file".
+  initial-state:
+    file: ${TICKETING_INITIAL_STATE_FILE:}
