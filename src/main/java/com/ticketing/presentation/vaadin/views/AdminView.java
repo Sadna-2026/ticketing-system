@@ -66,9 +66,10 @@ public class AdminView extends VerticalLayout {
     private final IntegerField suspensionDurationDays = new IntegerField("Duration days");
     private final Checkbox permanentSuspension = new Checkbox("Permanent suspension");
     private final TextArea suspensionReason = new TextArea("Suspension reason");
-    private final TextField suspensionId = new TextField("Suspension ID");
     private final Checkbox activeSuspensionsOnly = new Checkbox("Active suspensions only");
     private final Grid<SuspensionDTO> suspensionsGrid = new Grid<>(SuspensionDTO.class, false);
+    private Button cancelSuspensionButton;
+    private SuspensionDTO selectedSuspension;
 
     public AdminView(AdminPresenter presenter) {
         this.presenter = presenter;
@@ -110,7 +111,6 @@ public class AdminView extends VerticalLayout {
         suspensionDurationDays.setMin(1);
         suspensionDurationDays.setValue(7);
         suspensionReason.setPlaceholder("Reason shown in application error/status flows");
-        suspensionId.setPlaceholder("Suspension UUID");
         activeSuspensionsOnly.setValue(true);
 
         markRequired(suspensionTargetPicker, "Select a suspension target member.");
@@ -136,6 +136,16 @@ public class AdminView extends VerticalLayout {
         suspensionsGrid.addColumn(suspension -> formatInstant(suspension.startTime())).setHeader("Started").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::reason).setHeader("Reason").setAutoWidth(true);
         suspensionsGrid.setMinHeight("180px");
+        suspensionsGrid.asSingleSelect().addValueChangeListener(event -> {
+            selectedSuspension = event.getValue();
+            refreshCancelSuspensionState();
+        });
+    }
+
+    private void refreshCancelSuspensionState() {
+        if (cancelSuspensionButton != null) {
+            cancelSuspensionButton.setEnabled(selectedSuspension != null);
+        }
     }
 
     private VerticalLayout adminActionsSection() {
@@ -185,7 +195,8 @@ public class AdminView extends VerticalLayout {
 
     private VerticalLayout suspensionSection() {
         Button suspend = new Button("Suspend member", event -> suspendMember());
-        Button cancel = new Button("Cancel suspension", event -> cancelSuspension());
+        cancelSuspensionButton = new Button("Cancel suspension", event -> cancelSuspension());
+        cancelSuspensionButton.setEnabled(false);
         Button load = new Button("Load suspensions", event -> loadSuspensions());
 
         FormLayout form = new FormLayout(
@@ -193,11 +204,10 @@ public class AdminView extends VerticalLayout {
                 suspensionDurationDays,
                 permanentSuspension,
                 suspensionReason,
-                suspensionId,
                 activeSuspensionsOnly
         );
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
-        HorizontalLayout actions = new HorizontalLayout(suspend, cancel, load);
+        HorizontalLayout actions = new HorizontalLayout(suspend, cancelSuspensionButton, load);
         actions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
@@ -239,19 +249,16 @@ public class AdminView extends VerticalLayout {
     }
 
     private void cancelSuspension() {
-        MemberSummaryDTO target = requireSelected(suspensionTargetPicker, suspensionStatus, "Select a suspension target member.");
-        if (target == null) {
+        if (selectedSuspension == null) {
+            suspensionStatus.setText("Select a suspension to cancel.");
+            UiMessages.error("Select a suspension to cancel.");
             return;
         }
-        UUID sid;
-        try {
-            sid = requiredUuid(suspensionId, "suspension");
-        } catch (IllegalArgumentException ex) {
-            suspensionStatus.setText(ex.getMessage());
-            UiMessages.error(ex.getMessage());
-            return;
+        ActionResult result = presenter.cancelSuspension(selectedSuspension.memberId(), selectedSuspension.suspensionId());
+        handleSuspensionAction(result);
+        if (result.success()) {
+            suspensionsGrid.asSingleSelect().clear();
         }
-        handleSuspensionAction(presenter.cancelSuspension(target.id(), sid));
     }
 
     private void loadPurchaseHistory() {
@@ -318,18 +325,6 @@ public class AdminView extends VerticalLayout {
             UiMessages.error(message);
         }
         return selected;
-    }
-
-    private UUID requiredUuid(TextField field, String label) {
-        String value = field.getValue();
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Enter a valid " + label + " ID.");
-        }
-        try {
-            return UUID.fromString(value.trim());
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Enter a valid " + label + " ID.");
-        }
     }
 
     private void refreshSessionStatus() {
