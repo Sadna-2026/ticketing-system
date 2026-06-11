@@ -1,8 +1,11 @@
 package com.ticketing.infrastructure.persistence;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -10,6 +13,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.CompanyStatus;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.exception.OptimisticLockException;
 
@@ -87,6 +91,43 @@ public class JpaCompanyRepository implements ICompanyRepository {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Company> findActiveCompanies(String query) {
+        String needle = queryNeedle(query);
+        return delegate.findAll().stream()
+                .filter(Company::isActive)
+                .filter(c -> matchesName(c, needle))
+                .sorted(Comparator.comparing(Company::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(Company::detachedCopy)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Company> findLookupVisibleCompanies(UUID memberId, boolean systemAdmin, String query) {
+        String needle = queryNeedle(query);
+        return delegate.findAll().stream()
+                .filter(c -> c.isActive() || canViewSuspended(c, memberId, systemAdmin))
+                .filter(c -> matchesName(c, needle))
+                .sorted(Comparator.comparing(Company::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(Company::detachedCopy)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Company> findFounderLifecycleCompanies(UUID founderId, String query) {
+        String needle = queryNeedle(query);
+        return delegate.findAll().stream()
+                .filter(c -> founderId.equals(c.getFounderId()))
+                .filter(c -> c.getStatus() == CompanyStatus.ACTIVE || c.getStatus() == CompanyStatus.SUSPENDED)
+                .filter(c -> matchesName(c, needle))
+                .sorted(Comparator.comparing(Company::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(Company::detachedCopy)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public void save(Company company) {
         if (company == null) {
@@ -144,5 +185,18 @@ public class JpaCompanyRepository implements ICompanyRepository {
 
     private static String normalizeKey(String name) {
         return name.toLowerCase().trim();
+    }
+
+    private static String queryNeedle(String query) {
+        return query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean matchesName(Company company, String needle) {
+        return needle.isEmpty() || company.getName().toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    private static boolean canViewSuspended(Company company, UUID memberId, boolean systemAdmin) {
+        return company.getStatus() == CompanyStatus.SUSPENDED
+                && (systemAdmin || memberId != null && memberId.equals(company.getFounderId()));
     }
 }

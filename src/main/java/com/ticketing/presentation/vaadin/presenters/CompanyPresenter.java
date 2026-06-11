@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -89,7 +90,11 @@ public class CompanyPresenter {
 
     public CompanyInfoResult loadCompanyInfo(String companyName) {
         try {
-            return companyService.getCompanyInfo(companyName)
+            String token = memberToken();
+            Optional<CompanyPublicDTO> maybeCompany = token == null
+                    ? companyService.getCompanyInfo(companyName)
+                    : companyService.getCompanyInfoForLookup(token, companyName);
+            return maybeCompany
                     .map(company -> CompanyInfoResult.success("Company information loaded.", company))
                     .orElseGet(() -> CompanyInfoResult.failure("Company not found."));
         } catch (RuntimeException ex) {
@@ -104,6 +109,32 @@ public class CompanyPresenter {
             return companyService.searchCompanies(query);
         } catch (RuntimeException ex) {
             logger.warn("Company search failed", ex);
+            return List.of();
+        }
+    }
+
+    /** Company info lookup options; includes suspended companies only when the session may view them. */
+    public List<CompanySummaryDTO> searchLookupCompanies(String query) {
+        try {
+            String token = memberToken();
+            return token == null
+                    ? companyService.searchCompanies(query)
+                    : companyService.searchCompaniesForLookup(token, query);
+        } catch (RuntimeException ex) {
+            logger.warn("Lookup company search failed", ex);
+            return List.of();
+        }
+    }
+
+    public List<CompanySummaryDTO> searchLifecycleCompanies(String query) {
+        String token = memberToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return companyService.searchFounderLifecycleCompanies(token, query);
+        } catch (RuntimeException ex) {
+            logger.warn("Lifecycle company search failed", ex);
             return List.of();
         }
     }
@@ -790,8 +821,22 @@ public class CompanyPresenter {
         return lifecycle(companyName, "Company reopened.", (token, name) -> companyService.reopenCompany(token, name));
     }
 
-    public ActionResult closeCompany(String companyName) {
-        return lifecycle(companyName, "Company closed.", (token, name) -> companyService.permanentCloseByFounder(token, name));
+    public LifecycleAccessResult loadLifecycleAccess(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return LifecycleAccessResult.denied(MEMBER_SESSION_REQUIRED);
+        }
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return LifecycleAccessResult.denied("Select a company to show founder-only lifecycle controls.");
+        }
+
+        try {
+            companyService.verifyFounderLifecycleAccess(token, normalizedName);
+            return LifecycleAccessResult.allowed("Founder lifecycle controls available for " + normalizedName + ".");
+        } catch (RuntimeException ex) {
+            return LifecycleAccessResult.denied(userMessage(ex, LIFECYCLE_FAILURE_MESSAGE));
+        }
     }
 
     public PurchaseHistoryResult loadPurchaseHistory(String companyName) {
@@ -943,6 +988,16 @@ public class CompanyPresenter {
 
         public static PersonnelAccessResult denied(String message) {
             return new PersonnelAccessResult(false, message);
+        }
+    }
+
+    public record LifecycleAccessResult(boolean canManageLifecycle, String message) {
+        public static LifecycleAccessResult allowed(String message) {
+            return new LifecycleAccessResult(true, message);
+        }
+
+        public static LifecycleAccessResult denied(String message) {
+            return new LifecycleAccessResult(false, message);
         }
     }
 

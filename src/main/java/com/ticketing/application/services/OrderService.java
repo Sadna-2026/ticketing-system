@@ -20,6 +20,8 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
+import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
@@ -70,6 +72,7 @@ public class OrderService {
     private final ISessionTokenService sessionTokenService;
     private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
+    private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
     private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketSupplyGateway> ticketSupplyGateways;
@@ -86,10 +89,25 @@ public class OrderService {
     @org.springframework.beans.factory.annotation.Value("${ticketing.queue.flow-rate:10}")
     private int defaultQueueFlowRate = 10;
 
+    public OrderService(ISessionTokenService sessionTokenService,
+            IOrderRepository orderRepository,
+            IEventRepository eventRepository,
+            IMemberRepository memberRepository,
+            List<IPaymentGateway> paymentGateways,
+            List<ITicketSupplyGateway> ticketSupplyGateways,
+            ISystemClock systemClock,
+            IQueueRepository queueRepository,
+            OrderTimeDomainService orderTimeDomainService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
+        this(sessionTokenService, orderRepository, eventRepository, null, memberRepository, paymentGateways,
+                ticketSupplyGateways, systemClock, queueRepository, orderTimeDomainService, notificationService);
+    }
+
     @org.springframework.beans.factory.annotation.Autowired
     public OrderService(ISessionTokenService sessionTokenService,
             IOrderRepository orderRepository,
             IEventRepository eventRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) ICompanyRepository companyRepository,
             IMemberRepository memberRepository,
             List<IPaymentGateway> paymentGateways,
             List<ITicketSupplyGateway> ticketSupplyGateways,
@@ -107,6 +125,7 @@ public class OrderService {
         this.sessionTokenService = sessionTokenService;
         this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
+        this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.paymentGateways = paymentGateways != null ? paymentGateways : List.of();
         this.ticketSupplyGateways = ticketSupplyGateways != null ? ticketSupplyGateways : List.of();
@@ -507,6 +526,7 @@ public class OrderService {
         if (!event.isPublished()) {
             throw new IllegalStateException("Event is not available for purchase");
         }
+        rejectIfCompanyInactive(event);
 
         order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
         saveOrder(order);
@@ -893,6 +913,17 @@ public class OrderService {
                     log.warn("Event not found: eventId={}", eventId);
                     return new IllegalArgumentException("Event not found: " + eventId);
                 });
+    }
+
+    private void rejectIfCompanyInactive(Event event) {
+        if (companyRepository == null) {
+            return;
+        }
+        Company company = companyRepository.findByName(event.getCompanyName())
+                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + event.getCompanyName()));
+        if (!company.isActive()) {
+            throw new IllegalStateException("Company is suspended or closed: " + company.getName());
+        }
     }
 
     private void saveEvent(Event event) {

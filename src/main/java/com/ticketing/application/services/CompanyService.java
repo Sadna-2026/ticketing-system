@@ -2,10 +2,8 @@ package com.ticketing.application.services;
 
 import java.time.Instant;
 import java.util.ArrayDeque;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -69,6 +67,7 @@ public class CompanyService {
     private final IEventRepository eventRepository;
     private final IOrderRepository orderRepository;
     private final IPaymentGateway paymentGateway;
+    private final INotificationService notificationService;
 
     private final ConcurrentHashMap<String, Deque<RefundJob>> pendingRefunds = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Object> companyLocks = new ConcurrentHashMap<>();
@@ -79,7 +78,20 @@ public class CompanyService {
             ISessionTokenService sessionTokenService,
             IMemberRepository memberRepository
     ) {
-        this(companyRepository, eventPublisher, sessionTokenService, memberRepository, null, null, null);
+        this(companyRepository, eventPublisher, sessionTokenService, memberRepository, null, null, null, null);
+    }
+
+    public CompanyService(
+            ICompanyRepository companyRepository,
+            IEventPublisher eventPublisher,
+            ISessionTokenService sessionTokenService,
+            IMemberRepository memberRepository,
+            IEventRepository eventRepository,
+            IOrderRepository orderRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) IPaymentGateway paymentGateway
+    ) {
+        this(companyRepository, eventPublisher, sessionTokenService, memberRepository,
+                eventRepository, orderRepository, paymentGateway, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -90,7 +102,8 @@ public class CompanyService {
             IMemberRepository memberRepository,
             IEventRepository eventRepository,
             IOrderRepository orderRepository,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) IPaymentGateway paymentGateway
+            @org.springframework.beans.factory.annotation.Autowired(required = false) IPaymentGateway paymentGateway,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService
     ) {
         this.companyRepository = companyRepository;
         this.eventPublisher = eventPublisher;
@@ -99,6 +112,7 @@ public class CompanyService {
         this.eventRepository = eventRepository;
         this.orderRepository = orderRepository;
         this.paymentGateway = paymentGateway;
+        this.notificationService = notificationService;
     }
 
     // ── Company creation ───────────────────────────────────────────────
@@ -362,31 +376,50 @@ public class CompanyService {
             return Optional.empty();
         }
         Optional<Company> maybe = companyRepository.findByName(companyName);
-        if (maybe.isEmpty() || !maybe.get().isActive()) {
+        if (maybe.isEmpty() || !canViewPublicInfo(null, maybe.get())) {
             log.info("Company info request denied: name={}, reason={}",
                     companyName, maybe.isEmpty() ? "unknown" : "not-active");
             return Optional.empty();
         }
-        Company company = maybe.get();
-        List<EventSummaryDTO> active = eventRepository.findByCompanyName(company.getName()).stream()
-                .filter(e -> e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT)
-                .map(EventSummaryDTO::from)
-                .toList();
-        log.info("Company info provided: name={}", company.getName());
-        return Optional.of(new CompanyPublicDTO(company.getName(), company.getDescription(), active));
+        return Optional.of(toPublicDto(maybe.get()));
+    }
+
+    public Optional<CompanyPublicDTO> getCompanyInfoForLookup(String token, String companyName) {
+        log.info("Session-aware company info requested: name={}", companyName);
+        if (companyName == null || companyName.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<Company> maybe = companyRepository.findByName(companyName);
+        if (maybe.isEmpty() || !canViewPublicInfo(token, maybe.get())) {
+            log.info("Session-aware company info request denied: name={}, reason={}",
+                    companyName, maybe.isEmpty() ? "unknown" : "not-visible");
+            return Optional.empty();
+        }
+        return Optional.of(toPublicDto(maybe.get()));
     }
 
     public List<CompanySummaryDTO> searchCompanies(String query) {
-        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        return companyRepository.getAll().stream()
-                .filter(Company::isActive)
-                .filter(c -> needle.isEmpty() || c.getName().toLowerCase(Locale.ROOT).contains(needle))
+        return companyRepository.findActiveCompanies(query).stream()
                 .map(c -> new CompanySummaryDTO(c.getName()))
-                .sorted(Comparator.comparing(CompanySummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    public List<CompanySummaryDTO> searchCompaniesForLookup(String token, String query) {
+        return companyRepository.findLookupVisibleCompanies(lookupMemberId(token), lookupSystemAdmin(token), query)
+                .stream()
+                .map(c -> new CompanySummaryDTO(c.getName()))
                 .toList();
     }
 
     // ── History (inlined from CompanyHistoryDomainService) ───────────
+
+    public List<CompanySummaryDTO> searchFounderLifecycleCompanies(String token, String query) {
+        UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
+        return companyRepository.findFounderLifecycleCompanies(memberId, query).stream()
+                .map(c -> new CompanySummaryDTO(c.getName()))
+                .toList();
+    }
 
     public List<PurchaseRecordDTO> getPurchaseHistory(String token, String companyName) {
         UUID memberId = requireMember(token);
@@ -411,6 +444,13 @@ public class CompanyService {
 
     // ── Lifecycle (inlined from CompanyLifecycleDomainService) ───────
 
+    public void verifyFounderLifecycleAccess(String token, String companyName) {
+        UUID memberId = requireMember(token);
+        rejectIfSuspended(memberId);
+        Company company = loadCompany(companyName);
+        requireFounder(memberId, company);
+    }
+
     @Transactional
     public void suspendCompany(String token, String companyName) {
         UUID memberId = requireMember(token);
@@ -420,6 +460,7 @@ public class CompanyService {
 
         company.suspend();
         saveCompany(company);
+        notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has been suspended.");
         log.info("Company suspended: name={}, by={}", companyName, memberId);
     }
 
@@ -432,6 +473,7 @@ public class CompanyService {
 
         company.reopen();
         saveCompany(company);
+        notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has returned to activity.");
         log.info("Company reopened: name={}, by={}", companyName, memberId);
     }
 
@@ -492,6 +534,7 @@ public class CompanyService {
             pendingRefunds.remove(key);
             company.completeClosure();
             saveCompany(company);
+            notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has been closed.");
             log.info("Pending closure completed: company={}", companyName);
         }
     }
@@ -536,7 +579,20 @@ public class CompanyService {
 
         company.close();
         saveCompany(company);
+        notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has been closed.");
         log.info("Company permanently closed: name={}, revokedRoles={}", company.getName(), revokeRoles);
+    }
+
+    private void notifyCompanyStaff(String companyName, String message) {
+        if (notificationService == null) {
+            return;
+        }
+        for (Member member : memberRepository.findByCompanyAppointment(companyName)) {
+            StaffAppointment appointment = member.getStaffAppointment(companyName);
+            if (appointment != null && !appointment.isRevoked()) {
+                notificationService.notify(member.getId().toString(), message);
+            }
+        }
     }
 
     private void revokeAllAppointments(String companyName) {
@@ -654,6 +710,44 @@ public class CompanyService {
     private boolean isAdmin(String token) {
         Set<String> perms = sessionTokenService.extractPermissions(token);
         return perms != null && perms.contains(ADMIN_PERMISSION);
+    }
+
+    private boolean canViewPublicInfo(String token, Company company) {
+        if (company.isActive()) {
+            return true;
+        }
+        if (company.getStatus() != CompanyStatus.SUSPENDED || token == null || token.isBlank()) {
+            return false;
+        }
+        if (!sessionTokenService.isValid(token)) {
+            return false;
+        }
+        if (isAdmin(token)) {
+            return true;
+        }
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        return memberId != null && memberId.equals(company.getFounderId());
+    }
+
+    private UUID lookupMemberId(String token) {
+        return validToken(token) ? sessionTokenService.extractMemberId(token) : null;
+    }
+
+    private boolean lookupSystemAdmin(String token) {
+        return validToken(token) && isAdmin(token);
+    }
+
+    private boolean validToken(String token) {
+        return token != null && !token.isBlank() && sessionTokenService.isValid(token);
+    }
+
+    private CompanyPublicDTO toPublicDto(Company company) {
+        List<EventSummaryDTO> active = eventRepository.findByCompanyName(company.getName()).stream()
+                .filter(e -> e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT)
+                .map(EventSummaryDTO::from)
+                .toList();
+        log.info("Company info provided: name={}", company.getName());
+        return new CompanyPublicDTO(company.getName(), company.getDescription(), active);
     }
 
     private record RefundJob(String transactionId, java.math.BigDecimal amount) {}

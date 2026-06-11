@@ -32,6 +32,7 @@ import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.OrderService;
+import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -57,6 +58,7 @@ import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.services.OrderTimeDomainService;
+import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -951,6 +953,24 @@ public class OrderServiceTest {
                 () -> orderService.createOrder(memberToken, eventId));
         assertTrue(ex.getMessage().contains("suspended"));
 
+        Event event = eventRepo.findById(eventId).orElseThrow();
+        assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
+        assertEquals(0, event.findZone(gaZoneId).getLockedCount());
+    }
+
+    @Test
+    void GivenSuspendedCompany_WhenCreateOrderByEventId_ThenRejectsAndInventoryUnchanged() {
+        InMemoryCompanyRepository companyRepo = new InMemoryCompanyRepository();
+        Company company = new Company(companyName, "desc", UUID.randomUUID());
+        company.suspend();
+        companyRepo.save(company);
+        OrderService guardedOrderService = new OrderService(sessionService, orderRepo, eventRepo, companyRepo,
+                memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null, null, null);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> guardedOrderService.createOrder(guestToken, eventId));
+
+        assertTrue(ex.getMessage().contains("suspended or closed"));
         Event event = eventRepo.findById(eventId).orElseThrow();
         assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
         assertEquals(0, event.findZone(gaZoneId).getLockedCount());

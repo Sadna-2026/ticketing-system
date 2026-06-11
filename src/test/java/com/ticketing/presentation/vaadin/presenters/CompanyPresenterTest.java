@@ -52,6 +52,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResul
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
@@ -115,6 +116,19 @@ class CompanyPresenterTest {
         assertTrue(result.success());
         assertSame(company, result.company());
         verify(companyService).getCompanyInfo("Acme");
+    }
+
+    @Test
+    void GivenMemberSession_WhenLoadingCompanyInfo_ThenSessionAwareLookupIsUsed() {
+        memberSession();
+        CompanyPublicDTO company = new CompanyPublicDTO("Suspended Co", "desc", List.of());
+        when(companyService.getCompanyInfoForLookup("member-token", "Suspended Co")).thenReturn(Optional.of(company));
+
+        CompanyInfoResult result = presenter.loadCompanyInfo("Suspended Co");
+
+        assertTrue(result.success());
+        assertSame(company, result.company());
+        verify(companyService).getCompanyInfoForLookup("member-token", "Suspended Co");
     }
 
     @Test
@@ -296,22 +310,42 @@ class CompanyPresenterTest {
 
         ActionResult suspend = presenter.suspendCompany("Acme");
         ActionResult reopen = presenter.reopenCompany("Acme");
-        ActionResult close = presenter.closeCompany("Acme");
         PurchaseHistoryResult history = presenter.loadPurchaseHistory("Acme");
         SalesReportResult sales = presenter.loadSalesReport("Acme");
 
         assertTrue(suspend.success());
         assertTrue(reopen.success());
-        assertTrue(close.success());
         assertTrue(history.success());
         assertEquals(List.of(purchase), history.purchases());
         assertTrue(sales.success());
         assertSame(report, sales.report());
         verify(companyService).suspendCompany("member-token", "Acme");
         verify(companyService).reopenCompany("member-token", "Acme");
-        verify(companyService).permanentCloseByFounder("member-token", "Acme");
         verify(companyService).getPurchaseHistory("member-token", "Acme");
         verify(completedPurchaseService).getHierarchicalSalesReport("member-token", "Acme");
+    }
+
+    @Test
+    void GivenFounderLifecycleAccess_WhenLoadingLifecycleAccess_ThenAllowedResultIsReturned() {
+        memberSession();
+
+        LifecycleAccessResult result = presenter.loadLifecycleAccess("Acme");
+
+        assertTrue(result.canManageLifecycle());
+        assertEquals("Founder lifecycle controls available for Acme.", result.message());
+        verify(companyService).verifyFounderLifecycleAccess("member-token", "Acme");
+    }
+
+    @Test
+    void GivenNonFounderLifecycleAccess_WhenLoadingLifecycleAccess_ThenSpecificReasonIsReturned() {
+        memberSession();
+        doThrow(new SecurityException("Only the founder can perform this lifecycle action"))
+                .when(companyService).verifyFounderLifecycleAccess("member-token", "Acme");
+
+        LifecycleAccessResult result = presenter.loadLifecycleAccess("Acme");
+
+        assertFalse(result.canManageLifecycle());
+        assertEquals("Only the founder can perform this lifecycle action", result.message());
     }
 
     @Test
@@ -350,6 +384,34 @@ class CompanyPresenterTest {
         when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
 
         assertTrue(presenter.searchCompanies("a").isEmpty());
+    }
+
+    @Test
+    void GivenNoMemberSession_WhenSearchingLookupCompanies_ThenPublicSearchIsUsed() {
+        when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchLookupCompanies("ac"));
+        verify(companyService).searchCompanies("ac");
+    }
+
+    @Test
+    void GivenMemberSession_WhenSearchingLookupCompanies_ThenSessionAwareSearchIsUsed() {
+        memberSession();
+        when(companyService.searchCompaniesForLookup("member-token", "sus"))
+                .thenReturn(List.of(new CompanySummaryDTO("Suspended Co")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Suspended Co")), presenter.searchLookupCompanies("sus"));
+        verify(companyService).searchCompaniesForLookup("member-token", "sus");
+    }
+
+    @Test
+    void GivenMemberSession_WhenSearchingLifecycleCompanies_ThenFounderLifecycleCompaniesAreReturned() {
+        memberSession();
+        when(companyService.searchFounderLifecycleCompanies("member-token", "ac"))
+                .thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchLifecycleCompanies("ac"));
+        verify(companyService).searchFounderLifecycleCompanies("member-token", "ac");
     }
 
     @Test
