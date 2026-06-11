@@ -542,6 +542,7 @@ public class CompanyService {
     // ── Internal helpers ────────────────────────────────────────────
 
     private void runClose(Company company, boolean revokeRoles) {
+        List<Member> staffToNotify = revokeRoles ? activeCompanyStaff(company.getName()) : List.of();
         List<Event> events = eventRepository.findByCompanyName(company.getName());
         for (Event e : events) {
             if (e.isCancelled()) continue;
@@ -579,19 +580,34 @@ public class CompanyService {
 
         company.close();
         saveCompany(company);
-        notifyCompanyStaff(company.getName(), "Company '" + company.getName() + "' has been closed.");
+        String message = "Company '" + company.getName() + "' has been closed.";
+        if (revokeRoles) {
+            notifyMembers(staffToNotify, message);
+        } else {
+            notifyCompanyStaff(company.getName(), message);
+        }
         log.info("Company permanently closed: name={}, revokedRoles={}", company.getName(), revokeRoles);
     }
 
     private void notifyCompanyStaff(String companyName, String message) {
+        notifyMembers(activeCompanyStaff(companyName), message);
+    }
+
+    private List<Member> activeCompanyStaff(String companyName) {
+        return memberRepository.findByCompanyAppointment(companyName).stream()
+                .filter(member -> {
+                    StaffAppointment appointment = member.getStaffAppointment(companyName);
+                    return appointment != null && !appointment.isRevoked();
+                })
+                .toList();
+    }
+
+    private void notifyMembers(List<Member> members, String message) {
         if (notificationService == null) {
             return;
         }
-        for (Member member : memberRepository.findByCompanyAppointment(companyName)) {
-            StaffAppointment appointment = member.getStaffAppointment(companyName);
-            if (appointment != null && !appointment.isRevoked()) {
-                notificationService.notify(member.getId().toString(), message);
-            }
+        for (Member member : members) {
+            notificationService.notify(member.getId().toString(), message);
         }
     }
 

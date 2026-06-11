@@ -924,6 +924,8 @@ class CompanyServiceTest {
                 "Admin close revokes founder appointment");
             assertNull(memberRepo.findById(adminClosedManagerId).orElseThrow().getStaffAppointment(COMPANY),
                 "Admin close revokes manager appointment");
+            verify(notificationService).notify(eq(founderId.toString()), contains("closed"));
+            verify(notificationService).notify(eq(adminClosedManagerId.toString()), contains("closed"));
         }
 
         @Test

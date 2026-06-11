@@ -24,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
@@ -39,6 +40,8 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.tabs.Tab;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
@@ -63,12 +66,17 @@ class AdminViewTest {
         assertTrue(hasText(view, "System admin actions"));
         assertTrue(hasText(view, "Admin-only controls are kept separate from company owner and manager workflows."));
         assertTrue(hasText(view, "Application services still enforce system-admin authorization for every action and their responses are shown here."));
+        Tabs tabs = findTabs(view);
+        assertNotNull(tabs);
+        assertEquals(List.of("Members", "Companies", "Purchase history", "Suspensions"), tabLabels(tabs));
         assertTrue(hasButton(view, "Remove member"));
+        assertTrue(hasButton(view, "Close company"));
         assertTrue(hasButton(view, "Load global purchase history"));
         assertTrue(hasButton(view, "Suspend member"));
         assertTrue(hasButton(view, "Cancel suspension"));
         assertTrue(hasButton(view, "Load suspensions"));
         assertNotNull(findComboBox(view, "Target member"));
+        assertNotNull(findCompanyComboBox(view, "Company to close"));
         assertNotNull(findComboBox(view, "Buyer member"));
         assertNotNull(findComboBox(view, "Suspension target member"));
         assertNotNull(findTextField(view, "Company name"));
@@ -98,6 +106,7 @@ class AdminViewTest {
         AdminView view = new AdminView(presenter);
 
         assertFalse(hasVisibleButton(view, "Remove member"));
+        assertFalse(hasVisibleButton(view, "Close company"));
         assertFalse(hasVisibleButton(view, "Load global purchase history"));
         assertFalse(hasVisibleButton(view, "Suspend member"));
         assertFalse(hasVisibleButton(view, "Check policy backend support"));
@@ -117,6 +126,51 @@ class AdminViewTest {
 
         verify(presenter).removeMember(member.id());
         assertTrue(hasText(view, "Member removed."));
+    }
+
+    @Test
+    void GivenSelectedCompany_WhenCloseCompanyClicked_ThenPresenterIsCalledAndStatusIsDisplayed() {
+        AdminPresenter presenter = mockPresenter();
+        CompanySummaryDTO company = new CompanySummaryDTO("Acme");
+        when(presenter.searchCompanies("")).thenReturn(List.of(company));
+        when(presenter.closeCompany("Acme")).thenReturn(ActionResult.success("Company closed."));
+        AdminView view = new AdminView(presenter);
+        findCompanyComboBox(view, "Company to close").setValue(company);
+
+        clickButton(view, "Close company");
+
+        verify(presenter).closeCompany("Acme");
+        assertTrue(hasText(view, "Company closed."));
+    }
+
+    @Test
+    void GivenSelectedCompany_WhenCloseCompanyFails_ThenSpecificFailureReasonIsDisplayed() {
+        AdminPresenter presenter = mockPresenter();
+        CompanySummaryDTO company = new CompanySummaryDTO("Acme");
+        when(presenter.searchCompanies("")).thenReturn(List.of(company));
+        when(presenter.closeCompany("Acme")).thenReturn(ActionResult.failure("System admin permission required"));
+        AdminView view = new AdminView(presenter);
+        findCompanyComboBox(view, "Company to close").setValue(company);
+
+        clickButton(view, "Close company");
+
+        verify(presenter).closeCompany("Acme");
+        assertTrue(hasText(view, "System admin permission required"));
+    }
+
+    @Test
+    void GivenNoCompanySelected_WhenCloseCompanyClicked_ThenErrorMessageIsDisplayedBeforePresenterCall() {
+        AdminPresenter presenter = mockPresenter();
+        AdminView view = new AdminView(presenter);
+
+        clickButton(view, "Close company");
+
+        assertTrue(hasText(view, "Select a company to close."));
+        verify(presenter).currentSessionLabel();
+        verify(presenter).currentSessionState();
+        verify(presenter).searchMembers("");
+        verify(presenter).searchCompanies("");
+        verifyNoMoreInteractions(presenter);
     }
 
     @Test
@@ -163,6 +217,7 @@ class AdminViewTest {
         verify(presenter).currentSessionLabel();
         verify(presenter).currentSessionState();
         verify(presenter).searchMembers("");
+        verify(presenter).searchCompanies("");
         verifyNoMoreInteractions(presenter);
     }
 
@@ -288,6 +343,7 @@ class AdminViewTest {
         verify(presenter).currentSessionLabel();
         verify(presenter).currentSessionState();
         verify(presenter).searchMembers("");
+        verify(presenter).searchCompanies("");
         verifyNoMoreInteractions(presenter);
     }
 
@@ -296,6 +352,7 @@ class AdminViewTest {
         AdminView view = new AdminView(mockPresenter());
 
         assertTrue(findComboBox(view, "Suspension target member").isRequiredIndicatorVisible());
+        assertTrue(findCompanyComboBox(view, "Company to close").isRequiredIndicatorVisible());
 
         assertFalse(findTextArea(view, "Suspension reason").isRequiredIndicatorVisible());
         assertFalse(findTextField(view, "Suspension ID").isRequiredIndicatorVisible());
@@ -308,6 +365,7 @@ class AdminViewTest {
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (root)");
         when(presenter.currentSessionState()).thenReturn(admin());
         when(presenter.searchMembers("")).thenReturn(List.of());
+        when(presenter.searchCompanies("")).thenReturn(List.of());
         return presenter;
     }
 
@@ -376,6 +434,16 @@ class AdminViewTest {
                 .orElse(null);
     }
 
+    @SuppressWarnings("unchecked")
+    private static ComboBox<CompanySummaryDTO> findCompanyComboBox(Component root, String label) {
+        return components(root).stream()
+                .filter(ComboBox.class::isInstance)
+                .map(c -> (ComboBox<CompanySummaryDTO>) c)
+                .filter(field -> label.equals(field.getLabel()))
+                .findFirst()
+                .orElse(null);
+    }
+
     private static TextField findTextField(Component root, String label) {
         return components(root).stream()
                 .filter(TextField.class::isInstance)
@@ -427,6 +495,22 @@ class AdminViewTest {
                 .filter(grid -> grid.getId().map(id::equals).orElse(false))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Grid not found: " + id));
+    }
+
+    private static Tabs findTabs(Component root) {
+        return components(root).stream()
+                .filter(Tabs.class::isInstance)
+                .map(Tabs.class::cast)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static List<String> tabLabels(Tabs tabs) {
+        return tabs.getChildren()
+                .filter(Tab.class::isInstance)
+                .map(Tab.class::cast)
+                .map(Tab::getLabel)
+                .toList();
     }
 
     private static List<String> columnHeaders(Grid<?> grid) {
