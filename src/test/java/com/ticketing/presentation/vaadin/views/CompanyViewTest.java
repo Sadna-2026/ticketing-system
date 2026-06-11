@@ -170,6 +170,20 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenCompanyInfoNotFound_WhenLoadingCompanyInfo_ThenErrorMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadCompanyInfo("Unknown"))
+                .thenReturn(CompanyInfoResult.failure("Company not found."));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Company info name").setValue(company("Unknown"));
+
+        clickButton(view, "Load company info");
+
+        assertTrue(hasText(view, "Company not found."));
+        verify(presenter).loadCompanyInfo("Unknown");
+    }
+
+    @Test
     void GivenPersonnelInputs_WhenRoleActionsClicked_ThenPresenterMethodsAreCalled() {
         CompanyPresenter presenter = mockPresenter();
         UUID targetId = UUID.randomUUID();

@@ -132,6 +132,17 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenCompanyNotFound_WhenLoadingCompanyInfo_ThenFailureMessageIsReturned() {
+        when(companyService.getCompanyInfo("Unknown")).thenReturn(Optional.empty());
+
+        CompanyInfoResult result = presenter.loadCompanyInfo("Unknown");
+
+        assertFalse(result.success());
+        assertEquals("Company not found.", result.message());
+        verify(companyService).getCompanyInfo("Unknown");
+    }
+
+    @Test
     void GivenPersonnelInputs_WhenManagingRoles_ThenCompanyAndMemberServicesAreCalledDirectly() {
         memberSession();
         UUID targetId = UUID.randomUUID();
