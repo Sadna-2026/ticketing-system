@@ -397,6 +397,8 @@ public class EventsView extends VerticalLayout {
             quantity.setMin(1);
             quantity.setValue(1);
             Button addGA = new Button("Add GA tickets", event -> addGATickets(zone.id(), quantity.getValue()));
+            boolean canReserve = !ordersPresenter.currentSessionState().noSession();
+            addGA.setEnabled(canReserve);
             content.add(
                     new Span("Capacity: " + zone.maxCapacity()),
                     new Span("Available: " + zone.availableCount()),
@@ -422,6 +424,12 @@ public class EventsView extends VerticalLayout {
     private Component seatMap(EventMapDTO.ZoneInfo zone) {
         SeatMapComponent map = new SeatMapComponent(orderSeats(zone.seats()));
         map.setSelectionListener(seatId -> addAssignedSeat(zone.id(), seatId, map));
+        boolean canReserve = !ordersPresenter.currentSessionState().noSession();
+        map.setEnabled(canReserve);
+        if (!canReserve) {
+            map.getStyle().set("opacity", "0.5");
+            map.getStyle().set("pointer-events", "none");
+        }
         return map;
     }
 
