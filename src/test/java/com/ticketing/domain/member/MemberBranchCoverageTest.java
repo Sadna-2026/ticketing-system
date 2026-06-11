@@ -177,6 +177,7 @@ class MemberBranchCoverageTest {
 
         member.addPendingOffer(offer);
         assertTrue(member.findPendingOffer(offer.getOfferId()).isPresent());
+        assertEquals(1, member.getActivePendingOffers().size());
         assertThrows(UnsupportedOperationException.class, () -> member.getPendingOffers().add(offer));
 
         Member copy = member.detachedCopy();

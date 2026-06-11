@@ -211,9 +211,8 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerWithBothPermissions_WhenCreateEvent_ThenSucceed() {
-            appointAs(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
+        public void GivenManagerWithEventLifecycle_WhenCreateEvent_ThenSucceed() {
+            appointAs(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.EVENT_LIFECYCLE));
 
             UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
 
@@ -222,18 +221,9 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerMissingMapDefinition_WhenCreateEvent_ThenThrowSecurityException() {
+        public void GivenManagerWithoutEventLifecycle_WhenCreateEvent_ThenThrowSecurityException() {
             appointAs(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.INVENTORY_MGMT));
-
-            assertThrows(SecurityException.class,
-                    () -> eventService.createEvent(VALID_TOKEN, validRequest()));
-        }
-
-        @Test
-        public void GivenManagerMissingInventoryMgmt_WhenCreateEvent_ThenThrowSecurityException() {
-            appointAs(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.MAP_DEFINITION));
+                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
 
             assertThrows(SecurityException.class,
                     () -> eventService.createEvent(VALID_TOKEN, validRequest()));
@@ -532,9 +522,8 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerWithBothPermissions_WhenEditEvent_ThenSucceed() {
-            appoint(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
+        public void GivenManagerWithEventLifecycle_WhenEditEvent_ThenSucceed() {
+            appoint(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.EVENT_LIFECYCLE));
             EditEventRequest req = new EditEventRequest(eventId, "Renamed", null, null, null);
 
             EventDetailsDTO dto = eventService.editEvent(TOKEN, req);
@@ -543,17 +532,9 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerMissingMapDefinition_WhenEditEvent_ThenThrowSecurityException() {
-            appoint(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.INVENTORY_MGMT));
-            EditEventRequest req = new EditEventRequest(eventId, "X", null, null, null);
-
-            assertThrows(SecurityException.class,
-                    () -> eventService.editEvent(TOKEN, req));
-        }
-
-        @Test
-        public void GivenManagerMissingInventoryMgmt_WhenEditEvent_ThenThrowSecurityException() {
-            appoint(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.MAP_DEFINITION));
+        public void GivenManagerWithoutEventLifecycle_WhenEditEvent_ThenThrowSecurityException() {
+            appoint(StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
             EditEventRequest req = new EditEventRequest(eventId, "X", null, null, null);
 
             assertThrows(SecurityException.class,
