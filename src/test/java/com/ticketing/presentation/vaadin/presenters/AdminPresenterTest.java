@@ -20,10 +20,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.CompanyService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
@@ -36,12 +38,14 @@ import com.ticketing.presentation.vaadin.util.SessionContext;
 class AdminPresenterTest {
 
     private AdminService adminService;
+    private CompanyService companyService;
     private AdminPresenter presenter;
 
     @BeforeEach
     void setUp() {
         adminService = mock(AdminService.class);
-        presenter = new AdminPresenter(adminService);
+        companyService = mock(CompanyService.class);
+        presenter = new AdminPresenter(adminService, companyService);
     }
 
     @Test
@@ -89,6 +93,38 @@ class AdminPresenterTest {
         assertTrue(result.success());
         assertEquals("Member removed.", result.message());
         verify(adminService).removeMember("admin-token", targetId);
+    }
+
+    @Test
+    void GivenAdminSessionAndCompany_WhenClosingCompany_ThenCompanyServiceAdminCloseIsCalled() {
+        adminSession();
+
+        ActionResult result = presenter.closeCompany(" Acme ");
+
+        assertTrue(result.success());
+        assertEquals("Company closed.", result.message());
+        verify(companyService).permanentCloseByAdmin("admin-token", "Acme");
+    }
+
+    @Test
+    void GivenNoAdminSession_WhenClosingCompany_ThenNoServiceIsCalledAndSessionMessageIsReturned() {
+        ActionResult result = presenter.closeCompany("Acme");
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        verifyNoInteractions(companyService);
+    }
+
+    @Test
+    void GivenAdminCloseFails_WhenClosingCompany_ThenSpecificReasonIsReturned() {
+        adminSession();
+        org.mockito.Mockito.doThrow(new SecurityException("System admin permission required"))
+                .when(companyService).permanentCloseByAdmin("admin-token", "Acme");
+
+        ActionResult result = presenter.closeCompany("Acme");
+
+        assertFalse(result.success());
+        assertEquals("System admin permission required", result.message());
     }
 
     @Test
@@ -172,6 +208,18 @@ class AdminPresenterTest {
         assertEquals("alice", result.get(0).username());
         assertEquals(memberId, result.get(0).id());
         verify(adminService).searchMembers("admin-token", "ali");
+    }
+
+    @Test
+    void GivenAdminSession_WhenSearchingCompanies_ThenCompanyServiceResultsReturned() {
+        adminSession();
+        when(companyService.searchCompanies("ac"))
+                .thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        List<CompanySummaryDTO> result = presenter.searchCompanies("ac");
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), result);
+        verify(companyService).searchCompanies("ac");
     }
 
     @Test

@@ -41,6 +41,8 @@ import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.Suspension;
+import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @Component
@@ -51,6 +53,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final String COMPANY_NAME = "Demo Productions";
     public static final String SECOND_COMPANY_NAME = "Northwind Events";
     public static final String SUSPENDED_COMPANY_NAME = "Dormant Productions";
+    public static final String ADMIN_CLOSE_COMPANY_NAME = "Admin Closure Company";
     public static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     public static final UUID MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
     public static final UUID OWNER_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
@@ -79,6 +82,9 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID DESIGNER_DEMO_EVENT_ID = UUID.fromString("66666666-6666-6666-6666-666666666666");
     public static final UUID DESIGNER_SEAT_ZONE_ID = UUID.fromString("66666666-0000-0000-0000-0000000000a1");
     public static final UUID DESIGNER_GA_ZONE_ID = UUID.fromString("66666666-0000-0000-0000-0000000000a2");
+    public static final UUID ADMIN_CLOSE_EVENT_ID = UUID.fromString("77777777-7777-7777-7777-777777777777");
+    public static final UUID ADMIN_CLOSE_GA_ZONE_ID = UUID.fromString("77777777-0000-0000-0000-0000000000a1");
+    public static final UUID ADMIN_CLOSE_PURCHASE_ID = UUID.fromString("77777777-0000-0000-0000-0000000000b1");
 
     private final boolean initializePlatform;
     private final boolean seedEnabled;
@@ -87,6 +93,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     private final IAdminRepository adminRepository;
     private final ICompanyRepository companyRepository;
     private final IEventRepository eventRepository;
+    private final IOrderRepository orderRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
         private final AdminService adminService;
 
@@ -98,6 +105,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
             IAdminRepository adminRepository,
             ICompanyRepository companyRepository,
             IEventRepository eventRepository,
+            IOrderRepository orderRepository,
             PasswordEncryptionUtils passwordEncryptionUtils,    
             AdminService adminService
     ) {
@@ -108,6 +116,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         this.adminRepository = adminRepository;
         this.companyRepository = companyRepository;
         this.eventRepository = eventRepository;
+        this.orderRepository = orderRepository;
         this.passwordEncryptionUtils = passwordEncryptionUtils;
         this.adminService = adminService;
 
@@ -126,8 +135,9 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         seedMembersAndAdmin();
         seedCompanies();
         seedEvents();
-        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended/revoked-manager, companies '{}', '{}' and '{}'",
-                COMPANY_NAME, SECOND_COMPANY_NAME, SUSPENDED_COMPANY_NAME);
+        seedCompletedPurchases();
+        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended/revoked-manager, companies '{}', '{}', '{}' and '{}'",
+                COMPANY_NAME, SECOND_COMPANY_NAME, SUSPENDED_COMPANY_NAME, ADMIN_CLOSE_COMPANY_NAME);
     }
 
     private void seedMembersAndAdmin() {
@@ -175,6 +185,11 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.VIEW_REPORTS));
         ensureStaffAppointment(MANAGER_ID, SUSPENDED_COMPANY_NAME, OWNER_ID,
                 StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.VIEW_REPORTS));
+        ensureStaffAppointment(SECOND_OWNER_ID, ADMIN_CLOSE_COMPANY_NAME, null,
+                StaffAppointment.StaffRole.OWNER, Set.of());
+        ensureStaffAppointment(MANAGER_ID, ADMIN_CLOSE_COMPANY_NAME, SECOND_OWNER_ID,
+                StaffAppointment.StaffRole.MANAGER,
+                Set.of(ManagerPermission.EVENT_LIFECYCLE, ManagerPermission.VIEW_REPORTS));
     }
 
     private void ensureStaffAppointment(
@@ -241,6 +256,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         if (SECOND_OWNER_ID.equals(id)) {
             member.addStaffAppointment(SECOND_COMPANY_NAME,
                     new StaffAppointment(SECOND_COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Set.of()));
+            member.addStaffAppointment(ADMIN_CLOSE_COMPANY_NAME,
+                    new StaffAppointment(ADMIN_CLOSE_COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Set.of()));
         }
         memberRepository.save(member);
     }
@@ -260,6 +277,10 @@ public class DevSeedDataInitializer implements ApplicationRunner {
             suspendedCompany.suspend();
             companyRepository.save(suspendedCompany);
         }
+        if (!companyRepository.existsByName(ADMIN_CLOSE_COMPANY_NAME)) {
+            companyRepository.save(new Company(ADMIN_CLOSE_COMPANY_NAME,
+                    "Disposable company for admin-close manual QA.", SECOND_OWNER_ID));
+        }
     }
 
     private void seedEvents() {
@@ -277,6 +298,26 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 "Second-company event with a max-quantity policy for permission and search QA.",
                 EventCategory.CONFERENCE, new MaxQuantityPolicy(4), CONFERENCE_GA_ZONE_ID, "Auditorium",
                 new BigDecimal("75.00"), 60);
+        saveGaEventIfMissing(ADMIN_CLOSE_EVENT_ID, ADMIN_CLOSE_COMPANY_NAME, "Admin Close Company Event",
+                "Seeded event cancelled when an admin closes the demo company.",
+                EventCategory.CONFERENCE, new AlwaysAllowPolicy(), ADMIN_CLOSE_GA_ZONE_ID, "Demo hall",
+                new BigDecimal("25.00"), 40);
+    }
+
+    private void seedCompletedPurchases() {
+        if (orderRepository.findCompletedById(ADMIN_CLOSE_PURCHASE_ID).isPresent()) {
+            return;
+        }
+        orderRepository.save(new CompletedPurchase(
+                ADMIN_CLOSE_PURCHASE_ID,
+                ADMIN_CLOSE_EVENT_ID,
+                "Admin Close Company Event",
+                ADMIN_CLOSE_COMPANY_NAME,
+                MEMBER_ID,
+                "member",
+                "seed-admin-close-txn",
+                new BigDecimal("25.00"),
+                Instant.now().minus(Duration.ofDays(1))));
     }
 
     private void saveGaEventIfMissing(
