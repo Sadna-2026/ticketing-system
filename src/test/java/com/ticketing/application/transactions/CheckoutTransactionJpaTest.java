@@ -18,6 +18,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.OrderService;
+import com.ticketing.domain.company.Company;
+import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
@@ -61,6 +63,8 @@ class CheckoutTransactionJpaTest {
 
     @Autowired
     private OrderService orderService;
+    @Autowired
+    private ICompanyRepository companyRepository;
     @Autowired
     private IEventRepository eventRepository;
     @Autowired
@@ -221,7 +225,10 @@ class CheckoutTransactionJpaTest {
                 passwords.hashPassword("password123"));
     }
 
-    private static Event publishedGaEvent(UUID eventId, UUID zoneId, int capacity) {
+    private Event publishedGaEvent(UUID eventId, UUID zoneId, int capacity) {
+        if (!companyRepository.existsByName("Acme Productions")) {
+            companyRepository.save(new Company("Acme Productions", "desc", UUID.randomUUID()));
+        }
         Instant start = Instant.now().plus(Duration.ofDays(30));
         Event event = new Event(
                 eventId, "Acme Productions", "Race Fest", "desc",
