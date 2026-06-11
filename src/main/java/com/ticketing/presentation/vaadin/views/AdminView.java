@@ -7,9 +7,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
@@ -31,6 +35,8 @@ import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.tabs.Tab;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
@@ -49,12 +55,20 @@ public class AdminView extends VerticalLayout {
 
     private final Span sessionStatus = new Span();
     private final Paragraph adminOnlyHint = new Paragraph("Log in with system admin permissions to use admin actions.");
+    private final Tabs adminTabs = new Tabs();
+    private final VerticalLayout adminModeContent = new VerticalLayout();
+    private final Map<AdminMode, VerticalLayout> panelByMode = new EnumMap<>(AdminMode.class);
+    private final Map<Tab, AdminMode> modeByTab = new HashMap<>();
     private VerticalLayout memberControls;
+    private VerticalLayout companyControls;
     private VerticalLayout purchaseHistoryControls;
     private VerticalLayout suspensionControls;
 
     private final Span memberStatus = new Span("Remove members using system admin authorization.");
     private final ComboBox<MemberSummaryDTO> removeMemberPicker = new ComboBox<>("Target member");
+
+    private final Span companyStatus = new Span("Close production companies using system admin authorization.");
+    private final ComboBox<CompanySummaryDTO> closeCompanyPicker = new ComboBox<>("Company to close");
 
     private final Span historyStatus = new Span("Load global purchase history by buyer, company, or all purchases.");
     private final ComboBox<MemberSummaryDTO> historyBuyerPicker = new ComboBox<>("Buyer member");
@@ -78,7 +92,7 @@ public class AdminView extends VerticalLayout {
         setMaxWidth("1180px");
         getStyle().set("margin", "0 auto");
 
-        configureMemberPickers();
+        configurePickers();
         configureFields();
         configurePurchaseHistoryGrid();
         configureSuspensionsGrid();
@@ -93,9 +107,12 @@ public class AdminView extends VerticalLayout {
         refreshSessionStatus();
     }
 
-    private void configureMemberPickers() {
+    private void configurePickers() {
         removeMemberPicker.setItemLabelGenerator(MemberSummaryDTO::username);
         removeMemberPicker.setPlaceholder("Search by username");
+
+        closeCompanyPicker.setItemLabelGenerator(CompanySummaryDTO::name);
+        closeCompanyPicker.setPlaceholder("Search by company name");
 
         historyBuyerPicker.setItemLabelGenerator(MemberSummaryDTO::username);
         historyBuyerPicker.setPlaceholder("Optional — search by username");
@@ -114,6 +131,7 @@ public class AdminView extends VerticalLayout {
         activeSuspensionsOnly.setValue(true);
 
         markRequired(suspensionTargetPicker, "Select a suspension target member.");
+        markRequired(closeCompanyPicker, "Select a company to close.");
     }
 
     private void configurePurchaseHistoryGrid() {
@@ -139,16 +157,49 @@ public class AdminView extends VerticalLayout {
     }
 
     private VerticalLayout adminActionsSection() {
+        configureAdminPanels();
+        configureAdminTabs();
+
         VerticalLayout section = new VerticalLayout(
                 new H3("System admin actions"),
                 new Paragraph("Admin-only controls are kept separate from company owner and manager workflows."),
-                memberSection(),
-                purchaseHistorySection(),
-                suspensionSection()
+                adminTabs,
+                adminModeContent
         );
         section.setPadding(false);
         section.setSpacing(true);
         return section;
+    }
+
+    private void configureAdminPanels() {
+        adminModeContent.setPadding(false);
+        adminModeContent.setSpacing(true);
+        panelByMode.put(AdminMode.MEMBERS, memberSection());
+        panelByMode.put(AdminMode.COMPANIES, companySection());
+        panelByMode.put(AdminMode.PURCHASES, purchaseHistorySection());
+        panelByMode.put(AdminMode.SUSPENSIONS, suspensionSection());
+        panelByMode.values().forEach(adminModeContent::add);
+    }
+
+    private void configureAdminTabs() {
+        adminTabs.removeAll();
+        modeByTab.clear();
+        for (AdminMode mode : AdminMode.values()) {
+            Tab tab = new Tab(mode.label);
+            modeByTab.put(tab, mode);
+            adminTabs.add(tab);
+        }
+        adminTabs.addSelectedChangeListener(event -> showAdminPanel(event.getSelectedTab()));
+        adminTabs.setSelectedIndex(0);
+        showAdminPanel(adminTabs.getSelectedTab());
+    }
+
+    private void showAdminPanel(Tab selectedTab) {
+        panelByMode.values().forEach(panel -> panel.setVisible(false));
+        AdminMode mode = modeByTab.get(selectedTab);
+        if (mode != null) {
+            panelByMode.get(mode).setVisible(true);
+        }
     }
 
     private VerticalLayout memberSection() {
@@ -163,6 +214,22 @@ public class AdminView extends VerticalLayout {
         );
         section.setPadding(false);
         memberControls = section;
+        return section;
+    }
+
+    private VerticalLayout companySection() {
+        Button closeCompany = new Button("Close company", event -> closeCompany());
+
+        FormLayout form = new FormLayout(closeCompanyPicker);
+        VerticalLayout section = new VerticalLayout(
+                new H4("Company administration"),
+                new Paragraph("Admin close permanently closes the company, revokes staff appointments, and notifies company staff."),
+                form,
+                closeCompany,
+                companyStatus
+        );
+        section.setPadding(false);
+        companyControls = section;
         return section;
     }
 
@@ -222,6 +289,20 @@ public class AdminView extends VerticalLayout {
         if (result.success()) {
             removeMemberPicker.clear();
             loadMemberPickerItems();
+        }
+    }
+
+    private void closeCompany() {
+        CompanySummaryDTO company = requireSelected(closeCompanyPicker, companyStatus, "Select a company to close.");
+        if (company == null) {
+            return;
+        }
+        ActionResult result = presenter.closeCompany(company.name());
+        companyStatus.setText(result.message());
+        notify(result);
+        if (result.success()) {
+            closeCompanyPicker.clear();
+            loadCompanyPickerItems();
         }
     }
 
@@ -311,8 +392,8 @@ public class AdminView extends VerticalLayout {
         }
     }
 
-    private MemberSummaryDTO requireSelected(ComboBox<MemberSummaryDTO> picker, Span status, String message) {
-        MemberSummaryDTO selected = picker.getValue();
+    private static <T> T requireSelected(ComboBox<T> picker, Span status, String message) {
+        T selected = picker.getValue();
         if (selected == null) {
             status.setText(message);
             UiMessages.error(message);
@@ -336,11 +417,13 @@ public class AdminView extends VerticalLayout {
         sessionStatus.setText(presenter.currentSessionLabel());
         boolean admin = presenter.currentSessionState().systemAdmin();
         adminOnlyHint.setVisible(!admin);
-        memberControls.setVisible(admin);
-        purchaseHistoryControls.setVisible(admin);
-        suspensionControls.setVisible(admin);
+        adminTabs.setVisible(admin);
+        adminModeContent.setVisible(admin);
+        panelByMode.values().forEach(panel -> panel.setVisible(false));
         if (admin) {
+            showAdminPanel(adminTabs.getSelectedTab());
             loadMemberPickerItems();
+            loadCompanyPickerItems();
         }
     }
 
@@ -349,6 +432,10 @@ public class AdminView extends VerticalLayout {
         removeMemberPicker.setItems(members);
         historyBuyerPicker.setItems(members);
         suspensionTargetPicker.setItems(members);
+    }
+
+    private void loadCompanyPickerItems() {
+        closeCompanyPicker.setItems(presenter.searchCompanies(""));
     }
 
     private String formatInstant(Instant instant) {
@@ -369,5 +456,18 @@ public class AdminView extends VerticalLayout {
 
     private String valueOrEmpty(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private enum AdminMode {
+        MEMBERS("Members"),
+        COMPANIES("Companies"),
+        PURCHASES("Purchase history"),
+        SUSPENSIONS("Suspensions");
+
+        private final String label;
+
+        AdminMode(String label) {
+            this.label = label;
+        }
     }
 }
