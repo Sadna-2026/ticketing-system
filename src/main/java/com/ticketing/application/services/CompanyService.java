@@ -2,10 +2,8 @@ package com.ticketing.application.services;
 
 import java.time.Instant;
 import java.util.ArrayDeque;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -401,22 +399,15 @@ public class CompanyService {
     }
 
     public List<CompanySummaryDTO> searchCompanies(String query) {
-        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        return companyRepository.getAll().stream()
-                .filter(Company::isActive)
-                .filter(c -> needle.isEmpty() || c.getName().toLowerCase(Locale.ROOT).contains(needle))
+        return companyRepository.findActiveCompanies(query).stream()
                 .map(c -> new CompanySummaryDTO(c.getName()))
-                .sorted(Comparator.comparing(CompanySummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
 
     public List<CompanySummaryDTO> searchCompaniesForLookup(String token, String query) {
-        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        return companyRepository.getAll().stream()
-                .filter(c -> canViewPublicInfo(token, c))
-                .filter(c -> needle.isEmpty() || c.getName().toLowerCase(Locale.ROOT).contains(needle))
+        return companyRepository.findLookupVisibleCompanies(lookupMemberId(token), lookupSystemAdmin(token), query)
+                .stream()
                 .map(c -> new CompanySummaryDTO(c.getName()))
-                .sorted(Comparator.comparing(CompanySummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
 
@@ -736,6 +727,18 @@ public class CompanyService {
         }
         UUID memberId = sessionTokenService.extractMemberId(token);
         return memberId != null && memberId.equals(company.getFounderId());
+    }
+
+    private UUID lookupMemberId(String token) {
+        return validToken(token) ? sessionTokenService.extractMemberId(token) : null;
+    }
+
+    private boolean lookupSystemAdmin(String token) {
+        return validToken(token) && isAdmin(token);
+    }
+
+    private boolean validToken(String token) {
+        return token != null && !token.isBlank() && sessionTokenService.isValid(token);
     }
 
     private CompanyPublicDTO toPublicDto(Company company) {

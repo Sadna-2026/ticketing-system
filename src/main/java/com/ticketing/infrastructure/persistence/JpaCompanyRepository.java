@@ -92,12 +92,36 @@ public class JpaCompanyRepository implements ICompanyRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public List<Company> findActiveCompanies(String query) {
+        String needle = queryNeedle(query);
+        return delegate.findAll().stream()
+                .filter(Company::isActive)
+                .filter(c -> matchesName(c, needle))
+                .sorted(Comparator.comparing(Company::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(Company::detachedCopy)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Company> findLookupVisibleCompanies(UUID memberId, boolean systemAdmin, String query) {
+        String needle = queryNeedle(query);
+        return delegate.findAll().stream()
+                .filter(c -> c.isActive() || canViewSuspended(c, memberId, systemAdmin))
+                .filter(c -> matchesName(c, needle))
+                .sorted(Comparator.comparing(Company::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(Company::detachedCopy)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Company> findFounderLifecycleCompanies(UUID founderId, String query) {
-        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        String needle = queryNeedle(query);
         return delegate.findAll().stream()
                 .filter(c -> founderId.equals(c.getFounderId()))
                 .filter(c -> c.getStatus() == CompanyStatus.ACTIVE || c.getStatus() == CompanyStatus.SUSPENDED)
-                .filter(c -> needle.isEmpty() || c.getName().toLowerCase(Locale.ROOT).contains(needle))
+                .filter(c -> matchesName(c, needle))
                 .sorted(Comparator.comparing(Company::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(Company::detachedCopy)
                 .toList();
@@ -161,5 +185,18 @@ public class JpaCompanyRepository implements ICompanyRepository {
 
     private static String normalizeKey(String name) {
         return name.toLowerCase().trim();
+    }
+
+    private static String queryNeedle(String query) {
+        return query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean matchesName(Company company, String needle) {
+        return needle.isEmpty() || company.getName().toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    private static boolean canViewSuspended(Company company, UUID memberId, boolean systemAdmin) {
+        return company.getStatus() == CompanyStatus.SUSPENDED
+                && (systemAdmin || memberId != null && memberId.equals(company.getFounderId()));
     }
 }

@@ -300,6 +300,16 @@ public class CompanyServiceConcurrencyTest {
         }
 
         @Override
+        public List<Company> findActiveCompanies(String query) {
+            return delegate.findActiveCompanies(query);
+        }
+
+        @Override
+        public List<Company> findLookupVisibleCompanies(UUID memberId, boolean systemAdmin, String query) {
+            return delegate.findLookupVisibleCompanies(memberId, systemAdmin, query);
+        }
+
+        @Override
         public List<Company> findFounderLifecycleCompanies(UUID founderId, String query) {
             return delegate.findFounderLifecycleCompanies(founderId, query);
         }
