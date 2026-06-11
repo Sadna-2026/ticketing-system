@@ -119,6 +119,19 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenMemberSession_WhenLoadingCompanyInfo_ThenSessionAwareLookupIsUsed() {
+        memberSession();
+        CompanyPublicDTO company = new CompanyPublicDTO("Suspended Co", "desc", List.of());
+        when(companyService.getCompanyInfoForLookup("member-token", "Suspended Co")).thenReturn(Optional.of(company));
+
+        CompanyInfoResult result = presenter.loadCompanyInfo("Suspended Co");
+
+        assertTrue(result.success());
+        assertSame(company, result.company());
+        verify(companyService).getCompanyInfoForLookup("member-token", "Suspended Co");
+    }
+
+    @Test
     void GivenPersonnelInputs_WhenManagingRoles_ThenCompanyAndMemberServicesAreCalledDirectly() {
         memberSession();
         UUID targetId = UUID.randomUUID();
@@ -297,20 +310,17 @@ class CompanyPresenterTest {
 
         ActionResult suspend = presenter.suspendCompany("Acme");
         ActionResult reopen = presenter.reopenCompany("Acme");
-        ActionResult close = presenter.closeCompany("Acme");
         PurchaseHistoryResult history = presenter.loadPurchaseHistory("Acme");
         SalesReportResult sales = presenter.loadSalesReport("Acme");
 
         assertTrue(suspend.success());
         assertTrue(reopen.success());
-        assertTrue(close.success());
         assertTrue(history.success());
         assertEquals(List.of(purchase), history.purchases());
         assertTrue(sales.success());
         assertSame(report, sales.report());
         verify(companyService).suspendCompany("member-token", "Acme");
         verify(companyService).reopenCompany("member-token", "Acme");
-        verify(companyService).permanentCloseByFounder("member-token", "Acme");
         verify(companyService).getPurchaseHistory("member-token", "Acme");
         verify(completedPurchaseService).getHierarchicalSalesReport("member-token", "Acme");
     }
@@ -374,6 +384,24 @@ class CompanyPresenterTest {
         when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
 
         assertTrue(presenter.searchCompanies("a").isEmpty());
+    }
+
+    @Test
+    void GivenNoMemberSession_WhenSearchingLookupCompanies_ThenPublicSearchIsUsed() {
+        when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchLookupCompanies("ac"));
+        verify(companyService).searchCompanies("ac");
+    }
+
+    @Test
+    void GivenMemberSession_WhenSearchingLookupCompanies_ThenSessionAwareSearchIsUsed() {
+        memberSession();
+        when(companyService.searchCompaniesForLookup("member-token", "sus"))
+                .thenReturn(List.of(new CompanySummaryDTO("Suspended Co")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Suspended Co")), presenter.searchLookupCompanies("sus"));
+        verify(companyService).searchCompaniesForLookup("member-token", "sus");
     }
 
     @Test

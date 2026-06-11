@@ -1492,6 +1492,14 @@ class EventServiceTest {
                 companyRepo.save(a);
 
                 assertTrue(service.searchEvents(SearchEventsRequest.empty()).isEmpty());
+
+                a = companyRepo.findByName(COMPANY_A).orElseThrow();
+                a.reopen();
+                companyRepo.save(a);
+
+                List<EventSummaryDTO> hits = service.searchEvents(SearchEventsRequest.empty());
+                assertEquals(1, hits.size());
+                assertEquals("Hidden", hits.get(0).name());
             }
 
             @Test

@@ -378,24 +378,42 @@ public class CompanyService {
             return Optional.empty();
         }
         Optional<Company> maybe = companyRepository.findByName(companyName);
-        if (maybe.isEmpty() || !maybe.get().isActive()) {
+        if (maybe.isEmpty() || !canViewPublicInfo(null, maybe.get())) {
             log.info("Company info request denied: name={}, reason={}",
                     companyName, maybe.isEmpty() ? "unknown" : "not-active");
             return Optional.empty();
         }
-        Company company = maybe.get();
-        List<EventSummaryDTO> active = eventRepository.findByCompanyName(company.getName()).stream()
-                .filter(e -> e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT)
-                .map(EventSummaryDTO::from)
-                .toList();
-        log.info("Company info provided: name={}", company.getName());
-        return Optional.of(new CompanyPublicDTO(company.getName(), company.getDescription(), active));
+        return Optional.of(toPublicDto(maybe.get()));
+    }
+
+    public Optional<CompanyPublicDTO> getCompanyInfoForLookup(String token, String companyName) {
+        log.info("Session-aware company info requested: name={}", companyName);
+        if (companyName == null || companyName.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<Company> maybe = companyRepository.findByName(companyName);
+        if (maybe.isEmpty() || !canViewPublicInfo(token, maybe.get())) {
+            log.info("Session-aware company info request denied: name={}, reason={}",
+                    companyName, maybe.isEmpty() ? "unknown" : "not-visible");
+            return Optional.empty();
+        }
+        return Optional.of(toPublicDto(maybe.get()));
     }
 
     public List<CompanySummaryDTO> searchCompanies(String query) {
         String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         return companyRepository.getAll().stream()
                 .filter(Company::isActive)
+                .filter(c -> needle.isEmpty() || c.getName().toLowerCase(Locale.ROOT).contains(needle))
+                .map(c -> new CompanySummaryDTO(c.getName()))
+                .sorted(Comparator.comparing(CompanySummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    public List<CompanySummaryDTO> searchCompaniesForLookup(String token, String query) {
+        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        return companyRepository.getAll().stream()
+                .filter(c -> canViewPublicInfo(token, c))
                 .filter(c -> needle.isEmpty() || c.getName().toLowerCase(Locale.ROOT).contains(needle))
                 .map(c -> new CompanySummaryDTO(c.getName()))
                 .sorted(Comparator.comparing(CompanySummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
@@ -701,6 +719,32 @@ public class CompanyService {
     private boolean isAdmin(String token) {
         Set<String> perms = sessionTokenService.extractPermissions(token);
         return perms != null && perms.contains(ADMIN_PERMISSION);
+    }
+
+    private boolean canViewPublicInfo(String token, Company company) {
+        if (company.isActive()) {
+            return true;
+        }
+        if (company.getStatus() != CompanyStatus.SUSPENDED || token == null || token.isBlank()) {
+            return false;
+        }
+        if (!sessionTokenService.isValid(token)) {
+            return false;
+        }
+        if (isAdmin(token)) {
+            return true;
+        }
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        return memberId != null && memberId.equals(company.getFounderId());
+    }
+
+    private CompanyPublicDTO toPublicDto(Company company) {
+        List<EventSummaryDTO> active = eventRepository.findByCompanyName(company.getName()).stream()
+                .filter(e -> e.getStatus() == EventStatus.PUBLISHED || e.getStatus() == EventStatus.SOLD_OUT)
+                .map(EventSummaryDTO::from)
+                .toList();
+        log.info("Company info provided: name={}", company.getName());
+        return new CompanyPublicDTO(company.getName(), company.getDescription(), active);
     }
 
     private record RefundJob(String transactionId, java.math.BigDecimal amount) {}

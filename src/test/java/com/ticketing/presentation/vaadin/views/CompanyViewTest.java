@@ -3,7 +3,6 @@ package com.ticketing.presentation.vaadin.views;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -109,7 +108,7 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Set zone price"));
         assertTrue(hasButton(view, "Suspend company"));
         assertTrue(hasButton(view, "Reopen company"));
-        assertTrue(hasButton(view, "Close company"));
+        assertFalse(hasButton(view, "Close company"));
         assertTrue(hasButton(view, "Load company purchase history"));
         assertTrue(hasButton(view, "Load sales report"));
         assertNotNull(findTextField(view, "New company name"));
@@ -425,7 +424,6 @@ class CompanyViewTest {
         SalesReportDTO report = new SalesReportDTO("Acme", memberId, List.of(purchase), new BigDecimal("80.00"), 1);
         when(presenter.suspendCompany("Acme")).thenReturn(ActionResult.success("Company suspended."));
         when(presenter.reopenCompany("Acme")).thenReturn(ActionResult.success("Company reopened."));
-        when(presenter.closeCompany("Acme")).thenReturn(ActionResult.success("Company closed."));
         when(presenter.loadPurchaseHistory("Acme")).thenReturn(PurchaseHistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
         when(presenter.loadSalesReport("Acme")).thenReturn(SalesReportResult.success("Sales report loaded.", report));
         CompanyView view = new CompanyView(presenter);
@@ -434,11 +432,10 @@ class CompanyViewTest {
 
         clickButton(view, "Suspend company");
         clickButton(view, "Reopen company");
-        clickButton(view, "Close company");
         clickButton(view, "Load company purchase history");
         clickButton(view, "Load sales report");
 
-        assertTrue(hasText(view, "Company closed."));
+        assertTrue(hasText(view, "Company reopened."));
         assertTrue(hasText(view, "Total purchases: 1"));
         assertTrue(hasText(view, "Total revenue: 80.00"));
         assertEquals(List.of(purchase), findPurchasesGrid(view).getDataProvider().fetch(new Query<>()).toList());
@@ -456,20 +453,24 @@ class CompanyViewTest {
 
         assertTrue(hasVisibleButton(view, "Suspend company"));
         assertTrue(hasVisibleButton(view, "Reopen company"));
-        assertTrue(hasVisibleButton(view, "Close company"));
+        assertFalse(hasVisibleButton(view, "Close company"));
         assertFalse(hasText(view, "Only the founder can perform this lifecycle action"));
     }
 
     @Test
-    void GivenSuspendedFounderCompany_WhenRendered_ThenLifecyclePickerIncludesIt() {
+    void GivenInactiveFounderCompanies_WhenRendered_ThenLifecyclePickerIncludesThem() {
         CompanyPresenter presenter = mockPresenter();
+        when(presenter.searchLookupCompanies(""))
+                .thenReturn(List.of(company("Active Public"), company("Suspended Co")));
         when(presenter.searchCompanies("")).thenReturn(List.of(company("Active Public")));
-        when(presenter.searchLifecycleCompanies("")).thenReturn(List.of(company("Suspended Co")));
+        when(presenter.searchLifecycleCompanies(""))
+                .thenReturn(List.of(company("Suspended Co")));
 
         CompanyView view = new CompanyView(presenter);
 
         assertEquals(List.of("Suspended Co"), companyNames(findCompanyCombo(view, "Lifecycle company name")));
-        assertEquals(List.of("Active Public"), companyNames(findCompanyCombo(view, "Company info name")));
+        assertEquals(List.of("Active Public", "Suspended Co"), companyNames(findCompanyCombo(view, "Company info name")));
+        assertEquals(List.of("Active Public"), companyNames(findCompanyCombo(view, "Personnel company name")));
     }
 
     @Test
@@ -497,27 +498,51 @@ class CompanyViewTest {
     }
 
     @Test
-    void GivenCompanyClosed_WhenLifecycleActionSucceeds_ThenClosedCompanyIsRemovedFromLifecyclePicker() {
+    void GivenLifecycleActionSucceeds_WhenCompanyStatusChanges_ThenLookupAndActivePickersRefresh() {
         CompanyPresenter presenter = mockPresenter();
-        when(presenter.searchLifecycleCompanies(""))
+        when(presenter.searchLookupCompanies(""))
+                .thenReturn(List.of(company("Acme")))
+                .thenReturn(List.of(company("Acme")));
+        when(presenter.searchCompanies(""))
                 .thenReturn(List.of(company("Acme")))
                 .thenReturn(List.of());
-        when(presenter.closeCompany("Acme")).thenReturn(ActionResult.success("Company closed."));
-        when(presenter.loadLifecycleAccess("Acme"))
-                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
+        when(presenter.searchLifecycleCompanies(""))
+                .thenReturn(List.of(company("Acme")))
+                .thenReturn(List.of(company("Acme")));
+        when(presenter.suspendCompany("Acme")).thenReturn(ActionResult.success("Company suspended."));
+        when(presenter.loadLifecycleAccess(any()))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
         ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
         lifecyclePicker.setValue(company("Acme"));
 
-        clickButton(view, "Close company");
+        clickButton(view, "Suspend company");
 
-        assertEquals(List.of(), companyNames(lifecyclePicker));
-        assertNull(lifecyclePicker.getValue());
-        assertFalse(hasVisibleButton(view, "Reopen company"));
-        assertTrue(hasText(view, "Select a company to show founder-only lifecycle controls."));
-        verify(presenter).closeCompany("Acme");
+        assertEquals(List.of("Acme"), companyNames(findCompanyCombo(view, "Company info name")));
+        assertEquals(List.of(), companyNames(findCompanyCombo(view, "Personnel company name")));
+        assertEquals("Acme", lifecyclePicker.getValue().name());
+        verify(presenter, atLeast(2)).searchLookupCompanies("");
+        verify(presenter, atLeast(2)).searchCompanies("");
+        assertTrue(hasText(view, "Company suspended."));
+    }
+
+    @Test
+    void GivenSuspendedCompanySelected_WhenReopenClicked_ThenSuccessMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.searchLifecycleCompanies("")).thenReturn(List.of(company("Suspended Co")));
+        when(presenter.reopenCompany("Suspended Co")).thenReturn(ActionResult.success("Company reopened."));
+        when(presenter.loadLifecycleAccess("Suspended Co"))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Suspended Co."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Lifecycle");
+        findCompanyCombo(view, "Lifecycle company name").setValue(company("Suspended Co"));
+
+        clickButton(view, "Reopen company");
+
+        verify(presenter).reopenCompany("Suspended Co");
+        assertTrue(hasText(view, "Company reopened."));
     }
 
     @Test
@@ -805,6 +830,8 @@ class CompanyViewTest {
         when(presenter.loadLifecycleAccess(any()))
                 .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available."));
         when(presenter.searchCompanies(any()))
+                .thenReturn(List.of(company("Acme")));
+        when(presenter.searchLookupCompanies(any()))
                 .thenReturn(List.of(company("Acme")));
         when(presenter.searchLifecycleCompanies(any()))
                 .thenReturn(List.of(company("Acme")));

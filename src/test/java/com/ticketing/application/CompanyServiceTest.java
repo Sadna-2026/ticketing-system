@@ -844,6 +844,33 @@ class CompanyServiceTest {
         }
 
         @Test
+        public void GivenSuspendedCompany_WhenPublicLookupAndSearch_ThenHiddenUntilReopened() {
+            Event event = seedEvent(UUID.randomUUID());
+            EventStatus originalStatus = event.getStatus();
+
+            service.suspendCompany(FOUNDER_TOKEN, COMPANY);
+
+            assertTrue(service.getCompanyInfo(COMPANY).isEmpty());
+            assertFalse(service.searchCompanies("").stream().map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertTrue(service.getCompanyInfoForLookup(FOUNDER_TOKEN, COMPANY).isPresent());
+            assertTrue(service.getCompanyInfoForLookup(ADMIN_TOKEN, COMPANY).isPresent());
+            assertTrue(service.getCompanyInfoForLookup(OUTSIDER_TOKEN, COMPANY).isEmpty());
+            assertTrue(service.searchCompaniesForLookup(FOUNDER_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertTrue(service.searchCompaniesForLookup(ADMIN_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertFalse(service.searchCompaniesForLookup(OUTSIDER_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertEquals(originalStatus, eventRepo.findById(event.getId()).orElseThrow().getStatus());
+
+            service.reopenCompany(FOUNDER_TOKEN, COMPANY);
+
+            assertTrue(service.getCompanyInfo(COMPANY).isPresent());
+            assertTrue(service.searchCompanies("").stream().map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertEquals(originalStatus, eventRepo.findById(event.getId()).orElseThrow().getStatus());
+        }
+
+        @Test
         public void GivenFounder_WhenPermanentClose_ThenEventsCancelledPurchasesRefundedAppointmentsKept() {
             // seed two events for this company
             Event e1 = seedEvent(UUID.randomUUID());

@@ -50,6 +50,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
 
     public static final String COMPANY_NAME = "Demo Productions";
     public static final String SECOND_COMPANY_NAME = "Northwind Events";
+    public static final String SUSPENDED_COMPANY_NAME = "Dormant Productions";
     public static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     public static final UUID MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
     public static final UUID OWNER_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
@@ -124,8 +125,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         seedMembersAndAdmin();
         seedCompanies();
         seedEvents();
-        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended, companies '{}' and '{}'",
-                COMPANY_NAME, SECOND_COMPANY_NAME);
+        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended, companies '{}', '{}' and '{}'",
+                COMPANY_NAME, SECOND_COMPANY_NAME, SUSPENDED_COMPANY_NAME);
     }
 
     private void seedMembersAndAdmin() {
@@ -165,7 +166,11 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     }
 
     private void ensureManualQaAppointments() {
+        ensureStaffAppointment(OWNER_ID, SUSPENDED_COMPANY_NAME, null,
+                StaffAppointment.StaffRole.OWNER, Set.of());
         ensureStaffAppointment(MANAGER_ID, SECOND_COMPANY_NAME, SECOND_OWNER_ID,
+                StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.VIEW_REPORTS));
+        ensureStaffAppointment(MANAGER_ID, SUSPENDED_COMPANY_NAME, OWNER_ID,
                 StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.VIEW_REPORTS));
     }
 
@@ -202,6 +207,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         if (OWNER_ID.equals(id)) {
             member.addStaffAppointment(COMPANY_NAME,
                     new StaffAppointment(COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Set.of()));
+            member.addStaffAppointment(SUSPENDED_COMPANY_NAME,
+                    new StaffAppointment(SUSPENDED_COMPANY_NAME, null, StaffAppointment.StaffRole.OWNER, Set.of()));
         }
         if (MANAGER_ID.equals(id)) {
             member.addStaffAppointment(COMPANY_NAME,
@@ -209,6 +216,9 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                             Set.of(ManagerPermission.VIEW_REPORTS)));
             member.addStaffAppointment(SECOND_COMPANY_NAME,
                     new StaffAppointment(SECOND_COMPANY_NAME, SECOND_OWNER_ID, StaffAppointment.StaffRole.MANAGER,
+                            Set.of(ManagerPermission.VIEW_REPORTS)));
+            member.addStaffAppointment(SUSPENDED_COMPANY_NAME,
+                    new StaffAppointment(SUSPENDED_COMPANY_NAME, OWNER_ID, StaffAppointment.StaffRole.MANAGER,
                             Set.of(ManagerPermission.VIEW_REPORTS)));
         }
         if (INVENTORY_MANAGER_ID.equals(id)) {
@@ -233,6 +243,12 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         if (!companyRepository.existsByName(SECOND_COMPANY_NAME)) {
             companyRepository.save(new Company(SECOND_COMPANY_NAME,
                     "Second seeded company for search and cross-company checks.", SECOND_OWNER_ID));
+        }
+        if (!companyRepository.existsByName(SUSPENDED_COMPANY_NAME)) {
+            Company suspendedCompany = new Company(SUSPENDED_COMPANY_NAME,
+                    "Suspended seeded company for reopen lifecycle QA.", OWNER_ID);
+            suspendedCompany.suspend();
+            companyRepository.save(suspendedCompany);
         }
     }
 

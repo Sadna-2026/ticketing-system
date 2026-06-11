@@ -72,9 +72,4 @@ public class CompanyController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @DeleteMapping("/{companyName}")
-    public ResponseEntity<ApiResponse<Void>> closeCompany(@RequestHeader("X-Session-Token") String token, @PathVariable String companyName) {
-        companyService.permanentCloseByFounder(token, companyName);
-        return ResponseEntity.ok(ApiResponse.success(null));
-    }
 }

@@ -163,11 +163,10 @@ public class CompanyView extends VerticalLayout {
     private final VerticalLayout eventMapDisplay = new VerticalLayout();
 
     private final ComboBox<CompanySummaryDTO> lifecycleCompanyName = new ComboBox<>("Lifecycle company name");
-    private final Span lifecycleStatus = new Span("Suspend, reopen, or close companies.");
+    private final Span lifecycleStatus = new Span("Suspend or reopen companies.");
     private final Span lifecycleAccessHint = new Span("Select a company to show founder-only lifecycle controls.");
     private Button suspendCompanyButton;
     private Button reopenCompanyButton;
-    private Button closeCompanyButton;
 
     private final ComboBox<CompanySummaryDTO> reportingCompanyName = new ComboBox<>("Reporting company name");
     private final Span reportingStatus = new Span("Load company purchase history and hierarchical sales reports.");
@@ -375,14 +374,33 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void populatePickerItems() {
-        List<CompanySummaryDTO> companies = orEmpty(presenter.searchCompanies(""));
-        for (ComboBox<CompanySummaryDTO> picker : List.of(
-                infoCompanyName, personnelCompanyName, eventCompanyName,
-                inventoryCompanyName, reportingCompanyName, policyCompanyName)) {
-            picker.setItems(companies);
-        }
+        refreshCompanyPickers();
         refreshLifecycleCompanies();
         lookupEventPicker.setItems(orEmpty(presenter.searchBrowsableEvents()));
+    }
+
+    private void refreshCompanyPickers() {
+        setCompanyItemsPreservingSelection(infoCompanyName, orEmpty(presenter.searchLookupCompanies("")));
+        List<CompanySummaryDTO> activeCompanies = orEmpty(presenter.searchCompanies(""));
+        for (ComboBox<CompanySummaryDTO> picker : List.of(
+                personnelCompanyName, eventCompanyName, inventoryCompanyName,
+                reportingCompanyName, policyCompanyName)) {
+            setCompanyItemsPreservingSelection(picker, activeCompanies);
+        }
+    }
+
+    private static void setCompanyItemsPreservingSelection(
+            ComboBox<CompanySummaryDTO> picker,
+            List<CompanySummaryDTO> companies
+    ) {
+        CompanySummaryDTO selected = picker.getValue();
+        picker.setItems(companies);
+        if (selected != null) {
+            companies.stream()
+                    .filter(company -> company.name().equals(selected.name()))
+                    .findFirst()
+                    .ifPresentOrElse(picker::setValue, picker::clear);
+        }
     }
 
     private void refreshLifecycleCompanies() {
@@ -615,14 +633,13 @@ public class CompanyView extends VerticalLayout {
     private VerticalLayout lifecycleSection() {
         suspendCompanyButton = new Button("Suspend company", event -> handleLifecycleResult(presenter.suspendCompany(companyNameOf(lifecycleCompanyName))));
         reopenCompanyButton = new Button("Reopen company", event -> handleLifecycleResult(presenter.reopenCompany(companyNameOf(lifecycleCompanyName))));
-        closeCompanyButton = new Button("Close company", event -> handleLifecycleResult(presenter.closeCompany(companyNameOf(lifecycleCompanyName))));
-        HorizontalLayout actions = new HorizontalLayout(suspendCompanyButton, reopenCompanyButton, closeCompanyButton);
+        HorizontalLayout actions = new HorizontalLayout(suspendCompanyButton, reopenCompanyButton);
         actions.setAlignItems(Alignment.BASELINE);
         refreshLifecycleAccess();
 
         VerticalLayout section = new VerticalLayout(
                 new H3("Company lifecycle"),
-                new Paragraph("Founders may suspend, reopen, or close their company."),
+                new Paragraph("Founders may suspend or reopen their company."),
                 lifecycleCompanyName,
                 lifecycleAccessHint,
                 actions,
@@ -1096,7 +1113,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void refreshLifecycleAccess() {
-        if (suspendCompanyButton == null || reopenCompanyButton == null || closeCompanyButton == null) {
+        if (suspendCompanyButton == null || reopenCompanyButton == null) {
             return;
         }
         String companyName = companyNameOf(lifecycleCompanyName);
@@ -1116,7 +1133,6 @@ public class CompanyView extends VerticalLayout {
     private void setLifecycleControlsVisible(boolean visible) {
         suspendCompanyButton.setVisible(visible);
         reopenCompanyButton.setVisible(visible);
-        closeCompanyButton.setVisible(visible);
     }
 
     private void createEvent() {
@@ -1264,6 +1280,8 @@ public class CompanyView extends VerticalLayout {
     private void handleLifecycleResult(ActionResult result) {
         lifecycleStatus.setText(result.message());
         if (result.success()) {
+            refreshCompanyPickers();
+            lookupEventPicker.setItems(orEmpty(presenter.searchBrowsableEvents()));
             refreshLifecycleCompanies();
             refreshLifecycleAccess();
         }
