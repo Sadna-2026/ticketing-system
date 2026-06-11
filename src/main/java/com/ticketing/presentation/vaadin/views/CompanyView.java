@@ -127,6 +127,7 @@ public class CompanyView extends VerticalLayout {
     private final Span personnelStatus = new Span("Manage owner and manager appointments.");
     private final Span personnelAccessHint = new Span("Select a company to show owner-only permission controls.");
     private final VerticalLayout orgChartDisplay = new VerticalLayout();
+    private Button loadOrganizationChartButton;
     private Button revokePersonnelButton;
     private Button changeManagerPermissionsButton;
 
@@ -430,7 +431,6 @@ public class CompanyView extends VerticalLayout {
 
     private void configurePurchasesGrid() {
         purchasesGrid.setId("company-purchases-grid");
-        purchasesGrid.addColumn(purchase -> purchase.purchaseId().toString()).setHeader("Purchase ID").setAutoWidth(true);
         purchasesGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         purchasesGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
         purchasesGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);
@@ -518,11 +518,12 @@ public class CompanyView extends VerticalLayout {
                         permissions.getSelectedItems())));
         Button relinquish = new Button("Relinquish ownership", event -> handlePersonnelResult(
                 presenter.relinquishOwnership(companyNameOf(personnelCompanyName))));
-        Button loadOrgChart = new Button("Load organization chart", event -> loadOrganizationChart());
+        loadOrganizationChartButton = new Button("Load organization chart", event -> loadOrganizationChart());
 
         FormLayout form = new FormLayout(personnelCompanyName, targetMember, role, permissions, offerId);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
-        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revokePersonnelButton, changeManagerPermissionsButton, relinquish, loadOrgChart);
+        HorizontalLayout actions = new HorizontalLayout(offerRole, acceptOffer, rejectOffer, revokePersonnelButton,
+                changeManagerPermissionsButton, relinquish, loadOrganizationChartButton);
         actions.setAlignItems(Alignment.BASELINE);
         actions.getStyle().set("flex-wrap", "wrap");
         refreshPersonnelAccess();
@@ -1087,13 +1088,14 @@ public class CompanyView extends VerticalLayout {
     }
 
     private CompanyPresenter.PersonnelAccessResult refreshPersonnelAccess() {
-        if (changeManagerPermissionsButton == null || revokePersonnelButton == null) {
+        if (changeManagerPermissionsButton == null || revokePersonnelButton == null || loadOrganizationChartButton == null) {
             return CompanyPresenter.PersonnelAccessResult.denied("Select a company to show owner-only permission controls.");
         }
         String companyName = companyNameOf(personnelCompanyName);
         if (companyName == null) {
             revokePersonnelButton.setVisible(false);
             changeManagerPermissionsButton.setVisible(false);
+            loadOrganizationChartButton.setVisible(false);
             personnelAccessHint.setText("Select a company to show owner-only permission controls.");
             personnelAccessHint.setVisible(true);
             return CompanyPresenter.PersonnelAccessResult.denied("Select a company to show owner-only permission controls.");
@@ -1102,6 +1104,7 @@ public class CompanyView extends VerticalLayout {
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess(companyName);
         revokePersonnelButton.setVisible(result.canManagePersonnel());
         changeManagerPermissionsButton.setVisible(result.canManagePersonnel());
+        loadOrganizationChartButton.setVisible(result.canManagePersonnel());
         personnelAccessHint.setText(result.message());
         personnelAccessHint.setVisible(!result.canManagePersonnel());
         return result;
@@ -1327,19 +1330,101 @@ public class CompanyView extends VerticalLayout {
     }
 
     private Details orgNode(OrgNodeDTO node) {
-        VerticalLayout content = new VerticalLayout(
-                new Span("Member ID: " + node.memberId()),
-                new Span("Role: " + node.role()),
-                new Span("Permissions: " + node.permissions()),
-                new Span("Revoked: " + node.revoked())
-        );
-        content.setPadding(false);
-        for (OrgNodeDTO child : node.subordinates()) {
-            content.add(orgNode(child));
+        Span username = new Span(node.username());
+        username.getStyle()
+                .set("font-weight", "600")
+                .set("font-size", "1rem");
+        Span roleBadge = badge(node.role().name(), "var(--lumo-primary-color-10pct)", "var(--lumo-primary-text-color)");
+        Span status = node.revoked()
+                ? badge("Revoked", "var(--lumo-error-color-10pct)", "var(--lumo-error-text-color)")
+                : badge("Active", "var(--lumo-success-color-10pct)", "var(--lumo-success-text-color)");
+
+        HorizontalLayout summary = new HorizontalLayout(username, roleBadge, status);
+        summary.setAlignItems(Alignment.CENTER);
+        summary.setSpacing(true);
+        if (node.revoked()) {
+            username.getStyle().set("color", "var(--lumo-error-text-color)");
         }
-        Details details = new Details(node.username(), content);
+
+        Span memberId = new Span("ID: " + node.memberId());
+        memberId.getStyle()
+                .set("font-family", "monospace")
+                .set("font-size", "0.85rem")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        VerticalLayout permissionsBlock = new VerticalLayout(new Span("Permissions"));
+        permissionsBlock.setPadding(false);
+        permissionsBlock.setSpacing(false);
+        permissionsBlock.getStyle().set("gap", "0.35rem");
+        permissionsBlock.add(permissionChips(node));
+
+        VerticalLayout content = new VerticalLayout(memberId, permissionsBlock);
+        content.setPadding(false);
+        content.setSpacing(false);
+        content.getStyle()
+                .set("gap", "0.65rem")
+                .set("padding", "0.35rem 0 0.2rem 1.15rem");
+
+        VerticalLayout children = new VerticalLayout();
+        children.setPadding(false);
+        children.setSpacing(false);
+        children.getStyle()
+                .set("gap", "0.45rem")
+                .set("margin-top", "0.5rem")
+                .set("padding-left", "1rem")
+                .set("border-left", "1px solid var(--lumo-contrast-20pct)");
+        for (OrgNodeDTO child : node.subordinates()) {
+            children.add(orgNode(child));
+        }
+        if (!node.subordinates().isEmpty()) {
+            content.add(children);
+        }
+        Details details = new Details(summary, content);
         details.setOpened(true);
+        details.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-20pct)")
+                .set("border-left", node.revoked()
+                        ? "4px solid var(--lumo-error-text-color)"
+                        : "4px solid var(--lumo-primary-color)")
+                .set("border-radius", "6px")
+                .set("padding", "0.45rem 0.65rem")
+                .set("background", node.revoked()
+                        ? "var(--lumo-error-color-10pct)"
+                        : "var(--lumo-base-color)")
+                .set("box-shadow", "0 1px 2px var(--lumo-contrast-10pct)");
         return details;
+    }
+
+    private static HorizontalLayout permissionChips(OrgNodeDTO node) {
+        HorizontalLayout chips = new HorizontalLayout();
+        chips.setPadding(false);
+        chips.setSpacing(true);
+        chips.getStyle().set("flex-wrap", "wrap");
+        if (node.permissions() == null || node.permissions().isEmpty()) {
+            chips.add(badge("No manager permissions", "var(--lumo-contrast-10pct)", "var(--lumo-secondary-text-color)"));
+            return chips;
+        }
+        node.permissions().stream()
+                .map(ManagerPermission::name)
+                .sorted()
+                .map(permission -> badge(permission, "var(--lumo-contrast-10pct)", "var(--lumo-body-text-color)"))
+                .forEach(chips::add);
+        return chips;
+    }
+
+    private static Span badge(String text, String background, String color) {
+        Span badge = new Span(text);
+        badge.getStyle()
+                .set("display", "inline-flex")
+                .set("align-items", "center")
+                .set("min-height", "1.45rem")
+                .set("padding", "0 0.45rem")
+                .set("border-radius", "999px")
+                .set("background", background)
+                .set("color", color)
+                .set("font-size", "0.78rem")
+                .set("font-weight", "600");
+        return badge;
     }
 
     private UUID parseUuid(TextField field, String label) {

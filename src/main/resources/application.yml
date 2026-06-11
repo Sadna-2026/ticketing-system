@@ -29,7 +29,29 @@ ticketing:
   # (default, unchanged behavior); "jpa" activates the DB-backed JPA repositories.
   # Exactly one implementation per repository interface is active per mode.
   persistence: ${TICKETING_PERSISTENCE:memory}
+  # Virtual-queue startup parameters (V3-13): how many users may hold reservations
+  # concurrently before the queue kicks in (threshold), and how many waiting users are
+  # admitted per batch (flow-rate). Used as the default when a queue is created without
+  # explicit values; override per environment via the env vars below.
+  queue:
+    threshold: ${TICKETING_QUEUE_THRESHOLD:100}
+    flow-rate: ${TICKETING_QUEUE_FLOW_RATE:10}
   startup:
     initialize-platform: true
   seed:
     enabled: true
+  # Optional initial-state file (V3-15): when set to a readable path, InitialStateRunner
+  # parses it and executes the operations against the application layer on startup
+  # (all-or-nothing). Unset (default) => no-op; normal startup and DevSeedDataInitializer
+  # are unaffected. See README "Initial-state file".
+  initial-state:
+    file: ${TICKETING_INITIAL_STATE_FILE:}
+  # External systems integration (V3-16): the WSEP payment + ticket endpoint is a single HTTP
+  # POST endpoint keyed by action_type ("handshake" returns "OK"). The base URL is config-driven;
+  # when set, ExternalSystemsHandshakeRunner verifies connectivity at startup (integrity rule) and
+  # halts on failure. Unset (default) => no handshake; local dev, the stub gateways and tests are
+  # unaffected. See README "External systems".
+  external:
+    base-url: ${TICKETING_EXTERNAL_BASE_URL:}
+    connect-timeout-ms: ${TICKETING_EXTERNAL_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${TICKETING_EXTERNAL_READ_TIMEOUT_MS:5000}

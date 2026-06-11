@@ -81,6 +81,14 @@ public class OrderService {
     private final OrderTimeDomainService orderTimeDomainService;
     private final INotificationService notificationService;
 
+    // V3-13 (#271): per-event virtual-queue defaults are config-driven (ticketing.queue.*).
+    // The field initializers are the fallback for `new`-built unit tests, where Spring does
+    // not perform @Value injection; in the running app @Value overrides them from config/env.
+    @org.springframework.beans.factory.annotation.Value("${ticketing.queue.threshold:100}")
+    private int defaultQueueThreshold = 100;
+    @org.springframework.beans.factory.annotation.Value("${ticketing.queue.flow-rate:10}")
+    private int defaultQueueFlowRate = 10;
+
     public OrderService(ISessionTokenService sessionTokenService,
             IOrderRepository orderRepository,
             IEventRepository eventRepository,
@@ -407,6 +415,17 @@ public class OrderService {
         return queue.getId();
     }
 
+    /**
+     * Creates a virtual queue using the config-driven default threshold / flow-rate
+     * (`ticketing.queue.threshold` / `ticketing.queue.flow-rate`) — V3-13 (#271): the
+     * config defines how many users may reserve concurrently before the queue kicks in.
+     * The explicit-parameter overload remains for per-event overrides.
+     */
+    @Transactional
+    public UUID createQueue(String token, UUID eventId) {
+        return createQueue(token, eventId, defaultQueueThreshold, defaultQueueFlowRate);
+    }
+
     @Transactional
     public QueueEntryDto tryEnterOrQueue(UUID eventId, UUID sessionId) {
         log.info("Try enter or queue: eventId={}, sessionId={}", eventId, sessionId);
@@ -697,6 +716,7 @@ public class OrderService {
                 event.getName(),
                 event.getCompanyName(),
                 order.getMemberId(),
+                buyerContact.getUsername(),
                 payment.transactionId(),
                 finalAmount,
                 systemClock.now());

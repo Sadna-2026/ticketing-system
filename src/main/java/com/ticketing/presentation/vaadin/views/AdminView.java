@@ -118,10 +118,9 @@ public class AdminView extends VerticalLayout {
 
     private void configurePurchaseHistoryGrid() {
         purchaseHistoryGrid.setId("admin-global-purchases-grid");
-        purchaseHistoryGrid.addColumn(purchase -> purchase.purchaseId().toString()).setHeader("Purchase ID").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
-        purchaseHistoryGrid.addColumn(purchase -> valueOrEmpty(purchase.memberId())).setHeader("Buyer").setAutoWidth(true);
+        purchaseHistoryGrid.addColumn(purchase -> valueOrEmpty(purchase.buyerUsername())).setHeader("Buyer").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(purchase -> formatInstant(purchase.purchasedAt())).setHeader("Purchased at").setAutoWidth(true);
         purchaseHistoryGrid.setMinHeight("180px");
@@ -131,7 +130,6 @@ public class AdminView extends VerticalLayout {
         suspensionsGrid.setId("admin-suspensions-grid");
         suspensionsGrid.addColumn(suspension -> suspension.suspensionId().toString()).setHeader("Suspension ID").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::memberUsername).setHeader("Member").setAutoWidth(true);
-        suspensionsGrid.addColumn(suspension -> suspension.memberId().toString()).setHeader("Member ID").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::active).setHeader("Active").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::permanent).setHeader("Permanent").setAutoWidth(true);
         suspensionsGrid.addColumn(suspension -> formatDuration(suspension.duration())).setHeader("Duration").setAutoWidth(true);

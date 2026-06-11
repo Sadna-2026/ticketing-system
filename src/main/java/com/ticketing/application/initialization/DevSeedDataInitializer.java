@@ -59,6 +59,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID INVENTORY_MANAGER_ID = UUID.fromString("00000000-0000-0000-0000-000000000006");
     public static final UUID SECOND_OWNER_ID = UUID.fromString("00000000-0000-0000-0000-000000000007");
     public static final UUID SUSPENDED_MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000008");
+    public static final UUID REVOKED_MANAGER_ID = UUID.fromString("00000000-0000-0000-0000-000000000009");
     public static final String SUSPENDED_MEMBER_REASON = "Manual QA — policy violation";
     /** Keeps the seeded member suspended through the next calendar year. */
     public static final Duration SUSPENDED_MEMBER_DURATION = Duration.ofDays(365);
@@ -125,7 +126,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         seedMembersAndAdmin();
         seedCompanies();
         seedEvents();
-        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended, companies '{}', '{}' and '{}'",
+        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended/revoked-manager, companies '{}', '{}' and '{}'",
                 COMPANY_NAME, SECOND_COMPANY_NAME, SUSPENDED_COMPANY_NAME);
     }
 
@@ -146,6 +147,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 "050-000-0007", LocalDate.of(1984, 4, 12));
         saveMemberIfMissing(SUSPENDED_MEMBER_ID, "suspended", "suspended@ticketing.local", "suspended123",
                 "050-000-0008", LocalDate.of(1993, 3, 15));
+        saveMemberIfMissing(REVOKED_MANAGER_ID, "revoked-manager", "revoked-manager@ticketing.local", "revoked123",
+                "050-000-0009", LocalDate.of(1991, 9, 9));
         ensureSuspendedMemberSeed();
         ensureManualQaAppointments();
 
@@ -227,6 +230,13 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                             Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT,
                                     ManagerPermission.EVENT_LIFECYCLE, ManagerPermission.POLICY_MODIFICATION,
                                     ManagerPermission.VIEW_REPORTS)));
+        }
+        if (REVOKED_MANAGER_ID.equals(id)) {
+            StaffAppointment revokedAppointment = new StaffAppointment(COMPANY_NAME, OWNER_ID,
+                    StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.HANDLE_INQUIRIES, ManagerPermission.VIEW_REPORTS));
+            revokedAppointment.revoke();
+            member.addStaffAppointment(COMPANY_NAME, revokedAppointment);
         }
         if (SECOND_OWNER_ID.equals(id)) {
             member.addStaffAppointment(SECOND_COMPANY_NAME,

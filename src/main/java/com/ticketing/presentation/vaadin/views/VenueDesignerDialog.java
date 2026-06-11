@@ -19,13 +19,14 @@ import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
+import com.ticketing.presentation.vaadin.util.RequiredFields;
+import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
@@ -43,6 +44,7 @@ import com.vaadin.flow.component.textfield.TextField;
  * event map renders the saved layout grid.
  *
  * <p>Pure presentation: all rules go through {@link CompanyPresenter} → application services.
+ * Every action surfaces its outcome through the shared {@link UiMessages} helper (UX-7).
  */
 public class VenueDesignerDialog extends Dialog {
 
@@ -121,6 +123,10 @@ public class VenueDesignerDialog extends Dialog {
         mode.setItemLabelGenerator(m -> m.label);
         mode.setValue(CellMode.SEAT);
 
+        // Inline validation for the inputs that have no sensible default (UX-7).
+        RequiredFields.markRequired(eventName, "Event name is required.");
+        RequiredFields.markRequired(startTime, "Start time is required.");
+
         Button buildGrid = new Button("Build grid", e -> buildGrid());
         grid.getStyle().set("overflow", "auto").set("max-height", "320px").set("padding", "4px");
 
@@ -176,7 +182,9 @@ public class VenueDesignerDialog extends Dialog {
         eventId = null;
         validate.setEnabled(false);
         publish.setEnabled(false);
-        status.setText("Grid " + rows + "x" + cols + " ready. Pick a tool and click cells.");
+        String ready = "Grid " + rows + "x" + cols + " ready. Pick a tool and click cells.";
+        status.setText(ready);
+        UiMessages.info(ready);
     }
 
     private void paint(int r, int c) {
@@ -195,7 +203,7 @@ public class VenueDesignerDialog extends Dialog {
 
     private void saveDraft() {
         if (cells.length == 0) {
-            notify("Build a grid first.");
+            UiMessages.error("Build a grid first.");
             return;
         }
         List<CreateEventRequest.SeatSpec> seatSpecs = new ArrayList<>();
@@ -235,13 +243,13 @@ public class VenueDesignerDialog extends Dialog {
             sectionToZone.put("General Admission", "General Admission");
         }
         if (zones.isEmpty()) {
-            notify("Paint at least one seat or general-admission cell.");
+            UiMessages.error("Paint at least one seat or general-admission cell.");
             return;
         }
 
         Instant start = toInstant(startTime.getValue());
         if (start == null) {
-            notify("Pick a start time.");
+            UiMessages.error("Pick a start time.");
             return;
         }
         Instant end = start.plus(Duration.ofHours(3));
@@ -252,7 +260,7 @@ public class VenueDesignerDialog extends Dialog {
                 start, end, doors, lockMinutes.getValue(), zones, sectionToZone);
         if (!created.success() || created.eventId() == null) {
             status.setText("Save failed: " + created.message());
-            notify(created.message());
+            UiMessages.error(created.message());
             return;
         }
 
@@ -260,7 +268,7 @@ public class VenueDesignerDialog extends Dialog {
         ActionResult layoutResult = presenter.setEventLayout(created.eventId(), layout);
         if (!layoutResult.success()) {
             status.setText("Event created, but layout save failed: " + layoutResult.message());
-            notify(layoutResult.message());
+            UiMessages.error(layoutResult.message());
             return;
         }
 
@@ -269,34 +277,39 @@ public class VenueDesignerDialog extends Dialog {
         publish.setEnabled(true);
         status.setText("Draft saved (" + seatSpecs.size() + " seats, GA=" + hasGa
                 + ", " + layoutCells.size() + " cells). Validate, then Publish.");
-        notify("Draft saved.");
+        UiMessages.success("Draft saved.");
     }
 
     private void validateLayout() {
         if (eventId == null) {
-            notify("Save a draft first.");
+            UiMessages.error("Save a draft first.");
             return;
         }
         ActionResult result = presenter.validateEventLayout(eventId);
         status.setText(result.message());
-        notify(result.message());
+        showResult(result.success(), result.message());
     }
 
     private void publish() {
         if (eventId == null) {
-            notify("Save a draft first.");
+            UiMessages.error("Save a draft first.");
             return;
         }
         ActionResult result = presenter.publishEvent(eventId);
         status.setText(result.message());
-        notify(result.message());
+        showResult(result.success(), result.message());
         if (result.success()) {
             publish.setEnabled(false);
         }
     }
 
-    private void notify(String message) {
-        Notification.show(message, 3000, Notification.Position.MIDDLE);
+    /** Surfaces an action outcome through the shared feedback helper (success or specific failure). */
+    private static void showResult(boolean success, String message) {
+        if (success) {
+            UiMessages.success(message);
+        } else {
+            UiMessages.error(message);
+        }
     }
 
     private static String rowLetter(int r) {

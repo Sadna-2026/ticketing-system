@@ -59,6 +59,7 @@ import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
@@ -230,6 +231,7 @@ class CompanyViewTest {
 
         assertFalse(hasVisibleButton(view, "Change manager permissions"));
         assertFalse(hasVisibleButton(view, "Revoke personnel"));
+        assertFalse(hasVisibleButton(view, "Load organization chart"));
         assertTrue(hasText(view, "Only a company owner can manage personnel for Acme."));
     }
 
@@ -249,8 +251,53 @@ class CompanyViewTest {
         assertFalse(target.isInvalid());
         assertEquals("Owner-only personnel list unavailable", target.getPlaceholder());
         assertTrue(targetMemberLabels(view).isEmpty());
+        assertFalse(hasVisibleButton(view, "Load organization chart"));
         assertTrue(hasText(view, "Access denied. Only company owners can view the organization chart."));
         verify(presenter, never()).loadOrganizationChart("Acme");
+    }
+
+    @Test
+    void GivenOwnerAndOrganizationChart_WhenLoadOrganizationChartClicked_ThenRoleTreeShowsPermissionsAndRevokedInRed() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID ownerId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        UUID revokedManagerId = UUID.randomUUID();
+        OrgNodeDTO revokedManager = new OrgNodeDTO(revokedManagerId, "revoked-manager",
+                StaffAppointment.StaffRole.MANAGER,
+                Set.of(ManagerPermission.HANDLE_INQUIRIES, ManagerPermission.VIEW_REPORTS),
+                true,
+                List.of());
+        OrgNodeDTO manager = new OrgNodeDTO(managerId, "manager", StaffAppointment.StaffRole.MANAGER,
+                Set.of(ManagerPermission.INVENTORY_MGMT, ManagerPermission.VIEW_REPORTS),
+                false,
+                List.of(revokedManager));
+        OrgNodeDTO owner = new OrgNodeDTO(ownerId, "owner", StaffAppointment.StaffRole.OWNER,
+                Set.of(),
+                false,
+                List.of(manager));
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available for Acme."));
+        when(presenter.loadOrganizationChart("Acme"))
+                .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(owner)));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        assertTrue(hasVisibleButton(view, "Load organization chart"));
+        clickButton(view, "Load organization chart");
+
+        assertTrue(hasText(view, "Organization chart loaded."));
+        assertTrue(hasText(view, "owner"));
+        assertTrue(hasText(view, "No manager permissions"));
+        assertTrue(hasText(view, "manager"));
+        assertTrue(hasText(view, "INVENTORY_MGMT"));
+        assertTrue(hasText(view, "VIEW_REPORTS"));
+        assertTrue(hasText(view, "revoked-manager"));
+        assertTrue(hasText(view, "HANDLE_INQUIRIES"));
+        assertTrue(hasText(view, "Revoked"));
+        Span revokedSummary = findSpan(view, "revoked-manager");
+        assertEquals("var(--lumo-error-text-color)", revokedSummary.getStyle().get("color"));
     }
 
     @Test
@@ -559,6 +606,27 @@ class CompanyViewTest {
         assertFalse(hasVisibleButton(view, "Reopen company"));
         assertFalse(hasVisibleButton(view, "Close company"));
         assertTrue(hasText(view, "Only the founder can perform this lifecycle action"));
+    }
+
+    @Test
+    void GivenCompanyPurchases_WhenRendered_ThenGridShowsEventAndDateNotRawPurchaseId() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID memberId = UUID.randomUUID();
+        PurchaseRecordDTO purchase = purchase(memberId);
+        when(presenter.loadPurchaseHistory("Acme")).thenReturn(PurchaseHistoryResult.success("Loaded 1 purchase(s).", List.of(purchase)));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Reporting company name").setValue(company("Acme"));
+
+        clickButton(view, "Load company purchase history");
+
+        Grid<PurchaseRecordDTO> grid = findPurchasesGrid(view);
+        List<String> headers = columnHeaders(grid);
+        assertFalse(headers.contains("Purchase ID"), headers.toString());
+        assertTrue(headers.contains("Event"), headers.toString());
+        assertTrue(headers.contains("Purchased at"), headers.toString());
+        // The purchase id is still carried by the bound row even though it is no longer a column.
+        List<PurchaseRecordDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(purchase.purchaseId(), rows.get(0).purchaseId());
     }
 
     @Test
@@ -1084,6 +1152,12 @@ class CompanyViewTest {
                 .orElseThrow(() -> new AssertionError("Grid not found: " + id));
     }
 
+    private static List<String> columnHeaders(Grid<?> grid) {
+        return grid.getColumns().stream()
+                .map(Grid.Column::getHeaderText)
+                .toList();
+    }
+
     private static List<Grid<?>> findGrids(Component root) {
         List<Grid<?>> grids = new ArrayList<>();
         for (Component component : components(root)) {
@@ -1099,6 +1173,15 @@ class CompanyViewTest {
                 .filter(HasText.class::isInstance)
                 .map(HasText.class::cast)
                 .anyMatch(component -> expected.equals(component.getText()));
+    }
+
+    private static Span findSpan(Component root, String text) {
+        return components(root).stream()
+                .filter(Span.class::isInstance)
+                .map(Span.class::cast)
+                .filter(span -> text.equals(span.getText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Span not found: " + text));
     }
 
     private static boolean containsText(Component root, String fragment) {

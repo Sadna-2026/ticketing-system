@@ -3,6 +3,7 @@ package com.ticketing.presentation.vaadin.views;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.MemberPresenter;
+import com.ticketing.presentation.vaadin.util.RequiredFields;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
@@ -47,6 +48,11 @@ public class MemberView extends VerticalLayout {
 
     private void buildForm() {
         Button saveButton = new Button("Save", event -> saveProfile());
+
+        // Inline validation for the mandatory identity fields (UX-7); phone and date of
+        // birth stay optional, consistent with registration.
+        RequiredFields.markRequired(username, "Username is required.");
+        RequiredFields.markRequired(email, "Email is required.");
 
         FormLayout form = new FormLayout(username, email, phoneNumber, dateOfBirth);
         
