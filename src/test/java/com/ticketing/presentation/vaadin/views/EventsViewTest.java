@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
@@ -260,6 +261,81 @@ class EventsViewTest {
         );
     }
 
+    @Test
+    @DisplayName("Search events within a specific company with multiple filters shows success and results")
+    void GivenSearchWithinCompanyWithFilters_WhenSearchReturnsResults_ThenEventsAreDisplayedAndSuccessMessageShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Company Festival");
+        
+        LocalDate fromDate = LocalDate.now();
+        LocalDate toDate = LocalDate.now().plusDays(30);
+        BigDecimal minPrice = new BigDecimal("10.00");
+        BigDecimal maxPrice = new BigDecimal("100.00");
+        
+        when(presenter.searchCompanies("")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+        when(presenter.searchEvents(
+                eq("Festival"),
+                eq("North"),
+                eq(EventCategory.FESTIVAL),
+                eq("Acme"),
+                eq(minPrice),
+                eq(maxPrice),
+                eq(fromDate),
+                eq(toDate)
+        )).thenReturn(SearchResult.success("Found 1 event(s) for Acme.", List.of(event)));
+        
+        EventsView view = new EventsView(presenter, ordersPresenter);
+        
+        // Fill search form
+        findTextField(view, "Search text").setValue("Festival");
+        findTextField(view, "Region").setValue("North");
+        findCompanyComboBox(view).setValue(new CompanySummaryDTO("Acme"));
+        findCategoryComboBox(view).setValue(EventCategory.FESTIVAL);
+        findBigDecimalField(view, "Min price").setValue(minPrice);
+        findBigDecimalField(view, "Max price").setValue(maxPrice);
+        findDatePicker(view, "From date").setValue(fromDate);
+        findDatePicker(view, "To date").setValue(toDate);
+
+        clickButton(view, "Search events");
+
+        Grid<EventSummaryDTO> grid = findGrid(view);
+        List<EventSummaryDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(List.of(event), rows);
+        assertTrue(hasText(view, "Found 1 event(s) for Acme."));
+        
+        verify(presenter).searchEvents(
+                "Festival", "North", EventCategory.FESTIVAL, "Acme", minPrice, maxPrice, fromDate, toDate
+        );
+    }
+
+    @Test
+    @DisplayName("Search events within a specific company shows exact failure reason when backend rejects")
+    void GivenSearchWithinCompanyWithFilters_WhenSearchFails_ThenSpecificFailureReasonIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        
+        LocalDate fromDate = LocalDate.now();
+        LocalDate toDate = LocalDate.now().minusDays(1); // Invalid dates
+        
+        when(presenter.searchCompanies("")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+        when(presenter.searchEvents(
+                any(), any(), any(), eq("Acme"), any(), any(), eq(fromDate), eq(toDate)
+        )).thenReturn(SearchResult.failure("To Date cannot be before From Date."));
+        
+        EventsView view = new EventsView(presenter, ordersPresenter);
+        
+        findCompanyComboBox(view).setValue(new CompanySummaryDTO("Acme"));
+        findDatePicker(view, "From date").setValue(fromDate);
+        findDatePicker(view, "To date").setValue(toDate);
+
+        clickButton(view, "Search events");
+
+        Grid<EventSummaryDTO> grid = findGrid(view);
+        assertEquals(0, grid.getDataProvider().fetch(new Query<>()).count());
+        assertTrue(hasText(view, "To Date cannot be before From Date."));
+    }
+
     @SuppressWarnings("unchecked")
     private ComboBox<CompanySummaryDTO> findCompanyComboBox(Component root) {
         return (ComboBox<CompanySummaryDTO>) componentsOf(root).stream()
@@ -268,6 +344,43 @@ class EventsViewTest {
                 .filter(combo -> "Company".equals(combo.getLabel()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Company ComboBox not found"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private ComboBox<EventCategory> findCategoryComboBox(Component root) {
+        return (ComboBox<EventCategory>) componentsOf(root).stream()
+                .filter(ComboBox.class::isInstance)
+                .map(ComboBox.class::cast)
+                .filter(combo -> "Category".equals(combo.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Category ComboBox not found"));
+    }
+
+    private TextField findTextField(Component root, String label) {
+        return (TextField) componentsOf(root).stream()
+                .filter(TextField.class::isInstance)
+                .map(TextField.class::cast)
+                .filter(field -> label.equals(field.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(label + " TextField not found"));
+    }
+
+    private BigDecimalField findBigDecimalField(Component root, String label) {
+        return (BigDecimalField) componentsOf(root).stream()
+                .filter(BigDecimalField.class::isInstance)
+                .map(BigDecimalField.class::cast)
+                .filter(field -> label.equals(field.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(label + " BigDecimalField not found"));
+    }
+
+    private DatePicker findDatePicker(Component root, String label) {
+        return (DatePicker) componentsOf(root).stream()
+                .filter(DatePicker.class::isInstance)
+                .map(DatePicker.class::cast)
+                .filter(field -> label.equals(field.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(label + " DatePicker not found"));
     }
 
     private java.util.List<Component> componentsOf(Component root) {
