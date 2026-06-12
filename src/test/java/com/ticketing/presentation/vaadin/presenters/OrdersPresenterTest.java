@@ -31,6 +31,7 @@ import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuoteResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.InventoryResult;
@@ -122,6 +123,42 @@ class OrdersPresenterTest {
         assertEquals(purchaseId, result.purchaseId());
         assertEquals(new BigDecimal("80.00"), result.chargedAmount());
         verify(orderService).checkout("guest-token", "SAVE20");
+    }
+
+    @Test
+    void GivenOrderWithCoupon_WhenQuotingCheckout_ThenQuoteReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.quoteCheckout("guest-token", "SAVE20"))
+                .thenReturn(new OrderService.CheckoutQuote(new BigDecimal("100.00"), new BigDecimal("80.00")));
+
+        CheckoutQuoteResult result = presenter.quoteCheckout(" SAVE20 ");
+
+        assertTrue(result.success());
+        assertEquals(new BigDecimal("100.00"), result.subtotal());
+        assertEquals(new BigDecimal("80.00"), result.total());
+        verify(orderService).quoteCheckout("guest-token", "SAVE20");
+    }
+
+    @Test
+    void GivenNoSession_WhenQuotingCheckout_ThenFailureReturned() {
+        SessionContext.clear();
+
+        CheckoutQuoteResult result = presenter.quoteCheckout("SAVE20");
+
+        assertFalse(result.success());
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void GivenQuoteServiceFails_WhenQuotingCheckout_ThenDomainMessageIsPreserved() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.quoteCheckout("guest-token", null))
+                .thenThrow(new IllegalArgumentException("No active order with tickets to checkout"));
+
+        CheckoutQuoteResult result = presenter.quoteCheckout(null);
+
+        assertFalse(result.success());
+        assertEquals("No active order with tickets to checkout", result.message());
     }
 
     @Test

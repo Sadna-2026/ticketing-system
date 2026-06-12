@@ -192,6 +192,86 @@ class OrdersViewTest {
     }
 
     @Test
+    void GivenOrderWithDiscountQuote_WhenCouponEntered_ThenSubtotalAndAmountDueAreShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 2)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.success(new BigDecimal("100.00"), new BigDecimal("100.00")));
+        when(presenter.quoteCheckout("SAVE20"))
+                .thenReturn(CheckoutQuoteResult.success(new BigDecimal("100.00"), new BigDecimal("80.00")));
+        OrdersView view = new OrdersView(presenter);
+
+        findTextField(view, "Coupon code").setValue("SAVE20");
+
+        assertTrue(containsText(view, "Subtotal 100.00 | Amount due: 80.00"));
+        verify(presenter).quoteCheckout("SAVE20");
+    }
+
+    @Test
+    void GivenOrderWithoutDiscount_WhenRendered_ThenAmountDueShowsSingleTotalLine() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
+        OrdersView view = new OrdersView(presenter);
+
+        assertTrue(containsText(view, "Amount due: 50.00"));
+        assertFalse(containsText(view, "Subtotal 50.00 | Amount due:"));
+    }
+
+    @Test
+    void GivenQuoteFailure_WhenCheckoutStateRefreshed_ThenQuoteMessageIsShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.failure("Coupon expired"));
+        OrdersView view = new OrdersView(presenter);
+
+        assertTrue(hasText(view, "Coupon expired"));
+    }
+
+    @Test
+    void GivenBlankQuoteFailure_WhenCheckoutStateRefreshed_ThenDefaultHintIsShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.failure(""));
+        OrdersView view = new OrdersView(presenter);
+
+        assertTrue(hasText(view, "Enter an optional coupon code, then checkout."));
+    }
+
+    @Test
+    void GivenCheckoutSuccessWithoutChargedAmount_WhenCheckoutClicked_ThenPurchaseIdStillShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID purchaseId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout("")).thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
+        when(presenter.checkout("")).thenReturn(CheckoutResult.success("Checkout complete.", purchaseId, null));
+        OrdersView view = new OrdersView(presenter);
+
+        clickButton(view, "Checkout");
+
+        assertTrue(containsText(view, "Checkout complete. Purchase ID: " + purchaseId));
+        assertFalse(containsText(view, "Charged:"));
+    }
+
+    @Test
     void GivenOrderWithCoupon_WhenCheckoutClicked_ThenPurchaseIdIsDisplayedAndCouponClears() {
         OrdersPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
