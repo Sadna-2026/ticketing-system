@@ -6,6 +6,7 @@ import com.ticketing.presentation.vaadin.presenters.MemberPresenter;
 import com.ticketing.presentation.vaadin.util.RequiredFields;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -15,12 +16,14 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
 @Route(value = "profile", layout = MainLayout.class)
 @PageTitle("Profile")
-public class MemberView extends VerticalLayout {
+public class MemberView extends VerticalLayout implements BeforeEnterObserver {
 
     private final MemberPresenter presenter;
 
@@ -87,6 +90,15 @@ public class MemberView extends VerticalLayout {
             MainLayout.refreshCurrentNavigation();
         } else {
             UiMessages.error(result.message());
+        }
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        if (!SessionContext.isLoggedInMember()) {
+            event.forwardTo(HomeView.class);
+            UI.getCurrent().access(() ->
+                    UiMessages.error("You cannot access the profile page as a guest. Please log in first."));
         }
     }
 }
