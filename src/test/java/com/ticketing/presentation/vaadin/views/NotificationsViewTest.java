@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,10 +23,12 @@ import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.server.Command;
 
 @DisplayName("NotificationsView")
@@ -140,29 +143,75 @@ class NotificationsViewTest {
         verify(presenter).unregisterRealtimeListener("member-1", "listener-1");
     }
 
+    @Test
+    void GivenLoadFailure_WhenRefreshClicked_ThenSpecificFailureReasonIsShown() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        when(presenter.loadPendingNotifications())
+                .thenReturn(NotificationResult.failure("Log in as a member to view notifications."));
+        NotificationsView view = new NotificationsView(presenter);
+
+        clickButton(view, "Refresh notifications");
+
+        assertTrue(hasText(view, "Log in as a member to view notifications."));
+        assertTrue(hasText(view, "No notifications to show."));
+    }
+
+    @Test
+    void GivenGuestSession_WhenEnteringNotifications_ThenForwardedToHome() {
+        setSynchronousCurrentUi();
+        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event).forwardTo(HomeView.class);
+    }
+
+    @Test
+    void GivenMemberSession_WhenEnteringNotifications_ThenNavigationIsAllowed() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event, never()).forwardTo(HomeView.class);
+    }
+
+    /** Makes a {@link #synchronousUi()} current so the {@code beforeEnter} guard's inline popup can run. */
+    private void setSynchronousCurrentUi() {
+        UI.setCurrent(synchronousUi());
+    }
+
     private void attachViewToCurrentUi(Component view) {
         UI ui = new UI();
         ui.add(view);
         UI.setCurrent(ui);
     }
 
-    /**
-     * Attaches the view to a UI whose {@link UI#access(Command)} runs the command synchronously.
-     * A bare test UI has no {@link com.vaadin.flow.server.VaadinSession}, so the real
-     * {@code ui.access(...)} the view uses to marshal push callbacks onto the UI thread throws
-     * {@link com.vaadin.flow.component.UIDetachedException}. Running the command inline lets the
-     * test exercise the registered listener end-to-end without a live WebSocket/session.
-     */
+    /** Attaches the view to a {@link #synchronousUi()} and makes it current. */
     private void attachViewToSynchronousUi(Component view) {
-        UI ui = new UI() {
+        UI ui = synchronousUi();
+        ui.add(view);
+        UI.setCurrent(ui);
+    }
+
+    /**
+     * Builds a UI whose {@link UI#access(Command)} runs the command inline. A bare test UI has no
+     * {@link com.vaadin.flow.server.VaadinSession}, so the real {@code ui.access(...)} the view uses
+     * to marshal push callbacks (and the {@code beforeEnter} guard's info popup) onto the UI thread
+     * throws {@link com.vaadin.flow.component.UIDetachedException}. Running the command inline lets a
+     * test exercise that path without a live WebSocket/session.
+     */
+    private static UI synchronousUi() {
+        return new UI() {
             @Override
             public Future<Void> access(Command command) {
                 command.execute();
                 return CompletableFuture.completedFuture(null);
             }
         };
-        ui.add(view);
-        UI.setCurrent(ui);
     }
 
     private boolean hasButton(Component root, String text) {
