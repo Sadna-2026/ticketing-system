@@ -47,8 +47,10 @@ import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
@@ -132,6 +134,17 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenCompanyNotFound_WhenLoadingCompanyInfo_ThenFailureMessageIsReturned() {
+        when(companyService.getCompanyInfo("Unknown")).thenReturn(Optional.empty());
+
+        CompanyInfoResult result = presenter.loadCompanyInfo("Unknown");
+
+        assertFalse(result.success());
+        assertEquals("Company not found.", result.message());
+        verify(companyService).getCompanyInfo("Unknown");
+    }
+
+    @Test
     void GivenPersonnelInputs_WhenManagingRoles_ThenCompanyAndMemberServicesAreCalledDirectly() {
         memberSession();
         UUID targetId = UUID.randomUUID();
@@ -167,25 +180,43 @@ class CompanyPresenterTest {
     void GivenOwnerInCompanyOrgChart_WhenLoadingPersonnelAccess_ThenPermissionChangeIsAllowed() {
         UUID ownerId = UUID.randomUUID();
         memberSession(ownerId);
-        when(memberService.getOrganizationChart("member-token", "Acme"))
-                .thenReturn(List.of(new OrgNodeDTO(ownerId, "alice", StaffAppointment.StaffRole.OWNER,
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(ownerId, "alice", StaffAppointment.StaffRole.OWNER,
                         Set.of(), false, List.of())));
 
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
 
         assertTrue(result.canManagePersonnel());
         assertEquals("Owner personnel controls available for Acme.", result.message());
-        verify(memberService).getOrganizationChart("member-token", "Acme");
+        verify(memberService).getCurrentCompanyAppointment("member-token", "Acme");
+    }
+
+    @Test
+    void GivenPendingRoleOffers_WhenListingForCurrentMember_ThenOptionsExposeCompanyAndRole() {
+        memberSession();
+        PendingRoleOffer offer = new PendingRoleOffer(
+                UUID.randomUUID(),
+                "Acme",
+                StaffAppointment.StaffRole.MANAGER,
+                Set.of(ManagerPermission.VIEW_REPORTS),
+                java.time.LocalDateTime.now().plusDays(1));
+        when(memberService.listPendingRoleOffers("member-token")).thenReturn(List.of(offer));
+
+        List<CompanyPresenter.PendingRoleOfferOption> offers = presenter.listPendingRoleOffers();
+
+        assertEquals(1, offers.size());
+        assertEquals(offer.getOfferId(), offers.get(0).offerId());
+        assertEquals("Acme — MANAGER", offers.get(0).label());
+        verify(memberService).listPendingRoleOffers("member-token");
     }
 
     @Test
     void GivenManagerInCompanyOrgChart_WhenLoadingPersonnelAccess_ThenPermissionChangeIsDenied() {
         UUID managerId = UUID.randomUUID();
         memberSession(managerId);
-        when(memberService.getOrganizationChart("member-token", "Acme"))
-                .thenReturn(List.of(new OrgNodeDTO(UUID.randomUUID(), "owner", StaffAppointment.StaffRole.OWNER,
-                        Set.of(), false, List.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
-                                Set.of(ManagerPermission.PERSONNEL_MGMT), false, List.of())))));
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
+                        Set.of(ManagerPermission.PERSONNEL_MGMT), false, List.of())));
 
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
 
@@ -198,12 +229,46 @@ class CompanyPresenterTest {
         UUID memberId = UUID.randomUUID();
         memberSession(memberId);
         doThrow(new SecurityException("Viewing organization chart requires company staff permissions."))
-                .when(memberService).getOrganizationChart("member-token", "Acme");
+                .when(memberService).getCurrentCompanyAppointment("member-token", "Acme");
 
         CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
 
         assertFalse(result.canManagePersonnel());
         assertEquals("Viewing organization chart requires company staff permissions.", result.message());
+    }
+
+    @Test
+    void GivenManagerAppointment_WhenLoadingCompanyAccess_ThenManagerPermissionsAreExposed() {
+        UUID managerId = UUID.randomUUID();
+        memberSession(managerId);
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
+                        Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.EVENT_LIFECYCLE),
+                        false, List.of())));
+
+        CompanyAccessResult result = presenter.loadCompanyAccess("Acme");
+
+        assertTrue(result.staff());
+        assertFalse(result.owner());
+        assertTrue(result.canViewReports());
+        assertTrue(result.canManageEvents());
+        assertFalse(result.canManagePolicies());
+        assertEquals("Manager permissions for Acme: EVENT_LIFECYCLE, VIEW_REPORTS.", result.message());
+        verify(memberService).getCurrentCompanyAppointment("member-token", "Acme");
+    }
+
+    @Test
+    void GivenRevokedAppointment_WhenLoadingCompanyAccess_ThenAccessIsDenied() {
+        UUID managerId = UUID.randomUUID();
+        memberSession(managerId);
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
+                        Set.of(ManagerPermission.VIEW_REPORTS), true, List.of())));
+
+        CompanyAccessResult result = presenter.loadCompanyAccess("Acme");
+
+        assertFalse(result.staff());
+        assertEquals("No active staff appointment for Acme.", result.message());
     }
 
     @Test

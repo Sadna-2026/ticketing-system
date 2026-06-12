@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -88,6 +89,29 @@ class NotificationsPresenterTest {
         assertEquals("Notifications cleared.", result.message());
         assertTrue(result.empty());
         verify(notificationQueryService).clearPendingNotifications(memberId.toString());
+    }
+
+    @Test
+    void GivenNoMemberSession_WhenClearingNotifications_ThenLoginRequiredMessageIsReturned() {
+        NotificationResult result = presenter.clearPendingNotifications();
+
+        assertFalse(result.success());
+        assertEquals("Log in as a member to view notifications.", result.message());
+        assertTrue(result.empty());
+        verifyNoInteractions(notificationQueryService);
+    }
+
+    @Test
+    void GivenApplicationFailure_WhenClearingNotifications_ThenGenericMessageIsReturned() {
+        UUID memberId = UUID.randomUUID();
+        SessionContext.setMemberId(memberId);
+        doThrow(new IllegalStateException("repository internals"))
+                .when(notificationQueryService).clearPendingNotifications(memberId.toString());
+
+        NotificationResult result = presenter.clearPendingNotifications();
+
+        assertFalse(result.success());
+        assertEquals("Could not clear notifications. Please try again.", result.message());
     }
 
     @Test

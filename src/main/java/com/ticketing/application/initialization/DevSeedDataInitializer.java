@@ -306,18 +306,53 @@ public class DevSeedDataInitializer implements ApplicationRunner {
 
     private void seedCompletedPurchases() {
         if (orderRepository.findCompletedById(ADMIN_CLOSE_PURCHASE_ID).isPresent()) {
+        } else {
+            orderRepository.save(new CompletedPurchase(
+                    ADMIN_CLOSE_PURCHASE_ID,
+                    ADMIN_CLOSE_EVENT_ID,
+                    "Admin Close Company Event",
+                    ADMIN_CLOSE_COMPANY_NAME,
+                    MEMBER_ID,
+                    "member",
+                    "seed-admin-close-txn",
+                    new BigDecimal("25.00"),
+                    Instant.now().minus(Duration.ofDays(1))));
+        }
+
+        Instant base = Instant.now().minus(Duration.ofDays(5));
+        savePurchaseIfMissing("90000000-0000-0000-0000-000000000001", CONCERT_ID, "Demo Concert",
+                MANAGER_ID, "manager", "SEED-DEMO-001", "45.00", base.plus(Duration.ofHours(1)));
+        savePurchaseIfMissing("90000000-0000-0000-0000-000000000002", CONCERT_ID, "Demo Concert",
+                MANAGER_ID, "manager", "SEED-DEMO-002", "45.00", base.plus(Duration.ofHours(3)));
+        savePurchaseIfMissing("90000000-0000-0000-0000-000000000003", CONCERT_ID, "Demo Concert",
+                MANAGER_ID, "manager", "SEED-DEMO-003", "90.00", base.plus(Duration.ofHours(8)));
+        savePurchaseIfMissing("90000000-0000-0000-0000-000000000004", CONCERT_ID, "Demo Concert",
+                MANAGER_ID, "manager", "SEED-DEMO-004", "135.00", base.plus(Duration.ofHours(12)));
+
+        savePurchaseIfMissing("90000000-0000-0000-0000-000000000005", DESIGNER_DEMO_EVENT_ID, "Designer Demo",
+                MANAGER_ID, "manager", "SEED-DESIGN-001", "50.00", base.plus(Duration.ofDays(1)));
+        savePurchaseIfMissing("90000000-0000-0000-0000-000000000006", DESIGNER_DEMO_EVENT_ID, "Designer Demo",
+                MANAGER_ID, "manager", "SEED-DESIGN-002", "120.00", base.plus(Duration.ofDays(1).plus(Duration.ofHours(2))));
+        savePurchaseIfMissing("90000000-0000-0000-0000-000000000007", DESIGNER_DEMO_EVENT_ID, "Designer Demo",
+                MANAGER_ID, "manager", "SEED-DESIGN-003", "170.00", base.plus(Duration.ofDays(1).plus(Duration.ofHours(6))));
+    }
+
+    private void savePurchaseIfMissing(
+            String purchaseId,
+            UUID eventId,
+            String eventName,
+            UUID memberId,
+            String buyerUsername,
+            String transactionId,
+            String amount,
+            Instant purchasedAt
+    ) {
+        UUID id = UUID.fromString(purchaseId);
+        if (orderRepository.findCompletedById(id).isPresent()) {
             return;
         }
-        orderRepository.save(new CompletedPurchase(
-                ADMIN_CLOSE_PURCHASE_ID,
-                ADMIN_CLOSE_EVENT_ID,
-                "Admin Close Company Event",
-                ADMIN_CLOSE_COMPANY_NAME,
-                MEMBER_ID,
-                "member",
-                "seed-admin-close-txn",
-                new BigDecimal("25.00"),
-                Instant.now().minus(Duration.ofDays(1))));
+        orderRepository.save(new CompletedPurchase(id, eventId, eventName, COMPANY_NAME, memberId, buyerUsername,
+                transactionId, new BigDecimal(amount), purchasedAt));
     }
 
     private void saveGaEventIfMissing(

@@ -177,6 +177,13 @@ public class Event{
         this.status = EventStatus.SOLD_OUT;
     }
 
+    public void markAvailable() {
+        if (status != EventStatus.SOLD_OUT) {
+            throw new IllegalStateException("Can only mark a SOLD_OUT event as available");
+        }
+        this.status = EventStatus.PUBLISHED;
+    }
+
     public UUID getId() {
         return id;
     }

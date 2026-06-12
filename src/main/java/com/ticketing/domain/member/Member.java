@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
@@ -214,6 +215,16 @@ public class Member {
     public List<PendingRoleOffer> getPendingOffers() {
         synchronized(this) {
             return Collections.unmodifiableList(new ArrayList<>(pendingOffers));
+        }
+    }
+
+    public List<PendingRoleOffer> getActivePendingOffers() {
+        synchronized(this) {
+            return pendingOffers.stream()
+                    .filter(offer -> !offer.isExpired())
+                    .sorted(Comparator.comparing(PendingRoleOffer::getCreatedAt).reversed())
+                    .map(PendingRoleOffer::detachedCopy)
+                    .toList();
         }
     }
 

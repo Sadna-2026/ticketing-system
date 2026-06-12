@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -80,7 +82,6 @@ class AdminViewTest {
         assertNotNull(findComboBox(view, "Buyer member"));
         assertNotNull(findComboBox(view, "Suspension target member"));
         assertNotNull(findTextField(view, "Company name"));
-        assertNotNull(findTextField(view, "Suspension ID"));
         assertEquals(2, findGrids(view).size());
     }
 
@@ -283,6 +284,22 @@ class AdminViewTest {
     }
 
     @Test
+    void GivenCompanyFilterOnly_WhenLoadGlobalHistoryClicked_ThenEmptySuccessMessageIsShown() {
+        AdminPresenter presenter = mockPresenter();
+        when(presenter.loadGlobalPurchaseHistory(null, "Acme"))
+                .thenReturn(PurchaseHistoryResult.success("No global purchases found.", List.of()));
+        AdminView view = new AdminView(presenter);
+        findTextField(view, "Company name").setValue("Acme");
+
+        clickButton(view, "Load global purchase history");
+
+        // II.6.4: history can be filtered by company/event without a buyer; an empty result still explains the outcome.
+        verify(presenter).loadGlobalPurchaseHistory(null, "Acme");
+        assertTrue(hasText(view, "No global purchases found."));
+        assertEquals(0, findPurchaseHistoryGrid(view).getDataProvider().fetch(new Query<>()).count());
+    }
+
+    @Test
     void GivenSuspensionInputs_WhenActionsClicked_ThenPresenterMethodsAreCalledAndRowsDisplay() {
         AdminPresenter presenter = mockPresenter();
         MemberSummaryDTO target = new MemberSummaryDTO(UUID.randomUUID(), "carol");
@@ -295,19 +312,35 @@ class AdminViewTest {
         AdminView view = new AdminView(presenter);
         findComboBox(view, "Suspension target member").setValue(target);
         findTextArea(view, "Suspension reason").setValue("Spam");
-        findTextField(view, "Suspension ID").setValue(suspensionIdValue.toString());
         findIntegerField(view, "Duration days").setValue(7);
         findCheckbox(view, "Active suspensions only").setValue(true);
 
         clickButton(view, "Suspend member");
-        clickButton(view, "Cancel suspension");
         clickButton(view, "Load suspensions");
+        assertTrue(hasText(view, "Loaded 1 suspension(s)."));
+        assertEquals(List.of(suspension), findSuspensionsGrid(view).getDataProvider().fetch(new Query<>()).toList());
+
+        // Cancel is selection-driven: it reads the member + suspension id from the selected row.
+        Button cancel = findButton(view, "Cancel suspension");
+        assertFalse(cancel.isEnabled());
+        findSuspensionsGrid(view).asSingleSelect().setValue(suspension);
+        assertTrue(cancel.isEnabled());
+        clickButton(view, "Cancel suspension");
 
         verify(presenter).suspendUser(target.id(), 7, false, "Spam");
         verify(presenter).cancelSuspension(target.id(), suspensionIdValue);
         verify(presenter).listSuspensions(true);
-        assertTrue(hasText(view, "Loaded 1 suspension(s)."));
-        assertEquals(List.of(suspension), findSuspensionsGrid(view).getDataProvider().fetch(new Query<>()).toList());
+        assertTrue(hasText(view, "Suspension cancelled."));
+    }
+
+    @Test
+    void GivenNoSuspensionSelected_WhenRendered_ThenCancelIsDisabledAndPresenterNotCalled() {
+        AdminPresenter presenter = mockPresenter();
+        AdminView view = new AdminView(presenter);
+
+        // Cancel stays disabled until a suspension row is selected, so the id can never be a typed UUID.
+        assertFalse(findButton(view, "Cancel suspension").isEnabled());
+        verify(presenter, never()).cancelSuspension(any(), any());
     }
 
     @Test
@@ -355,7 +388,6 @@ class AdminViewTest {
         assertTrue(findCompanyComboBox(view, "Company to close").isRequiredIndicatorVisible());
 
         assertFalse(findTextArea(view, "Suspension reason").isRequiredIndicatorVisible());
-        assertFalse(findTextField(view, "Suspension ID").isRequiredIndicatorVisible());
         assertFalse(findIntegerField(view, "Duration days").isRequiredIndicatorVisible());
         assertFalse(findComboBox(view, "Buyer member").isRequiredIndicatorVisible());
     }
@@ -415,13 +447,16 @@ class AdminViewTest {
     }
 
     private static void clickButton(Component root, String text) {
-        Button button = components(root).stream()
+        findButton(root, text).click();
+    }
+
+    private static Button findButton(Component root, String text) {
+        return components(root).stream()
                 .filter(Button.class::isInstance)
                 .map(Button.class::cast)
                 .filter(candidate -> text.equals(candidate.getText()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Button not found: " + text));
-        button.click();
     }
 
     @SuppressWarnings("unchecked")
