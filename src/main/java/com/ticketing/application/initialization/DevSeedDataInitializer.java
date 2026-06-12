@@ -85,6 +85,9 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID ADMIN_CLOSE_EVENT_ID = UUID.fromString("77777777-7777-7777-7777-777777777777");
     public static final UUID ADMIN_CLOSE_GA_ZONE_ID = UUID.fromString("77777777-0000-0000-0000-0000000000a1");
     public static final UUID ADMIN_CLOSE_PURCHASE_ID = UUID.fromString("77777777-0000-0000-0000-0000000000b1");
+    public static final UUID MIXED_LIMITED_EVENT_ID = UUID.fromString("88888888-8888-8888-8888-888888888888");
+    public static final UUID MIXED_LIMITED_SEAT_ZONE_ID = UUID.fromString("88888888-0000-0000-0000-0000000000a1");
+    public static final UUID MIXED_LIMITED_GA_ZONE_ID = UUID.fromString("88888888-0000-0000-0000-0000000000a2");
 
     private final boolean initializePlatform;
     private final boolean seedEnabled;
@@ -302,6 +305,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 "Seeded event cancelled when an admin closes the demo company.",
                 EventCategory.CONFERENCE, new AlwaysAllowPolicy(), ADMIN_CLOSE_GA_ZONE_ID, "Demo hall",
                 new BigDecimal("25.00"), 40);
+        saveMixedLimitedEventIfMissing();
     }
 
     private void seedCompletedPurchases() {
@@ -506,5 +510,53 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         event.publish();
         eventRepository.save(event);
         log.info("Seeded designer-built event '{}' with a {}-cell hall layout", event.getName(), cells.size());
+    }
+
+    private void saveMixedLimitedEventIfMissing() {
+        if (eventRepository.findById(MIXED_LIMITED_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(25));
+        Event event = new Event(MIXED_LIMITED_EVENT_ID, COMPANY_NAME, "Mixed Limited Event",
+                "Seeded hall built to test MaxQuantityPolicy(3) across GA and assigned seats.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new MaxQuantityPolicy(3),
+                new NoDiscountPolicy());
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+
+        // Reserved seating zone with 3 seats
+        InventoryZone seating = InventoryZone.createAssigned(MIXED_LIMITED_SEAT_ZONE_ID, "Reserved Seating", new BigDecimal("120.00"));
+        Seat a1 = new Seat(UUID.randomUUID(), "A", "1");
+        Seat a2 = new Seat(UUID.randomUUID(), "A", "2");
+        Seat a3 = new Seat(UUID.randomUUID(), "A", "3");
+        seating.addSeat(a1);
+        seating.addSeat(a2);
+        seating.addSeat(a3);
+        event.addZone(seating);
+
+        // General-admission zone
+        event.addZone(InventoryZone.createGA(MIXED_LIMITED_GA_ZONE_ID, "General Admission", new BigDecimal("50.00"), 200));
+
+        event.setVenueMap(new VenueMap(Map.of(
+                "Reserved Seating", MIXED_LIMITED_SEAT_ZONE_ID,
+                "General Admission", MIXED_LIMITED_GA_ZONE_ID)));
+
+        List<LayoutCell> cells = List.of(
+                LayoutCell.stage(0, 1, "Main Stage"),
+                LayoutCell.stage(0, 2, "Main Stage"),
+                LayoutCell.seat(1, 1, MIXED_LIMITED_SEAT_ZONE_ID, a1.getId()),
+                LayoutCell.seat(1, 2, MIXED_LIMITED_SEAT_ZONE_ID, a2.getId()),
+                LayoutCell.seat(1, 3, MIXED_LIMITED_SEAT_ZONE_ID, a3.getId()),
+                LayoutCell.ga(2, 1, MIXED_LIMITED_GA_ZONE_ID, "Floor"),
+                LayoutCell.ga(2, 2, MIXED_LIMITED_GA_ZONE_ID, "Floor"),
+                LayoutCell.ga(2, 3, MIXED_LIMITED_GA_ZONE_ID, "Floor"));
+        event.setVenueLayout(new VenueLayout(3, 4, cells));
+
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded mixed limited event '{}' with max quantity 3", event.getName());
     }
 }
