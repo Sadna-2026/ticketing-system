@@ -258,6 +258,71 @@ class AuthViewTest {
         }
     }
 
+    @Test
+    void GivenLogoutClicked_WhenMemberSession_ThenSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn(
+                "Current session: Member (alice)", "Current session: none");
+        when(presenter.currentSessionState()).thenReturn(member(), none());
+        when(presenter.logout()).thenReturn(AuthResult.success("Logged out successfully."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log out");
+
+            uiMessagesMock.verify(() -> UiMessages.success("Logged out successfully."));
+            // After logout the UI returns to no-session state: tab sheet visible, logout hidden.
+            assertTrue(isTabSheetVisible(view));
+            assertFalse(hasVisibleButton(view, "Log out"));
+        }
+    }
+
+    @Test
+    void GivenLogoutClicked_WhenMemberSessionFails_ThenErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
+        when(presenter.logout()).thenReturn(AuthResult.failure("Logout failed. Please try again."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log out");
+
+            uiMessagesMock.verify(() -> UiMessages.error("Logout failed. Please try again."));
+            // Session unchanged: logout button must still be visible.
+            assertTrue(hasVisibleButton(view, "Log out"));
+        }
+    }
+
+    @Test
+    void GivenLogoutClicked_WhenSuccessful_ThenAllInputFieldsAreCleared() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)", "Current session: none");
+        when(presenter.currentSessionState()).thenReturn(member(), none());
+        when(presenter.logout()).thenReturn(AuthResult.success("Logged out successfully."));
+
+        AuthView view = new AuthView(presenter);
+
+        List<com.vaadin.flow.component.textfield.TextField> textFields = findAll(view, com.vaadin.flow.component.textfield.TextField.class);
+        textFields.forEach(f -> f.setValue("dummy text"));
+
+        List<com.vaadin.flow.component.textfield.PasswordField> passFields = findAll(view, com.vaadin.flow.component.textfield.PasswordField.class);
+        passFields.forEach(f -> f.setValue("secret"));
+
+        List<com.vaadin.flow.component.textfield.EmailField> emailFields = findAll(view, com.vaadin.flow.component.textfield.EmailField.class);
+        emailFields.forEach(f -> f.setValue("dummy@example.com"));
+
+        assertFalse(textFields.isEmpty());
+        assertFalse(passFields.isEmpty());
+        assertFalse(emailFields.isEmpty());
+
+        clickButton(view, "Log out");
+
+        textFields.forEach(f -> assertTrue(f.isEmpty(), "TextField should be cleared"));
+        passFields.forEach(f -> assertTrue(f.isEmpty(), "PasswordField should be cleared"));
+        emailFields.forEach(f -> assertTrue(f.isEmpty(), "EmailField should be cleared"));
+    }
+
     // ── Required field indicators ──────────────────────────────────────────────
 
     @Test
@@ -383,6 +448,19 @@ class AuthViewTest {
                 .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElse(null);
+    }
+
+    private <T extends Component> List<T> findAll(Component root, Class<T> type) {
+        List<T> result = new ArrayList<>();
+        collectAll(root, type, result);
+        return result;
+    }
+
+    private <T extends Component> void collectAll(Component root, Class<T> type, List<T> out) {
+        if (type.isInstance(root)) {
+            out.add(type.cast(root));
+        }
+        root.getChildren().forEach(child -> collectAll(child, type, out));
     }
 
     private boolean isEffectivelyVisible(Component component) {

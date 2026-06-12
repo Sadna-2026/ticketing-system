@@ -63,16 +63,24 @@ public class AuthPresenter {
             return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
 
+        boolean createdNewGuestToken = SessionContext.getSessionToken() == null || SessionContext.getSessionToken().isBlank();
+
         try {
             String guestToken = ensureGuestToken();
             LoginResponse response = memberService.login(new LoginRequest(username, password), guestToken);
             if (!response.success()) {
+                if (createdNewGuestToken) {
+                    rollbackToNoSession();
+                }
                 return AuthResult.failure(response.message());
             }
 
             storeMemberSession(response.sessionToken(), response.member(), "Member");
             return AuthResult.success(response.message());
         } catch (RuntimeException ex) {
+            if (createdNewGuestToken) {
+                rollbackToNoSession();
+            }
             return safeFailure("Login failed. Please try again.", ex);
         }
     }
@@ -87,10 +95,15 @@ public class AuthPresenter {
             return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
 
+        boolean createdNewGuestToken = SessionContext.getSessionToken() == null || SessionContext.getSessionToken().isBlank();
+
         try {
             String guestToken = ensureGuestToken();
             LoginResponse response = adminService.adminLogin(new LoginRequest(username, password), guestToken);
             if (!response.success()) {
+                if (createdNewGuestToken) {
+                    rollbackToNoSession();
+                }
                 return AuthResult.failure(response.message());
             }
 
@@ -104,6 +117,9 @@ public class AuthPresenter {
 
             return AuthResult.success("Admin logged in successfully.");
         } catch (RuntimeException ex) {
+            if (createdNewGuestToken) {
+                rollbackToNoSession();
+            }
             return safeFailure("Admin login failed. Please try again.", ex);
         }
     }
@@ -123,17 +139,25 @@ public class AuthPresenter {
             return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
 
+        boolean createdNewGuestToken = SessionContext.getSessionToken() == null || SessionContext.getSessionToken().isBlank();
+
         try {
             String guestToken = ensureGuestToken();
             RegisterRequest request = new RegisterRequest(username, email, password, phoneNumber, dateOfBirth);
             RegisterResponse response = memberService.register(request, guestToken);
             if (!response.success()) {
+                if (createdNewGuestToken) {
+                    rollbackToNoSession();
+                }
                 return AuthResult.failure(response.message());
             }
 
             storeMemberSession(response.sessionToken(), response.member(), "Member");
             return AuthResult.success(response.message());
         } catch (RuntimeException ex) {
+            if (createdNewGuestToken) {
+                rollbackToNoSession();
+            }
             return safeFailure("Registration failed. Please try again.", ex);
         }
     }
