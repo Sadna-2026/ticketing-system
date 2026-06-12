@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
@@ -18,13 +20,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.presentation.vaadin.presenters.MemberPresenter;
+import com.ticketing.presentation.vaadin.testsupport.SynchronousUi;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasLabel;
 import com.vaadin.flow.component.HasValueAndElement;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.router.BeforeEnterEvent;
 
 @DisplayName("MemberView")
 @ExtendWith(VaadinSessionExtension.class)
@@ -90,6 +95,31 @@ class MemberViewTest {
 
             uiMessagesMock.verify(() -> UiMessages.error("Failed to load profile details."));
         }
+    }
+
+    @Test
+    void GivenGuestSession_WhenEnteringProfile_ThenForwardedToHome() {
+        MemberView view = new MemberView(mock(MemberPresenter.class));
+        // Hold a strong reference: UI.getCurrent() is backed by a WeakReference, so an inline
+        // SynchronousUi can be GC'd before beforeEnter runs (see VaadinSessionExtension javadoc).
+        UI ui = SynchronousUi.create();
+        UI.setCurrent(ui);
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event).forwardTo(HomeView.class);
+    }
+
+    @Test
+    void GivenMemberSession_WhenEnteringProfile_ThenNavigationIsAllowed() {
+        SessionContext.setMemberId(UUID.randomUUID());
+        MemberView view = new MemberView(presenterReturning(MEMBER));
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event, never()).forwardTo(HomeView.class);
     }
 
     private void assertRequired(Component root, String label) {
