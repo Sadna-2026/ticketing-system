@@ -51,6 +51,9 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 | Assigned seat IDs | `eeeeeeee-0000-0000-0000-000000000001`, `eeeeeeee-0000-0000-0000-000000000002`, `eeeeeeee-0000-0000-0000-000000000003` |
 | Second-company conference event ID | `44444444-4444-4444-4444-444444444444` |
 | Conference GA zone ID | `dddddddd-dddd-dddd-dddd-dddddddddddd` |
+| Mixed limited event ID | `88888888-8888-8888-8888-888888888888` |
+| Mixed limited seat zone ID | `88888888-0000-0000-0000-0000000000a1` |
+| Mixed limited GA zone ID | `88888888-0000-0000-0000-0000000000a2` |
 
 ## Test Checklist
 
@@ -72,6 +75,7 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 4. Load inventory, add GA ticket(s), checkout.
 5. Verify success message and purchase history.
 6. Repeat with assigned-seat event `33333333-3333-3333-3333-333333333333` and one of the assigned seat IDs to verify assigned-seat selection.
+7. Open `/orders`, create an order for Mixed Limited Event `88888888-8888-8888-8888-888888888888`. Add 1 assigned seat and 3 GA tickets. The system should block the addition of the 4th ticket due to the `MaxQuantityPolicy(3)`.
 
 ### Policy Failure
 
