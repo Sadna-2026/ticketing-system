@@ -105,8 +105,7 @@ public class EventsView extends VerticalLayout {
                 new H3("Event map and ticket selection"),
                 mapStatus,
                 reservationStatus,
-                mapDisplay
-        );
+                mapDisplay);
         refreshSessionStatus();
         refreshActiveOrderStatus();
     }
@@ -130,7 +129,8 @@ public class EventsView extends VerticalLayout {
     private void configureResultsGrid() {
         resultsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
         resultsGrid.addColumn(event -> formatCategory(event.category())).setHeader("Category").setAutoWidth(true);
-        resultsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts").setAutoWidth(true);
+        resultsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts")
+                .setAutoWidth(true);
         resultsGrid.addColumn(event -> event.status().name()).setHeader("Status").setAutoWidth(true);
         resultsGrid.setMinHeight("240px");
 
@@ -158,13 +158,11 @@ public class EventsView extends VerticalLayout {
                 minPrice,
                 maxPrice,
                 fromDate,
-                toDate
-        );
+                toDate);
         form.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 1),
                 new FormLayout.ResponsiveStep("640px", 2),
-                new FormLayout.ResponsiveStep("960px", 4)
-        );
+                new FormLayout.ResponsiveStep("960px", 4));
 
         HorizontalLayout actions = new HorizontalLayout(search, clear);
         actions.setAlignItems(Alignment.BASELINE);
@@ -183,8 +181,7 @@ public class EventsView extends VerticalLayout {
                 minPrice.getValue(),
                 maxPrice.getValue(),
                 fromDate.getValue(),
-                toDate.getValue()
-        );
+                toDate.getValue());
 
         selectedEvent = null;
         currentEventMap = null;
@@ -249,6 +246,9 @@ public class EventsView extends VerticalLayout {
         }
         OrderMutationResult result = ordersPresenter.addGATickets(eventId, zoneId, quantity == null ? 0 : quantity);
         handleReservationResult(result);
+        if (result.success()) { // refresh the headers after adding GA tickets
+            loadSelectedEventMap();
+        }
     }
 
     private void addAssignedSeat(UUID zoneId, UUID seatId, SeatMapComponent map) {
@@ -295,8 +295,7 @@ public class EventsView extends VerticalLayout {
         mapDisplay.add(
                 new H4(eventMap.eventName()),
                 new Span("Company: " + eventMap.companyName()),
-                new Span("Status: " + eventMap.status().name())
-        );
+                new Span("Status: " + eventMap.status().name()));
 
         if (eventMap.venueMap().isEmpty()) {
             mapDisplay.add(new Paragraph("No venue sections are available for this event."));
@@ -389,8 +388,7 @@ public class EventsView extends VerticalLayout {
         content.setSpacing(false);
         content.add(
                 new Span("Type: " + zone.type().name()),
-                new Span("Price: " + formatPrice(zone.pricePerTicket()))
-        );
+                new Span("Price: " + formatPrice(zone.pricePerTicket())));
 
         if (zone.type() == ZoneType.GENERAL_ADMISSION) {
             IntegerField quantity = new IntegerField("Quantity");
@@ -403,8 +401,7 @@ public class EventsView extends VerticalLayout {
                     new Span("Capacity: " + zone.maxCapacity()),
                     new Span("Available: " + zone.availableCount()),
                     new Span("Sold: " + zone.soldCount()),
-                    new HorizontalLayout(quantity, addGA)
-            );
+                    new HorizontalLayout(quantity, addGA));
         } else {
             content.add(new Span("Seats: " + zone.seats().size()));
             content.add(seatMap(zone));
@@ -417,8 +414,10 @@ public class EventsView extends VerticalLayout {
 
     /**
      * Renders the assigned-seating zone as a single client-side {@code <seat-map>}
-     * element (no per-seat server component — see #255), fed a compact, row/seat-ordered
-     * payload. Clicking a free seat routes through the existing reservation/lock flow;
+     * element (no per-seat server component — see #255), fed a compact,
+     * row/seat-ordered
+     * payload. Clicking a free seat routes through the existing reservation/lock
+     * flow;
      * on success the clicked seat is flipped to taken client-side.
      */
     private Component seatMap(EventMapDTO.ZoneInfo zone) {
@@ -465,7 +464,8 @@ public class EventsView extends VerticalLayout {
         }
         ActiveOrderDto order = result.order();
         if (order == null) {
-            activeOrderStatus.setText("No active order yet. Adding tickets here will start one for the selected event.");
+            activeOrderStatus
+                    .setText("No active order yet. Adding tickets here will start one for the selected event.");
             return;
         }
         int ticketCount = order.getItems().stream().mapToInt(item -> item.getQuantity()).sum();
