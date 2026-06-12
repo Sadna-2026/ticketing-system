@@ -260,6 +260,49 @@ class EventsViewTest {
         );
     }
 
+    @Test
+    void GivenNoSession_WhenMapRendered_ThenReservationActionsAreDisabled() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        when(ordersPresenter.currentSessionState()).thenReturn(new SessionContext.UiState(false, false, false, false, null, null));
+        EventSummaryDTO event = eventSummary("Spring Concert");
+        EventMapDTO loadedMap = sampleEventMap(event.id());
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        Button addGa = findButton(view, "Add GA tickets");
+        assertFalse(addGa.isEnabled(), "GA button should be disabled with no session");
+
+        SeatMapComponent map = findSeatMap(view);
+        assertFalse(map.isEnabled(), "Seat map should be disabled with no session");
+    }
+
+    @Test
+    void GivenValidSession_WhenAddTicketsFails_ThenFailureMessageIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Spring Concert");
+        EventMapDTO loadedMap = sampleEventMap(event.id());
+        UUID gaZoneId = loadedMap.zones().get(0).id();
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        when(ordersPresenter.addGATickets(event.id(), gaZoneId, 1))
+                .thenReturn(OrderMutationResult.failure("Not enough tickets available."));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+        clickButton(view, "Add GA tickets");
+
+        assertTrue(hasText(view, "Not enough tickets available."));
+    }
+
     @SuppressWarnings("unchecked")
     private ComboBox<CompanySummaryDTO> findCompanyComboBox(Component root) {
         return (ComboBox<CompanySummaryDTO>) componentsOf(root).stream()

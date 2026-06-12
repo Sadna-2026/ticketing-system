@@ -6,6 +6,7 @@ import java.util.UUID;
 import com.ticketing.application.dto.EventMapDTO;
 import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.HasEnabled;
 import com.vaadin.flow.component.Tag;
 import com.vaadin.flow.component.dependency.JsModule;
 import com.vaadin.flow.function.SerializableConsumer;
@@ -27,7 +28,7 @@ import elemental.json.JsonObject;
  */
 @Tag("seat-map")
 @JsModule("./seat-map.js")
-public class SeatMapComponent extends Component {
+public class SeatMapComponent extends Component implements HasEnabled {
 
     private transient SerializableConsumer<UUID> selectionListener;
 
