@@ -614,23 +614,28 @@ public class OrderService {
             throw new IllegalArgumentException("Selection event does not match order event");
         }
 
-        Event event = findEvent(order.getEventId());
-        validateOrderNotExpired(order, event);
-        validateSelection(request, event);
-        validatePurchasePolicyOnReservation(event, order, request);
+        try {
+            Event event = findEvent(order.getEventId());
+            validateOrderNotExpired(order, event);
+            validateSelection(request, event);
+            validatePurchasePolicyOnReservation(event, order, request);
 
-        List<UUID> itemIds = new ArrayList<>();
-        for (com.ticketing.domain.order.SelectionRequest.SeatPick pick : request.seats()) {
-            itemIds.add(lockSeat(order, event, pick.zoneId(), pick.seatId()));
-        }
-        for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
-            itemIds.add(lockGA(order, event, pick.zoneId(), pick.quantity()));
-        }
+            List<UUID> itemIds = new ArrayList<>();
+            for (com.ticketing.domain.order.SelectionRequest.SeatPick pick : request.seats()) {
+                itemIds.add(lockSeat(order, event, pick.zoneId(), pick.seatId()));
+            }
+            for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
+                itemIds.add(lockGA(order, event, pick.zoneId(), pick.quantity()));
+            }
 
-        saveEvent(event);
-        saveOrder(order);
-        checkAndPublishSoldOut(event);
-        return itemIds;
+            saveEvent(event);
+            saveOrder(order);
+            checkAndPublishSoldOut(event);
+            return itemIds;
+        } catch (RuntimeException ex) {
+            discardEmptyActiveOrder(order);
+            throw ex;
+        }
     }
 
     // ── Inventory lock/release ──────────────────────────────────────
@@ -1022,6 +1027,15 @@ public class OrderService {
             log.warn("Order has expired: orderId={}, eventId={}", order.getId(), event.getId());
             throw new IllegalStateException("Order has expired");
         }
+    }
+
+    private void discardEmptyActiveOrder(ActiveOrder order) {
+        if (!order.isActive() || !order.getItems().isEmpty()) {
+            return;
+        }
+        order.cancel();
+        saveOrder(order);
+        log.info("Discarded empty active order after failed add: orderId={}", order.getId());
     }
 
     private BigDecimal discountedCheckoutAmount(ActiveOrder order, Event event, String couponCode) {

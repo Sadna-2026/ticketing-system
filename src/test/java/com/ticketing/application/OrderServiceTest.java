@@ -33,6 +33,7 @@ import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.company.Company;
+import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -304,7 +305,33 @@ public class OrderServiceTest {
         assertThrows(IllegalStateException.class,
                 () -> orderService.addGATicketsToOrder(guestToken, policyEventId, policyZoneId, 1));
 
+        assertNull(orderService.getActiveOrder(guestToken));
         assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+    @Test
+    void GivenPurchasePolicyRejects_WhenAddingTicketsWithoutPriorCreateOrder_ThenNoActiveOrderRemains() {
+        UUID policyEventId = UUID.randomUUID();
+        UUID policyZoneId = UUID.randomUUID();
+        Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AgeRestrictionPolicy(18),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
+        event.publish();
+        eventRepo.save(event);
+
+        UUID teenMemberId = UUID.randomUUID();
+        Member teen = new Member(teenMemberId, "teenBuyer", "teen@example.com", "pw",
+                "050-2222222", LocalDate.of(2012, 1, 1));
+        memberRepo.save(teen);
+        String teenToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), teenMemberId, Set.of(), teen.getUsername(), teen.getEmail(), "MEMBER"));
+
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addGATicketsToOrder(teenToken, policyEventId, policyZoneId, 1));
+
+        assertNull(orderService.getActiveOrder(teenToken));
     }
 
     @Test
