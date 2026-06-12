@@ -73,6 +73,7 @@ import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.provider.Query;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
@@ -1173,6 +1174,35 @@ public class CompanyView extends VerticalLayout {
         ActionResult result = presenter.openCompany(openCompanyName.getValue(), openCompanyDescription.getValue());
         handleCompanyAction(result);
         refreshSessionStatus();
+        if (result.success()) {
+            resetOpenCompanyForm();
+            selectCompanyByName(openedCompanyName(result));
+        }
+    }
+
+    private void resetOpenCompanyForm() {
+        openCompanyName.clear();
+        openCompanyDescription.clear();
+        openCompanyName.setInvalid(false);
+    }
+
+    private void selectCompanyByName(String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            return;
+        }
+        selectedCompanyName.getDataProvider().fetch(new Query<>())
+                .filter(company -> company.name().equalsIgnoreCase(companyName))
+                .findFirst()
+                .ifPresent(selectedCompanyName::setValue);
+    }
+
+    private static String openedCompanyName(ActionResult result) {
+        String prefix = "Company opened: ";
+        String message = result.message();
+        if (message != null && message.startsWith(prefix)) {
+            return message.substring(prefix.length());
+        }
+        return null;
     }
 
     private void loadCompanyInfo() {

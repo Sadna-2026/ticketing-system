@@ -142,6 +142,62 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenMemberSession_WhenRendered_ThenFounderSetupTabAndOpenCompanyAreReachable() {
+        CompanyView view = new CompanyView(mockPresenter());
+
+        selectTab(view, "Founder setup");
+
+        assertTrue(hasVisibleButton(view, "Open company"));
+        assertNotNull(findTextField(view, "New company name"));
+        assertNotNull(findTextArea(view, "New company description"));
+    }
+
+    @Test
+    void GivenMemberSession_WhenOpenCompanyClicked_ThenPresenterIsCalledAndSuccessMessageIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.openCompany("My New Co", "A brand-new production company."))
+                .thenReturn(ActionResult.success("Company opened: My New Co"));
+        when(presenter.searchCompanies(""))
+                .thenReturn(List.of(company("Acme"), company("My New Co")));
+        when(presenter.searchLookupCompanies(""))
+                .thenReturn(List.of(company("Acme"), company("My New Co")));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Founder setup");
+        findTextField(view, "New company name").setValue("My New Co");
+        findTextArea(view, "New company description").setValue("A brand-new production company.");
+
+        clickButton(view, "Open company");
+
+        verify(presenter).openCompany("My New Co", "A brand-new production company.");
+        assertTrue(hasText(view, "Company opened: My New Co"));
+        TextField companyName = findTextField(view, "New company name");
+        assertEquals("", companyName.getValue());
+        assertFalse(companyName.isInvalid());
+        assertEquals("", findTextArea(view, "New company description").getValue());
+        assertEquals("My New Co", findCompanyCombo(view, "Selected company").getValue().name());
+    }
+
+    @Test
+    void GivenDuplicateCompanyName_WhenOpenCompanyClicked_ThenSpecificFailureReasonIsDisplayed() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.openCompany("Demo Productions", "duplicate attempt"))
+                .thenReturn(ActionResult.failure("A production company with this name already exists."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Founder setup");
+        findTextField(view, "New company name").setValue("Demo Productions");
+        findTextArea(view, "New company description").setValue("duplicate attempt");
+
+        clickButton(view, "Open company");
+
+        verify(presenter).openCompany("Demo Productions", "duplicate attempt");
+        assertTrue(hasText(view, "A production company with this name already exists."));
+        assertEquals("Demo Productions", findTextField(view, "New company name").getValue());
+        assertEquals("duplicate attempt", findTextArea(view, "New company description").getValue());
+    }
+
+    @Test
     void GivenCompanyView_WhenRendered_ThenAdminOnlyControlsAreHidden() {
         CompanyView view = new CompanyView(mockPresenter());
 
