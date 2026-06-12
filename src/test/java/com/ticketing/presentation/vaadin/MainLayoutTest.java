@@ -61,10 +61,17 @@ class MainLayoutTest {
 
     @Test
     void GivenSystemAdminSession_WhenRendered_ThenAdminNavigationIsVisible() {
-        List<String> labels = labelsFor(new SessionContext.UiState(true, false, true, true, "root", "Member"));
+        List<String> labels = labelsFor(new SessionContext.UiState(true, false, true, true, "root", "Admin"));
 
-        assertTrue(labels.contains("Company"));
         assertTrue(labels.contains("Admin"));
+        assertTrue(labels.contains("Notifications"));
+        assertTrue(labels.contains("Auth"));
+        
+        assertFalse(labels.contains("Company"));
+        assertFalse(labels.contains("Home"));
+        assertFalse(labels.contains("Events"));
+        assertFalse(labels.contains("Orders"));
+        assertFalse(labels.contains("Profile"));
     }
 
     private static List<String> labelsFor(SessionContext.UiState state) {

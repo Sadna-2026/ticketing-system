@@ -187,7 +187,7 @@ public class AuthView extends VerticalLayout {
             MainLayout.refreshCurrentNavigation();
             if (result.success()) {
                 password.clear();
-                getUI().ifPresent(ui -> ui.navigate(HomeView.class));
+                getUI().ifPresent(ui -> ui.navigate(AdminView.class));
             }
         });
 
