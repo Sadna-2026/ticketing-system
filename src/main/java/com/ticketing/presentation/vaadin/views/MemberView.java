@@ -1,5 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
+import java.util.Objects;
+
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.MemberPresenter;
@@ -27,10 +29,14 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
 
     private final MemberPresenter presenter;
 
+    private static final String NO_CHANGES_MESSAGE = "No changes to save.";
+
     private final TextField username = new TextField("Username");
     private final EmailField email = new EmailField("Email");
     private final TextField phoneNumber = new TextField("Phone number");
     private final DatePicker dateOfBirth = new DatePicker("Date of birth");
+
+    private MemberDto loadedProfile;
 
     public MemberView(MemberPresenter presenter) {
         this.presenter = presenter;
@@ -68,16 +74,23 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
     private void loadMemberData() {
         MemberDto member = presenter.getCurrentMember();
         if (member != null) {
+            loadedProfile = member;
             username.setValue(member.username() != null ? member.username() : "");
             email.setValue(member.email() != null ? member.email() : "");
             phoneNumber.setValue(member.phoneNumber() != null ? member.phoneNumber() : "");
             dateOfBirth.setValue(member.dateOfBirth());
         } else {
+            loadedProfile = null;
             UiMessages.error("Failed to load profile details.");
         }
     }
 
     private void saveProfile() {
+        if (profileUnchanged()) {
+            UiMessages.info(NO_CHANGES_MESSAGE);
+            return;
+        }
+
         MemberPresenter.UpdateResult result = presenter.updateIdentifyingDetails(
                 username.getValue(),
                 email.getValue(),
@@ -88,9 +101,26 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
         if (result.success()) {
             UiMessages.success(result.message());
             MainLayout.refreshCurrentNavigation();
+            loadMemberData();
+            username.setInvalid(false);
+            email.setInvalid(false);
         } else {
             UiMessages.error(result.message());
         }
+    }
+
+    private boolean profileUnchanged() {
+        if (loadedProfile == null) {
+            return false;
+        }
+        return normalizeText(username.getValue()).equals(normalizeText(loadedProfile.username()))
+                && normalizeText(email.getValue()).equals(normalizeText(loadedProfile.email()))
+                && normalizeText(phoneNumber.getValue()).equals(normalizeText(loadedProfile.phoneNumber()))
+                && Objects.equals(dateOfBirth.getValue(), loadedProfile.dateOfBirth());
+    }
+
+    private static String normalizeText(String value) {
+        return value == null || value.isBlank() ? "" : value.trim();
     }
 
     @Override
