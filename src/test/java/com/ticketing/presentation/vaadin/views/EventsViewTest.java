@@ -49,6 +49,7 @@ import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.textfield.BigDecimalField;
+import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.Query;
 
@@ -160,6 +161,7 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
         clickButton(view, "Add GA tickets");
+        assertTrue(hasText(view, "GA tickets added."));
         // Simulate the client-side seat click: the <seat-map> element calls back to
         // the server with the chosen seat id.
         findSeatMap(view).selectSeat(seatId.toString());
@@ -167,6 +169,59 @@ class EventsViewTest {
         assertTrue(hasText(view, "Assigned seat added."));
         verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 1);
         verify(ordersPresenter).addAssignedSeat(event.id(), seatZoneId, seatId);
+    }
+
+    @Test
+    @DisplayName("Selecting a GA zone quantity passes the requested quantity to the backend")
+    void GivenValidSession_WhenAddingMultipleGATickets_ThenCorrectQuantityIsPassed() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Spring Concert");
+        EventMapDTO loadedMap = sampleEventMap(event.id());
+        UUID gaZoneId = loadedMap.zones().get(0).id();
+        
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        when(ordersPresenter.addGATickets(event.id(), gaZoneId, 3))
+                .thenReturn(OrderMutationResult.success("3 GA tickets added.", UUID.randomUUID(), null));
+        
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        findIntegerField(view, "Quantity").setValue(3);
+        clickButton(view, "Add GA tickets");
+
+        assertTrue(hasText(view, "3 GA tickets added."));
+        verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 3);
+    }
+
+    @Test
+    @DisplayName("Adding more tickets than MaxQuantityPolicy allows shows failure message in UI")
+    void GivenMixedEvent_WhenAddingMoreThanMaxQuantityTickets_ThenFailureMessageIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Mixed Limited Event");
+        EventMapDTO loadedMap = sampleEventMap(event.id());
+        UUID gaZoneId = loadedMap.zones().get(0).id();
+        
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        when(ordersPresenter.addGATickets(event.id(), gaZoneId, 4))
+                .thenReturn(OrderMutationResult.failure("Cannot purchase more than 3 tickets"));
+        
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        findIntegerField(view, "Quantity").setValue(4);
+        clickButton(view, "Add GA tickets");
+
+        assertTrue(hasText(view, "Cannot purchase more than 3 tickets"));
     }
 
     @Test
@@ -405,6 +460,15 @@ class EventsViewTest {
                 .filter(field -> label.equals(field.getLabel()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(label + " TextField not found"));
+    }
+
+    private IntegerField findIntegerField(Component root, String label) {
+        return (IntegerField) componentsOf(root).stream()
+                .filter(IntegerField.class::isInstance)
+                .map(IntegerField.class::cast)
+                .filter(field -> label.equals(field.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(label + " IntegerField not found"));
     }
 
     private BigDecimalField findBigDecimalField(Component root, String label) {
