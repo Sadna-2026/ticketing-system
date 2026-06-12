@@ -215,6 +215,7 @@ public class OrderService {
                 });
 
         releaseInventoryForItem(event, item);
+        checkAndPublishAvailable(event);
         saveEvent(event);
 
         order.removeItem(itemId);
@@ -236,6 +237,7 @@ public class OrderService {
         validateOrderNotExpired(order, event);
 
         updateGAQuantityInternal(order, event, zoneId, newQuantity);
+        checkAndPublishAvailable(event);
         saveEvent(event);
         saveOrder(order);
         log.info("GA quantity updated: orderId={}, zoneId={}", order.getId(), zoneId);
@@ -257,6 +259,7 @@ public class OrderService {
 
         Event event = findEvent(order.getEventId());
         releaseAllInventory(event, order);
+        checkAndPublishAvailable(event);
         saveEvent(event);
 
         order.cancel();
@@ -336,6 +339,7 @@ public class OrderService {
             saveOrder(order);
             if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
                 releaseAllInventory(event, order);
+                checkAndPublishAvailable(event);
                 saveEvent(event);
             }
             log.warn("Failed to checkout order {}: {}", order.getId(), e.getMessage());
@@ -556,6 +560,7 @@ public class OrderService {
             if (order.isExpiredAt(systemClock.now(), event.getLockTimerDuration().getDuration())) {
                 releaseAllInventory(event, order);
                 order.expire();
+                checkAndPublishAvailable(event);
                 saveEvent(event);
                 saveOrder(order);
                 return null;
@@ -676,6 +681,17 @@ public class OrderService {
     private void checkAndPublishSoldOut(Event event) {
         if (!event.hasAvailableTickets() && event.isPublished()) {
             event.markSoldOut();
+            saveEvent(event);
+        }
+    }
+
+    /**
+     * Checks if a sold-out event has available tickets (e.g., after an order cancellation).
+     * If so, transitions the event status back to PUBLISHED and persists the change.
+     */
+    private void checkAndPublishAvailable(Event event) {
+        if (event.hasAvailableTickets() && event.getStatus() == EventStatus.SOLD_OUT) {
+            event.markAvailable();
             saveEvent(event);
         }
     }
