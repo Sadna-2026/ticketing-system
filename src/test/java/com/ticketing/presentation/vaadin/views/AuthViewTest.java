@@ -258,6 +258,42 @@ class AuthViewTest {
         }
     }
 
+    @Test
+    void GivenLogoutClicked_WhenMemberSession_ThenSuccessMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn(
+                "Current session: Member (alice)", "Current session: none");
+        when(presenter.currentSessionState()).thenReturn(member(), none());
+        when(presenter.logout()).thenReturn(AuthResult.success("Logged out successfully."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log out");
+
+            uiMessagesMock.verify(() -> UiMessages.success("Logged out successfully."));
+            // After logout the UI returns to no-session state: tab sheet visible, logout hidden.
+            assertTrue(isTabSheetVisible(view));
+            assertFalse(hasVisibleButton(view, "Log out"));
+        }
+    }
+
+    @Test
+    void GivenLogoutClicked_WhenMemberSessionFails_ThenErrorMessage() {
+        AuthPresenter presenter = mock(AuthPresenter.class);
+        when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(presenter.currentSessionState()).thenReturn(member());
+        when(presenter.logout()).thenReturn(AuthResult.failure("Logout failed. Please try again."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            AuthView view = new AuthView(presenter);
+            clickButton(view, "Log out");
+
+            uiMessagesMock.verify(() -> UiMessages.error("Logout failed. Please try again."));
+            // Session unchanged: logout button must still be visible.
+            assertTrue(hasVisibleButton(view, "Log out"));
+        }
+    }
+
     // ── Required field indicators ──────────────────────────────────────────────
 
     @Test
