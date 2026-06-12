@@ -179,20 +179,9 @@ class NotificationsViewTest {
         verify(event, never()).forwardTo(HomeView.class);
     }
 
-    /**
-     * Sets a current UI whose {@link UI#access(Command)} runs inline so that the view's
-     * {@code beforeEnter} guard, which marshals its info popup via {@code UI.getCurrent().access(...)},
-     * can run without a live {@link com.vaadin.flow.server.VaadinSession}.
-     */
+    /** Makes a {@link #synchronousUi()} current so the {@code beforeEnter} guard's inline popup can run. */
     private void setSynchronousCurrentUi() {
-        UI ui = new UI() {
-            @Override
-            public Future<Void> access(Command command) {
-                command.execute();
-                return CompletableFuture.completedFuture(null);
-            }
-        };
-        UI.setCurrent(ui);
+        UI.setCurrent(synchronousUi());
     }
 
     private void attachViewToCurrentUi(Component view) {
@@ -201,23 +190,28 @@ class NotificationsViewTest {
         UI.setCurrent(ui);
     }
 
-    /**
-     * Attaches the view to a UI whose {@link UI#access(Command)} runs the command synchronously.
-     * A bare test UI has no {@link com.vaadin.flow.server.VaadinSession}, so the real
-     * {@code ui.access(...)} the view uses to marshal push callbacks onto the UI thread throws
-     * {@link com.vaadin.flow.component.UIDetachedException}. Running the command inline lets the
-     * test exercise the registered listener end-to-end without a live WebSocket/session.
-     */
+    /** Attaches the view to a {@link #synchronousUi()} and makes it current. */
     private void attachViewToSynchronousUi(Component view) {
-        UI ui = new UI() {
+        UI ui = synchronousUi();
+        ui.add(view);
+        UI.setCurrent(ui);
+    }
+
+    /**
+     * Builds a UI whose {@link UI#access(Command)} runs the command inline. A bare test UI has no
+     * {@link com.vaadin.flow.server.VaadinSession}, so the real {@code ui.access(...)} the view uses
+     * to marshal push callbacks (and the {@code beforeEnter} guard's info popup) onto the UI thread
+     * throws {@link com.vaadin.flow.component.UIDetachedException}. Running the command inline lets a
+     * test exercise that path without a live WebSocket/session.
+     */
+    private static UI synchronousUi() {
+        return new UI() {
             @Override
             public Future<Void> access(Command command) {
                 command.execute();
                 return CompletableFuture.completedFuture(null);
             }
         };
-        ui.add(view);
-        UI.setCurrent(ui);
     }
 
     private boolean hasButton(Component root, String text) {
