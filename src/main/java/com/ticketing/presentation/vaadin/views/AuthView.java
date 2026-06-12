@@ -210,6 +210,7 @@ public class AuthView extends VerticalLayout {
             refreshSessionStatus();
             MainLayout.refreshCurrentNavigation();
             if (result.success()) {
+                clearAllFields();
                 getUI().ifPresent(ui -> ui.navigate(AuthView.class));
             }
         });
@@ -234,6 +235,17 @@ public class AuthView extends VerticalLayout {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private void clearAllFields() {
+        clearFields(tabContent);
+    }
+
+    private void clearFields(com.vaadin.flow.component.Component root) {
+        if (root instanceof com.vaadin.flow.component.HasValue<?, ?> field) {
+            field.clear();
+        }
+        root.getChildren().forEach(this::clearFields);
+    }
 
     private void handle(AuthResult result) {
         if (result.success()) {
