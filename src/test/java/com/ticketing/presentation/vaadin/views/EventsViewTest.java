@@ -199,6 +199,32 @@ class EventsViewTest {
     }
 
     @Test
+    @DisplayName("Adding more tickets than MaxQuantityPolicy allows shows failure message in UI")
+    void GivenMixedEvent_WhenAddingMoreThanMaxQuantityTickets_ThenFailureMessageIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Mixed Limited Event");
+        EventMapDTO loadedMap = sampleEventMap(event.id());
+        UUID gaZoneId = loadedMap.zones().get(0).id();
+        
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        when(ordersPresenter.addGATickets(event.id(), gaZoneId, 4))
+                .thenReturn(OrderMutationResult.failure("Cannot purchase more than 3 tickets"));
+        
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        findIntegerField(view, "Quantity").setValue(4);
+        clickButton(view, "Add GA tickets");
+
+        assertTrue(hasText(view, "Cannot purchase more than 3 tickets"));
+    }
+
+    @Test
     @DisplayName("Assigned-seating zone feeds the client seat map an ordered payload with free/taken status")
     void GivenAssignedZone_WhenMapRendered_ThenSeatPayloadIsOrderedWithFreeTakenStatus() {
         EventsPresenter presenter = mock(EventsPresenter.class);
