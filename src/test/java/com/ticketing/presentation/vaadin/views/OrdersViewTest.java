@@ -26,6 +26,7 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuoteResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
@@ -182,22 +183,119 @@ class OrdersViewTest {
     }
 
     @Test
-    void GivenOrderWithCoupon_WhenCheckoutClicked_ThenPurchaseIdIsDisplayed() {
+    void GivenNoActiveOrder_WhenRendered_ThenCheckoutButtonIsDisabled() {
+        OrdersPresenter presenter = mockPresenter();
+        OrdersView view = new OrdersView(presenter);
+
+        assertFalse(findButton(view, "Checkout").isEnabled());
+        assertTrue(hasText(view, "Checkout is available once the active order has tickets."));
+    }
+
+    @Test
+    void GivenOrderWithDiscountQuote_WhenCouponEntered_ThenSubtotalAndAmountDueAreShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 2)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.success(new BigDecimal("100.00"), new BigDecimal("100.00")));
+        when(presenter.quoteCheckout("SAVE20"))
+                .thenReturn(CheckoutQuoteResult.success(new BigDecimal("100.00"), new BigDecimal("80.00")));
+        OrdersView view = new OrdersView(presenter);
+
+        findTextField(view, "Coupon code").setValue("SAVE20");
+
+        assertTrue(containsText(view, "Subtotal 100.00 | Amount due: 80.00"));
+        verify(presenter).quoteCheckout("SAVE20");
+    }
+
+    @Test
+    void GivenOrderWithoutDiscount_WhenRendered_ThenAmountDueShowsSingleTotalLine() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
+        OrdersView view = new OrdersView(presenter);
+
+        assertTrue(containsText(view, "Amount due: 50.00"));
+        assertFalse(containsText(view, "Subtotal 50.00 | Amount due:"));
+    }
+
+    @Test
+    void GivenQuoteFailure_WhenCheckoutStateRefreshed_ThenQuoteMessageIsShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.failure("Coupon expired"));
+        OrdersView view = new OrdersView(presenter);
+
+        assertTrue(hasText(view, "Coupon expired"));
+    }
+
+    @Test
+    void GivenBlankQuoteFailure_WhenCheckoutStateRefreshed_ThenDefaultHintIsShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(""))
+                .thenReturn(CheckoutQuoteResult.failure(""));
+        OrdersView view = new OrdersView(presenter);
+
+        assertTrue(hasText(view, "Enter an optional coupon code, then checkout."));
+    }
+
+    @Test
+    void GivenCheckoutSuccessWithoutChargedAmount_WhenCheckoutClicked_ThenPurchaseIdStillShown() {
         OrdersPresenter presenter = mockPresenter();
         UUID eventId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         UUID purchaseId = UUID.randomUUID();
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
-        when(presenter.checkout("SAVE20")).thenReturn(CheckoutResult.success("Checkout complete.", purchaseId));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout("")).thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
+        when(presenter.checkout("")).thenReturn(CheckoutResult.success("Checkout complete.", purchaseId, null));
         OrdersView view = new OrdersView(presenter);
+
+        clickButton(view, "Checkout");
+
+        assertTrue(containsText(view, "Checkout complete. Purchase ID: " + purchaseId));
+        assertFalse(containsText(view, "Charged:"));
+    }
+
+    @Test
+    void GivenOrderWithCoupon_WhenCheckoutClicked_ThenPurchaseIdIsDisplayedAndCouponClears() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID purchaseId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout("SAVE20"))
+                .thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("40.00")));
+        when(presenter.checkout("SAVE20"))
+                .thenReturn(CheckoutResult.success("Checkout complete.", purchaseId, new BigDecimal("40.00")));
+        OrdersView view = new OrdersView(presenter);
+        assertTrue(findButton(view, "Checkout").isEnabled());
         findTextField(view, "Coupon code").setValue("SAVE20");
 
         clickButton(view, "Checkout");
 
-        assertTrue(hasText(view, "Checkout complete."));
-        assertTrue(hasText(view, "Checkout complete. Purchase ID: " + purchaseId));
+        assertTrue(containsText(view, "Checkout complete."));
+        assertTrue(containsText(view, "Charged: 40.00"));
+        assertTrue(containsText(view, "Purchase ID: " + purchaseId));
         assertTrue(findOrderItemsGrid(view).getDataProvider().fetch(new Query<>()).toList().isEmpty());
         assertTrue(hasText(view, "No active order. Add tickets from the Events page."));
+        assertFalse(findButton(view, "Checkout").isEnabled());
+        assertEquals("", findTextField(view, "Coupon code").getValue());
         verify(presenter).checkout("SAVE20");
     }
 
@@ -267,6 +365,7 @@ class OrdersViewTest {
         String policyMessage = "Purchase policy violation: AGE_RESTRICTED - Buyer does not meet age policy";
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout("")).thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
         when(presenter.checkout("")).thenReturn(CheckoutResult.failure(policyMessage));
         OrdersView view = new OrdersView(presenter);
 
@@ -286,6 +385,7 @@ class OrdersViewTest {
         OrderItemDto item = gaItem(itemId, zoneId, 2);
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(item));
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(any())).thenReturn(CheckoutQuoteResult.success(new BigDecimal("100.00"), new BigDecimal("100.00")));
         when(presenter.updateGAQuantity(zoneId, 4))
                 .thenReturn(OrderMutationResult.failure("GA quantity exceeds remaining availability."));
         when(presenter.removeItem(itemId))
@@ -317,6 +417,7 @@ class OrdersViewTest {
         ActiveOrderDto updatedOrder = activeOrder(orderId, eventId, List.of(gaItem(itemId, zoneId, 4)));
         ActiveOrderDto emptyOrder = activeOrder(orderId, eventId, List.of());
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout(any())).thenReturn(CheckoutQuoteResult.success(new BigDecimal("100.00"), new BigDecimal("100.00")));
         when(presenter.updateGAQuantity(zoneId, 4))
                 .thenReturn(OrderMutationResult.success("GA quantity updated.", null, updatedOrder));
         when(presenter.removeItem(itemId))
@@ -390,6 +491,7 @@ class OrdersViewTest {
         when(presenter.currentSessionState()).thenReturn(guest());
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("No active order found.", null, null));
         when(presenter.labelsFor(any())).thenReturn(OrderLabels.empty());
+        when(presenter.quoteCheckout(any())).thenReturn(CheckoutQuoteResult.success(BigDecimal.ZERO, BigDecimal.ZERO));
         return presenter;
     }
 
@@ -442,6 +544,13 @@ class OrdersViewTest {
             return true;
         }
         return root.getChildren().anyMatch(child -> hasText(child, text));
+    }
+
+    private boolean containsText(Component root, String fragment) {
+        if (root instanceof HasText hasText && hasText.getText() != null && hasText.getText().contains(fragment)) {
+            return true;
+        }
+        return root.getChildren().anyMatch(child -> containsText(child, fragment));
     }
 
     private boolean isEffectivelyVisible(Component component) {

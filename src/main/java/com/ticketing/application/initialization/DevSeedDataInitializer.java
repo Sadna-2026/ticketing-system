@@ -23,6 +23,7 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
+import com.ticketing.domain.event.CouponDiscount;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -88,6 +89,9 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID MIXED_LIMITED_EVENT_ID = UUID.fromString("88888888-8888-8888-8888-888888888888");
     public static final UUID MIXED_LIMITED_SEAT_ZONE_ID = UUID.fromString("88888888-0000-0000-0000-0000000000a1");
     public static final UUID MIXED_LIMITED_GA_ZONE_ID = UUID.fromString("88888888-0000-0000-0000-0000000000a2");
+    public static final UUID COUPON_CHECKOUT_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
+    public static final UUID COUPON_CHECKOUT_GA_ZONE_ID = UUID.fromString("99999999-0000-0000-0000-000000000001");
+    public static final String CHECKOUT_COUPON_CODE = "SAVE20";
 
     private final boolean initializePlatform;
     private final boolean seedEnabled;
@@ -305,7 +309,32 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 "Seeded event cancelled when an admin closes the demo company.",
                 EventCategory.CONFERENCE, new AlwaysAllowPolicy(), ADMIN_CLOSE_GA_ZONE_ID, "Demo hall",
                 new BigDecimal("25.00"), 40);
+        saveCouponCheckoutEventIfMissing();
         saveMixedLimitedEventIfMissing();
+    }
+
+    private void saveCouponCheckoutEventIfMissing() {
+        if (eventRepository.findById(COUPON_CHECKOUT_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(30));
+        Instant couponExpiry = Instant.now().plus(Duration.ofDays(365));
+        Event event = new Event(COUPON_CHECKOUT_EVENT_ID, COMPANY_NAME, "Coupon Checkout Demo",
+                "UI-13 manual QA: add 2 GA tickets at 50.00 each; coupon "
+                        + CHECKOUT_COUPON_CODE + " gives 20% off (pay 80.00).",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("20"), CHECKOUT_COUPON_CODE, couponExpiry));
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        event.addZone(InventoryZone.createGA(COUPON_CHECKOUT_GA_ZONE_ID, "Discount floor",
+                new BigDecimal("50.00"), 100));
+        event.setVenueMap(new VenueMap(Map.of("Discount floor", COUPON_CHECKOUT_GA_ZONE_ID)));
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded coupon checkout demo event '{}' with coupon {}", event.getName(), CHECKOUT_COUPON_CODE);
     }
 
     private void seedCompletedPurchases() {
