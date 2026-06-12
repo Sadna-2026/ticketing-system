@@ -144,7 +144,7 @@ class CheckoutTransactionJpaTest {
         orderService.createOrder(token, eventId);
         orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
 
-        UUID purchaseId = orderService.checkout(token, null);
+        UUID purchaseId = orderService.checkout(token, null).purchaseId();
 
         assertThat(orderRepository.findCompletedById(purchaseId)).isPresent();
         InventoryZone zone = eventRepository.findById(eventId).orElseThrow().findZone(zoneId);

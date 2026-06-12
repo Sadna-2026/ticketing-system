@@ -216,7 +216,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
         orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
-        UUID purchaseId = orderService.checkout(guestToken, null);
+        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
 
         ActiveOrder order = orderRepo.findById(orderId).orElseThrow();
         assertEquals(OrderStatus.COMPLETED, order.getStatus());
@@ -321,7 +321,7 @@ public class OrderServiceTest {
 
         UUID orderId = orderService.createOrder(guestToken, discountEventId);
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, "SAVE20");
+        UUID purchaseId = orderService.checkout(guestToken, "SAVE20").purchaseId();
 
         assertEquals(new BigDecimal("80.00"), paymentGateway.chargedAmount);
         assertEquals(new BigDecimal("80.00"), orderRepo.findCompletedById(purchaseId).orElseThrow().amount());
@@ -338,7 +338,7 @@ public class OrderServiceTest {
 
         UUID orderId = orderService.createOrder(memberToken, eventId);
         orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, null);
+        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
 
         assertEquals(memberId, orderRepo.findCompletedById(purchaseId).orElseThrow().memberId());
         assertEquals(memberId, paymentGateway.lastDetails.memberId());
@@ -363,7 +363,7 @@ public class OrderServiceTest {
         orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId);
 
         // When: the order is checked out successfully
-        UUID purchaseId = orderService.checkout(memberToken, null);
+        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
 
         // Then: the receipt is persisted in the history repository, keyed by its id
         CompletedPurchase receipt = orderRepo.findCompletedById(purchaseId).orElseThrow();
@@ -755,7 +755,7 @@ public class OrderServiceTest {
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
 
-        UUID purchaseId = failoverService.checkout(guestToken, null);
+        UUID purchaseId = failoverService.checkout(guestToken, null).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryGateway.issueCalls);
@@ -848,7 +848,7 @@ public class OrderServiceTest {
         // Make a purchase
         UUID orderId = orderService.createOrder(memberToken, eventId);
         orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, null);
+        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
 
         // Fetch history
         List<PurchaseRecordDTO> history2 = orderService.getPurchaseHistory(memberToken);
@@ -887,7 +887,7 @@ public class OrderServiceTest {
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
-        UUID purchaseId = failoverService.checkout(guestToken, null);
+        UUID purchaseId = failoverService.checkout(guestToken, null).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryPayment.chargeCalls);
@@ -923,7 +923,7 @@ public class OrderServiceTest {
         // Create a successful order to refund
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, null);
+        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(0, paymentGateway.refundCalls); // Should be 0 before we call refundEventPurchases

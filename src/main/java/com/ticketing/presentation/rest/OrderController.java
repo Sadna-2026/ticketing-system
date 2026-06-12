@@ -57,8 +57,8 @@ public class OrderController {
 
     @PostMapping("/current/checkout")
     public ResponseEntity<ApiResponse<UUID>> checkout(@RequestHeader("X-Session-Token") String token, @RequestParam(required = false) String couponCode) {
-        UUID purchaseId = orderService.checkout(token, couponCode);
-        return ResponseEntity.ok(ApiResponse.success(purchaseId));
+        OrderService.CheckoutCompletion completion = orderService.checkout(token, couponCode);
+        return ResponseEntity.ok(ApiResponse.success(completion.purchaseId()));
     }
 
     @DeleteMapping("/current/items/{itemId}")

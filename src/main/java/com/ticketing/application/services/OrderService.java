@@ -293,6 +293,34 @@ public class OrderService {
     // ── Checkout ────────────────────────────────────────────────────
 
     /**
+     * Estimates the amount that would be charged at checkout for the active order,
+     * applying the event discount policy and optional coupon without side effects.
+     */
+    @Transactional
+    public CheckoutQuote quoteCheckout(String token, String couponCode) {
+        validateToken(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) {
+            throw new IllegalArgumentException("No active order found");
+        }
+        if (order.getItems().isEmpty()) {
+            throw new IllegalArgumentException("No active order with tickets to checkout");
+        }
+        Event event = findEvent(order.getEventId());
+        BigDecimal subtotal = order.getTotalPrice();
+        BigDecimal total = discountedCheckoutAmount(order, event, normalizeCoupon(couponCode));
+        return new CheckoutQuote(subtotal, total);
+    }
+
+    public record CheckoutQuote(BigDecimal subtotal, BigDecimal total) {
+    }
+
+    public record CheckoutCompletion(UUID purchaseId, BigDecimal chargedAmount) {
+    }
+
+    /**
      * Checkout use case (V3-10 / #268): one atomic DB transaction wrapping all the
      * persistent work — order status transition, inventory sell-down and the
      * {@link CompletedPurchase} insert. In {@code jpa} mode the auto-configured
@@ -310,7 +338,7 @@ public class OrderService {
      * {@code setRollbackOnly()} is required.
      */
     @Transactional
-    public UUID checkout(String token, String couponCode) {
+    public CheckoutCompletion checkout(String token, String couponCode) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -334,7 +362,7 @@ public class OrderService {
 
         CompletedPurchase purchase;
         try {
-            purchase = processCheckout(order, event, buyerContact, couponCode, buyerDob);
+            purchase = processCheckout(order, event, buyerContact, normalizeCoupon(couponCode), buyerDob);
         } catch (IllegalStateException e) {
             saveOrder(order);
             if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
@@ -361,7 +389,7 @@ public class OrderService {
         if (notificationService != null && memberId != null) {
             notificationService.notify(memberId.toString(), "Your checkout was completed successfully.");
         }
-        return purchase.purchaseId();
+        return new CheckoutCompletion(purchase.purchaseId(), purchase.amount());
     }
 
     @Transactional
@@ -706,7 +734,7 @@ public class OrderService {
         rejectIfMemberSuspended(order.getMemberId());
         validatePurchasePolicy(event, order, order.getMemberId(), buyerDateOfBirth);
 
-        BigDecimal finalAmount = event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
+        BigDecimal finalAmount = discountedCheckoutAmount(order, event, couponCode);
 
         order.startCheckout();
 
@@ -994,5 +1022,13 @@ public class OrderService {
             log.warn("Order has expired: orderId={}, eventId={}", order.getId(), event.getId());
             throw new IllegalStateException("Order has expired");
         }
+    }
+
+    private BigDecimal discountedCheckoutAmount(ActiveOrder order, Event event, String couponCode) {
+        return event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
+    }
+
+    private static String normalizeCoupon(String couponCode) {
+        return couponCode == null || couponCode.isBlank() ? null : couponCode.trim();
     }
 }

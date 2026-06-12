@@ -112,13 +112,15 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         UUID purchaseId = UUID.randomUUID();
         SessionContext.setSessionToken("guest-token");
-        when(orderService.checkout("guest-token", "SAVE20")).thenReturn(purchaseId);
+        when(orderService.checkout("guest-token", "SAVE20"))
+                .thenReturn(new OrderService.CheckoutCompletion(purchaseId, new BigDecimal("80.00")));
 
         CheckoutResult result = presenter.checkout(" SAVE20 ");
 
         assertTrue(result.success());
         assertEquals("Checkout complete.", result.message());
         assertEquals(purchaseId, result.purchaseId());
+        assertEquals(new BigDecimal("80.00"), result.chargedAmount());
         verify(orderService).checkout("guest-token", "SAVE20");
     }
 

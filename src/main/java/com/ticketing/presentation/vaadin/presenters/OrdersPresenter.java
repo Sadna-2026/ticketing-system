@@ -1,5 +1,6 @@
 package com.ticketing.presentation.vaadin.presenters;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -234,6 +235,20 @@ public class OrdersPresenter {
         }
     }
 
+    public CheckoutQuoteResult quoteCheckout(String couponCode) {
+        String token = sessionToken();
+        if (token == null) {
+            return CheckoutQuoteResult.failure(NO_SESSION_MESSAGE);
+        }
+
+        try {
+            OrderService.CheckoutQuote quote = orderService.quoteCheckout(token, blankToNull(couponCode));
+            return CheckoutQuoteResult.success(quote.subtotal(), quote.total());
+        } catch (RuntimeException ex) {
+            return CheckoutQuoteResult.failure(userMessage(ex, CHECKOUT_FAILURE_MESSAGE));
+        }
+    }
+
     public CheckoutResult checkout(String couponCode) {
         String token = sessionToken();
         if (token == null) {
@@ -241,8 +256,9 @@ public class OrdersPresenter {
         }
 
         try {
-            UUID purchaseId = orderService.checkout(token, blankToNull(couponCode));
-            return CheckoutResult.success("Checkout complete.", purchaseId);
+            OrderService.CheckoutCompletion completion = orderService.checkout(token, blankToNull(couponCode));
+            return CheckoutResult.success(
+                    "Checkout complete.", completion.purchaseId(), completion.chargedAmount());
         } catch (RuntimeException ex) {
             return CheckoutResult.failure(userMessage(ex, CHECKOUT_FAILURE_MESSAGE));
         }
@@ -367,13 +383,23 @@ public class OrdersPresenter {
         }
     }
 
-    public record CheckoutResult(boolean success, String message, UUID purchaseId) {
-        public static CheckoutResult success(String message, UUID purchaseId) {
-            return new CheckoutResult(true, message, purchaseId);
+    public record CheckoutQuoteResult(boolean success, String message, BigDecimal subtotal, BigDecimal total) {
+        public static CheckoutQuoteResult success(BigDecimal subtotal, BigDecimal total) {
+            return new CheckoutQuoteResult(true, "", subtotal, total);
+        }
+
+        public static CheckoutQuoteResult failure(String message) {
+            return new CheckoutQuoteResult(false, message, null, null);
+        }
+    }
+
+    public record CheckoutResult(boolean success, String message, UUID purchaseId, BigDecimal chargedAmount) {
+        public static CheckoutResult success(String message, UUID purchaseId, BigDecimal chargedAmount) {
+            return new CheckoutResult(true, message, purchaseId, chargedAmount);
         }
 
         public static CheckoutResult failure(String message) {
-            return new CheckoutResult(false, message, null);
+            return new CheckoutResult(false, message, null, null);
         }
     }
 

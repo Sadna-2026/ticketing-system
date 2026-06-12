@@ -76,10 +76,10 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 ### Policy Failure
 
 1. Log in as `teen` / `teen123`.
-2. In `/orders`, create an order for event `22222222-2222-2222-2222-222222222222`.
-3. Load inventory, add GA ticket(s), checkout.
-4. Verify the age-policy message is shown from the domain/application result:
+2. On `/events`, search for `18+ Policy Test Event`, load its map, and try to add GA ticket(s).
+3. Verify the age-policy message is shown from the domain/application result when adding tickets:
    `You must be at least 18 years old to purchase tickets for this event`.
+4. Checkout stays disabled because no tickets were added to the cart.
 
 ### Owner
 
