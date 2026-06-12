@@ -2,6 +2,9 @@ package com.ticketing.presentation.vaadin.views;
 
 import static com.ticketing.presentation.vaadin.util.RequiredFields.markRequired;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter.AuthResult;
@@ -15,6 +18,8 @@ import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.tabs.Tab;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
@@ -27,71 +32,81 @@ public class AuthView extends VerticalLayout {
 
     private final AuthPresenter presenter;
     private final Span sessionStatus = new Span();
-    private final HorizontalLayout guestActions;
-    private final VerticalLayout loginForm;
-    private final VerticalLayout adminLoginForm;
-    private final VerticalLayout registerForm;
+
+    private final Tabs tabs = new Tabs();
+    private final VerticalLayout tabContent = new VerticalLayout();
+    private final Map<Tab, VerticalLayout> panelByTab = new HashMap<>();
+
+    private final Tab loginTab      = new Tab("Log in");
+    private final Tab registerTab   = new Tab("Register");
+    private final Tab guestTab      = new Tab("Continue as guest");
+    private final Tab adminTab      = new Tab("Admin login");
+
     private final HorizontalLayout logoutActions;
 
     public AuthView(AuthPresenter presenter) {
         this.presenter = presenter;
-        this.guestActions = guestSection();
-        this.loginForm = loginSection();
-        this.adminLoginForm = adminLoginSection();
-        this.registerForm = registerSection();
         this.logoutActions = logoutSection();
 
         setPadding(true);
         setSpacing(true);
 
+        buildTabs();
+
         add(
                 new H2("Authentication"),
-                new Paragraph("Start as a guest, then log in or register to continue as a member. Admins log in through the separate admin form."),
                 sessionStatus,
-                guestActions,
-                loginForm,
-                adminLoginForm,
-                registerForm,
+                tabs,
+                tabContent,
                 logoutActions
         );
         refreshSessionStatus();
     }
 
-    /**
-     * Renders the guest section.
-     * When a user successfully starts a guest session, they are automatically redirected to the Home page.
-     * 
-     * @return the layout containing the guest actions
-     */
-    private HorizontalLayout guestSection() {
-        Button startGuestSession = new Button("Enter as guest", event -> {
-            AuthResult result = presenter.startGuestSession();
-            handle(result);
-            refreshSessionStatus();
-            
-            // Rebuild the navigation tabs to expose guest-accessible pages (Events, Orders)
-            // since the user transitions from no session to a guest session.
-            MainLayout.refreshCurrentNavigation();
-            
-            if (result.success()) {
-                getUI().ifPresent(ui -> ui.navigate(HomeView.class));
-            }
-        });
+    // ── Tab construction ───────────────────────────────────────────────────────
 
-        HorizontalLayout layout = new HorizontalLayout(startGuestSession);
-        layout.setAlignItems(Alignment.BASELINE);
-        return layout;
+    private void buildTabs() {
+        panelByTab.put(loginTab,    loginSection());
+        panelByTab.put(registerTab, registerSection());
+        panelByTab.put(guestTab,    guestSection());
+        panelByTab.put(adminTab,    adminLoginSection());
+
+        tabs.add(loginTab, registerTab, guestTab, adminTab);
+        tabs.setWidthFull();
+
+        // All panels live in the DOM; only the selected one is shown.
+        for (VerticalLayout panel : panelByTab.values()) {
+            panel.setVisible(false);
+            tabContent.add(panel);
+        }
+        tabContent.setPadding(false);
+
+        tabs.addSelectedChangeListener(e -> showPanel(e.getSelectedTab()));
+        // Show the first tab by default.
+        showPanel(loginTab);
     }
+
+    private void showPanel(Tab selected) {
+        panelByTab.forEach((tab, panel) -> panel.setVisible(tab.equals(selected)));
+    }
+
+    // ── Login tab ──────────────────────────────────────────────────────────────
 
     private VerticalLayout loginSection() {
         TextField username = new TextField("Username");
         PasswordField password = new PasswordField("Password");
         markRequired(username, "Username is required.");
         markRequired(password, "Password is required.");
+
         Button login = new Button("Log in", event -> {
-            handle(presenter.login(username.getValue(), password.getValue()));
+            AuthResult result = presenter.login(username.getValue(), password.getValue());
+            handle(result);
             refreshSessionStatus();
             MainLayout.refreshCurrentNavigation();
+            if (result.success()) {
+                password.clear();
+                getUI().ifPresent(ui -> ui.navigate(HomeView.class));
+            }
         });
 
         FormLayout form = new FormLayout(username, password);
@@ -100,27 +115,7 @@ public class AuthView extends VerticalLayout {
         return layout;
     }
 
-    private VerticalLayout adminLoginSection() {
-        TextField username = new TextField("Admin username");
-        PasswordField password = new PasswordField("Admin password");
-        markRequired(username, "Admin username is required.");
-        markRequired(password, "Admin password is required.");
-        Button login = new Button("Log in as admin", event -> {
-            handle(presenter.adminLogin(username.getValue(), password.getValue()));
-            refreshSessionStatus();
-            MainLayout.refreshCurrentNavigation();
-        });
-
-        FormLayout form = new FormLayout(username, password);
-        VerticalLayout layout = new VerticalLayout(
-                new H3("Admin login"),
-                new Paragraph("For platform administrators only. Regular members should use the member login above."),
-                form,
-                login
-        );
-        layout.setPadding(false);
-        return layout;
-    }
+    // ── Register tab ───────────────────────────────────────────────────────────
 
     private VerticalLayout registerSection() {
         TextField username = new TextField("Username");
@@ -131,16 +126,22 @@ public class AuthView extends VerticalLayout {
         markRequired(username, "Username is required.");
         markRequired(email, "Email is required.");
         markRequired(password, "Password is required.");
+
         Button register = new Button("Register", event -> {
-            handle(presenter.register(
+            AuthResult result = presenter.register(
                     username.getValue(),
                     email.getValue(),
                     password.getValue(),
                     phoneNumber.getValue(),
                     dateOfBirth.getValue()
-            ));
+            );
+            handle(result);
             refreshSessionStatus();
             MainLayout.refreshCurrentNavigation();
+            if (result.success()) {
+                password.clear();
+                getUI().ifPresent(ui -> ui.navigate(HomeView.class));
+            }
         });
 
         FormLayout form = new FormLayout(username, email, password, phoneNumber, dateOfBirth);
@@ -149,21 +150,65 @@ public class AuthView extends VerticalLayout {
         return layout;
     }
 
-    private HorizontalLayout logoutSection() {
-        Button logout = new Button("Log out", event -> {
-            // Attempt to end the session (for both guests and members)
-            AuthResult result = presenter.logout();
-            
-            // Display a success or error notification based on the result
+    // ── Guest tab ──────────────────────────────────────────────────────────────
+
+    private VerticalLayout guestSection() {
+        Button startGuestSession = new Button("Continue as guest", event -> {
+            AuthResult result = presenter.startGuestSession();
             handle(result);
-            
-            // Re-evaluate what UI sections are visible based on the new session state
             refreshSessionStatus();
             MainLayout.refreshCurrentNavigation();
-            
-            // On a successful logout or guest exit, explicitly redirect the user 
-            // back to the AuthView. This ensures a clean state and clears out any 
-            // previous application context they might have been viewing.
+            if (result.success()) {
+                getUI().ifPresent(ui -> ui.navigate(HomeView.class));
+            }
+        });
+
+        VerticalLayout layout = new VerticalLayout(
+                new H3("Continue as guest"),
+                new Paragraph("Browse events and reserve tickets without creating an account. You can register or log in at any time."),
+                startGuestSession
+        );
+        layout.setPadding(false);
+        return layout;
+    }
+
+    // ── Admin login tab ────────────────────────────────────────────────────────
+
+    private VerticalLayout adminLoginSection() {
+        TextField username = new TextField("Admin username");
+        PasswordField password = new PasswordField("Admin password");
+        markRequired(username, "Admin username is required.");
+        markRequired(password, "Admin password is required.");
+
+        Button login = new Button("Log in as admin", event -> {
+            AuthResult result = presenter.adminLogin(username.getValue(), password.getValue());
+            handle(result);
+            refreshSessionStatus();
+            MainLayout.refreshCurrentNavigation();
+            if (result.success()) {
+                password.clear();
+                getUI().ifPresent(ui -> ui.navigate(HomeView.class));
+            }
+        });
+
+        VerticalLayout layout = new VerticalLayout(
+                new H3("Admin login"),
+                new Paragraph("For platform administrators only. Regular members should use the Log in tab."),
+                new FormLayout(username, password),
+                login
+        );
+        layout.setPadding(false);
+        return layout;
+    }
+
+    // ── Logout section ─────────────────────────────────────────────────────────
+
+    private HorizontalLayout logoutSection() {
+        Button logout = new Button("Log out", event -> {
+            AuthResult result = presenter.logout();
+            handle(result);
+            refreshSessionStatus();
+            MainLayout.refreshCurrentNavigation();
             if (result.success()) {
                 getUI().ifPresent(ui -> ui.navigate(AuthView.class));
             }
@@ -174,21 +219,27 @@ public class AuthView extends VerticalLayout {
         return layout;
     }
 
+    // ── Visibility control ─────────────────────────────────────────────────────
+
+    private void refreshSessionStatus() {
+        sessionStatus.setText(presenter.currentSessionLabel());
+        var session = presenter.currentSessionState();
+
+        // Tabs + their content are shown for no-session and guest states.
+        // Once a member is logged in, only the logout button is shown.
+        boolean showTabs = !session.loggedInMember();
+        tabs.setVisible(showTabs);
+        tabContent.setVisible(showTabs);
+        logoutActions.setVisible(session.loggedInMember() || session.guest());
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
     private void handle(AuthResult result) {
         if (result.success()) {
             UiMessages.success(result.message());
         } else {
             UiMessages.error(result.message());
         }
-    }
-
-    private void refreshSessionStatus() {
-        sessionStatus.setText(presenter.currentSessionLabel());
-        var session = presenter.currentSessionState();
-        guestActions.setVisible(session.noSession());
-        loginForm.setVisible(session.guest());
-        adminLoginForm.setVisible(session.guest());
-        registerForm.setVisible(session.guest());
-        logoutActions.setVisible(session.loggedInMember() || session.guest());
     }
 }
