@@ -84,6 +84,20 @@ class AdminPresenterTest {
     }
 
     @Test
+    void GivenRegularMemberSession_WhenLoadingGlobalHistory_ThenNoServiceIsCalledAndAdminSessionMessageIsReturned() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setUsername("alice");
+
+        PurchaseHistoryResult result = presenter.loadGlobalPurchaseHistory(UUID.randomUUID(), "Acme");
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        assertTrue(result.purchases().isEmpty());
+        verifyNoInteractions(adminService);
+    }
+
+    @Test
     void GivenAdminSessionAndTargetMember_WhenRemovingMember_ThenAdminServiceIsCalledDirectly() {
         adminSession();
         UUID targetId = UUID.randomUUID();

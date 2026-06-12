@@ -283,6 +283,22 @@ class AdminViewTest {
     }
 
     @Test
+    void GivenCompanyFilterOnly_WhenLoadGlobalHistoryClicked_ThenEmptySuccessMessageIsShown() {
+        AdminPresenter presenter = mockPresenter();
+        when(presenter.loadGlobalPurchaseHistory(null, "Acme"))
+                .thenReturn(PurchaseHistoryResult.success("No global purchases found.", List.of()));
+        AdminView view = new AdminView(presenter);
+        findTextField(view, "Company name").setValue("Acme");
+
+        clickButton(view, "Load global purchase history");
+
+        // II.6.4: history can be filtered by company/event without a buyer; an empty result still explains the outcome.
+        verify(presenter).loadGlobalPurchaseHistory(null, "Acme");
+        assertTrue(hasText(view, "No global purchases found."));
+        assertEquals(0, findPurchaseHistoryGrid(view).getDataProvider().fetch(new Query<>()).count());
+    }
+
+    @Test
     void GivenSuspensionInputs_WhenActionsClicked_ThenPresenterMethodsAreCalledAndRowsDisplay() {
         AdminPresenter presenter = mockPresenter();
         MemberSummaryDTO target = new MemberSummaryDTO(UUID.randomUUID(), "carol");
