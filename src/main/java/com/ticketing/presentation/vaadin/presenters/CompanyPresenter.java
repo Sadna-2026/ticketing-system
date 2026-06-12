@@ -203,6 +203,24 @@ public class CompanyPresenter {
         }
     }
 
+    public List<PendingRoleOfferOption> listPendingRoleOffers() {
+        String token = memberToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return memberService.listPendingRoleOffers(token).stream()
+                    .map(offer -> new PendingRoleOfferOption(
+                            offer.getOfferId(),
+                            offer.getCompanyName(),
+                            offer.getRole()))
+                    .toList();
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to load pending role offers", ex);
+            return List.of();
+        }
+    }
+
     public ActionResult respondToRoleOffer(UUID offerId, boolean accepted) {
         String token = memberToken();
         if (token == null) {
@@ -259,28 +277,38 @@ public class CompanyPresenter {
     }
 
     public PersonnelAccessResult loadPersonnelAccess(String companyName) {
+        CompanyAccessResult access = loadCompanyAccess(companyName);
+        if (access.owner()) {
+            return PersonnelAccessResult.allowed("Owner personnel controls available for " + access.companyName() + ".");
+        }
+        return PersonnelAccessResult.denied(access.staff()
+                ? "Only a company owner can manage personnel for " + access.companyName() + "."
+                : access.message());
+    }
+
+    public CompanyAccessResult loadCompanyAccess(String companyName) {
         String token = memberToken();
         if (token == null) {
-            return PersonnelAccessResult.denied(MEMBER_SESSION_REQUIRED);
+            return CompanyAccessResult.denied(null, MEMBER_SESSION_REQUIRED);
         }
         String normalizedName = blankToNull(companyName);
         if (normalizedName == null) {
-            return PersonnelAccessResult.denied("Select a company to manage personnel.");
-        }
-        UUID memberId = SessionContext.getMemberId();
-        if (memberId == null) {
-            return PersonnelAccessResult.denied(MEMBER_SESSION_REQUIRED);
+            return CompanyAccessResult.denied(null, "Select a company to show permitted actions.");
         }
 
         try {
-            List<OrgNodeDTO> nodes = memberService.getOrganizationChart(token, normalizedName);
-            OrgNodeDTO currentMember = findNode(nodes, memberId);
-            if (currentMember != null && currentMember.role() == StaffAppointment.StaffRole.OWNER && !currentMember.revoked()) {
-                return PersonnelAccessResult.allowed("Owner personnel controls available for " + normalizedName + ".");
+            Optional<OrgNodeDTO> appointment = memberService.getCurrentCompanyAppointment(token, normalizedName);
+            if (appointment.isEmpty() || appointment.get().revoked()) {
+                return CompanyAccessResult.denied(normalizedName,
+                        "No active staff appointment for " + normalizedName + ".");
             }
-            return PersonnelAccessResult.denied("Only a company owner can manage personnel for " + normalizedName + ".");
+            OrgNodeDTO current = appointment.get();
+            if (current.role() == StaffAppointment.StaffRole.OWNER) {
+                return CompanyAccessResult.owner(normalizedName);
+            }
+            return CompanyAccessResult.manager(normalizedName, current.permissions());
         } catch (RuntimeException ex) {
-            return PersonnelAccessResult.denied(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+            return CompanyAccessResult.denied(normalizedName, userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
         }
     }
 
@@ -950,22 +978,6 @@ public class CompanyPresenter {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private static OrgNodeDTO findNode(List<OrgNodeDTO> nodes, UUID memberId) {
-        if (nodes == null || memberId == null) {
-            return null;
-        }
-        for (OrgNodeDTO node : nodes) {
-            if (memberId.equals(node.memberId())) {
-                return node;
-            }
-            OrgNodeDTO child = findNode(node.subordinates(), memberId);
-            if (child != null) {
-                return child;
-            }
-        }
-        return null;
-    }
-
     @FunctionalInterface
     private interface LifecycleCall {
         void run(String token, String companyName);
@@ -991,6 +1003,12 @@ public class CompanyPresenter {
         }
     }
 
+    public record PendingRoleOfferOption(UUID offerId, String companyName, StaffAppointment.StaffRole role) {
+        public String label() {
+            return companyName + " — " + role.name();
+        }
+    }
+
     public record LifecycleAccessResult(boolean canManageLifecycle, String message) {
         public static LifecycleAccessResult allowed(String message) {
             return new LifecycleAccessResult(true, message);
@@ -998,6 +1016,63 @@ public class CompanyPresenter {
 
         public static LifecycleAccessResult denied(String message) {
             return new LifecycleAccessResult(false, message);
+        }
+    }
+
+    public record CompanyAccessResult(
+            boolean staff,
+            boolean owner,
+            String companyName,
+            Set<ManagerPermission> permissions,
+            String message
+    ) {
+        public CompanyAccessResult {
+            permissions = permissions == null ? Set.of() : Set.copyOf(permissions);
+        }
+
+        public static CompanyAccessResult owner(String companyName) {
+            return new CompanyAccessResult(true, true, companyName, Set.of(),
+                    "Owner controls available for " + companyName + ".");
+        }
+
+        public static CompanyAccessResult manager(String companyName, Set<ManagerPermission> permissions) {
+            Set<ManagerPermission> safe = permissions == null ? Set.of() : Set.copyOf(permissions);
+            String suffix = safe.isEmpty() ? "no manager permissions" : String.join(", ",
+                    safe.stream().map(ManagerPermission::name).sorted().toList());
+            return new CompanyAccessResult(true, false, companyName, safe,
+                    "Manager permissions for " + companyName + ": " + suffix + ".");
+        }
+
+        public static CompanyAccessResult denied(String companyName, String message) {
+            return new CompanyAccessResult(false, false, companyName, Set.of(), message);
+        }
+
+        public boolean has(ManagerPermission permission) {
+            return owner || permissions.contains(permission);
+        }
+
+        public boolean canManagePersonnelOffers() {
+            return has(ManagerPermission.PERSONNEL_MGMT);
+        }
+
+        public boolean canManageEvents() {
+            return has(ManagerPermission.EVENT_LIFECYCLE);
+        }
+
+        public boolean canManageInventory() {
+            return has(ManagerPermission.INVENTORY_MGMT) || has(ManagerPermission.MAP_DEFINITION);
+        }
+
+        public boolean canDefineMaps() {
+            return has(ManagerPermission.MAP_DEFINITION);
+        }
+
+        public boolean canManagePolicies() {
+            return has(ManagerPermission.POLICY_MODIFICATION);
+        }
+
+        public boolean canViewReports() {
+            return has(ManagerPermission.VIEW_REPORTS);
         }
     }
 

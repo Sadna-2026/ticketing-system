@@ -850,12 +850,10 @@ public class EventService {
 
     private void authorizeEventCreation(StaffAppointment appointment) {
         boolean allowed = appointment.isOwner()
-                || (appointment.isManager()
-                    && appointment.hasPermission(ManagerPermission.MAP_DEFINITION)
-                    && appointment.hasPermission(ManagerPermission.INVENTORY_MGMT));
+                || (appointment.isManager() && appointment.hasPermission(ManagerPermission.EVENT_LIFECYCLE));
         if (!allowed) {
             throw new SecurityException(
-                    "Insufficient permissions to create events");
+                    "Insufficient permissions: EVENT_LIFECYCLE required");
         }
     }
 

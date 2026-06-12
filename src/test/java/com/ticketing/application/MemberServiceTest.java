@@ -1253,6 +1253,40 @@ class MemberServiceTest {
         }
 
         @Test
+        void GivenManagerCaller_WhenGetCurrentCompanyAppointment_ThenOnlyOwnPermissionsReturned() {
+            UUID managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "m@test.com", "pass");
+            manager.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, ownerId,
+                    StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.EVENT_LIFECYCLE)));
+
+            when(sessionTokenService.extractMemberId(AUTH_TOKEN)).thenReturn(managerId);
+            when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
+
+            Optional<OrgNodeDTO> appointment = memberService.getCurrentCompanyAppointment(AUTH_TOKEN, COMPANY_NAME);
+
+            assertTrue(appointment.isPresent());
+            OrgNodeDTO node = appointment.orElseThrow();
+            assertEquals(managerId, node.memberId());
+            assertEquals("manager", node.username());
+            assertEquals(StaffAppointment.StaffRole.MANAGER, node.role());
+            assertEquals(Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.EVENT_LIFECYCLE),
+                    node.permissions());
+            assertTrue(node.subordinates().isEmpty());
+        }
+
+        @Test
+        void GivenMemberWithoutAppointment_WhenGetCurrentCompanyAppointment_ThenEmptyReturned() {
+            UUID memberId = UUID.randomUUID();
+            Member member = new Member(memberId, "member", "member@test.com", "pass");
+
+            when(sessionTokenService.extractMemberId(AUTH_TOKEN)).thenReturn(memberId);
+            when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+            assertTrue(memberService.getCurrentCompanyAppointment(AUTH_TOKEN, COMPANY_NAME).isEmpty());
+        }
+
+        @Test
         void GivenInvalidToken_WhenGetOrganizationChart_ThenIllegalArgumentException() {
             when(sessionTokenService.isValid(AUTH_TOKEN)).thenReturn(false);
             assertThrows(IllegalArgumentException.class, () -> memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME));

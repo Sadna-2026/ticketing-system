@@ -3,6 +3,7 @@ package com.ticketing.application.services;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,6 +22,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.MemberMapper;
+import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
@@ -406,6 +408,41 @@ public class MemberService {
                 .collect(Collectors.toList());
     }
 
+    // Returns pending role offers addressed to the authenticated member.
+    public List<PendingRoleOffer> listPendingRoleOffers(String token) {
+        UUID memberId = validateTokenForStaffAccess(token);
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new SecurityException("Authenticated member not found."));
+        return member.getActivePendingOffers();
+    }
+
+    // Returns only the authenticated member's own appointment in a company.
+    // This supports permission-scoped UI without exposing the full organization chart.
+    public Optional<OrgNodeDTO> getCurrentCompanyAppointment(String token, String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            throw new IllegalArgumentException("Company name is required.");
+        }
+
+        UUID memberId = validateTokenForStaffAccess(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests cannot view company permissions. Please log in.");
+        }
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new SecurityException("Authenticated member not found."));
+        StaffAppointment appt = member.getStaffAppointment(companyName);
+        if (appt == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new OrgNodeDTO(
+                member.getId(),
+                member.getUsername(),
+                appt.getRole(),
+                appt.getPermissions(),
+                appt.isRevoked(),
+                List.of()
+        ));
+    }
+
     private OrgNodeDTO buildSubtree(Member member, Map<UUID, List<Member>> subordinatesByAppointer, String companyName) {
         StaffAppointment appt = member.getStaffAppointment(companyName);
         
@@ -425,17 +462,21 @@ public class MemberService {
     }
 
     private UUID validateTokenForChart(String token) {
+        UUID memberId = validateTokenForStaffAccess(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests cannot view the organization chart. Please log in.");
+        }
+        return memberId;
+    }
+
+    private UUID validateTokenForStaffAccess(String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Authentication token is required.");
         }
         if (!sessionTokenService.isValid(token)) {
             throw new IllegalArgumentException("Invalid or expired authentication token.");
         }
-        UUID memberId = sessionTokenService.extractMemberId(token);
-        if (memberId == null) {
-            throw new SecurityException("Guests cannot view the organization chart. Please log in.");
-        }
-        return memberId;
+        return sessionTokenService.extractMemberId(token);
     }
 
     private boolean isValidRegisterRequest(RegisterRequest request) {
