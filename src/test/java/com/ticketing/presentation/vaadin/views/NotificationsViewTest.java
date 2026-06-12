@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,10 +23,12 @@ import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.server.Command;
 
 @DisplayName("NotificationsView")
@@ -138,6 +141,58 @@ class NotificationsViewTest {
         UI.getCurrent().remove(view);
 
         verify(presenter).unregisterRealtimeListener("member-1", "listener-1");
+    }
+
+    @Test
+    void GivenLoadFailure_WhenRefreshClicked_ThenSpecificFailureReasonIsShown() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        when(presenter.loadPendingNotifications())
+                .thenReturn(NotificationResult.failure("Log in as a member to view notifications."));
+        NotificationsView view = new NotificationsView(presenter);
+
+        clickButton(view, "Refresh notifications");
+
+        assertTrue(hasText(view, "Log in as a member to view notifications."));
+        assertTrue(hasText(view, "No notifications to show."));
+    }
+
+    @Test
+    void GivenGuestSession_WhenEnteringNotifications_ThenForwardedToHome() {
+        setSynchronousCurrentUi();
+        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event).forwardTo(HomeView.class);
+    }
+
+    @Test
+    void GivenMemberSession_WhenEnteringNotifications_ThenNavigationIsAllowed() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event, never()).forwardTo(HomeView.class);
+    }
+
+    /**
+     * Sets a current UI whose {@link UI#access(Command)} runs inline so that the view's
+     * {@code beforeEnter} guard, which marshals its info popup via {@code UI.getCurrent().access(...)},
+     * can run without a live {@link com.vaadin.flow.server.VaadinSession}.
+     */
+    private void setSynchronousCurrentUi() {
+        UI ui = new UI() {
+            @Override
+            public Future<Void> access(Command command) {
+                command.execute();
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        UI.setCurrent(ui);
     }
 
     private void attachViewToCurrentUi(Component view) {
