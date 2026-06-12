@@ -7,6 +7,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
@@ -18,14 +20,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter.AuthResult;
+import com.ticketing.presentation.vaadin.testsupport.SynchronousUi;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasLabel;
 import com.vaadin.flow.component.HasValueAndElement;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.textfield.PasswordField;
+import com.vaadin.flow.router.BeforeEnterEvent;
 
 @DisplayName("AuthView")
 @ExtendWith(VaadinSessionExtension.class)
@@ -352,5 +357,32 @@ class AuthViewTest {
             return "Current session: Member (" + state.username() + ")";
         }
         return state.guest() ? "Current session: Guest" : "Current session: none";
+    }
+
+    // ── HomeView navigation guard (FIX-V2-13) ────────────────────────────────
+
+    @Test
+    void GivenNoSession_WhenNavigatingToRoot_ThenForwardedToAuthView() {
+        HomeView view = new HomeView();
+        // Hold a strong reference so the UI is not GC'd before beforeEnter runs.
+        UI ui = SynchronousUi.create();
+        UI.setCurrent(ui);
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event).forwardTo(AuthView.class);
+    }
+
+    @Test
+    void GivenGuestSession_WhenNavigatingToRoot_ThenNavigationIsAllowed() {
+        SessionContext.setSessionToken("guest-token");
+        HomeView view = new HomeView();
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event, never()).forwardTo(AuthView.class);
+        SessionContext.clear();
     }
 }
