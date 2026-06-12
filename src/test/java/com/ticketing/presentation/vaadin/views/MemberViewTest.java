@@ -1,11 +1,15 @@
 package com.ticketing.presentation.vaadin.views;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,9 +30,13 @@ import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasLabel;
+import com.vaadin.flow.component.HasValidation;
 import com.vaadin.flow.component.HasValueAndElement;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.datepicker.DatePicker;
+import com.vaadin.flow.component.textfield.EmailField;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.BeforeEnterEvent;
 
 @DisplayName("MemberView")
@@ -45,8 +53,31 @@ class MemberViewTest {
     }
 
     @Test
+    void GivenGuestSession_WhenRendered_ThenProfileFormIsHiddenWithLoginMessage() {
+        SessionContext.setSessionToken("guest-token");
+
+        MemberView view = new MemberView(mock(MemberPresenter.class));
+
+        assertTrue(hasText(view, "You must be logged in to view your profile."));
+        assertNull(findButton(view, "Save"));
+        assertNull(findFieldValue(view, "Username"));
+    }
+
+    @Test
+    void GivenLoggedInMember_WhenRendered_ThenCurrentMemberDetailsAreLoadedIntoFields() {
+        memberSession();
+
+        MemberView view = new MemberView(presenterReturning(MEMBER));
+
+        assertEquals("alice", findFieldValue(view, "Username"));
+        assertEquals("alice@example.com", findFieldValue(view, "Email"));
+        assertEquals("050-1234567", findFieldValue(view, "Phone number"));
+        assertEquals(LocalDate.of(1990, 1, 1), findDateValue(view, "Date of birth"));
+    }
+
+    @Test
     void GivenLoggedInMember_WhenRendered_ThenMandatoryIdentityFieldsShowRequiredIndicatorAndOptionalFieldsDoNot() {
-        SessionContext.setMemberId(UUID.randomUUID());
+        memberSession();
 
         MemberView view = new MemberView(presenterReturning(MEMBER));
 
@@ -57,38 +88,87 @@ class MemberViewTest {
     }
 
     @Test
-    void GivenSaveClicked_WhenSuccess_ThenShowsSuccessMessage() {
-        SessionContext.setMemberId(UUID.randomUUID());
+    void GivenEditedProfile_WhenSaveClicked_ThenPresenterIsCalledAndSuccessMessageIsShown() {
+        memberSession();
         MemberPresenter presenter = presenterReturning(MEMBER);
-        when(presenter.updateIdentifyingDetails(any(), any(), any(), any()))
-                .thenReturn(new MemberPresenter.UpdateResult(true, "Profile updated."));
+        MemberDto updated = new MemberDto(
+                MEMBER.memberId(),
+                "alice-updated",
+                "alice.updated@example.com",
+                "050-7654321",
+                LocalDate.of(1991, 2, 2)
+        );
+        when(presenter.getCurrentMember()).thenReturn(MEMBER, updated);
+        when(presenter.updateIdentifyingDetails(
+                "alice-updated",
+                "alice.updated@example.com",
+                "050-7654321",
+                LocalDate.of(1991, 2, 2)
+        )).thenReturn(new MemberPresenter.UpdateResult(true, "Profile updated successfully."));
+
+        try (var uiMessagesMock = mockStatic(UiMessages.class)) {
+            MemberView view = new MemberView(presenter);
+            setFieldValue(view, "Username", "alice-updated");
+            setFieldValue(view, "Email", "alice.updated@example.com");
+            setFieldValue(view, "Phone number", "050-7654321");
+            setDateValue(view, "Date of birth", LocalDate.of(1991, 2, 2));
+
+            clickButton(view, "Save");
+
+            verify(presenter).updateIdentifyingDetails(
+                    "alice-updated",
+                    "alice.updated@example.com",
+                    "050-7654321",
+                    LocalDate.of(1991, 2, 2)
+            );
+            verify(presenter, times(2)).getCurrentMember();
+            uiMessagesMock.verify(() -> UiMessages.success("Profile updated successfully."));
+            assertEquals("alice-updated", findFieldValue(view, "Username"));
+            assertEquals("alice.updated@example.com", findFieldValue(view, "Email"));
+            assertFalse(((HasValidation) findTextField(view, "Username")).isInvalid());
+            assertFalse(((HasValidation) findEmailField(view, "Email")).isInvalid());
+        }
+    }
+
+    @Test
+    void GivenUnchangedProfile_WhenSaveClicked_ThenShowsInfoMessageWithoutCallingPresenter() {
+        memberSession();
+        MemberPresenter presenter = presenterReturning(MEMBER);
 
         try (var uiMessagesMock = mockStatic(UiMessages.class)) {
             MemberView view = new MemberView(presenter);
             clickButton(view, "Save");
 
-            uiMessagesMock.verify(() -> UiMessages.success("Profile updated."));
+            verify(presenter, never()).updateIdentifyingDetails(any(), any(), any(), any());
+            uiMessagesMock.verify(() -> UiMessages.info("No changes to save."));
         }
     }
 
     @Test
     void GivenSaveClicked_WhenFailure_ThenShowsSpecificErrorMessage() {
-        SessionContext.setMemberId(UUID.randomUUID());
+        memberSession();
         MemberPresenter presenter = presenterReturning(MEMBER);
         when(presenter.updateIdentifyingDetails(any(), any(), any(), any()))
-                .thenReturn(new MemberPresenter.UpdateResult(false, "Email already in use."));
+                .thenReturn(new MemberPresenter.UpdateResult(false, "Username or email already in use."));
 
         try (var uiMessagesMock = mockStatic(UiMessages.class)) {
             MemberView view = new MemberView(presenter);
+            setFieldValue(view, "Username", "owner");
             clickButton(view, "Save");
 
-            uiMessagesMock.verify(() -> UiMessages.error("Email already in use."));
+            verify(presenter).updateIdentifyingDetails(
+                    eq("owner"),
+                    eq("alice@example.com"),
+                    eq("050-1234567"),
+                    eq(LocalDate.of(1990, 1, 1))
+            );
+            uiMessagesMock.verify(() -> UiMessages.error("Username or email already in use."));
         }
     }
 
     @Test
     void GivenProfileLoadFails_WhenRendered_ThenShowsErrorMessage() {
-        SessionContext.setMemberId(UUID.randomUUID());
+        memberSession();
 
         try (var uiMessagesMock = mockStatic(UiMessages.class)) {
             new MemberView(presenterReturning(null));
@@ -113,7 +193,7 @@ class MemberViewTest {
 
     @Test
     void GivenMemberSession_WhenEnteringProfile_ThenNavigationIsAllowed() {
-        SessionContext.setMemberId(UUID.randomUUID());
+        memberSession();
         MemberView view = new MemberView(presenterReturning(MEMBER));
         BeforeEnterEvent event = mock(BeforeEnterEvent.class);
 
@@ -149,6 +229,82 @@ class MemberViewTest {
             out.add(field);
         }
         component.getChildren().forEach(child -> collectFieldsByLabel(child, label, out));
+    }
+
+    private static void memberSession() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+    }
+
+    private static boolean hasText(Component root, String expected) {
+        return components(root).stream()
+                .filter(com.vaadin.flow.component.HasText.class::isInstance)
+                .map(com.vaadin.flow.component.HasText.class::cast)
+                .anyMatch(component -> expected.equals(component.getText()));
+    }
+
+    private static List<Component> components(Component root) {
+        List<Component> result = new ArrayList<>();
+        collect(root, result);
+        return result;
+    }
+
+    private static void collect(Component component, List<Component> result) {
+        result.add(component);
+        component.getChildren().forEach(child -> collect(child, result));
+    }
+
+    private static String findFieldValue(Component root, String label) {
+        List<HasValueAndElement<?, ?>> fields = findFieldsByLabel(root, label);
+        if (fields.isEmpty()) {
+            return null;
+        }
+        Object value = fields.getFirst().getValue();
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static LocalDate findDateValue(Component root, String label) {
+        List<HasValueAndElement<?, ?>> fields = findFieldsByLabel(root, label);
+        if (fields.isEmpty()) {
+            return null;
+        }
+        return (LocalDate) fields.getFirst().getValue();
+    }
+
+    private static void setFieldValue(Component root, String label, String value) {
+        if ("Email".equals(label)) {
+            findEmailField(root, label).setValue(value);
+            return;
+        }
+        findTextField(root, label).setValue(value);
+    }
+
+    private static void setDateValue(Component root, String label, LocalDate value) {
+        findDatePicker(root, label).setValue(value);
+    }
+
+    private static TextField findTextField(Component root, String label) {
+        return findFieldsByLabel(root, label).stream()
+                .filter(TextField.class::isInstance)
+                .map(TextField.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("TextField not found: " + label));
+    }
+
+    private static EmailField findEmailField(Component root, String label) {
+        return findFieldsByLabel(root, label).stream()
+                .filter(EmailField.class::isInstance)
+                .map(EmailField.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("EmailField not found: " + label));
+    }
+
+    private static DatePicker findDatePicker(Component root, String label) {
+        return findFieldsByLabel(root, label).stream()
+                .filter(DatePicker.class::isInstance)
+                .map(DatePicker.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("DatePicker not found: " + label));
     }
 
     private void clickButton(Component root, String text) {
