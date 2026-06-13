@@ -80,9 +80,35 @@ skipped, so local dev, the existing stub gateways and the test suite are unaffec
 TICKETING_EXTERNAL_BASE_URL=https://<wsep-host>/
 ```
 
-> The payment and ticket-supply gateways are wired onto this client in V3-17 / V3-18; V3-16
-> delivers the client and the startup handshake. Tests exercise the client against a stubbed
-> endpoint (`MockRestServiceServer`), never the live system.
+### Payment gateway (V3-17)
+
+When `base-url` is set, `HttpPaymentGateway` becomes the active `IPaymentGateway` and **replaces**
+`StubPaymentGateway` — the two carry mutually exclusive conditions on `ticketing.external.base-url`,
+so the always-approving stub never runs alongside the real gateway (it can't mask a real decline).
+With `base-url` blank (the default) the stub stays active for local dev and tests.
+
+`charge` POSTs `action_type=pay`; a transaction id in `[10000, 100000]` is an approval, `-1` (or any
+other body, or an unreachable endpoint) is a decline. `refund` POSTs `action_type=refund` and treats
+`1` as success, `-1`/anything else as failure.
+
+The WSEP `pay` action also needs card details + a currency, but the purchase flow does not capture
+cardholder input (the `IPaymentGateway` contract is amount + order metadata only). Those fields are
+therefore **config-driven** with sandbox-friendly defaults; capturing real cardholder input is a
+future ticket.
+
+| Env var | Default | `application.yml` key |
+|---------|---------|-----------------------|
+| `TICKETING_EXTERNAL_PAYMENT_CURRENCY` | `USD` | `ticketing.external.payment.currency` |
+| `TICKETING_EXTERNAL_PAYMENT_CARD_NUMBER` | *(sandbox placeholder)* | `ticketing.external.payment.card-number` |
+| `TICKETING_EXTERNAL_PAYMENT_CARD_MONTH` | `12` | `ticketing.external.payment.card-month` |
+| `TICKETING_EXTERNAL_PAYMENT_CARD_YEAR` | `2030` | `ticketing.external.payment.card-year` |
+| `TICKETING_EXTERNAL_PAYMENT_CARD_HOLDER` | `Ticketing System` | `ticketing.external.payment.card-holder` |
+| `TICKETING_EXTERNAL_PAYMENT_CARD_CVV` | `123` | `ticketing.external.payment.card-cvv` |
+| `TICKETING_EXTERNAL_PAYMENT_CARD_ID` | `000000000` | `ticketing.external.payment.card-id` |
+
+> The ticket-supply gateway is wired onto this client in V3-18; V3-16 delivers the client and the
+> startup handshake. Tests exercise the gateways against a stubbed endpoint (`MockRestServiceServer`),
+> never the live system.
 
 ## Initial-state file
 
