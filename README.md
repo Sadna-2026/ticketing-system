@@ -106,9 +106,27 @@ future ticket.
 | `TICKETING_EXTERNAL_PAYMENT_CARD_CVV` | `123` | `ticketing.external.payment.card-cvv` |
 | `TICKETING_EXTERNAL_PAYMENT_CARD_ID` | `000000000` | `ticketing.external.payment.card-id` |
 
-> The ticket-supply gateway is wired onto this client in V3-18; V3-16 delivers the client and the
-> startup handshake. Tests exercise the gateways against a stubbed endpoint (`MockRestServiceServer`),
-> never the live system.
+### Ticket-supply gateway (V3-18)
+
+When `base-url` is set, `HttpTicketSupplyGateway` becomes the active `ITicketSupplyGateway` and
+**replaces** `StubTicketSupplyGateway` — the two carry mutually exclusive conditions on
+`ticketing.external.base-url`, so the always-succeeding stub never sits alongside the real gateway in
+`OrderService`'s supply-gateway failover (where it could mask a real supply failure). With `base-url`
+blank (the default) the stub stays active for local dev and tests.
+
+`issueTickets` POSTs one `action_type=issue_ticket` per ticket (the purchase flow already expands a GA
+quantity into one request per ticket), with `customer_id`, `event_id` and `zone`: general admission
+adds `quantity=1`, assigned seating adds `is_seating=true` + the seat as a JSON `seats` array. The
+endpoint returns the ticket code on success, or `-1` (or an empty/unexpected body, or an unreachable
+endpoint) on failure; on a mid-batch failure the already-issued codes are returned with the failed
+result so `OrderService` can cancel them. `cancelTickets` POSTs `action_type=cancel_ticket` per code
+and treats `1` as success, `-1`/anything else as failure.
+
+The `zone` and seat ids come from the order (`OrderItem.zoneId`/`seatId`), so the ticket gateway needs
+no extra configuration.
+
+> V3-16 delivers the client and the startup handshake. Tests exercise the gateways against a stubbed
+> endpoint (`MockRestServiceServer`), never the live system.
 
 ## Initial-state file
 
