@@ -135,6 +135,16 @@ public class CompanyView extends VerticalLayout {
     private final BigDecimalField zonePrice = new BigDecimalField("Zone price");
     private final IntegerField gaCapacity = new IntegerField("GA capacity");
     private final TextField sectionName = new TextField("Venue section");
+
+    private final ComboBox<String> zoneType = new ComboBox<>("Zone type");
+    private final TextField newZoneName = new TextField("Zone name");
+    private final BigDecimalField newZonePrice = new BigDecimalField("Price per ticket");
+    private final IntegerField newZoneCapacity = new IntegerField("GA capacity");
+    private final TextField newZoneSeatRows = new TextField("Seat rows (e.g. A:1-5, B:1-8)");
+    private final TextField newZoneSection = new TextField("Venue section name");
+    private final VerticalLayout zoneListDisplay = new VerticalLayout();
+    private final List<ZoneEntry> configuredZones = new ArrayList<>();
+
     private final TextField eventId = new TextField("Event ID");
     private final TextField newEventName = new TextField("New event name");
     private final TextArea newEventDescription = new TextArea("New event description");
@@ -299,6 +309,7 @@ public class CompanyView extends VerticalLayout {
         inventoryEventId.setPlaceholder("Event UUID");
         inventoryZoneId.setPlaceholder("Zone UUID");
         seatId.setPlaceholder("Assigned seat UUID");
+        configureZoneBuilder();
     }
 
     private void configureCompanyEventsGrid() {
@@ -419,7 +430,8 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout eventManagementSection() {
-        Button createEvent = new Button("Create company event", event -> createEvent());
+        Button createEventLegacy = new Button("Create company event", event -> createEvent());
+        Button createEventMultiZone = new Button("Create event with zones", event -> createEventWithZones());
         Button editEvent = new Button("Edit event details", event -> editEvent());
         Button publishEvent = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(parseUuid(eventId, "event"))));
         Button cancelEvent = new Button("Cancel event", event -> handleEventAction(presenter.cancelEvent(parseUuid(eventId, "event"))));
@@ -432,27 +444,40 @@ public class CompanyView extends VerticalLayout {
                 startTime,
                 endTime,
                 doorsOpenTime,
-                lockMinutes,
-                zoneName,
-                zonePrice,
-                gaCapacity,
-                sectionName
+                lockMinutes
         );
         createForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
+
+        FormLayout legacyZoneForm = new FormLayout(zoneName, zonePrice, gaCapacity, sectionName);
+        legacyZoneForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 4));
+
+        Button addZoneBtn = new Button("Add zone", event -> addZoneToList());
+        FormLayout zoneBuilderForm = new FormLayout(zoneType, newZoneName, newZonePrice, newZoneCapacity, newZoneSeatRows, newZoneSection);
+        zoneBuilderForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
         FormLayout editForm = new FormLayout(eventId, newEventName, newEventDescription, newArtist, newStartTime, newEndTime, newDoorsOpenTime);
         editForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
-        HorizontalLayout actions = new HorizontalLayout(createEvent, editEvent, publishEvent, cancelEvent);
-        actions.setAlignItems(Alignment.BASELINE);
+        HorizontalLayout editActions = new HorizontalLayout(editEvent, publishEvent, cancelEvent);
+        editActions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
                 new H3("Event management"),
                 new Paragraph("Create, edit, publish, and cancel company events."),
-                new H4("Create and edit"),
+                new H4("Event details"),
                 createForm,
+                new H4("Configure zones"),
+                new Paragraph("Add one or more zones (GA or Assigned Seating) with different prices. Each zone needs a venue section name."),
+                zoneBuilderForm,
+                addZoneBtn,
+                zoneListDisplay,
+                createEventMultiZone,
+                new H4("Quick create (single GA zone)"),
+                legacyZoneForm,
+                createEventLegacy,
+                new H4("Edit existing event"),
                 editForm,
-                actions,
+                editActions,
                 eventStatus
         );
         section.setPadding(false);
@@ -544,7 +569,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout policySection() {
-        purchasePolicyType.setItems("Age restriction", "Max quantity", "Min quantity");
+        purchasePolicyType.setItems("Age restriction", "Max quantity", "Min quantity", "No orphan seat");
         purchasePolicyType.setValue("Age restriction");
         policyAge.setMin(1);
         policyAge.setValue(18);
@@ -760,6 +785,8 @@ public class CompanyView extends VerticalLayout {
                     return null;
                 }
                 return new MaxQuantityPolicy(max);
+            } else if ("No orphan seat".equals(type)) {
+                return new com.ticketing.domain.event.NoOrphanSeatPolicy();
             } else {
                 Integer min = policyMinTickets.getValue();
                 if (min == null || min <= 0) {
@@ -924,7 +951,7 @@ public class CompanyView extends VerticalLayout {
                 sectionName.getValue()
         );
         handleEventAction(result);
-        if (result.success() && result.eventId() != null) {
+        if (result != null && result.success() && result.eventId() != null) {
             eventId.setValue(result.eventId().toString());
             inventoryEventId.setValue(result.eventId().toString());
         }
@@ -1009,6 +1036,11 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void handleEventAction(EventActionResult result) {
+        if (result == null) {
+            eventStatus.setText("No response from event action.");
+            UiMessages.error("No response from event action.");
+            return;
+        }
         if (result.eventDetails() != null) {
             EventDetailsDTO details = result.eventDetails();
             eventStatus.setText(result.message() + " " + details.name() + " | " + details.status());
@@ -1131,5 +1163,168 @@ public class CompanyView extends VerticalLayout {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private record ZoneEntry(String type, String name, BigDecimal price, int capacity,
+                             String seatRows, String section) {
+        String summary() {
+            if ("Assigned Seating".equals(type)) {
+                return name + " [Assigned] $" + price.toPlainString() + " seats: " + seatRows + " (section: " + section + ")";
+            }
+            return name + " [GA] $" + price.toPlainString() + " × " + capacity + " (section: " + section + ")";
+        }
+
+        com.ticketing.application.CreateEventRequest.ZoneSpec toZoneSpec() {
+            if ("Assigned Seating".equals(type)) {
+                List<com.ticketing.application.CreateEventRequest.SeatSpec> seats = parseSeatRows(seatRows);
+                return new com.ticketing.application.CreateEventRequest.AssignedZoneSpec(name, price, seats);
+            }
+            return new com.ticketing.application.CreateEventRequest.GAZoneSpec(name, price, capacity);
+        }
+
+        private static List<com.ticketing.application.CreateEventRequest.SeatSpec> parseSeatRows(String input) {
+            List<com.ticketing.application.CreateEventRequest.SeatSpec> seats = new ArrayList<>();
+            if (input == null || input.isBlank()) return seats;
+            for (String part : input.split(",")) {
+                String trimmed = part.trim();
+                int colonIdx = trimmed.indexOf(':');
+                if (colonIdx < 0) continue;
+                String row = trimmed.substring(0, colonIdx).trim();
+                String range = trimmed.substring(colonIdx + 1).trim();
+                int dashIdx = range.indexOf('-');
+                if (dashIdx >= 0) {
+                    try {
+                        int from = Integer.parseInt(range.substring(0, dashIdx).trim());
+                        int to = Integer.parseInt(range.substring(dashIdx + 1).trim());
+                        for (int n = from; n <= to; n++) {
+                            seats.add(new com.ticketing.application.CreateEventRequest.SeatSpec(row, String.valueOf(n)));
+                        }
+                    } catch (NumberFormatException ignored) {
+                        seats.add(new com.ticketing.application.CreateEventRequest.SeatSpec(row, range));
+                    }
+                } else {
+                    seats.add(new com.ticketing.application.CreateEventRequest.SeatSpec(row, range));
+                }
+            }
+            return seats;
+        }
+    }
+
+    private void configureZoneBuilder() {
+        zoneType.setItems("General Admission", "Assigned Seating");
+        zoneType.setValue("General Admission");
+        newZonePrice.setValue(BigDecimal.ZERO);
+        newZoneCapacity.setMin(1);
+        newZoneCapacity.setValue(100);
+        newZoneSeatRows.setPlaceholder("e.g. A:1-5, B:1-8");
+        newZoneSection.setPlaceholder("e.g. Main Floor");
+        zoneListDisplay.setPadding(false);
+        zoneListDisplay.setSpacing(false);
+        refreshZoneListDisplay();
+
+        zoneType.addValueChangeListener(e -> {
+            boolean isGA = "General Admission".equals(e.getValue());
+            newZoneCapacity.setVisible(isGA);
+            newZoneSeatRows.setVisible(!isGA);
+        });
+        newZoneSeatRows.setVisible(false);
+    }
+
+    private void addZoneToList() {
+        String type = zoneType.getValue();
+        String name = newZoneName.getValue();
+        BigDecimal price = newZonePrice.getValue();
+        String section = newZoneSection.getValue();
+
+        if (name == null || name.isBlank()) {
+            UiMessages.error("Zone name is required.");
+            return;
+        }
+        if (price == null || price.signum() < 0) {
+            UiMessages.error("Zone price must be non-negative.");
+            return;
+        }
+        if (section == null || section.isBlank()) {
+            UiMessages.error("Venue section name is required.");
+            return;
+        }
+
+        if ("Assigned Seating".equals(type)) {
+            String seatRows = newZoneSeatRows.getValue();
+            if (seatRows == null || seatRows.isBlank()) {
+                UiMessages.error("Seat rows are required for assigned seating (e.g. A:1-5, B:1-8).");
+                return;
+            }
+            configuredZones.add(new ZoneEntry(type, name.trim(), price, 0, seatRows.trim(), section.trim()));
+        } else {
+            Integer capacity = newZoneCapacity.getValue();
+            if (capacity == null || capacity <= 0) {
+                UiMessages.error("GA capacity must be positive.");
+                return;
+            }
+            configuredZones.add(new ZoneEntry(type, name.trim(), price, capacity, "", section.trim()));
+        }
+
+        newZoneName.clear();
+        newZoneSection.clear();
+        refreshZoneListDisplay();
+        UiMessages.success("Zone added: " + configuredZones.get(configuredZones.size() - 1).summary());
+    }
+
+    private void refreshZoneListDisplay() {
+        zoneListDisplay.removeAll();
+        if (configuredZones.isEmpty()) {
+            zoneListDisplay.add(new Span("No zones configured yet. Add at least one zone."));
+            return;
+        }
+        for (int i = 0; i < configuredZones.size(); i++) {
+            ZoneEntry entry = configuredZones.get(i);
+            int idx = i;
+            HorizontalLayout row = new HorizontalLayout();
+            row.setAlignItems(Alignment.BASELINE);
+            row.add(new Span((i + 1) + ". " + entry.summary()));
+            Button remove = new Button("Remove", e -> {
+                configuredZones.remove(idx);
+                refreshZoneListDisplay();
+            });
+            remove.getStyle().set("color", "var(--lumo-error-text-color)");
+            row.add(remove);
+            zoneListDisplay.add(row);
+        }
+    }
+
+    private void createEventWithZones() {
+        if (configuredZones.isEmpty()) {
+            UiMessages.error("Add at least one zone before creating the event.");
+            return;
+        }
+
+        List<com.ticketing.application.CreateEventRequest.ZoneSpec> zones = new ArrayList<>();
+        Map<String, String> sectionToZone = new java.util.LinkedHashMap<>();
+
+        for (ZoneEntry entry : configuredZones) {
+            zones.add(entry.toZoneSpec());
+            sectionToZone.put(entry.section(), entry.name());
+        }
+
+        EventActionResult result = presenter.createEventWithZones(
+                eventCompanyName.getValue(),
+                eventName.getValue(),
+                eventDescription.getValue(),
+                eventCategory.getValue(),
+                instant(startTime),
+                instant(endTime),
+                instant(doorsOpenTime),
+                lockMinutes.getValue(),
+                zones,
+                sectionToZone
+        );
+        handleEventAction(result);
+        if (result.success() && result.eventId() != null) {
+            eventId.setValue(result.eventId().toString());
+            inventoryEventId.setValue(result.eventId().toString());
+            configuredZones.clear();
+            refreshZoneListDisplay();
+        }
     }
 }

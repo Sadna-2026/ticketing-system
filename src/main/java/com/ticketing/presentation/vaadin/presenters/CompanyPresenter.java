@@ -487,6 +487,61 @@ public class CompanyPresenter {
         }
     }
 
+    public EventActionResult createEventWithZones(
+            String companyName,
+            String name,
+            String description,
+            EventCategory category,
+            Instant startTime,
+            Instant endTime,
+            Instant doorsOpenTime,
+            Integer lockMinutes,
+            List<CreateEventRequest.ZoneSpec> zones,
+            Map<String, String> sectionToZoneName
+    ) {
+        String token = memberToken();
+        if (token == null) {
+            return EventActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (category == null) {
+            return EventActionResult.failure("Event category is required.");
+        }
+        if (lockMinutes == null || lockMinutes <= 0) {
+            return EventActionResult.failure("Lock minutes must be positive.");
+        }
+        String normalizedCompanyName = blankToNull(companyName);
+        if (normalizedCompanyName == null) {
+            return EventActionResult.failure("Company name is required.");
+        }
+        String normalizedEventName = blankToNull(name);
+        if (normalizedEventName == null) {
+            return EventActionResult.failure("Event name is required.");
+        }
+        if (zones == null || zones.isEmpty()) {
+            return EventActionResult.failure("At least one zone is required.");
+        }
+        if (sectionToZoneName == null || sectionToZoneName.isEmpty()) {
+            return EventActionResult.failure("At least one venue section mapping is required.");
+        }
+
+        try {
+            CreateEventRequest request = new CreateEventRequest(
+                    normalizedCompanyName,
+                    normalizedEventName,
+                    blankToNull(description),
+                    category,
+                    new EventSchedule(startTime, endTime, doorsOpenTime),
+                    new LockTimerDuration(Duration.ofMinutes(lockMinutes)),
+                    zones,
+                    sectionToZoneName
+            );
+            UUID eventId = eventService.createEvent(token, request);
+            return EventActionResult.created("Event created with " + zones.size() + " zone(s).", eventId);
+        } catch (RuntimeException ex) {
+            return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
     public EventActionResult editEvent(
             UUID eventId,
             String name,
@@ -869,6 +924,8 @@ public class CompanyPresenter {
             return "Max quantity: at most " + p.getMaxTickets() + " tickets";
         if (policy instanceof com.ticketing.domain.event.MinQuantityPolicy p)
             return "Min quantity: at least " + p.getMinTickets() + " tickets";
+        if (policy instanceof com.ticketing.domain.event.NoOrphanSeatPolicy)
+            return "No orphan seat: prevents leaving a single isolated seat in a row";
         if (policy instanceof com.ticketing.domain.event.AndPolicy p) {
             StringBuilder sb = new StringBuilder("AND(");
             for (int i = 0; i < p.getPolicies().size(); i++) {

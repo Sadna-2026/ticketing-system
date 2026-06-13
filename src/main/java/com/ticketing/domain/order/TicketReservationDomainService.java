@@ -156,6 +156,17 @@ public class TicketReservationDomainService {
                 });
 
         releaseInventoryForItem(event, item);
+
+        if (item.isAssignedSeat()) {
+            java.time.LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
+            PurchaseContext ctx = new PurchaseContext(order, order.getMemberId(), buyerDob, event, java.util.Set.of());
+            PolicyResult policyResult = event.getEventPurchasePolicy().isAllowed(ctx);
+            if (!policyResult.allowed()) {
+                event.findZone(item.getZoneId()).lockSeat(item.getSeatId());
+                throw new IllegalStateException(policyResult.reason());
+            }
+        }
+
         saveEvent(event);
 
         order.removeItem(itemId);
@@ -298,9 +309,13 @@ public class TicketReservationDomainService {
             additionalTickets += pick.quantity();
         }
 
+        java.util.Set<java.util.UUID> incomingSeatIds = request.seats().stream()
+                .map(SelectionRequest.SeatPick::seatId)
+                .collect(java.util.stream.Collectors.toSet());
+
         ActiveOrder simulatedOrder = order.simulateWithAdditionalTickets(additionalTickets);
         java.time.LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
-        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob);
+        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob, event, incomingSeatIds);
         PolicyResult result = event.getEventPurchasePolicy().isAllowed(ctx);
         if (!result.allowed()) {
             throw new IllegalStateException(result.reason());

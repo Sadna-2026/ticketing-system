@@ -85,6 +85,8 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Revoke personnel"));
         assertTrue(hasButton(view, "Change manager permissions"));
         assertTrue(hasButton(view, "Create company event"));
+        assertTrue(hasButton(view, "Create event with zones"));
+        assertTrue(hasButton(view, "Add zone"));
         assertTrue(hasButton(view, "Edit event details"));
         assertTrue(hasButton(view, "Publish event"));
         assertTrue(hasButton(view, "Cancel event"));
@@ -193,8 +195,8 @@ class CompanyViewTest {
         UUID eventId = UUID.randomUUID();
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
-        when(presenter.createEvent(eq("Acme"), eq("Show"), eq("desc"), eq(EventCategory.CONCERT),
-                any(), any(), any(), eq(15), eq("Floor"), eq(new BigDecimal("50.00")), eq(100), eq("Main Hall")))
+        when(presenter.createEvent(any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(EventActionResult.created("Event created.", eventId));
         when(presenter.publishEvent(eventId)).thenReturn(ActionResult.success("Event published."));
         when(presenter.cancelEvent(eventId)).thenReturn(ActionResult.success("Event cancelled."));
