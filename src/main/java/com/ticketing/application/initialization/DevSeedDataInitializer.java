@@ -34,6 +34,7 @@ import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
+import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.event.VenueMap;
@@ -91,6 +92,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID MIXED_LIMITED_GA_ZONE_ID = UUID.fromString("88888888-0000-0000-0000-0000000000a2");
     public static final UUID COUPON_CHECKOUT_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     public static final UUID COUPON_CHECKOUT_GA_ZONE_ID = UUID.fromString("99999999-0000-0000-0000-000000000001");
+    public static final UUID NO_ORPHAN_EVENT_ID = UUID.fromString("aabbccdd-aabb-aabb-aabb-aabbccddeeff");
+    public static final UUID NO_ORPHAN_SEAT_ZONE_ID = UUID.fromString("aabbccdd-0000-0000-0000-0000000000a1");
     public static final String CHECKOUT_COUPON_CODE = "SAVE20";
 
     private final boolean initializePlatform;
@@ -311,6 +314,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 new BigDecimal("25.00"), 40);
         saveCouponCheckoutEventIfMissing();
         saveMixedLimitedEventIfMissing();
+        saveNoOrphanSeatEventIfMissing();
     }
 
     private void saveCouponCheckoutEventIfMissing() {
@@ -587,5 +591,58 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         event.publish();
         eventRepository.save(event);
         log.info("Seeded mixed limited event '{}' with max quantity 3", event.getName());
+    }
+
+    private void saveNoOrphanSeatEventIfMissing() {
+        if (eventRepository.findById(NO_ORPHAN_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(35));
+        Event event = new Event(NO_ORPHAN_EVENT_ID, COMPANY_NAME, "No-Orphan Seat Demo",
+                "Seeded event with NoOrphanSeatPolicy: selecting seats that leave a single isolated seat is rejected.",
+                EventCategory.PLAY,
+                new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofMinutes(45))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                new NoDiscountPolicy());
+        event.setArtist("QA Theater");
+        event.setRegion("Tel Aviv");
+
+        InventoryZone zone = InventoryZone.createAssigned(NO_ORPHAN_SEAT_ZONE_ID, "Main Hall", new BigDecimal("100.00"));
+        Seat a1 = new Seat(UUID.randomUUID(), "A", "1");
+        Seat a2 = new Seat(UUID.randomUUID(), "A", "2");
+        Seat a3 = new Seat(UUID.randomUUID(), "A", "3");
+        Seat a4 = new Seat(UUID.randomUUID(), "A", "4");
+        Seat a5 = new Seat(UUID.randomUUID(), "A", "5");
+        Seat b1 = new Seat(UUID.randomUUID(), "B", "1");
+        Seat b2 = new Seat(UUID.randomUUID(), "B", "2");
+        Seat b3 = new Seat(UUID.randomUUID(), "B", "3");
+        Seat b4 = new Seat(UUID.randomUUID(), "B", "4");
+        Seat b5 = new Seat(UUID.randomUUID(), "B", "5");
+        for (Seat s : List.of(a1, a2, a3, a4, a5, b1, b2, b3, b4, b5)) {
+            zone.addSeat(s);
+        }
+        event.addZone(zone);
+        event.setVenueMap(new VenueMap(Map.of("Main Hall", NO_ORPHAN_SEAT_ZONE_ID)));
+
+        List<LayoutCell> cells = List.of(
+                LayoutCell.stage(0, 1, "Stage"),
+                LayoutCell.stage(0, 2, "Stage"),
+                LayoutCell.stage(0, 3, "Stage"),
+                LayoutCell.seat(1, 0, NO_ORPHAN_SEAT_ZONE_ID, a1.getId()),
+                LayoutCell.seat(1, 1, NO_ORPHAN_SEAT_ZONE_ID, a2.getId()),
+                LayoutCell.seat(1, 2, NO_ORPHAN_SEAT_ZONE_ID, a3.getId()),
+                LayoutCell.seat(1, 3, NO_ORPHAN_SEAT_ZONE_ID, a4.getId()),
+                LayoutCell.seat(1, 4, NO_ORPHAN_SEAT_ZONE_ID, a5.getId()),
+                LayoutCell.seat(2, 0, NO_ORPHAN_SEAT_ZONE_ID, b1.getId()),
+                LayoutCell.seat(2, 1, NO_ORPHAN_SEAT_ZONE_ID, b2.getId()),
+                LayoutCell.seat(2, 2, NO_ORPHAN_SEAT_ZONE_ID, b3.getId()),
+                LayoutCell.seat(2, 3, NO_ORPHAN_SEAT_ZONE_ID, b4.getId()),
+                LayoutCell.seat(2, 4, NO_ORPHAN_SEAT_ZONE_ID, b5.getId()));
+        event.setVenueLayout(new VenueLayout(3, 5, cells));
+
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded no-orphan-seat event '{}' with 2 rows x 5 seats", event.getName());
     }
 }
