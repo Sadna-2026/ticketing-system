@@ -91,7 +91,9 @@ public class HttpPaymentGateway implements IPaymentGateway {
             if (transactionId != null
                     && transactionId >= MIN_TRANSACTION_ID
                     && transactionId <= MAX_TRANSACTION_ID) {
-                return PaymentResult.successful(Integer.toString(transactionId));
+                // Return the endpoint's own response verbatim (refund echoes it back), rather than a
+                // re-stringified int, so the transaction id is preserved exactly as issued.
+                return PaymentResult.successful(body);
             }
             log.warn("External payment declined or returned an unexpected response: '{}'", body);
             return PaymentResult.failed("Payment was declined by the external payment system.");
