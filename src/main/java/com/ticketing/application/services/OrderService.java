@@ -215,6 +215,16 @@ public class OrderService {
                 });
 
         releaseInventoryForItem(event, item);
+
+        if (item.isAssignedSeat()) {
+            PurchaseContext ctx = new PurchaseContext(order, memberId, null, event, java.util.Set.of());
+            PolicyResult policyResult = event.getEventPurchasePolicy().isAllowed(ctx);
+            if (!policyResult.allowed()) {
+                event.findZone(item.getZoneId()).lockSeat(item.getSeatId());
+                throw new IllegalStateException(policyResult.reason());
+            }
+        }
+
         checkAndPublishAvailable(event);
         saveEvent(event);
 
@@ -790,7 +800,7 @@ public class OrderService {
     }
 
     private void validatePurchasePolicy(Event event, ActiveOrder order, UUID memberId, LocalDate buyerDateOfBirth) {
-        PurchaseContext ctx = new PurchaseContext(order, memberId, buyerDateOfBirth);
+        PurchaseContext ctx = new PurchaseContext(order, memberId, buyerDateOfBirth, event, java.util.Set.of());
         PolicyResult validation = event.getEventPurchasePolicy().isAllowed(ctx);
         if (!validation.allowed()) {
             throw new IllegalStateException("Purchase policy violation: "
@@ -807,9 +817,13 @@ public class OrderService {
             additionalTickets += pick.quantity();
         }
 
+        java.util.Set<UUID> incomingSeatIds = request.seats().stream()
+                .map(com.ticketing.domain.order.SelectionRequest.SeatPick::seatId)
+                .collect(java.util.stream.Collectors.toSet());
+
         ActiveOrder simulatedOrder = order.simulateWithAdditionalTickets(additionalTickets);
         LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
-        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob);
+        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob, event, incomingSeatIds);
         PolicyResult result = event.getEventPurchasePolicy().isAllowed(ctx);
         if (!result.allowed()) {
             throw new IllegalStateException(result.reason());

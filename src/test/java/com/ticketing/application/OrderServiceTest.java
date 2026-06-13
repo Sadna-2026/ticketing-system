@@ -48,6 +48,7 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxQuantityPolicy;
+import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
@@ -1167,6 +1168,145 @@ public class OrderServiceTest {
         Event event = eventRepo.findById(eventId).orElseThrow();
         assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
         assertEquals(0, event.findZone(gaZoneId).getLockedCount());
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenSelectionLeavesOrphan_ThenReservationBlocked() {
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID(), seat2 = UUID.randomUUID(),
+             seat3 = UUID.randomUUID(), seat4 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "A", "1"));
+        zone.addSeat(new Seat(seat2, "A", "2"));
+        zone.addSeat(new Seat(seat3, "A", "3"));
+        zone.addSeat(new Seat(seat4, "A", "4"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+
+        assertThrows(IllegalStateException.class,
+                () -> orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat2));
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenAdjacentSelection_ThenReservationAllowed() {
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID(), seat2 = UUID.randomUUID(),
+             seat3 = UUID.randomUUID(), seat4 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "A", "1"));
+        zone.addSeat(new Seat(seat2, "A", "2"));
+        zone.addSeat(new Seat(seat3, "A", "3"));
+        zone.addSeat(new Seat(seat4, "A", "4"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+        orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat1);
+        orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat2);
+
+        Event after = eventRepo.findById(orphanEventId).orElseThrow();
+        assertTrue(after.findZone(orphanZoneId).findSeat(seat1).isLocked());
+        assertTrue(after.findZone(orphanZoneId).findSeat(seat2).isLocked());
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenEventWithoutPolicy_ThenOrphanSelectionAllowed() {
+        // Default event has AlwaysAllow — orphan-creating selection should pass
+        orderService.createOrder(guestToken, eventId);
+        orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
+
+        Event after = eventRepo.findById(eventId).orElseThrow();
+        assertTrue(after.findZone(assignedZoneId).findSeat(seatId).isLocked());
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenRemovalCreatesOrphan_ThenRemovalBlocked() {
+        // Row: [1][2][3][4][5] — lock 1,2,3, then try removing 2
+        // Post-removal: [locked][free][locked][free][free] → seat 2 orphaned
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID(), seat2 = UUID.randomUUID(),
+             seat3 = UUID.randomUUID(), seat4 = UUID.randomUUID(),
+             seat5 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "A", "1"));
+        zone.addSeat(new Seat(seat2, "A", "2"));
+        zone.addSeat(new Seat(seat3, "A", "3"));
+        zone.addSeat(new Seat(seat4, "A", "4"));
+        zone.addSeat(new Seat(seat5, "A", "5"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+        UUID item1 = orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat1);
+        UUID item2 = orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat2);
+        UUID item3 = orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat3);
+
+        assertThrows(IllegalStateException.class,
+                () -> orderService.removeItemFromOrder(guestToken, item2));
+
+        Event after = eventRepo.findById(orphanEventId).orElseThrow();
+        assertTrue(after.findZone(orphanZoneId).findSeat(seat2).isLocked(),
+                "Seat should remain locked after blocked removal");
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenRemovalLeavesNoOrphan_ThenRemovalAllowed() {
+        // Row: [1][2][3][4] — lock 1,2, then remove 2
+        // Post-removal: [locked][free][free][free] → no orphan (seat 2 has free neighbor 3)
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID(), seat2 = UUID.randomUUID(),
+             seat3 = UUID.randomUUID(), seat4 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "A", "1"));
+        zone.addSeat(new Seat(seat2, "A", "2"));
+        zone.addSeat(new Seat(seat3, "A", "3"));
+        zone.addSeat(new Seat(seat4, "A", "4"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+        UUID item1 = orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat1);
+        UUID item2 = orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat2);
+
+        orderService.removeItemFromOrder(guestToken, item2);
+
+        Event after = eventRepo.findById(orphanEventId).orElseThrow();
+        assertTrue(after.findZone(orphanZoneId).findSeat(seat2).isAvailable(),
+                "Seat should be released after allowed removal");
     }
 
 }
