@@ -124,8 +124,16 @@ class SeatMap extends LitElement {
   }
 
   _notifySelectionCount() {
-    if (this.$server && this.$server.notifySelectionCount) {
-      this.$server.notifySelectionCount(this._selectedCount());
+    const ids = (this.seats || [])
+      .filter((s) => s.selected && !s.taken)
+      .map((s) => s.id);
+    if (this.$server) {
+      if (this.$server.notifySelectionCount) {
+        this.$server.notifySelectionCount(ids.length);
+      }
+      if (this.$server.onStagedSelectionChanged) {
+        this.$server.onStagedSelectionChanged(ids);
+      }
     }
   }
 
@@ -219,6 +227,16 @@ class SeatMap extends LitElement {
     this._notifySelectionCount();
   }
 
+  /** Restore buyer's staged picks after the map re-attaches (e.g. tab navigation). */
+  applyStagedSelection(ids) {
+    const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
+    this.seats = (this.seats || []).map((seat) => ({
+      ...seat,
+      selected: idSet.has(seat.id) && !seat.taken,
+    }));
+    this._notifySelectionCount();
+  }
+
   /**
    * Apply server availability; drop staged picks on seats that became taken.
    * Reports lost labels back to Java via onSyncComplete.
@@ -233,13 +251,15 @@ class SeatMap extends LitElement {
       }
       const wasSelected = seat.selected && !seat.taken;
       const nowTaken = !!fresh.taken;
-      if (wasSelected && nowTaken) {
+      const keepSelected =
+        fresh.selected != null ? !!fresh.selected && !nowTaken : wasSelected && !nowTaken;
+      if ((wasSelected || fresh.selected) && nowTaken) {
         lost.push(`${fresh.row}-${fresh.num}`);
       }
       return {
         ...seat,
         taken: nowTaken,
-        selected: wasSelected && !nowTaken,
+        selected: keepSelected,
       };
     });
     this._notifySelectionCount();
