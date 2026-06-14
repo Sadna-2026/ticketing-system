@@ -110,6 +110,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void configureOrderItemsGrid() {
+        orderItemsGrid.setEmptyStateText("No active order — browse events to add tickets.");
         orderItemsGrid.addColumn(this::formatZone).setHeader("Zone").setAutoWidth(true);
         orderItemsGrid.addColumn(this::formatSeat).setHeader("Seat").setAutoWidth(true);
         orderItemsGrid.addColumn(OrderItemDto::getQuantity).setHeader("Quantity").setAutoWidth(true);
@@ -124,6 +125,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void configureHistoryGrid() {
+        historyGrid.setEmptyStateText("No past purchases yet — your completed orders will appear here.");
         historyGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         historyGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
         historyGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);

@@ -554,6 +554,18 @@ class AdminViewTest {
                 .toList();
     }
 
+    @Test
+    void GivenAdminView_WhenRendered_ThenAllGridsShowEmptyStateMessages() {
+        AdminView view = new AdminView(mockPresenter());
+
+        List<Grid<?>> grids = findGrids(view);
+        assertEquals(2, grids.size());
+        for (Grid<?> grid : grids) {
+            assertTrue(grid.getEmptyStateText() != null && !grid.getEmptyStateText().isBlank(),
+                    "every data grid should show an empty-state message");
+        }
+    }
+
     private static List<Grid<?>> findGrids(Component root) {
         List<Grid<?>> grids = new ArrayList<>();
         for (Component component : components(root)) {

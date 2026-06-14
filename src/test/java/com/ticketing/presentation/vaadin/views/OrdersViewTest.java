@@ -586,6 +586,20 @@ class OrdersViewTest {
                 .toList();
     }
 
+    @Test
+    void GivenOrdersView_WhenRendered_ThenGridsShowEmptyStateMessages() {
+        OrdersPresenter presenter = mockPresenter();
+
+        OrdersView view = new OrdersView(presenter);
+
+        for (Grid<?> grid : findGrids(view)) {
+            assertTrue(grid.getEmptyStateText() != null && !grid.getEmptyStateText().isBlank(),
+                    "every data grid should show an empty-state message");
+        }
+        assertEquals("No active order — browse events to add tickets.",
+                findOrderItemsGrid(view).getEmptyStateText());
+    }
+
     private List<Grid<?>> findGrids(Component root) {
         List<Grid<?>> grids = new ArrayList<>();
         collectGrids(root, grids);
