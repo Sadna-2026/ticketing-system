@@ -55,3 +55,16 @@ ticketing:
     base-url: ${TICKETING_EXTERNAL_BASE_URL:}
     connect-timeout-ms: ${TICKETING_EXTERNAL_CONNECT_TIMEOUT_MS:5000}
     read-timeout-ms: ${TICKETING_EXTERNAL_READ_TIMEOUT_MS:5000}
+    # Payment gateway (V3-17): when base-url is set, HttpPaymentGateway replaces StubPaymentGateway
+    # and sends these card + currency fields with the WSEP "pay" action. The purchase flow does not
+    # capture cardholder input (the IPaymentGateway contract is amount + order metadata only), so
+    # they are config-driven with sandbox-friendly defaults. Real cardholder capture is a future
+    # ticket. See README "External systems".
+    payment:
+      currency: ${TICKETING_EXTERNAL_PAYMENT_CURRENCY:USD}
+      card-number: ${TICKETING_EXTERNAL_PAYMENT_CARD_NUMBER:2222333344445555}
+      card-month: ${TICKETING_EXTERNAL_PAYMENT_CARD_MONTH:12}
+      card-year: ${TICKETING_EXTERNAL_PAYMENT_CARD_YEAR:2030}
+      card-holder: ${TICKETING_EXTERNAL_PAYMENT_CARD_HOLDER:Ticketing System}
+      card-cvv: ${TICKETING_EXTERNAL_PAYMENT_CARD_CVV:123}
+      card-id: ${TICKETING_EXTERNAL_PAYMENT_CARD_ID:000000000}
