@@ -572,6 +572,17 @@ class EventsViewTest {
         return root.getChildren().anyMatch(child -> hasText(child, text));
     }
 
+    @Test
+    void GivenEventsView_WhenRendered_ThenResultsGridShowsEmptyStateMessage() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        assertEquals("No events match your search yet — adjust the filters and search again.",
+                findGrid(view).getEmptyStateText());
+    }
+
     @SuppressWarnings("unchecked")
     private Grid<EventSummaryDTO> findGrid(Component root) {
         return findGridOptional(root).orElseThrow();

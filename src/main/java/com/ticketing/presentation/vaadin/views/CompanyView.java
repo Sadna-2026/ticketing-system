@@ -558,6 +558,7 @@ public class CompanyView extends VerticalLayout {
 
     private void configureCompanyEventsGrid() {
         companyEventsGrid.setId("company-events-grid");
+        companyEventsGrid.setEmptyStateText("No events yet — create one to start selling tickets.");
         companyEventsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
         companyEventsGrid.addColumn(event -> event.category().name()).setHeader("Category").setAutoWidth(true);
         companyEventsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts").setAutoWidth(true);
@@ -567,6 +568,7 @@ public class CompanyView extends VerticalLayout {
 
     private void configurePurchasesGrid() {
         purchasesGrid.setId("company-purchases-grid");
+        purchasesGrid.setEmptyStateText("No purchases recorded for this company yet.");
         purchasesGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         purchasesGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
         purchasesGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);

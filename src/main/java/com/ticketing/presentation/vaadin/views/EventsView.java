@@ -157,6 +157,7 @@ public class EventsView extends VerticalLayout {
     }
 
     private void configureResultsGrid() {
+        resultsGrid.setEmptyStateText("No events match your search yet — adjust the filters and search again.");
         resultsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
         resultsGrid.addColumn(event -> formatCategory(event.category())).setHeader("Category").setAutoWidth(true);
         resultsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts")
