@@ -7,10 +7,13 @@ import static com.ticketing.application.initialization.DevSeedDataInitializer.MI
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.DefaultApplicationArguments;
 
+import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.PlatformInitializationService;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
@@ -56,6 +59,34 @@ class DevSeedDataInitializerTest {
         initializer.run(new DefaultApplicationArguments(new String[0]));
 
         assertTrue(eventRepository.findAll().isEmpty());
+    }
+
+    @Test
+    void GivenPlatformInitializationFails_WhenSeedRuns_ThenNoDataIsSeeded() throws Exception {
+        InMemoryEventRepository eventRepository = new InMemoryEventRepository();
+        InMemoryMemberRepository memberRepository = new InMemoryMemberRepository();
+        InMemoryAdminRepository adminRepository = new InMemoryAdminRepository();
+        InMemoryCompanyRepository companyRepository = new InMemoryCompanyRepository();
+        InMemoryOrderRepository orderRepository = new InMemoryOrderRepository();
+        PasswordEncryptionUtils passwords = new PasswordEncryptionUtils();
+        AdminService adminService = new AdminService(
+                memberRepository, companyRepository, mock(ISessionTokenService.class),
+                adminRepository, orderRepository);
+
+        PlatformInitializationService platformInit = mock(PlatformInitializationService.class);
+        when(platformInit.initialize()).thenReturn(
+                PlatformInitializationService.InitializationResult.failure("Unable to connect to clearing service"));
+
+        // initializePlatform = true AND seedEnabled = true, but initialization fails.
+        DevSeedDataInitializer initializer = new DevSeedDataInitializer(
+                true, true, platformInit,
+                memberRepository, adminRepository, companyRepository, eventRepository,
+                orderRepository, passwords, adminService);
+
+        initializer.run(new DefaultApplicationArguments(new String[0]));
+
+        verify(platformInit).initialize();
+        assertTrue(eventRepository.findAll().isEmpty(), "no events should be seeded after a failed platform init");
     }
 
     private static DevSeedDataInitializer initializer(boolean seedEnabled, InMemoryEventRepository eventRepository) {
