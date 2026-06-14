@@ -94,8 +94,6 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID MIXED_LIMITED_GA_ZONE_ID = UUID.fromString("88888888-0000-0000-0000-0000000000a2");
     public static final UUID COUPON_CHECKOUT_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     public static final UUID COUPON_CHECKOUT_GA_ZONE_ID = UUID.fromString("99999999-0000-0000-0000-000000000001");
-    public static final UUID NO_ORPHAN_EVENT_ID = UUID.fromString("aabbccdd-aabb-aabb-aabb-aabbccddeeff");
-    public static final UUID NO_ORPHAN_SEAT_ZONE_ID = UUID.fromString("aabbccdd-0000-0000-0000-0000000000a1");
     public static final String CHECKOUT_COUPON_CODE = "SAVE20";
 
     private final boolean initializePlatform;
@@ -317,7 +315,6 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 new BigDecimal("25.00"), 40);
         saveCouponCheckoutEventIfMissing();
         saveMixedLimitedEventIfMissing();
-        saveNoOrphanSeatEventIfMissing();
     }
 
     private void saveCouponCheckoutEventIfMissing() {
@@ -421,35 +418,6 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         event.setRegion("Beer Sheva");
         event.addZone(InventoryZone.createGA(zoneId, zoneName, price, capacity));
         event.setVenueMap(new VenueMap(Map.of(zoneName, zoneId)));
-        event.publish();
-        eventRepository.save(event);
-    }
-
-    private void saveNoOrphanSeatEventIfMissing() {
-        if (eventRepository.findById(NO_ORPHAN_EVENT_ID).isPresent()) {
-            return;
-        }
-        Instant start = Instant.now().plus(Duration.ofDays(60));
-        Event event = new Event(NO_ORPHAN_EVENT_ID, COMPANY_NAME, "No-Orphan Seat Demo",
-                "Seeded event with no-orphan seat policy. 2 rows x 5 seats each.",
-                EventCategory.PLAY,
-                new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofMinutes(30))),
-                new LockTimerDuration(Duration.ofMinutes(15)),
-                new com.ticketing.domain.event.NoOrphanSeatPolicy(),
-                new NoDiscountPolicy());
-        event.setArtist("QA Stage");
-        event.setRegion("Tel Aviv");
-        InventoryZone zone = InventoryZone.createAssigned(NO_ORPHAN_SEAT_ZONE_ID, "Main Hall", new BigDecimal("80.00"));
-        for (int seat = 1; seat <= 5; seat++) {
-            zone.addSeat(new Seat(UUID.fromString(
-                    "aabbccdd-0000-0000-0000-00000000a" + String.format("%03d", seat)), "A", String.valueOf(seat)));
-        }
-        for (int seat = 1; seat <= 5; seat++) {
-            zone.addSeat(new Seat(UUID.fromString(
-                    "aabbccdd-0000-0000-0000-00000000b" + String.format("%03d", seat)), "B", String.valueOf(seat)));
-        }
-        event.addZone(zone);
-        event.setVenueMap(new VenueMap(Map.of("Main Hall", NO_ORPHAN_SEAT_ZONE_ID)));
         event.publish();
         eventRepository.save(event);
     }
