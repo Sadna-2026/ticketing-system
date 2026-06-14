@@ -77,10 +77,12 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.Query;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "company", layout = MainLayout.class)
 @PageTitle("Company")
+@SpringComponent
 @UIScope
 public class CompanyView extends VerticalLayout {
 

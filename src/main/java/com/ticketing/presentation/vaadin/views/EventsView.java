@@ -51,10 +51,12 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.shared.Registration;
+import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "events", layout = MainLayout.class)
 @PageTitle("Events")
+@SpringComponent
 @UIScope
 public class EventsView extends VerticalLayout {
 

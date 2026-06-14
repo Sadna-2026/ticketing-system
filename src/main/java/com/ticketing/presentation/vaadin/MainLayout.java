@@ -25,7 +25,11 @@ import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.RouterLink;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
+@SpringComponent
+@UIScope
 public class MainLayout extends AppLayout implements AfterNavigationObserver, BeforeEnterObserver {
 
     private final Tabs navigation = new Tabs();

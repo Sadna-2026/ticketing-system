@@ -33,10 +33,12 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "orders", layout = MainLayout.class)
 @PageTitle("Orders")
+@SpringComponent
 @UIScope
 public class OrdersView extends VerticalLayout {
 
@@ -93,10 +95,10 @@ public class OrdersView extends VerticalLayout {
                 historySection
         );
         refreshSessionStatus();
-        loadActiveOrder();
+        loadActiveOrder(false);
         addAttachListener(event -> {
             refreshSessionStatus();
-            loadActiveOrder();
+            loadActiveOrder(false);
         });
     }
 
@@ -174,7 +176,11 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void loadActiveOrder() {
-        handleOrderResult(presenter.loadCurrentOrder());
+        loadActiveOrder(true);
+    }
+
+    private void loadActiveOrder(boolean notify) {
+        applyOrderResult(presenter.loadCurrentOrder(), notify);
     }
 
     private void removeSelectedItem() {
@@ -278,19 +284,36 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void handleOrderResult(OrderResult result) {
+        applyOrderResult(result, true);
+    }
+
+    private void applyOrderResult(OrderResult result, boolean notify) {
         orderActionStatus.setText(result.message());
         if (!result.success()) {
             orderStatus.setText(result.message());
             currentOrder = null;
             refreshOrderDisplay();
-            UiMessages.error(result.message());
+            if (notify) {
+                UiMessages.error(result.message());
+            }
             return;
         }
 
+        UUID previousSelectionId = selectedOrderItem != null ? selectedOrderItem.getId() : null;
         currentOrder = result.order();
         refreshOrderDisplay();
+        if (previousSelectionId != null && currentOrder != null) {
+            currentOrder.getItems().stream()
+                    .filter(item -> item.getId().equals(previousSelectionId))
+                    .findFirst()
+                    .ifPresent(item -> {
+                        selectedOrderItem = item;
+                        orderItemsGrid.select(item);
+                        refreshItemActionState();
+                    });
+        }
         refreshSessionStatus();
-        if (currentOrder != null) {
+        if (notify && currentOrder != null) {
             UiMessages.success(result.message());
         }
     }
