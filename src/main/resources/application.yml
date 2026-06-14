@@ -8,6 +8,11 @@ spring:
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
     username: ${DB_USERNAME:sa}
     password: ${DB_PASSWORD:}
+    hikari:
+      connection-timeout: 5000
+      max-lifetime: 600000
+      keepalive-time: 30000
+      validation-timeout: 3000
   jpa:
     database-platform: ${DB_DIALECT:org.hibernate.dialect.H2Dialect}
     hibernate:
