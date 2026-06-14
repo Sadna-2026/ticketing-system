@@ -1,6 +1,7 @@
 package com.ticketing.application.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -65,6 +66,17 @@ class BuyerPolicyCatalogTest {
         assertEquals(Kind.DISCOUNT, discounts.get(0).kind());
         assertTrue(discounts.get(0).detail().contains("15% off"));
         assertTrue(discounts.get(0).detail().contains("3 or more"));
+    }
+
+    @Test
+    void GivenMinQuantityBelowTwo_WhenConstructing_ThenRejected() {
+        assertThrows(IllegalArgumentException.class, () -> new MinQuantityPolicy(1));
+        assertThrows(IllegalArgumentException.class, () -> new MinQuantityPolicy(0));
+    }
+
+    @Test
+    void GivenMaxQuantityZero_WhenConstructing_ThenRejected() {
+        assertThrows(IllegalArgumentException.class, () -> new MaxQuantityPolicy(0));
     }
 
     @Test

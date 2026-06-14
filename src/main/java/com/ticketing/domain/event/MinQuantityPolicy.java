@@ -19,7 +19,9 @@ public class MinQuantityPolicy extends AbstractPurchasePolicy {
     }
 
     public MinQuantityPolicy(int minTickets) {
-        if (minTickets <= 0) throw new IllegalArgumentException("minTickets must be positive");
+        if (minTickets < 2) {
+            throw new IllegalArgumentException("minTickets must be at least 2");
+        }
         this.minTickets = minTickets;
     }
 

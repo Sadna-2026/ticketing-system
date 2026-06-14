@@ -453,7 +453,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 EventCategory.PLAY,
                 new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofMinutes(45))),
                 new LockTimerDuration(Duration.ofMinutes(10)),
-                new MinQuantityPolicy(1),
+                new AlwaysAllowPolicy(),
                 new NoDiscountPolicy());
         event.setArtist("QA Theater");
         event.setRegion("Tel Aviv");
@@ -481,7 +481,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 EventCategory.PLAY,
                 new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofMinutes(45))),
                 new LockTimerDuration(Duration.ofMinutes(10)),
-                new MinQuantityPolicy(1),
+                new AlwaysAllowPolicy(),
                 new NoDiscountPolicy());
         event.setArtist("QA Theater");
         event.setRegion("Tel Aviv");
