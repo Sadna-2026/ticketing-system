@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.services.AdminService;
@@ -53,6 +54,7 @@ import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @Component
+@Order(50)
 public class DevSeedDataInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DevSeedDataInitializer.class);
@@ -153,6 +155,11 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         if (initializePlatform) {
             PlatformInitializationService.InitializationResult result = platformInitializationService.initialize();
             log.info("Platform initialization: {}", result.message());
+            if (!result.success()) {
+                // Don't seed onto a platform that failed to initialize (it is left inactive).
+                log.error("Platform initialization failed — skipping dev seed: {}", result.message());
+                return;
+            }
         }
         if (!seedEnabled) {
             log.info("Dev seed data disabled");
