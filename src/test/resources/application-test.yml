@@ -1,0 +1,26 @@
+# Dedicated isolated test configuration (V3-25, requirement §2.4c): guarantees the test suite
+# never reaches the real external systems or a real / working database. Activated for EVERY test
+# run via the `test` Spring profile, which the Surefire plugin turns on in pom.xml — so CI's
+# `mvn clean verify` uses it automatically (no workflow change needed).
+#
+# This file is the dedicated test profile. As defence-in-depth, pom.xml ALSO pins the datasource
+# and the external base-url as JVM system properties, which outrank OS environment variables
+# (DB_URL / TICKETING_EXTERNAL_BASE_URL), so isolation holds even when those are exported locally.
+# See README "Testing".
+spring:
+  datasource:
+    url: jdbc:h2:mem:ticketing-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: false
+
+ticketing:
+  # Blank base-url => the stub payment/ticket gateways are active and the startup handshake is
+  # skipped, so tests never contact the real WSEP endpoint.
+  external:
+    base-url:

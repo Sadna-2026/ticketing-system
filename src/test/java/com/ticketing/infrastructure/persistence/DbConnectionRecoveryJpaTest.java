@@ -67,8 +67,11 @@ class DbConnectionRecoveryJpaTest {
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("TICKETING_PERSISTENCE", () -> "jpa");
-        // Point to the manually started TCP server using file DB
-        registry.add("DB_URL", () -> "jdbc:h2:tcp://localhost:" + H2_PORT + "/./target/recoverytest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
+        // Point to the manually started TCP server using file DB. The isolated test config (V3-25)
+        // pins spring.datasource.url to a throwaway in-memory H2, so this must override the canonical
+        // property directly (a @DynamicPropertySource outranks both the test profile and the Surefire
+        // system-property pin) rather than the base config's now-shadowed ${DB_URL} placeholder.
+        registry.add("spring.datasource.url", () -> "jdbc:h2:tcp://localhost:" + H2_PORT + "/./target/recoverytest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
     }
 
     @Test
