@@ -22,17 +22,29 @@ public record EventMapDTO(
         Map<String, UUID> venueMap,
         List<ZoneInfo> zones,
         // Optional visual grid layout (null when the event has no designed layout).
-        LayoutInfo layout
+        LayoutInfo layout,
+        String description,
+        List<EventPolicyBadgeDTO> purchaseRestrictions,
+        List<EventPolicyBadgeDTO> visibleDiscounts
 ) {
     public EventMapDTO {
         venueMap = venueMap == null ? Map.of() : Map.copyOf(venueMap);
         zones    = zones == null    ? List.of() : List.copyOf(zones);
+        description = description == null ? "" : description;
+        purchaseRestrictions = purchaseRestrictions == null ? List.of() : List.copyOf(purchaseRestrictions);
+        visibleDiscounts = visibleDiscounts == null ? List.of() : List.copyOf(visibleDiscounts);
     }
 
     /** Backwards-compatible constructor for callers that don't carry a layout. */
     public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
                        Map<String, UUID> venueMap, List<ZoneInfo> zones) {
-        this(eventId, eventName, companyName, status, venueMap, zones, null);
+        this(eventId, eventName, companyName, status, venueMap, zones, null, "", List.of(), List.of());
+    }
+
+    /** Backwards-compatible constructor for callers that don't carry policy metadata. */
+    public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
+                       Map<String, UUID> venueMap, List<ZoneInfo> zones, LayoutInfo layout) {
+        this(eventId, eventName, companyName, status, venueMap, zones, layout, "", List.of(), List.of());
     }
 
     public record ZoneInfo(
