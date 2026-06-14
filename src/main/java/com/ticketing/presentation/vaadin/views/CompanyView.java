@@ -36,6 +36,7 @@ import com.ticketing.domain.event.MaxQuantityCondition;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityCondition;
 import com.ticketing.domain.event.MinQuantityPolicy;
+import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.SumCompositeDiscount;
@@ -1065,7 +1066,7 @@ public class CompanyView extends VerticalLayout {
                 }
                 return new MaxQuantityPolicy(max);
             } else if ("No orphan seat".equals(type)) {
-                return new com.ticketing.domain.event.NoOrphanSeatPolicy();
+                return new NoOrphanSeatPolicy();
             } else {
                 Integer min = policyMinTickets.getValue();
                 if (min == null || min <= 0) {

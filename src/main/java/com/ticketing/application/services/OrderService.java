@@ -217,8 +217,7 @@ public class OrderService {
         releaseInventoryForItem(event, item);
 
         if (item.isAssignedSeat()) {
-            LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
-            PurchaseContext ctx = new PurchaseContext(order, order.getMemberId(), buyerDob, event, java.util.Set.of());
+            PurchaseContext ctx = new PurchaseContext(order, memberId, null, event, java.util.Set.of());
             PolicyResult policyResult = event.getEventPurchasePolicy().isAllowed(ctx);
             if (!policyResult.allowed()) {
                 event.findZone(item.getZoneId()).lockSeat(item.getSeatId());
@@ -801,7 +800,7 @@ public class OrderService {
     }
 
     private void validatePurchasePolicy(Event event, ActiveOrder order, UUID memberId, LocalDate buyerDateOfBirth) {
-        PurchaseContext ctx = new PurchaseContext(order, memberId, buyerDateOfBirth);
+        PurchaseContext ctx = new PurchaseContext(order, memberId, buyerDateOfBirth, event, java.util.Set.of());
         PolicyResult validation = event.getEventPurchasePolicy().isAllowed(ctx);
         if (!validation.allowed()) {
             throw new IllegalStateException("Purchase policy violation: "
@@ -870,11 +869,11 @@ public class OrderService {
         List<TicketRequest> tickets = new ArrayList<>();
         for (OrderItem item : order.getItems()) {
             if (item.isAssignedSeat()) {
-                tickets.add(new TicketRequest(event.getId().toString(),
+                tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
                         item.getId().toString(), item.getSeatId().toString()));
             } else {
                 for (int i = 0; i < item.getQuantity(); i++) {
-                    tickets.add(new TicketRequest(event.getId().toString(),
+                    tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
                             item.getId() + "-" + (i + 1), null));
                 }
             }

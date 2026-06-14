@@ -101,4 +101,20 @@ class HttpExternalSystemsClientTest {
                 .isInstanceOf(ExternalSystemsUnavailableException.class)
                 .hasMessageContaining("not configured");
     }
+
+    @Test
+    void GivenOversizedResponse_WhenSend_ThenThrowsExternalSystemsUnavailable() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        
+        String hugeResponse = "A".repeat(2049);
+        server.expect(requestTo(BASE_URL))
+                .andRespond(withSuccess(hugeResponse, MediaType.TEXT_PLAIN));
+
+        assertThatThrownBy(() -> clientFor(restTemplate).send(Map.of("action_type", "pay")))
+                .isInstanceOf(ExternalSystemsUnavailableException.class)
+                .hasMessageContaining("exceeded maximum allowed length");
+        
+        server.verify();
+    }
 }

@@ -54,6 +54,8 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 | Mixed limited event ID | `88888888-8888-8888-8888-888888888888` |
 | Mixed limited seat zone ID | `88888888-0000-0000-0000-0000000000a1` |
 | Mixed limited GA zone ID | `88888888-0000-0000-0000-0000000000a2` |
+| No-orphan seat event ID | `aabbccdd-aabb-aabb-aabb-aabbccddeeff` |
+| No-orphan seat zone ID | `aabbccdd-0000-0000-0000-0000000000a1` |
 
 ## Test Checklist
 
@@ -84,6 +86,14 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 3. Verify the age-policy message is shown from the domain/application result when adding tickets:
    `You must be at least 18 years old to purchase tickets for this event`.
 4. Checkout stays disabled because no tickets were added to the cart.
+
+### No-Orphan Seat Policy
+
+1. Log in as `member` / `member123` (or use a guest session).
+2. On `/orders`, create an order for the No-Orphan Seat Demo event `aabbccdd-aabb-aabb-aabb-aabbccddeeff`.
+3. Load inventory and try selecting a single middle seat (e.g. A-2). The system should **reject** the reservation because it leaves seat A-1 isolated at the edge.
+4. Select seat A-1, then A-2. Both should succeed because the remaining seats (A-3, A-4, A-5) are adjacent.
+5. Verify the error message mentions the isolated seat (e.g. `Your selection would leave seat A-1 isolated`).
 
 ### Owner
 

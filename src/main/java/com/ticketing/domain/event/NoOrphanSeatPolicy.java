@@ -8,12 +8,17 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+
 /**
  * Rejects seat selections that leave a single isolated (orphan) free seat
  * in an assigned-seating row. Only applies to assigned-seating zones;
  * general-admission zones are ignored.
  */
-public class NoOrphanSeatPolicy implements IPurchasePolicy {
+@Entity
+@DiscriminatorValue("NO_ORPHAN_SEAT")
+public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
 
     public NoOrphanSeatPolicy() {
     }
