@@ -364,7 +364,7 @@ public class OrderService {
         if (violations.isEmpty()) {
             return PurchasePolicyStatus.ok();
         }
-        return PurchasePolicyStatus.violation(String.join(" ", violations));
+        return PurchasePolicyStatus.violation(String.join("\n", violations));
     }
 
     public record CheckoutCompletion(UUID purchaseId, BigDecimal chargedAmount) {
@@ -669,7 +669,7 @@ public class OrderService {
             validateOrderNotExpired(order, event);
             List<String> selectionErrors = collectSelectionErrors(event, order, request);
             if (!selectionErrors.isEmpty()) {
-                throw new IllegalStateException(String.join(" ", selectionErrors));
+                throw new IllegalStateException(String.join("\n", selectionErrors));
             }
 
             List<UUID> itemIds = new ArrayList<>();
@@ -845,7 +845,7 @@ public class OrderService {
     private void requirePurchasePolicyCompliance(Event event, PurchaseContext ctx) {
         List<String> violations = event.getEventPurchasePolicy().collectViolations(ctx);
         if (!violations.isEmpty()) {
-            throw new IllegalStateException(String.join(" ", violations));
+            throw new IllegalStateException(String.join("\n", violations));
         }
     }
 

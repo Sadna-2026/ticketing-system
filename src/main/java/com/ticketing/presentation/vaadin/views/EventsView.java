@@ -126,6 +126,7 @@ public class EventsView extends VerticalLayout {
     }
 
     private void configureFields() {
+        reservationStatus.getStyle().set("white-space", "pre-line");
         category.setItems(EventCategory.values());
         category.setItemLabelGenerator(this::formatCategory);
 

@@ -95,6 +95,8 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void configureFields() {
+        orderActionStatus.getStyle().set("white-space", "pre-line");
+        policyComplianceStatus.getStyle().set("white-space", "pre-line");
         couponCode.setPlaceholder("Optional");
         couponCode.setValueChangeMode(ValueChangeMode.EAGER);
         couponCode.addValueChangeListener(event -> refreshCheckoutState());
