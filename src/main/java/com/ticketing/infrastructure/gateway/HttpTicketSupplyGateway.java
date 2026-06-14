@@ -93,7 +93,7 @@ public class HttpTicketSupplyGateway implements ITicketSupplyGateway {
         }
 
         String body = client.send(params).trim();
-        if (body.isEmpty() || FAILED.equals(body)) {
+        if (body.isEmpty() || FAILED.equals(body) || !body.matches("^[a-zA-Z0-9-]+$")) {
             log.warn("External ticket issue failed or returned an unexpected response: '{}'", body);
             return null;
         }

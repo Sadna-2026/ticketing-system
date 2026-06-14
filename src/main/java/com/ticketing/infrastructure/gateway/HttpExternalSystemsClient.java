@@ -8,9 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.FormHttpMessageConverter;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -62,10 +62,19 @@ public class HttpExternalSystemsClient implements IExternalSystemsClient {
         if (params != null) {
             params.forEach(form::add);
         }
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         try {
-            String body = restTemplate.postForObject(baseUrl, new HttpEntity<>(form, headers), String.class);
+            String body = restTemplate.execute(baseUrl, HttpMethod.POST, request -> {
+                request.getHeaders().setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+                new FormHttpMessageConverter().write(form, MediaType.APPLICATION_FORM_URLENCODED, request);
+            }, response -> {
+                try (java.io.InputStream is = response.getBody()) {
+                    byte[] data = is.readNBytes(2049);
+                    if (data.length > 2048) {
+                        throw new RestClientException("External system response exceeded maximum allowed length (2048 bytes).");
+                    }
+                    return new String(data, java.nio.charset.StandardCharsets.UTF_8);
+                }
+            });
             return body == null ? "" : body;
         } catch (RestClientException ex) {
             throw new ExternalSystemsUnavailableException(
