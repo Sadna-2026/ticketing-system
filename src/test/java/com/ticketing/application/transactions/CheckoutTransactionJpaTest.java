@@ -35,6 +35,7 @@ import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
+import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
 
 /**
@@ -76,6 +77,8 @@ class CheckoutTransactionJpaTest {
     @Autowired
     private StubTicketSupplyGateway supplyGateway;
     @Autowired
+    private StubPaymentGateway paymentGateway;
+    @Autowired
     private TransactionTemplate transactionTemplate;
 
     private final PasswordEncryptionUtils passwords = new PasswordEncryptionUtils();
@@ -83,7 +86,8 @@ class CheckoutTransactionJpaTest {
     @AfterEach
     void resetGateway() {
         // The stub is a shared singleton bean; never leave it in the failing state.
-        supplyGateway.setShouldFail(false);
+        supplyGateway.reset();
+        paymentGateway.reset();
     }
 
     // ── Rollback: a mid-checkout failure rolls back ALL DB changes ────────────────
@@ -128,6 +132,51 @@ class CheckoutTransactionJpaTest {
         assertThat(orderRepository.findCompletedByMemberId(memberId))
                 .as("no CompletedPurchase row was inserted")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("Given a checkout that fails partially during ticket supply, When it throws, Then payment is refunded and issued tickets are cancelled")
+    void GivenCheckoutFailsPartially_WhenItThrows_ThenPaymentIsRefundedAndTicketsCancelled() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        eventRepository.save(publishedGaEvent(eventId, zoneId, 2));
+
+        UUID memberId = UUID.randomUUID();
+        memberRepository.save(member(memberId, "buyer-partial"));
+
+        String token = memberToken(memberId);
+
+        // Reservation: locks 2 GA tickets.
+        orderService.createOrder(token, eventId);
+        orderService.addGATicketsToOrder(token, eventId, zoneId, 2);
+        UUID orderId = orderRepository.findActiveByMemberId(memberId).orElseThrow().getId();
+
+        // Fail after issuing 1 ticket
+        supplyGateway.setFailAfterCount(1);
+
+        assertThatThrownBy(() -> orderService.checkout(token, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Ticket generation failed");
+
+        // Assert payment was refunded
+        assertThat(paymentGateway.getLastRefundedTransactions())
+                .as("the successful payment must be refunded")
+                .hasSize(1);
+
+        // Assert partially issued tickets were cancelled
+        assertThat(supplyGateway.getLastCancelledTickets())
+                .as("the partially issued tickets must be cancelled")
+                .hasSize(1);
+
+        // DB shows NO partial changes
+        ActiveOrder reloaded = orderRepository.findById(orderId).orElseThrow();
+        assertThat(reloaded.isActive()).isTrue();
+
+        InventoryZone zone = eventRepository.findById(eventId).orElseThrow().findZone(zoneId);
+        assertThat(zone.getSoldCount()).isZero();
+        assertThat(zone.getLockedCount()).isEqualTo(2);
+
+        assertThat(orderRepository.findCompletedByMemberId(memberId)).isEmpty();
     }
 
     @Test
