@@ -137,6 +137,20 @@ class HttpTicketSupplyGatewayTest {
     }
 
     @Test
+    void GivenMalformedBody_WhenIssue_ThenFails() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        // Garbage HTML response instead of a ticket code
+        server.expect(requestTo(BASE_URL)).andRespond(withSuccess("<html>502 Bad Gateway</html>", MediaType.TEXT_HTML));
+
+        SupplyResult result = gatewayFor(restTemplate).issueTickets(List.of(ga("t-1")), CUSTOMER);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.issuedTicketCodes()).isEmpty();
+        server.verify();
+    }
+
+    @Test
     void GivenSecondTicketRejected_WhenIssue_ThenReturnsPartialCodesForRollback() {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
