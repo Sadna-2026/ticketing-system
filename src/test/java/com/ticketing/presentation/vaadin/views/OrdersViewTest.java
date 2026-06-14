@@ -29,6 +29,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuoteResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderComplianceResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
@@ -189,6 +190,22 @@ class OrdersViewTest {
 
         assertFalse(findButton(view, "Checkout").isEnabled());
         assertTrue(hasText(view, "Checkout is available once the active order has tickets."));
+    }
+
+    @Test
+    void GivenOrderViolatesPolicy_WhenRendered_ThenCheckoutDisabledAndReasonShown() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.checkOrderCompliance())
+                .thenReturn(OrderComplianceResult.nonCompliant("You must purchase at least 2 tickets"));
+        OrdersView view = new OrdersView(presenter);
+
+        assertFalse(findButton(view, "Checkout").isEnabled());
+        assertTrue(hasText(view, "Purchase policy not met: You must purchase at least 2 tickets"));
+        assertTrue(hasText(view, "Resolve the issue above before checkout."));
     }
 
     @Test
@@ -492,6 +509,7 @@ class OrdersViewTest {
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("No active order found.", null, null));
         when(presenter.labelsFor(any())).thenReturn(OrderLabels.empty());
         when(presenter.quoteCheckout(any())).thenReturn(CheckoutQuoteResult.success(BigDecimal.ZERO, BigDecimal.ZERO));
+        when(presenter.checkOrderCompliance()).thenReturn(OrderComplianceResult.compliant("Order meets purchase requirements."));
         return presenter;
     }
 

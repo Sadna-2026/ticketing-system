@@ -15,6 +15,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuoteResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderComplianceResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
@@ -54,6 +55,7 @@ public class OrdersView extends VerticalLayout {
     private static final String NO_TICKETS_CHECKOUT_MESSAGE = "Add tickets to your order before checkout.";
 
     private final TextField couponCode = new TextField("Coupon code");
+    private final Span policyComplianceStatus = new Span();
     private final Span checkoutStatus = new Span("Checkout is available once the active order has tickets.");
     private Button checkoutButton;
     private final Span historyStatus = new Span("Members can load purchase history.");
@@ -151,7 +153,7 @@ public class OrdersView extends VerticalLayout {
         HorizontalLayout form = new HorizontalLayout(couponCode, checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, checkoutStatus);
+        VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, policyComplianceStatus, checkoutStatus);
         section.setPadding(false);
         return section;
     }
@@ -215,11 +217,29 @@ public class OrdersView extends VerticalLayout {
             return;
         }
         boolean ready = canCheckout();
-        checkoutButton.setEnabled(ready);
         if (!ready) {
+            checkoutButton.setEnabled(false);
+            policyComplianceStatus.setText("");
             checkoutStatus.setText("Checkout is available once the active order has tickets.");
             return;
         }
+
+        OrderComplianceResult compliance = presenter.checkOrderCompliance();
+        if (!compliance.success()) {
+            checkoutButton.setEnabled(false);
+            policyComplianceStatus.setText(compliance.message());
+            checkoutStatus.setText(compliance.message());
+            return;
+        }
+        if (!compliance.compliant()) {
+            checkoutButton.setEnabled(false);
+            policyComplianceStatus.setText("Purchase policy not met: " + compliance.message());
+            checkoutStatus.setText("Resolve the issue above before checkout.");
+            return;
+        }
+
+        checkoutButton.setEnabled(true);
+        policyComplianceStatus.setText(compliance.message());
 
         CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
         if (!quote.success()) {

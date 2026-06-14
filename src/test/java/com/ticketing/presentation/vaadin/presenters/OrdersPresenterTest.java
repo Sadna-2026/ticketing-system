@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -35,6 +37,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuot
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.InventoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderComplianceResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
@@ -73,7 +76,7 @@ class OrdersPresenterTest {
                 seatItem(seatItemId, seatZoneId, seatId)));
         SessionContext.setSessionToken("guest-token");
         when(orderService.addGATicketsToOrder("guest-token", eventId, gaZoneId, 2)).thenReturn(gaItemId);
-        when(orderService.addSeatToOrder("guest-token", eventId, seatZoneId, seatId)).thenReturn(seatItemId);
+        when(orderService.addSelectionToOrder(eq("guest-token"), any())).thenReturn(List.of(seatItemId));
         when(orderService.getActiveOrder("guest-token")).thenReturn(gaOrder, seatOrder);
 
         OrderMutationResult gaResult = presenter.addGATickets(eventId, gaZoneId, 2);
@@ -85,10 +88,10 @@ class OrdersPresenterTest {
         assertSame(gaOrder, gaResult.order());
         assertTrue(seatResult.success());
         assertEquals("Assigned seat added.", seatResult.message());
-        assertEquals(seatItemId, seatResult.itemId());
+        assertNull(seatResult.itemId());
         assertSame(seatOrder, seatResult.order());
         verify(orderService).addGATicketsToOrder("guest-token", eventId, gaZoneId, 2);
-        verify(orderService).addSeatToOrder("guest-token", eventId, seatZoneId, seatId);
+        verify(orderService).addSelectionToOrder(eq("guest-token"), any());
     }
 
     @Test
@@ -159,6 +162,32 @@ class OrdersPresenterTest {
 
         assertFalse(result.success());
         assertEquals("No active order with tickets to checkout", result.message());
+    }
+
+    @Test
+    void GivenCompliantOrder_WhenCheckingCompliance_ThenSuccessReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.checkPurchasePolicy("guest-token"))
+                .thenReturn(OrderService.PurchasePolicyStatus.ok());
+
+        OrderComplianceResult result = presenter.checkOrderCompliance();
+
+        assertTrue(result.success());
+        assertTrue(result.compliant());
+        assertEquals("Order meets purchase requirements.", result.message());
+    }
+
+    @Test
+    void GivenPolicyViolation_WhenCheckingCompliance_ThenReasonReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.checkPurchasePolicy("guest-token"))
+                .thenReturn(OrderService.PurchasePolicyStatus.violation("You must purchase at least 2 tickets"));
+
+        OrderComplianceResult result = presenter.checkOrderCompliance();
+
+        assertTrue(result.success());
+        assertFalse(result.compliant());
+        assertEquals("You must purchase at least 2 tickets", result.message());
     }
 
     @Test
