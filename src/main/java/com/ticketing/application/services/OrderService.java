@@ -869,11 +869,11 @@ public class OrderService {
         List<TicketRequest> tickets = new ArrayList<>();
         for (OrderItem item : order.getItems()) {
             if (item.isAssignedSeat()) {
-                tickets.add(new TicketRequest(event.getId().toString(),
+                tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
                         item.getId().toString(), item.getSeatId().toString()));
             } else {
                 for (int i = 0; i < item.getQuantity(); i++) {
-                    tickets.add(new TicketRequest(event.getId().toString(),
+                    tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
                             item.getId() + "-" + (i + 1), null));
                 }
             }
