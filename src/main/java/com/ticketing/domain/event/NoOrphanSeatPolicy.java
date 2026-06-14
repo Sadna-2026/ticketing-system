@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.ticketing.domain.order.OrderItem;
+
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
@@ -30,7 +32,8 @@ public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
             return PolicyResult.success();
         }
 
-        Set<UUID> incomingSeatIds = context.incomingSeatIds();
+        Set<UUID> takenOrSelected = occupiedSeatIds(context);
+        Set<UUID> becomingAvailable = context.seatsBecomingAvailable();
 
         for (InventoryZone zone : event.getZones()) {
             if (!zone.isAssigned()) {
@@ -51,14 +54,14 @@ public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
 
                 for (int i = 0; i < sorted.size(); i++) {
                     Seat seat = sorted.get(i);
-                    if (!isFreeAfterSelection(seat, incomingSeatIds)) {
+                    if (!isFreeAfterSelection(seat, takenOrSelected, becomingAvailable)) {
                         continue;
                     }
 
                     boolean leftTaken = (i == 0)
-                            || !isFreeAfterSelection(sorted.get(i - 1), incomingSeatIds);
+                            || !isFreeAfterSelection(sorted.get(i - 1), takenOrSelected, becomingAvailable);
                     boolean rightTaken = (i == sorted.size() - 1)
-                            || !isFreeAfterSelection(sorted.get(i + 1), incomingSeatIds);
+                            || !isFreeAfterSelection(sorted.get(i + 1), takenOrSelected, becomingAvailable);
 
                     if (leftTaken && rightTaken) {
                         return PolicyResult.failure("ORPHAN_SEAT",
@@ -73,11 +76,35 @@ public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
         return PolicyResult.success();
     }
 
-    private boolean isFreeAfterSelection(Seat seat, Set<UUID> incomingSeatIds) {
-        if (!seat.isAvailable()) {
+    /**
+     * Seat ids treated as occupied when checking for orphans:
+     * <ul>
+     *   <li><b>In cart</b> — assigned seats already on the active order</li>
+     *   <li><b>Staged batch</b> — seats in {@code incomingSeatIds} (the current
+     *       "Add selected seats" request, before inventory is locked)</li>
+     * </ul>
+     * Seats locked or sold by other buyers are excluded via {@link Seat#isAvailable()}.
+     */
+    private static Set<UUID> occupiedSeatIds(PurchaseContext context) {
+        Set<UUID> occupied = new java.util.HashSet<>(context.incomingSeatIds());
+        if (context.order() != null) {
+            for (OrderItem item : context.order().getItems()) {
+                if (item.isAssignedSeat() && item.getSeatId() != null) {
+                    occupied.add(item.getSeatId());
+                }
+            }
+        }
+        return occupied;
+    }
+
+    private boolean isFreeAfterSelection(Seat seat, Set<UUID> occupied, Set<UUID> becomingAvailable) {
+        if (becomingAvailable.contains(seat.getId())) {
+            return true;
+        }
+        if (occupied.contains(seat.getId())) {
             return false;
         }
-        return !incomingSeatIds.contains(seat.getId());
+        return seat.isAvailable();
     }
 
     private int parseSeatNumber(String seatNumber) {

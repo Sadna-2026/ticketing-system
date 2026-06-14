@@ -56,4 +56,17 @@ public class OrPolicy extends AbstractPurchasePolicy {
         }
         return PolicyResult.failure("ALL_OR_CONDITIONS_FAILED", "No policies in the OR condition passed.");
     }
+
+    @Override
+    public List<String> collectViolations(PurchaseContext context) {
+        if (policies.isEmpty()) {
+            return List.of();
+        }
+        for (IPurchasePolicy policy : policies) {
+            if (policy.isAllowed(context).allowed()) {
+                return List.of();
+            }
+        }
+        return List.of("No policies in the OR condition passed.");
+    }
 }
