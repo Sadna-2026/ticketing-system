@@ -147,11 +147,6 @@ public class CompanyView extends VerticalLayout {
     private final DateTimePicker endTime = new DateTimePicker("End time");
     private final DateTimePicker doorsOpenTime = new DateTimePicker("Doors open time");
     private final IntegerField lockMinutes = new IntegerField("Lock minutes");
-    private final TextField zoneName = new TextField("Zone name");
-    private final BigDecimalField zonePrice = new BigDecimalField("Zone price");
-    private final IntegerField gaCapacity = new IntegerField("GA capacity");
-    private final TextField sectionName = new TextField("Venue section");
-
     private final ComboBox<String> zoneType = new ComboBox<>("Zone type");
     private final TextField newZoneName = new TextField("Zone name");
     private final BigDecimalField newZonePrice = new BigDecimalField("Price per ticket");
@@ -355,8 +350,6 @@ public class CompanyView extends VerticalLayout {
 
         lockMinutes.setMin(1);
         lockMinutes.setValue(15);
-        gaCapacity.setMin(1);
-        gaCapacity.setValue(100);
         capacityDelta.setMin(1);
         capacityDelta.setValue(1);
 
@@ -377,10 +370,6 @@ public class CompanyView extends VerticalLayout {
         markRequired(startTime, "Start time is required.");
         markRequired(endTime, "End time is required.");
         markRequired(lockMinutes, "Lock minutes is required.");
-        markRequired(zoneName, "Zone name is required.");
-        markRequired(zonePrice, "Zone price is required.");
-        markRequired(gaCapacity, "GA capacity is required.");
-        markRequired(sectionName, "Venue section is required.");
     }
 
     private void configurePickers() {
@@ -447,7 +436,7 @@ public class CompanyView extends VerticalLayout {
             refreshInventoryActionState();
             return;
         }
-        EventMapResult result = presenter.loadEventMap(event.id());
+        EventMapResult result = presenter.loadEventMapForManagement(event.id());
         if (!result.success()) {
             inventoryZonePicker.setItems(List.of());
             inventoryStatus.setText(result.message());
@@ -703,8 +692,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout eventManagementSection() {
-        createEventButton = new Button("Create company event", event -> createEvent());
-        Button createEventMultiZone = new Button("Create event with zones", event -> createEventWithZones());
+        createEventButton = new Button("Create event with zones", event -> createEventWithZones());
         editEventButton = new Button("Edit event details", event -> editEvent());
         publishEventButton = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(selectedEventId(eventId))));
         cancelEventButton = new Button("Cancel event", event -> handleEventAction(presenter.cancelEvent(selectedEventId(eventId))));
@@ -731,7 +719,7 @@ public class CompanyView extends VerticalLayout {
         eventEditForm = new FormLayout(newEventName, newEventDescription, newArtist, newStartTime, newEndTime, newDoorsOpenTime);
         eventEditForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
-        eventActions = new HorizontalLayout(createEventButton, createEventMultiZone, editEventButton, publishEventButton, cancelEventButton, designHallButton);
+        eventActions = new HorizontalLayout(createEventButton, editEventButton, publishEventButton, cancelEventButton, designHallButton);
         eventActions.setAlignItems(Alignment.BASELINE);
         eventControls = new VerticalLayout(
                 new H4("Event controls"),
@@ -1489,30 +1477,6 @@ public class CompanyView extends VerticalLayout {
         reopenCompanyButton.setVisible(visible);
     }
 
-    private void createEvent() {
-        CompanySummaryDTO company = eventCompanyName.getValue();
-        EventActionResult result = presenter.createEvent(
-                companyNameOf(eventCompanyName),
-                eventName.getValue(),
-                eventDescription.getValue(),
-                eventCategory.getValue(),
-                instant(startTime),
-                instant(endTime),
-                instant(doorsOpenTime),
-                lockMinutes.getValue(),
-                zoneName.getValue(),
-                zonePrice.getValue(),
-                gaCapacity.getValue(),
-                sectionName.getValue()
-        );
-        handleEventAction(result);
-        if (result != null && result.success() && result.eventId() != null && company != null) {
-            selectEventInPicker(eventId, company.name(), result.eventId());
-            inventoryCompanyName.setValue(company);
-            selectEventInPicker(inventoryEventId, company.name(), result.eventId());
-        }
-    }
-
     private void openVenueDesigner() {
         String company = companyNameOf(eventCompanyName);
         if (company == null) {
@@ -1606,6 +1570,9 @@ public class CompanyView extends VerticalLayout {
 
     private void handleEventAction(ActionResult result) {
         eventStatus.setText(result.message());
+        if (result.success()) {
+            lookupEventPicker.setItems(orEmpty(presenter.searchBrowsableEvents()));
+        }
         notify(result);
     }
 
@@ -1996,11 +1963,6 @@ public class CompanyView extends VerticalLayout {
         handleEventAction(result);
         if (result != null && result.success() && result.eventId() != null && company != null) {
             selectEventInPicker(eventId, company, result.eventId());
-            CompanySummaryDTO companyDto = eventCompanyName.getValue();
-            if (companyDto != null) {
-                inventoryCompanyName.setValue(companyDto);
-                selectEventInPicker(inventoryEventId, company, result.eventId());
-            }
             configuredZones.clear();
             refreshZoneListDisplay();
         }

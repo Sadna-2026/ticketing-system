@@ -99,7 +99,6 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Revoke personnel"));
         assertTrue(hasButton(view, "Change manager permissions"));
         assertTrue(hasButton(view, "Relinquish ownership"));
-        assertTrue(hasButton(view, "Create company event"));
         assertTrue(hasButton(view, "Create event with zones"));
         assertTrue(hasButton(view, "Add zone"));
         assertTrue(hasButton(view, "Edit event details"));
@@ -136,7 +135,7 @@ class CompanyViewTest {
         assertFalse(hasVisibleButton(view, "Open company"));
         assertFalse(hasVisibleButton(view, "Offer role appointment"));
         assertFalse(hasVisibleButton(view, "Relinquish ownership"));
-        assertFalse(hasVisibleButton(view, "Create company event"));
+        assertFalse(hasVisibleButton(view, "Create event with zones"));
         assertFalse(hasVisibleButton(view, "Add seat"));
         assertFalse(hasVisibleButton(view, "Suspend company"));
         assertFalse(hasVisibleButton(view, "Load company purchase history"));
@@ -495,13 +494,13 @@ class CompanyViewTest {
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         EventSummaryDTO created = event("Show", eventId);
-        when(presenter.createEvent(any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any()))
+        when(presenter.createEventWithZones(any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any()))
                 .thenReturn(EventActionResult.created("Event created.", eventId));
         when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(created));
         when(presenter.publishEvent(eventId)).thenReturn(ActionResult.success("Event published."));
         when(presenter.cancelEvent(eventId)).thenReturn(ActionResult.success("Event cancelled."));
-        when(presenter.loadEventMap(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
+        when(presenter.loadEventMapForManagement(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
         when(presenter.addSeat(eventId, zoneId, "A", "1")).thenReturn(ActionResult.success("Seat added."));
         when(presenter.removeSeat(eventId, zoneId, seatId)).thenReturn(ActionResult.success("Seat removed."));
         when(presenter.increaseGACapacity(eventId, zoneId, 5)).thenReturn(ActionResult.success("GA capacity increased."));
@@ -510,11 +509,13 @@ class CompanyViewTest {
         CompanyView view = new CompanyView(presenter);
         fillCreateEventForm(view);
 
-        clickButton(view, "Create company event");
-        // Creating an event auto-selects it in both the management and inventory pickers,
-        // and selecting the inventory event loads its zones into the zone picker.
+        clickButton(view, "Create event with zones");
+        // Creating an event auto-selects it in the management picker.
         assertEquals(eventId, findEventCombo(view, "Event to manage").getValue().id());
-        assertEquals(eventId, findEventCombo(view, "Inventory event").getValue().id());
+
+        // Set up inventory section: select company and event to load zones.
+        findCompanyCombo(view, "Inventory company name").setValue(company("Acme"));
+        findEventCombo(view, "Inventory event").setValue(created);
 
         // Inventory actions are selection-driven: pick the zone (and seat) instead of typing UUIDs.
         ComboBox<EventMapDTO.ZoneInfo> zoneCombo = findZoneCombo(view);
@@ -537,7 +538,7 @@ class CompanyViewTest {
         verify(presenter).publishEvent(eventId);
         verify(presenter).cancelEvent(eventId);
         // Selecting the inventory event triggers the zone load.
-        verify(presenter).loadEventMap(eventId);
+        verify(presenter).loadEventMapForManagement(eventId);
         verify(presenter).addSeat(eventId, zoneId, "A", "1");
         verify(presenter).removeSeat(eventId, zoneId, seatId);
         verify(presenter).increaseGACapacity(eventId, zoneId, 5);
@@ -553,7 +554,7 @@ class CompanyViewTest {
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
-        when(presenter.loadEventMap(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
+        when(presenter.loadEventMapForManagement(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
         CompanyView view = new CompanyView(presenter);
 
         // Before any selection every inventory action is disabled.
@@ -779,7 +780,7 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Manager permissions for Acme: VIEW_REPORTS."));
 
         selectTab(view, "Events");
-        assertFalse(hasVisibleButton(view, "Create company event"));
+        assertFalse(hasVisibleButton(view, "Create event with zones"));
         assertFalse(hasVisibleButton(view, "Publish event"));
         assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE permission for Acme."));
 
@@ -811,7 +812,7 @@ class CompanyViewTest {
 
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
         selectTab(view, "Events");
-        assertTrue(hasVisibleButton(view, "Create company event"));
+        assertTrue(hasVisibleButton(view, "Create event with zones"));
         assertTrue(hasVisibleButton(view, "Publish event"));
         assertTrue(hasVisibleButton(view, "Design hall layout (visual)"));
 
@@ -858,10 +859,6 @@ class CompanyViewTest {
         assertTrue(findDateTimePicker(view, "Start time").isRequiredIndicatorVisible());
         assertTrue(findDateTimePicker(view, "End time").isRequiredIndicatorVisible());
         assertTrue(findIntegerField(view, "Lock minutes").isRequiredIndicatorVisible());
-        assertTrue(findTextField(view, "Zone name").isRequiredIndicatorVisible());
-        assertTrue(findBigDecimalField(view, "Zone price").isRequiredIndicatorVisible());
-        assertTrue(findIntegerField(view, "GA capacity").isRequiredIndicatorVisible());
-        assertTrue(findTextField(view, "Venue section").isRequiredIndicatorVisible());
 
         assertFalse(findTextArea(view, "New company description").isRequiredIndicatorVisible());
         assertFalse(findTextArea(view, "Event description").isRequiredIndicatorVisible());
@@ -1109,6 +1106,8 @@ class CompanyViewTest {
         when(presenter.loadOrganizationChart(any()))
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of()));
         when(presenter.listPendingRoleOffers()).thenReturn(List.of());
+        when(presenter.loadEventMapForManagement(any()))
+                .thenReturn(EventMapResult.failure("Event map not found."));
         return presenter;
     }
 
@@ -1120,10 +1119,15 @@ class CompanyViewTest {
         findDateTimePicker(view, "End time").setValue(LocalDateTime.of(2026, 6, 1, 21, 0));
         findDateTimePicker(view, "Doors open time").setValue(LocalDateTime.of(2026, 6, 1, 18, 0));
         findIntegerField(view, "Lock minutes").setValue(15);
+        // Add a zone via the zone builder
+        @SuppressWarnings("unchecked")
+        ComboBox<String> zoneTypeCombo = (ComboBox<String>) findComboByLabel(view, "Zone type");
+        zoneTypeCombo.setValue("General Admission");
         findTextField(view, "Zone name").setValue("Floor");
-        findBigDecimalField(view, "Zone price").setValue(new BigDecimal("50.00"));
+        findBigDecimalField(view, "Price per ticket").setValue(new BigDecimal("50.00"));
         findIntegerField(view, "GA capacity").setValue(100);
-        findTextField(view, "Venue section").setValue("Main Hall");
+        findTextField(view, "Venue section name").setValue("Main Hall");
+        clickButton(view, "Add zone");
     }
 
     private static EventSummaryDTO eventSummary() {

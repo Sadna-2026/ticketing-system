@@ -255,7 +255,7 @@ public class VenueDesignerDialog extends Dialog {
         Instant end = start.plus(Duration.ofHours(3));
         Instant doors = start.minus(Duration.ofHours(1));
 
-        EventActionResult created = presenter.createDesignedEvent(
+        EventActionResult created = presenter.createEventWithZones(
                 companyName, eventName.getValue(), description.getValue(), category.getValue(),
                 start, end, doors, lockMinutes.getValue(), zones, sectionToZone);
         if (!created.success() || created.eventId() == null) {

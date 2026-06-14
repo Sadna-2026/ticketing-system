@@ -652,6 +652,14 @@ public class EventService {
     // ── Query (event map) ───────────────────────────────────────────
 
     public Optional<EventMapDTO> getEventMap(UUID eventId) {
+        return getEventMap(eventId, false);
+    }
+
+    public Optional<EventMapDTO> getEventMapForManagement(UUID eventId) {
+        return getEventMap(eventId, true);
+    }
+
+    private Optional<EventMapDTO> getEventMap(UUID eventId, boolean allowDraft) {
         if (eventId == null)
             return Optional.empty();
         Optional<Event> maybe = eventRepository.findById(eventId);
@@ -660,7 +668,7 @@ public class EventService {
             return Optional.empty();
         }
         Event event = maybe.get();
-        if (!isBrowsable(event)) {
+        if (!allowDraft && !isBrowsable(event)) {
             log.info("Event map request denied: id={}, reason=status={}", eventId, event.getStatus());
             return Optional.empty();
         }

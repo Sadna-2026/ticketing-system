@@ -781,6 +781,21 @@ public class CompanyPresenter {
         }
     }
 
+    public EventMapResult loadEventMapForManagement(UUID eventId) {
+        if (eventId == null) {
+            return EventMapResult.failure("Event ID is required.");
+        }
+
+        try {
+            return eventService.getEventMapForManagement(eventId)
+                    .map(eventMap -> EventMapResult.success("Event map loaded.", eventMap))
+                    .orElseGet(() -> EventMapResult.failure("Event map not found."));
+        } catch (RuntimeException ex) {
+            logger.warn(INVENTORY_FAILURE_MESSAGE, ex);
+            return EventMapResult.failure(INVENTORY_FAILURE_MESSAGE);
+        }
+    }
+
     public ActionResult addSeat(UUID eventId, UUID zoneId, String row, String seatNumber) {
         String token = memberToken();
         if (token == null) {

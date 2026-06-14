@@ -60,7 +60,7 @@ class VenueDesignerDialogTest {
     @Test
     void GivenSeatPaintedAndStartSet_WhenSaveDraft_ThenShowsSuccessMessage() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
-        when(presenter.createDesignedEvent(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(presenter.createEventWithZones(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
         when(presenter.setEventLayout(any(), any())).thenReturn(new ActionResult(true, "Layout saved."));
 
@@ -77,7 +77,7 @@ class VenueDesignerDialogTest {
     @Test
     void GivenSavedDraft_WhenValidateFailsThenPublishSucceeds_ThenEachOutcomeIsSurfaced() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
-        when(presenter.createDesignedEvent(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(presenter.createEventWithZones(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
         when(presenter.setEventLayout(any(), any())).thenReturn(new ActionResult(true, "Layout saved."));
         when(presenter.validateEventLayout(any()))
