@@ -33,9 +33,11 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "orders", layout = MainLayout.class)
 @PageTitle("Orders")
+@UIScope
 public class OrdersView extends VerticalLayout {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
@@ -92,6 +94,10 @@ public class OrdersView extends VerticalLayout {
         );
         refreshSessionStatus();
         loadActiveOrder();
+        addAttachListener(event -> {
+            refreshSessionStatus();
+            loadActiveOrder();
+        });
     }
 
     private void configureFields() {

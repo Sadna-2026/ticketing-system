@@ -51,9 +51,11 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.shared.Registration;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "events", layout = MainLayout.class)
 @PageTitle("Events")
+@UIScope
 public class EventsView extends VerticalLayout {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
@@ -117,6 +119,13 @@ public class EventsView extends VerticalLayout {
                 mapDisplay);
         refreshSessionStatus();
         refreshActiveOrderStatus();
+        addAttachListener(event -> {
+            refreshSessionStatus();
+            refreshActiveOrderStatus();
+            if (currentEventMap != null) {
+                startMapPolling();
+            }
+        });
     }
 
     @Override
