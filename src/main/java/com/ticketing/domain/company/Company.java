@@ -8,15 +8,43 @@ import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import jakarta.persistence.Version;
+
+@Entity
+@Table(name = "companies")
 public class Company {
+    @Id
+    @Column(name = "name")
     private String name; // also the unique identifier for the company
     private String description;
-    private final UUID founderId;
+    @Column(name = "founder_id")
+    private UUID founderId;
+    @Enumerated(EnumType.STRING)
     private CompanyStatus status;
+    // Policy hierarchies are mapped separately in V3-6 (#264); kept @Transient here and
+    // defaulted in the JPA no-arg constructor so a reloaded Company is never null.
+    @Transient
     private IPurchasePolicy purchasePolicy;
+    @Transient
     private IDiscountPolicy discountPolicy;
     private boolean allowDiscountStacking;  // true = company + event discounts both apply
+    @Version
     private int version;
+
+    /** JPA-only no-arg constructor. */
+    protected Company() {
+        this.status = CompanyStatus.ACTIVE;
+        this.purchasePolicy = new AlwaysAllowPolicy();
+        this.discountPolicy = new NoDiscountPolicy();
+        this.allowDiscountStacking = false;
+    }
 
     public Company(String name, String description, UUID founderId) {
         if (name == null || name.isBlank()) {

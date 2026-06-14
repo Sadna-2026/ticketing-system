@@ -12,8 +12,10 @@ import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuoteResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
@@ -27,6 +29,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
@@ -47,8 +50,12 @@ public class OrdersView extends VerticalLayout {
     private final IntegerField newGAQuantity = new IntegerField("New GA quantity");
     private final Button removeSelectedItem = new Button("Remove selected item");
     private final Button updateSelectedGAQuantity = new Button("Update selected GA quantity");
+    private final Button clearCart = new Button("Clear cart");
+    private static final String NO_TICKETS_CHECKOUT_MESSAGE = "Add tickets to your order before checkout.";
+
     private final TextField couponCode = new TextField("Coupon code");
     private final Span checkoutStatus = new Span("Checkout is available once the active order has tickets.");
+    private Button checkoutButton;
     private final Span historyStatus = new Span("Members can load purchase history.");
     private final Paragraph memberOnlyHistoryHint = new Paragraph("Log in as a member to view purchase history.");
     private final Grid<PurchaseRecordDTO> historyGrid = new Grid<>(PurchaseRecordDTO.class, false);
@@ -56,6 +63,7 @@ public class OrdersView extends VerticalLayout {
 
     private ActiveOrderDto currentOrder;
     private OrderItemDto selectedOrderItem;
+    private OrderLabels currentLabels = OrderLabels.empty();
 
     public OrdersView(OrdersPresenter presenter) {
         this.presenter = presenter;
@@ -86,6 +94,8 @@ public class OrdersView extends VerticalLayout {
 
     private void configureFields() {
         couponCode.setPlaceholder("Optional");
+        couponCode.setValueChangeMode(ValueChangeMode.EAGER);
+        couponCode.addValueChangeListener(event -> refreshCheckoutState());
         newGAQuantity.setMin(1);
         newGAQuantity.setValue(1);
 
@@ -94,12 +104,14 @@ public class OrdersView extends VerticalLayout {
 
         updateSelectedGAQuantity.setEnabled(false);
         updateSelectedGAQuantity.addClickListener(event -> updateSelectedGAQuantity());
+
+        clearCart.setEnabled(false);
+        clearCart.addClickListener(event -> clearCart());
     }
 
     private void configureOrderItemsGrid() {
-        orderItemsGrid.addColumn(item -> item.getId().toString()).setHeader("Item ID").setAutoWidth(true);
-        orderItemsGrid.addColumn(item -> item.getZoneId().toString()).setHeader("Zone ID").setAutoWidth(true);
-        orderItemsGrid.addColumn(this::formatSeat).setHeader("Seat ID").setAutoWidth(true);
+        orderItemsGrid.addColumn(this::formatZone).setHeader("Zone").setAutoWidth(true);
+        orderItemsGrid.addColumn(this::formatSeat).setHeader("Seat").setAutoWidth(true);
         orderItemsGrid.addColumn(OrderItemDto::getQuantity).setHeader("Quantity").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> formatPrice(item.getPricePerTicket())).setHeader("Price").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> formatPrice(item.getTotalPrice())).setHeader("Line total").setAutoWidth(true);
@@ -112,7 +124,6 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void configureHistoryGrid() {
-        historyGrid.addColumn(purchase -> purchase.purchaseId().toString()).setHeader("Purchase ID").setAutoWidth(true);
         historyGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         historyGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
         historyGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);
@@ -121,7 +132,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private VerticalLayout activeOrderSection() {
-        HorizontalLayout itemActions = new HorizontalLayout(removeSelectedItem, newGAQuantity, updateSelectedGAQuantity);
+        HorizontalLayout itemActions = new HorizontalLayout(removeSelectedItem, newGAQuantity, updateSelectedGAQuantity, clearCart);
         itemActions.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(
@@ -136,8 +147,8 @@ public class OrdersView extends VerticalLayout {
     }
 
     private VerticalLayout checkoutSection() {
-        Button checkout = new Button("Checkout", event -> checkout());
-        HorizontalLayout form = new HorizontalLayout(couponCode, checkout);
+        checkoutButton = new Button("Checkout", event -> checkout());
+        HorizontalLayout form = new HorizontalLayout(couponCode, checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, checkoutStatus);
@@ -167,7 +178,17 @@ public class OrdersView extends VerticalLayout {
         handleMutationResult(presenter.updateGAQuantity(zoneId, quantity == null ? 0 : quantity));
     }
 
+    private void clearCart() {
+        handleMutationResult(presenter.cancelOrder());
+    }
+
     private void checkout() {
+        if (!canCheckout()) {
+            checkoutStatus.setText(NO_TICKETS_CHECKOUT_MESSAGE);
+            UiMessages.info(NO_TICKETS_CHECKOUT_MESSAGE);
+            return;
+        }
+
         CheckoutResult result = presenter.checkout(couponCode.getValue());
         if (!result.success()) {
             checkoutStatus.setText(result.message());
@@ -176,11 +197,38 @@ public class OrdersView extends VerticalLayout {
             return;
         }
 
-        checkoutStatus.setText(result.message() + " Purchase ID: " + result.purchaseId());
-        orderActionStatus.setText(result.message());
         currentOrder = null;
+        couponCode.clear();
         refreshOrderDisplay();
-        UiMessages.success(result.message());
+        String successMessage = formatCheckoutSuccess(result);
+        checkoutStatus.setText(successMessage);
+        orderActionStatus.setText(successMessage);
+        UiMessages.success(successMessage);
+    }
+
+    private boolean canCheckout() {
+        return currentOrder != null && currentOrder.getItems() != null && !currentOrder.getItems().isEmpty();
+    }
+
+    private void refreshCheckoutState() {
+        if (checkoutButton == null) {
+            return;
+        }
+        boolean ready = canCheckout();
+        checkoutButton.setEnabled(ready);
+        if (!ready) {
+            checkoutStatus.setText("Checkout is available once the active order has tickets.");
+            return;
+        }
+
+        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
+        if (!quote.success()) {
+            checkoutStatus.setText(quote.message().isBlank()
+                    ? "Enter an optional coupon code, then checkout."
+                    : quote.message());
+            return;
+        }
+        checkoutStatus.setText(formatCheckoutQuote(quote));
     }
 
     private void loadPurchaseHistory() {
@@ -233,13 +281,16 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void refreshOrderDisplay() {
+        currentLabels = presenter.labelsFor(currentOrder);
         List<OrderItemDto> items = currentOrder == null ? List.of() : currentOrder.getItems();
         orderItemsGrid.setItems(items);
         orderItemsGrid.setVisible(!items.isEmpty());
         selectedOrderItem = null;
         orderItemsGrid.deselectAll();
         refreshItemActionState();
+        clearCart.setEnabled(currentOrder != null);
 
+        refreshCheckoutState();
         if (currentOrder == null) {
             orderStatus.setText("No active order. Add tickets from the Events page.");
             return;
@@ -276,8 +327,20 @@ public class OrdersView extends VerticalLayout {
         historySection.setVisible(member);
     }
 
+    private String formatZone(OrderItemDto item) {
+        UUID zoneId = item.getZoneId();
+        if (zoneId == null) {
+            return "";
+        }
+        return currentLabels.zoneNames().getOrDefault(zoneId, zoneId.toString());
+    }
+
     private String formatSeat(OrderItemDto item) {
-        return item.getSeatId() == null ? "" : item.getSeatId().toString();
+        UUID seatId = item.getSeatId();
+        if (seatId == null) {
+            return "";
+        }
+        return currentLabels.seatLabels().getOrDefault(seatId, seatId.toString());
     }
 
     private String formatInstant(Instant instant) {
@@ -286,5 +349,22 @@ public class OrdersView extends VerticalLayout {
 
     private String formatPrice(BigDecimal price) {
         return price == null ? "N/A" : price.toPlainString();
+    }
+
+    private String formatCheckoutQuote(CheckoutQuoteResult quote) {
+        if (quote.subtotal().compareTo(quote.total()) == 0) {
+            return "Amount due: " + formatPrice(quote.total())
+                    + ". Enter an optional coupon code, then checkout.";
+        }
+        return "Subtotal " + formatPrice(quote.subtotal())
+                + " | Amount due: " + formatPrice(quote.total())
+                + ". Enter an optional coupon code, then checkout.";
+    }
+
+    private String formatCheckoutSuccess(CheckoutResult result) {
+        String amount = result.chargedAmount() == null
+                ? ""
+                : " Charged: " + formatPrice(result.chargedAmount());
+        return result.message() + amount + " Purchase ID: " + result.purchaseId();
     }
 }

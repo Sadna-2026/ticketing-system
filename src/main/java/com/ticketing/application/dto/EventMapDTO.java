@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventStatus;
+import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
 
 /**
@@ -19,11 +20,19 @@ public record EventMapDTO(
         String companyName,
         EventStatus status,
         Map<String, UUID> venueMap,
-        List<ZoneInfo> zones
+        List<ZoneInfo> zones,
+        // Optional visual grid layout (null when the event has no designed layout).
+        LayoutInfo layout
 ) {
     public EventMapDTO {
         venueMap = venueMap == null ? Map.of() : Map.copyOf(venueMap);
         zones    = zones == null    ? List.of() : List.copyOf(zones);
+    }
+
+    /** Backwards-compatible constructor for callers that don't carry a layout. */
+    public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
+                       Map<String, UUID> venueMap, List<ZoneInfo> zones) {
+        this(eventId, eventName, companyName, status, venueMap, zones, null);
     }
 
     public record ZoneInfo(
@@ -49,4 +58,14 @@ public record EventMapDTO(
      * the buyer doesn't need to distinguish "someone else is buying it" from "already gone".
      */
     public record SeatInfo(UUID id, String row, String seatNumber, boolean available) {}
+
+    /** A visual grid layout for spatial rendering of the hall. */
+    public record LayoutInfo(int rows, int cols, List<CellInfo> cells) {
+        public LayoutInfo {
+            cells = cells == null ? List.of() : List.copyOf(cells);
+        }
+    }
+
+    /** One placed cell in the grid. {@code zoneId}/{@code seatId} are null for non-sellable cells. */
+    public record CellInfo(int row, int col, LayoutCellType type, String label, UUID zoneId, UUID seatId) {}
 }

@@ -1,7 +1,17 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Base64;
@@ -16,31 +26,23 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
+import com.ticketing.application.auth.ISessionTokenRepository;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.application.services.OrderService;
-import com.ticketing.application.auth.ISessionTokenRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.request.UpdateMemberDetailsRequest;
@@ -50,8 +52,6 @@ import com.ticketing.domain.member.response.MemberExitResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.response.UpdateMemberDetailsResponse;
 import com.ticketing.domain.order.ActiveOrder;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
-import com.ticketing.domain.order.TicketReservationDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -93,9 +93,7 @@ class MemberServiceTest {
 
             eventRepository = new InMemoryEventRepository();
             TestClock clock = new TestClock(Instant.parse("2026-06-01T10:00:00Z"));
-            TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepository, eventRepository, clock, memberRepository);
-            OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepository, eventRepository, null, List.of(), List.of(), clock);
-            orderService = new OrderService(sessionTokenService, ticketReservationService, orderCheckoutService, null, null, null);
+            orderService = new OrderService(sessionTokenService, orderRepository, eventRepository, memberRepository, List.of(), List.of(), clock, null, null, null);
         }
 
         @Test
@@ -1025,6 +1023,32 @@ class MemberServiceTest {
             assertEquals("MemberDto", response.member().getClass().getSimpleName());
         }
 
+        @Test
+        @DisplayName("Suspended member cannot update details but can still read profile")
+        void GivenSuspendedMember_WhenUpdateOwnDetails_ThenDeniedAndReadOnlyDetailsStillAvailable() {
+            RegisterResponse registerResponse = registerMember("tamar", "tamar@example.com");
+            UUID memberId = registerResponse.member().memberId();
+            Member member = memberRepository.findById(memberId).orElseThrow();
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(member);
+
+            UpdateMemberDetailsResponse response =
+                    memberService.updateIdentifyingDetails(
+                            registerResponse.sessionToken(),
+                            memberId,
+                            updateRequest("tamar-new", "new@example.com", "0527654321", "1999-05-06")
+                    );
+
+            assertFalse(response.success());
+            assertTrue(response.message().contains("suspended"));
+            assertNull(response.member());
+            assertNotNull(memberService.getMemberDetails(registerResponse.sessionToken()));
+
+            Member savedMember = memberRepository.findById(memberId).orElseThrow();
+            assertEquals("tamar", savedMember.getUsername());
+            assertEquals("tamar@example.com", savedMember.getEmail());
+        }
+
         private RegisterResponse registerMember(String username, String email) {
             String guestToken = sessionTokenService.generateGuestToken();
 
@@ -1229,6 +1253,40 @@ class MemberServiceTest {
         }
 
         @Test
+        void GivenManagerCaller_WhenGetCurrentCompanyAppointment_ThenOnlyOwnPermissionsReturned() {
+            UUID managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "m@test.com", "pass");
+            manager.addStaffAppointment(COMPANY_NAME, new StaffAppointment(COMPANY_NAME, ownerId,
+                    StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.EVENT_LIFECYCLE)));
+
+            when(sessionTokenService.extractMemberId(AUTH_TOKEN)).thenReturn(managerId);
+            when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
+
+            Optional<OrgNodeDTO> appointment = memberService.getCurrentCompanyAppointment(AUTH_TOKEN, COMPANY_NAME);
+
+            assertTrue(appointment.isPresent());
+            OrgNodeDTO node = appointment.orElseThrow();
+            assertEquals(managerId, node.memberId());
+            assertEquals("manager", node.username());
+            assertEquals(StaffAppointment.StaffRole.MANAGER, node.role());
+            assertEquals(Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.EVENT_LIFECYCLE),
+                    node.permissions());
+            assertTrue(node.subordinates().isEmpty());
+        }
+
+        @Test
+        void GivenMemberWithoutAppointment_WhenGetCurrentCompanyAppointment_ThenEmptyReturned() {
+            UUID memberId = UUID.randomUUID();
+            Member member = new Member(memberId, "member", "member@test.com", "pass");
+
+            when(sessionTokenService.extractMemberId(AUTH_TOKEN)).thenReturn(memberId);
+            when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+            assertTrue(memberService.getCurrentCompanyAppointment(AUTH_TOKEN, COMPANY_NAME).isEmpty());
+        }
+
+        @Test
         void GivenInvalidToken_WhenGetOrganizationChart_ThenIllegalArgumentException() {
             when(sessionTokenService.isValid(AUTH_TOKEN)).thenReturn(false);
             assertThrows(IllegalArgumentException.class, () -> memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME));
@@ -1273,6 +1331,30 @@ class MemberServiceTest {
             assertEquals(juniorId, juniorNode.memberId());
             assertTrue(juniorNode.subordinates().isEmpty());
             assertFalse(managerNode.revoked());
+        }
+
+        @Test
+        void GivenSelfAppointedOwnerAndStaff_WhenGetOrganizationChart_ThenOwnerIsRoot() {
+            Member owner = new Member(ownerId, "owner", "o@test.com", "pass");
+            owner.addStaffAppointment(COMPANY_NAME,
+                    new StaffAppointment(COMPANY_NAME, ownerId, StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+
+            UUID managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "m@test.com", "pass");
+            manager.addStaffAppointment(COMPANY_NAME,
+                    new StaffAppointment(COMPANY_NAME, ownerId, StaffAppointment.StaffRole.MANAGER,
+                            Set.of(ManagerPermission.VIEW_REPORTS)));
+
+            when(memberRepository.findById(ownerId)).thenReturn(Optional.of(owner));
+            when(memberRepository.findByCompanyAppointment(COMPANY_NAME)).thenReturn(List.of(owner, manager));
+
+            List<OrgNodeDTO> chart = memberService.getOrganizationChart(AUTH_TOKEN, COMPANY_NAME);
+
+            assertEquals(1, chart.size());
+            OrgNodeDTO root = chart.get(0);
+            assertEquals(ownerId, root.memberId());
+            assertEquals(1, root.subordinates().size());
+            assertEquals(managerId, root.subordinates().get(0).memberId());
         }
 
         @Test

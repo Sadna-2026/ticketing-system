@@ -1,6 +1,5 @@
 package com.ticketing.presentation.vaadin.views;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,32 +9,29 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
+import com.ticketing.presentation.vaadin.testsupport.SynchronousUi;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.router.BeforeEnterEvent;
 
 @DisplayName("NotificationsView")
+@ExtendWith(VaadinSessionExtension.class)
 class NotificationsViewTest {
-
-    @BeforeEach
-    void setUp() {
-        UI.setCurrent(new UI());
-    }
-
-    @AfterEach
-    void tearDown() {
-        UI.setCurrent(null);
-    }
 
     @Test
     void GivenNotificationsView_WhenRendered_ThenNotificationActionsAreAvailable() {
@@ -107,11 +103,29 @@ class NotificationsViewTest {
                 .thenReturn(RegistrationResult.success("member-1", "listener-1"));
         NotificationsView view = new NotificationsView(presenter);
 
-        UI.getCurrent().add(view);
+        attachViewToCurrentUi(view);
 
         assertTrue(hasText(view, "Real-time notifications connected."));
         assertTrue(hasText(view, "No pending notifications."));
         verify(presenter, never()).loadPendingNotifications();
+    }
+
+    @Test
+    void GivenRegisteredView_WhenServicePushesNotification_ThenListenerUpdatesTheUi() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        AtomicReference<NotificationListener> captured = new AtomicReference<>();
+        when(presenter.registerRealtimeListener(any())).thenAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return RegistrationResult.success("member-1", "listener-1");
+        });
+        NotificationsView view = new NotificationsView(presenter);
+        attachViewToSynchronousUi(view);
+
+        assertNotNull(captured.get(), "view did not register a realtime listener on attach");
+        captured.get().onMessage("Role appointment offer received.");
+
+        assertTrue(hasText(view, "Role appointment offer received."));
+        assertTrue(hasText(view, "Showing 1 notification(s)."));
     }
 
     @Test
@@ -120,11 +134,65 @@ class NotificationsViewTest {
         when(presenter.registerRealtimeListener(any()))
                 .thenReturn(RegistrationResult.success("member-1", "listener-1"));
         NotificationsView view = new NotificationsView(presenter);
-        UI.getCurrent().add(view);
+        attachViewToCurrentUi(view);
 
         UI.getCurrent().remove(view);
 
         verify(presenter).unregisterRealtimeListener("member-1", "listener-1");
+    }
+
+    @Test
+    void GivenLoadFailure_WhenRefreshClicked_ThenSpecificFailureReasonIsShown() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        when(presenter.loadPendingNotifications())
+                .thenReturn(NotificationResult.failure("Log in as a member to view notifications."));
+        NotificationsView view = new NotificationsView(presenter);
+
+        clickButton(view, "Refresh notifications");
+
+        assertTrue(hasText(view, "Log in as a member to view notifications."));
+        assertTrue(hasText(view, "No notifications to show."));
+    }
+
+    @Test
+    void GivenGuestSession_WhenEnteringNotifications_ThenForwardedToHome() {
+        setSynchronousCurrentUi();
+        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event).forwardTo(HomeView.class);
+    }
+
+    @Test
+    void GivenMemberSession_WhenEnteringNotifications_ThenNavigationIsAllowed() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        BeforeEnterEvent event = mock(BeforeEnterEvent.class);
+
+        view.beforeEnter(event);
+
+        verify(event, never()).forwardTo(HomeView.class);
+    }
+
+    /** Makes a {@link SynchronousUi} current so the {@code beforeEnter} guard's inline popup can run. */
+    private void setSynchronousCurrentUi() {
+        UI.setCurrent(SynchronousUi.create());
+    }
+
+    private void attachViewToCurrentUi(Component view) {
+        UI ui = new UI();
+        ui.add(view);
+        UI.setCurrent(ui);
+    }
+
+    /** Attaches the view to a {@link SynchronousUi} and makes it current. */
+    private void attachViewToSynchronousUi(Component view) {
+        UI ui = SynchronousUi.create();
+        ui.add(view);
+        UI.setCurrent(ui);
     }
 
     private boolean hasButton(Component root, String text) {

@@ -6,10 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -24,15 +22,16 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
@@ -48,18 +47,22 @@ import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.domain.member.ManagerPermission;
+import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("CompanyPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class CompanyPresenterTest {
 
     private CompanyService companyService;
@@ -80,12 +83,6 @@ class CompanyPresenterTest {
                 eventService,
                 completedPurchaseService
         );
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
     @Test
@@ -124,6 +121,30 @@ class CompanyPresenterTest {
     }
 
     @Test
+    void GivenMemberSession_WhenLoadingCompanyInfo_ThenSessionAwareLookupIsUsed() {
+        memberSession();
+        CompanyPublicDTO company = new CompanyPublicDTO("Suspended Co", "desc", List.of());
+        when(companyService.getCompanyInfoForLookup("member-token", "Suspended Co")).thenReturn(Optional.of(company));
+
+        CompanyInfoResult result = presenter.loadCompanyInfo("Suspended Co");
+
+        assertTrue(result.success());
+        assertSame(company, result.company());
+        verify(companyService).getCompanyInfoForLookup("member-token", "Suspended Co");
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenLoadingCompanyInfo_ThenFailureMessageIsReturned() {
+        when(companyService.getCompanyInfo("Unknown")).thenReturn(Optional.empty());
+
+        CompanyInfoResult result = presenter.loadCompanyInfo("Unknown");
+
+        assertFalse(result.success());
+        assertEquals("Company not found.", result.message());
+        verify(companyService).getCompanyInfo("Unknown");
+    }
+
+    @Test
     void GivenPersonnelInputs_WhenManagingRoles_ThenCompanyAndMemberServicesAreCalledDirectly() {
         memberSession();
         UUID targetId = UUID.randomUUID();
@@ -153,6 +174,101 @@ class CompanyPresenterTest {
         verify(companyService).changeManagerPermissions("member-token", "Acme", targetId,
                 Set.of(ManagerPermission.PERSONNEL_MGMT));
         verify(memberService).getOrganizationChart("member-token", "Acme");
+    }
+
+    @Test
+    void GivenOwnerInCompanyOrgChart_WhenLoadingPersonnelAccess_ThenPermissionChangeIsAllowed() {
+        UUID ownerId = UUID.randomUUID();
+        memberSession(ownerId);
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(ownerId, "alice", StaffAppointment.StaffRole.OWNER,
+                        Set.of(), false, List.of())));
+
+        CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
+
+        assertTrue(result.canManagePersonnel());
+        assertEquals("Owner personnel controls available for Acme.", result.message());
+        verify(memberService).getCurrentCompanyAppointment("member-token", "Acme");
+    }
+
+    @Test
+    void GivenPendingRoleOffers_WhenListingForCurrentMember_ThenOptionsExposeCompanyAndRole() {
+        memberSession();
+        PendingRoleOffer offer = new PendingRoleOffer(
+                UUID.randomUUID(),
+                "Acme",
+                StaffAppointment.StaffRole.MANAGER,
+                Set.of(ManagerPermission.VIEW_REPORTS),
+                java.time.LocalDateTime.now().plusDays(1));
+        when(memberService.listPendingRoleOffers("member-token")).thenReturn(List.of(offer));
+
+        List<CompanyPresenter.PendingRoleOfferOption> offers = presenter.listPendingRoleOffers();
+
+        assertEquals(1, offers.size());
+        assertEquals(offer.getOfferId(), offers.get(0).offerId());
+        assertEquals("Acme — MANAGER", offers.get(0).label());
+        verify(memberService).listPendingRoleOffers("member-token");
+    }
+
+    @Test
+    void GivenManagerInCompanyOrgChart_WhenLoadingPersonnelAccess_ThenPermissionChangeIsDenied() {
+        UUID managerId = UUID.randomUUID();
+        memberSession(managerId);
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
+                        Set.of(ManagerPermission.PERSONNEL_MGMT), false, List.of())));
+
+        CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
+
+        assertFalse(result.canManagePersonnel());
+        assertEquals("Only a company owner can manage personnel for Acme.", result.message());
+    }
+
+    @Test
+    void GivenOrganizationChartFails_WhenLoadingPersonnelAccess_ThenSpecificReasonIsReturned() {
+        UUID memberId = UUID.randomUUID();
+        memberSession(memberId);
+        doThrow(new SecurityException("Viewing organization chart requires company staff permissions."))
+                .when(memberService).getCurrentCompanyAppointment("member-token", "Acme");
+
+        CompanyPresenter.PersonnelAccessResult result = presenter.loadPersonnelAccess("Acme");
+
+        assertFalse(result.canManagePersonnel());
+        assertEquals("Viewing organization chart requires company staff permissions.", result.message());
+    }
+
+    @Test
+    void GivenManagerAppointment_WhenLoadingCompanyAccess_ThenManagerPermissionsAreExposed() {
+        UUID managerId = UUID.randomUUID();
+        memberSession(managerId);
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
+                        Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.EVENT_LIFECYCLE),
+                        false, List.of())));
+
+        CompanyAccessResult result = presenter.loadCompanyAccess("Acme");
+
+        assertTrue(result.staff());
+        assertFalse(result.owner());
+        assertTrue(result.canViewReports());
+        assertTrue(result.canManageEvents());
+        assertFalse(result.canManagePolicies());
+        assertEquals("Manager permissions for Acme: EVENT_LIFECYCLE, VIEW_REPORTS.", result.message());
+        verify(memberService).getCurrentCompanyAppointment("member-token", "Acme");
+    }
+
+    @Test
+    void GivenRevokedAppointment_WhenLoadingCompanyAccess_ThenAccessIsDenied() {
+        UUID managerId = UUID.randomUUID();
+        memberSession(managerId);
+        when(memberService.getCurrentCompanyAppointment("member-token", "Acme"))
+                .thenReturn(Optional.of(new OrgNodeDTO(managerId, "alice", StaffAppointment.StaffRole.MANAGER,
+                        Set.of(ManagerPermission.VIEW_REPORTS), true, List.of())));
+
+        CompanyAccessResult result = presenter.loadCompanyAccess("Acme");
+
+        assertFalse(result.staff());
+        assertEquals("No active staff appointment for Acme.", result.message());
     }
 
     @Test
@@ -259,22 +375,42 @@ class CompanyPresenterTest {
 
         ActionResult suspend = presenter.suspendCompany("Acme");
         ActionResult reopen = presenter.reopenCompany("Acme");
-        ActionResult close = presenter.closeCompany("Acme");
         PurchaseHistoryResult history = presenter.loadPurchaseHistory("Acme");
         SalesReportResult sales = presenter.loadSalesReport("Acme");
 
         assertTrue(suspend.success());
         assertTrue(reopen.success());
-        assertTrue(close.success());
         assertTrue(history.success());
         assertEquals(List.of(purchase), history.purchases());
         assertTrue(sales.success());
         assertSame(report, sales.report());
         verify(companyService).suspendCompany("member-token", "Acme");
         verify(companyService).reopenCompany("member-token", "Acme");
-        verify(companyService).permanentCloseByFounder("member-token", "Acme");
         verify(companyService).getPurchaseHistory("member-token", "Acme");
         verify(completedPurchaseService).getHierarchicalSalesReport("member-token", "Acme");
+    }
+
+    @Test
+    void GivenFounderLifecycleAccess_WhenLoadingLifecycleAccess_ThenAllowedResultIsReturned() {
+        memberSession();
+
+        LifecycleAccessResult result = presenter.loadLifecycleAccess("Acme");
+
+        assertTrue(result.canManageLifecycle());
+        assertEquals("Founder lifecycle controls available for Acme.", result.message());
+        verify(companyService).verifyFounderLifecycleAccess("member-token", "Acme");
+    }
+
+    @Test
+    void GivenNonFounderLifecycleAccess_WhenLoadingLifecycleAccess_ThenSpecificReasonIsReturned() {
+        memberSession();
+        doThrow(new SecurityException("Only the founder can perform this lifecycle action"))
+                .when(companyService).verifyFounderLifecycleAccess("member-token", "Acme");
+
+        LifecycleAccessResult result = presenter.loadLifecycleAccess("Acme");
+
+        assertFalse(result.canManageLifecycle());
+        assertEquals("Only the founder can perform this lifecycle action", result.message());
     }
 
     @Test
@@ -301,20 +437,244 @@ class CompanyPresenterTest {
         assertNull(presenter.loadEventMap(null).eventMap());
     }
 
-    private void memberSession() {
+    @Test
+    void GivenCompaniesExist_WhenSearchingCompanies_ThenServiceResultsAreReturned() {
+        when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchCompanies("ac"));
+    }
+
+    @Test
+    void GivenServiceError_WhenSearchingCompanies_ThenEmptyListIsReturned() {
+        when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
+
+        assertTrue(presenter.searchCompanies("a").isEmpty());
+    }
+
+    @Test
+    void GivenNoMemberSession_WhenSearchingLookupCompanies_ThenPublicSearchIsUsed() {
+        when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchLookupCompanies("ac"));
+        verify(companyService).searchCompanies("ac");
+    }
+
+    @Test
+    void GivenMemberSession_WhenSearchingLookupCompanies_ThenSessionAwareSearchIsUsed() {
+        memberSession();
+        when(companyService.searchCompaniesForLookup("member-token", "sus"))
+                .thenReturn(List.of(new CompanySummaryDTO("Suspended Co")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Suspended Co")), presenter.searchLookupCompanies("sus"));
+        verify(companyService).searchCompaniesForLookup("member-token", "sus");
+    }
+
+    @Test
+    void GivenMemberSession_WhenSearchingLifecycleCompanies_ThenFounderLifecycleCompaniesAreReturned() {
+        memberSession();
+        when(companyService.searchFounderLifecycleCompanies("member-token", "ac"))
+                .thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), presenter.searchLifecycleCompanies("ac"));
+        verify(companyService).searchFounderLifecycleCompanies("member-token", "ac");
+    }
+
+    @Test
+    void GivenMemberSession_WhenListingCompanyEvents_ThenEventServiceIsCalledWithToken() {
+        memberSession();
+        EventSummaryDTO event = eventSummary();
+        when(eventService.listCompanyEvents("member-token", "Acme")).thenReturn(List.of(event));
+
+        assertEquals(List.of(event), presenter.listCompanyEvents("Acme"));
+    }
+
+    @Test
+    void GivenNoMemberSession_WhenListingCompanyEvents_ThenEmptyListIsReturnedWithoutCallingService() {
+        when(eventService.listCompanyEvents(any(), any())).thenReturn(List.of(eventSummary()));
+
+        assertTrue(presenter.listCompanyEvents("Acme").isEmpty());
+    }
+
+    @Test
+    void GivenBlankCompany_WhenListingCompanyEvents_ThenEmptyListIsReturned() {
+        memberSession();
+
+        assertTrue(presenter.listCompanyEvents("   ").isEmpty());
+    }
+
+    @Test
+    void GivenOwnerAndCompany_WhenLoadingSalesReport_ThenServiceIsCalledAndReportTotalsAreReturned() {
+        memberSession();
+        UUID memberId = SessionContext.getMemberId();
+        PurchaseRecordDTO purchase = purchase(memberId);
+        SalesReportDTO report = new SalesReportDTO("Acme", memberId, List.of(purchase), new BigDecimal("80.00"), 1);
+        when(completedPurchaseService.getHierarchicalSalesReport("member-token", "Acme")).thenReturn(report);
+
+        SalesReportResult result = presenter.loadSalesReport("Acme");
+
+        assertTrue(result.success());
+        assertEquals("Sales report loaded.", result.message());
+        assertSame(report, result.report());
+        verify(completedPurchaseService).getHierarchicalSalesReport("member-token", "Acme");
+    }
+
+    @Test
+    void GivenInsufficientPermissions_WhenLoadingSalesReport_ThenFailureReasonIsReturned() {
+        memberSession();
+        when(completedPurchaseService.getHierarchicalSalesReport("member-token", "Acme"))
+                .thenThrow(new SecurityException("Viewing sales report requires Owner role or (Manager + VIEW_REPORTS permission)"));
+
+        SalesReportResult result = presenter.loadSalesReport("Acme");
+
+        assertFalse(result.success());
+        assertEquals("Viewing sales report requires Owner role or (Manager + VIEW_REPORTS permission)", result.message());
+    }
+
+    @Test
+    void GivenOwnerAndManagerTarget_WhenOfferingManagerAppointmentWithPermissions_ThenServiceIsCalledWithTokenAndPermissions() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+        Set<ManagerPermission> perms = Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.PERSONNEL_MGMT);
+
+        ActionResult result = presenter.offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER, perms);
+
+        assertTrue(result.success());
+        assertEquals("Role appointment offer sent.", result.message());
+        verify(companyService).offerRoleAppointment("member-token", "Acme", targetId,
+                StaffAppointment.StaffRole.MANAGER, perms);
+    }
+
+    @Test
+    void GivenTargetIsAlreadyOwner_WhenOfferingManagerAppointment_ThenFailureReasonIsReturned() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+        doThrow(new IllegalArgumentException("Target is already an owner of this company"))
+                .when(companyService).offerRoleAppointment(eq("member-token"), eq("Acme"), eq(targetId),
+                        eq(StaffAppointment.StaffRole.MANAGER), any());
+
+        ActionResult result = presenter.offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER, Set.of());
+
+        assertFalse(result.success());
+        assertEquals("Target is already an owner of this company", result.message());
+    }
+
+    @Test
+    void GivenOwnerDirectlyAppointedTarget_WhenOriginalOwnerRevokes_ThenServiceIsCalledAndSuccessReturned() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+
+        ActionResult result = presenter.revokePersonnel("Acme", targetId);
+
+        assertTrue(result.success());
+        assertEquals("Personnel revoked.", result.message());
+        verify(companyService).revokePersonnel("member-token", "Acme", targetId);
+    }
+
+    @Test
+    void GivenTargetWasAppointedByDifferentOwner_WhenOwnerTriesToRevoke_ThenOnlyAppointersCanRevokeMessageReturned() {
+        memberSession();
+        UUID targetId = UUID.randomUUID();
+        doThrow(new IllegalArgumentException(
+                "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."))
+                .when(companyService).revokePersonnel("member-token", "Acme", targetId);
+
+        ActionResult result = presenter.revokePersonnel("Acme", targetId);
+
+        assertFalse(result.success());
+        assertEquals("Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees.",
+                result.message());
+    }
+
+    @Test
+    void GivenMemberSession_WhenRelinquishingOwnership_ThenCompanyServiceIsCalledWithTokenAndCompanyName() {
+        memberSession();
+
+        ActionResult result = presenter.relinquishOwnership("Acme");
+
+        assertTrue(result.success());
+        assertEquals("Ownership relinquished for Acme.", result.message());
+        verify(companyService).relinquishOwnership("member-token", "Acme");
+    }
+
+    @Test
+    void GivenBlankCompanyName_WhenRelinquishingOwnership_ThenValidationFailureIsReturnedBeforeServiceCall() {
+        memberSession();
+
+        ActionResult result = presenter.relinquishOwnership("   ");
+
+        assertFalse(result.success());
+        assertEquals("Company name is required.", result.message());
+        verifyNoInteractions(companyService);
+    }
+
+    @Test
+    void GivenBrowsableEvents_WhenSearchingBrowsable_ThenSearchServiceResultsAreReturned() {
+        EventSummaryDTO event = eventSummary();
+        when(eventService.searchEvents(any())).thenReturn(List.of(event));
+
+        assertEquals(List.of(event), presenter.searchBrowsableEvents());
+    }
+
+    // ── UI-23: Define & edit purchase/discount policies ─────────────
+
+    @Test
+    void GivenMemberSession_WhenSettingCompanyPurchasePolicy_ThenServiceIsCalledWithTokenAndPolicy() {
+        memberSession();
+        com.ticketing.domain.event.AgeRestrictionPolicy policy = new com.ticketing.domain.event.AgeRestrictionPolicy(18);
+
+        ActionResult result = presenter.setCompanyPurchasePolicy("Acme", policy);
+
+        assertTrue(result.success());
+        assertEquals("Company purchase policy updated.", result.message());
+        verify(companyService).setCompanyPurchasePolicy("member-token", "Acme", policy);
+    }
+
+    @Test
+    void GivenBlankCompanyName_WhenSettingCompanyPurchasePolicy_ThenValidationFailureIsReturnedBeforeServiceCall() {
+        memberSession();
+
+        ActionResult result = presenter.setCompanyPurchasePolicy("   ", new com.ticketing.domain.event.AgeRestrictionPolicy(18));
+
+        assertFalse(result.success());
+        assertEquals("Company name is required.", result.message());
+        verifyNoInteractions(companyService);
+    }
+
+    @Test
+    void GivenMemberSession_WhenSettingCompanyDiscountPolicy_ThenServiceIsCalledWithTokenAndPolicy() {
+        memberSession();
+        com.ticketing.domain.event.SimpleDiscount policy = new com.ticketing.domain.event.SimpleDiscount(new BigDecimal("10"));
+
+        ActionResult result = presenter.setCompanyDiscountPolicy("Acme", policy);
+
+        assertTrue(result.success());
+        assertEquals("Company discount policy updated.", result.message());
+        verify(companyService).setCompanyDiscountPolicy("member-token", "Acme", policy);
+    }
+
+    @Test
+    void GivenInsufficientPermissions_WhenSettingCompanyDiscountPolicy_ThenFailureReasonIsReturned() {
+        memberSession();
+        com.ticketing.domain.event.SimpleDiscount policy = new com.ticketing.domain.event.SimpleDiscount(new BigDecimal("10"));
+        doThrow(new SecurityException("Insufficient permissions: POLICY_MODIFICATION required"))
+                .when(companyService).setCompanyDiscountPolicy("member-token", "Acme", policy);
+
+        ActionResult result = presenter.setCompanyDiscountPolicy("Acme", policy);
+
+        assertFalse(result.success());
+        assertEquals("Insufficient permissions: POLICY_MODIFICATION required", result.message());
+    }
+
+    private UUID memberSession() {
         UUID memberId = UUID.randomUUID();
+        memberSession(memberId);
+        return memberId;
+    }
+
+    private void memberSession(UUID memberId) {
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(memberId);
         SessionContext.setUsername("alice");
-    }
-
-    private void installVaadinSession() {
-        Map<String, Object> attributes = new java.util.HashMap<>();
-        VaadinSession session = mock(VaadinSession.class);
-        doAnswer(invocation -> attributes.put(invocation.getArgument(0), invocation.getArgument(1)))
-                .when(session).setAttribute(anyString(), nullable(Object.class));
-        when(session.getAttribute(anyString())).thenAnswer(invocation -> attributes.get(invocation.getArgument(0)));
-        VaadinSession.setCurrent(session);
     }
 
     private static EventSummaryDTO eventSummary() {

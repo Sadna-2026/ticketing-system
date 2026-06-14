@@ -1,19 +1,57 @@
 package com.ticketing.domain.member;
 
-
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "staff_appointments")
 public class StaffAppointment {
 
-    private final String companyId;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
+    private Long id;
+
+    @Column(name = "company_id")
+    private String companyId;
+    @Column(name = "appointed_by_member_id")
     private UUID appointedByMemberId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role")
     private StaffRole role;
+    @ElementCollection
+    @CollectionTable(
+            name = "staff_appointment_permissions",
+            joinColumns = @JoinColumn(name = "staff_appointment_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "permission")
     private Set<ManagerPermission> managerPermissions;
+    @ElementCollection
+    @CollectionTable(
+            name = "staff_appointment_appointed_staff",
+            joinColumns = @JoinColumn(name = "staff_appointment_id"))
+    @Column(name = "appointed_staff_member_id")
     private Set<UUID> appointedStaffMemberIds;
+    @Column(name = "revoked")
     private boolean revoked;
+
+    // Required by JPA; do not use directly.
+    protected StaffAppointment() {
+    }
 
     public StaffAppointment(
             String companyId,
@@ -108,7 +146,7 @@ public class StaffAppointment {
     }
 
     public boolean isOwner() {
-        return role == StaffRole.OWNER;
+        return role == StaffRole.OWNER && !revoked;
     }
 
     public boolean isManager() {
@@ -124,9 +162,6 @@ public class StaffAppointment {
     }
 
     public void revoke() {
-        if (isOwner()) {
-            throw new IllegalStateException("Cannot revoke an owner appointment.");
-        }
         if (revoked) {
             throw new IllegalStateException("Appointment is already revoked.");
         }

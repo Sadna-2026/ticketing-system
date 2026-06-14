@@ -18,9 +18,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.auth.ISessionTokenRepository;
 import com.ticketing.application.auth.SessionTokenData;
+import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 
 @DisplayName("SessionTokenService")

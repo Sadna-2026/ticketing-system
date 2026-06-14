@@ -4,6 +4,7 @@ import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -13,12 +14,14 @@ import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
 @Route(value = "notifications", layout = MainLayout.class)
 @PageTitle("Notifications")
-public class NotificationsView extends VerticalLayout {
+public class NotificationsView extends VerticalLayout implements BeforeEnterObserver {
 
     private final NotificationsPresenter presenter;
 
@@ -171,5 +174,22 @@ public class NotificationsView extends VerticalLayout {
                 .set("padding", "var(--lumo-space-s)")
                 .set("background", "var(--lumo-base-color)");
         return card;
+    }
+
+    /**
+     * Intercepts navigation before entering the view.
+     * Unauthenticated users (e.g., guests or users with no session) are prevented from accessing
+     * the notifications page. They are shown an informational popup and redirected to the Home page.
+     *
+     * @param event the before enter event
+     */
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        if (!SessionContext.currentUiState().loggedInMember()) {
+            event.forwardTo(HomeView.class);
+            UI.getCurrent().access(() -> {
+                UiMessages.error("You cannot access the notifications page as a guest. Please log in first.");
+            });
+        }
     }
 }

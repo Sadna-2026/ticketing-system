@@ -18,15 +18,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.application.SearchEventsRequest;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -34,25 +36,22 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("EventsPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class EventsPresenterTest {
 
     private EventService eventService;
+    private CompanyService companyService;
     private EventsPresenter presenter;
 
     @BeforeEach
     void setUp() {
         eventService = mock(EventService.class);
-        presenter = new EventsPresenter(eventService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
+        companyService = mock(CompanyService.class);
+        presenter = new EventsPresenter(eventService, companyService);
     }
 
     @Test
@@ -150,14 +149,36 @@ class EventsPresenterTest {
         assertEquals("Could not search events. Please try again.", result.message());
     }
 
-    private void installVaadinSession() {
-        Map<String, Object> attributes = new java.util.HashMap<>();
-        VaadinSession session = mock(VaadinSession.class);
-        org.mockito.Mockito.doAnswer(invocation -> attributes.put(invocation.getArgument(0), invocation.getArgument(1)))
-                .when(session).setAttribute(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.nullable(Object.class));
-        when(session.getAttribute(org.mockito.ArgumentMatchers.anyString()))
-                .thenAnswer(invocation -> attributes.get(invocation.getArgument(0)));
-        VaadinSession.setCurrent(session);
+    @Test
+    void GivenInvalidPriceRange_WhenSearchingEvents_ThenSpecificValidationReasonIsReturned() {
+        // An invalid filter (min > max) is rejected by SearchEventsRequest with a specific
+        // IllegalArgumentException; the presenter surfaces that exact reason, not the generic message.
+        SearchResult result = presenter.searchEvents(
+                null, null, null, null,
+                new BigDecimal("90.00"),
+                new BigDecimal("10.00"),
+                null, null
+        );
+
+        assertFalse(result.success());
+        assertTrue(result.empty());
+        assertEquals("minPrice (90.00) cannot be greater than maxPrice (10.00)", result.message());
+    }
+
+    @Test
+    void GivenCompaniesExist_WhenSearchingCompanies_ThenApplicationServiceResultsAreReturned() {
+        when(companyService.searchCompanies("ac")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        List<CompanySummaryDTO> results = presenter.searchCompanies("ac");
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), results);
+    }
+
+    @Test
+    void GivenApplicationError_WhenSearchingCompanies_ThenEmptyListIsReturned() {
+        when(companyService.searchCompanies(any())).thenThrow(new IllegalStateException("boom"));
+
+        assertTrue(presenter.searchCompanies("x").isEmpty());
     }
 
     private static EventSummaryDTO eventSummary(String name) {

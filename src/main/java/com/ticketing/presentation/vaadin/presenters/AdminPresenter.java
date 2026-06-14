@@ -8,9 +8,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.application.dto.CompanySummaryDTO;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.CompanyService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
@@ -23,15 +26,19 @@ public class AdminPresenter {
             "Start a session with system admin permissions before using admin actions.";
     private static final String ADMIN_ACTION_FAILURE_MESSAGE =
             "Could not complete admin action. Please try again.";
+    private static final String ADMIN_COMPANY_FAILURE_MESSAGE =
+            "Could not complete company administration action. Please try again.";
     private static final String ADMIN_HISTORY_FAILURE_MESSAGE =
             "Could not load global purchase history. Please try again.";
     private static final String ADMIN_SUSPENSION_FAILURE_MESSAGE =
             "Could not complete suspension action. Please try again.";
 
     private final AdminService adminService;
+    private final CompanyService companyService;
 
-    public AdminPresenter(AdminService adminService) {
+    public AdminPresenter(AdminService adminService, CompanyService companyService) {
         this.adminService = adminService;
+        this.companyService = companyService;
     }
 
     public ActionResult removeMember(UUID targetMemberId) {
@@ -126,6 +133,50 @@ public class AdminPresenter {
             return PurchaseHistoryResult.success(message, purchases);
         } catch (RuntimeException ex) {
             return PurchaseHistoryResult.failure(userMessage(ex, ADMIN_HISTORY_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult closeCompany(String companyName) {
+        String token = adminToken();
+        if (token == null) {
+            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return ActionResult.failure("Company name is required.");
+        }
+
+        try {
+            companyService.permanentCloseByAdmin(token, normalizedName);
+            return ActionResult.success("Company closed.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, ADMIN_COMPANY_FAILURE_MESSAGE));
+        }
+    }
+
+    public List<MemberSummaryDTO> searchMembers(String usernameQuery) {
+        String token = adminToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return adminService.searchMembers(token, usernameQuery);
+        } catch (RuntimeException ex) {
+            logger.warn("Member search failed", ex);
+            return List.of();
+        }
+    }
+
+    public List<CompanySummaryDTO> searchCompanies(String query) {
+        String token = adminToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return companyService.searchCompanies(query);
+        } catch (RuntimeException ex) {
+            logger.warn("Company search failed", ex);
+            return List.of();
         }
     }
 

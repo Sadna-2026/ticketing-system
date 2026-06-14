@@ -11,8 +11,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.SearchEventsRequest;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
 
@@ -27,9 +29,21 @@ public class EventsPresenter {
     private static final String MAP_FAILURE_MESSAGE = "Could not load event map. Please try again.";
 
     private final EventService eventService;
+    private final CompanyService companyService;
 
-    public EventsPresenter(EventService eventService) {
+    public EventsPresenter(EventService eventService, CompanyService companyService) {
         this.eventService = eventService;
+        this.companyService = companyService;
+    }
+
+    /** Active companies for the optional company filter; empty on failure. */
+    public List<CompanySummaryDTO> searchCompanies(String query) {
+        try {
+            return companyService.searchCompanies(query);
+        } catch (RuntimeException ex) {
+            logger.warn("Company search failed", ex);
+            return List.of();
+        }
     }
 
     public SearchResult searchEvents(

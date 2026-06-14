@@ -1,15 +1,16 @@
 package com.ticketing.presentation.rest;
 
-import com.ticketing.application.dto.CompanyPublicDTO;
-import com.ticketing.application.services.CompanyService;
+import java.util.Collections;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Optional;
-import java.util.UUID;
-import java.util.Set;
-import java.util.Collections;
+import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.services.CompanyService;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.StaffAppointment;
 
@@ -71,9 +72,4 @@ public class CompanyController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
-    @DeleteMapping("/{companyName}")
-    public ResponseEntity<ApiResponse<Void>> closeCompany(@RequestHeader("X-Session-Token") String token, @PathVariable String companyName) {
-        companyService.permanentCloseByFounder(token, companyName);
-        return ResponseEntity.ok(ApiResponse.success(null));
-    }
 }

@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -14,12 +15,13 @@ import org.springframework.stereotype.Component;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
+import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
-import com.ticketing.domain.event.IDiscountPolicy;
-import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
 import com.ticketing.application.services.CompanyService;
@@ -28,7 +30,10 @@ import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
+import com.ticketing.domain.event.IDiscountPolicy;
+import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -85,12 +90,76 @@ public class CompanyPresenter {
 
     public CompanyInfoResult loadCompanyInfo(String companyName) {
         try {
-            return companyService.getCompanyInfo(companyName)
+            String token = memberToken();
+            Optional<CompanyPublicDTO> maybeCompany = token == null
+                    ? companyService.getCompanyInfo(companyName)
+                    : companyService.getCompanyInfoForLookup(token, companyName);
+            return maybeCompany
                     .map(company -> CompanyInfoResult.success("Company information loaded.", company))
                     .orElseGet(() -> CompanyInfoResult.failure("Company not found."));
         } catch (RuntimeException ex) {
             logger.warn(COMPANY_INFO_FAILURE_MESSAGE, ex);
             return CompanyInfoResult.failure(COMPANY_INFO_FAILURE_MESSAGE);
+        }
+    }
+
+    /** Active companies for company pickers; empty on failure so the view never crashes. */
+    public List<CompanySummaryDTO> searchCompanies(String query) {
+        try {
+            return companyService.searchCompanies(query);
+        } catch (RuntimeException ex) {
+            logger.warn("Company search failed", ex);
+            return List.of();
+        }
+    }
+
+    /** Company info lookup options; includes suspended companies only when the session may view them. */
+    public List<CompanySummaryDTO> searchLookupCompanies(String query) {
+        try {
+            String token = memberToken();
+            return token == null
+                    ? companyService.searchCompanies(query)
+                    : companyService.searchCompaniesForLookup(token, query);
+        } catch (RuntimeException ex) {
+            logger.warn("Lookup company search failed", ex);
+            return List.of();
+        }
+    }
+
+    public List<CompanySummaryDTO> searchLifecycleCompanies(String query) {
+        String token = memberToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return companyService.searchFounderLifecycleCompanies(token, query);
+        } catch (RuntimeException ex) {
+            logger.warn("Lifecycle company search failed", ex);
+            return List.of();
+        }
+    }
+
+    /** All events of a company (any status) for management pickers; empty if no member session. */
+    public List<EventSummaryDTO> listCompanyEvents(String companyName) {
+        String token = memberToken();
+        if (token == null || companyName == null || companyName.isBlank()) {
+            return List.of();
+        }
+        try {
+            return eventService.listCompanyEvents(token, companyName);
+        } catch (RuntimeException ex) {
+            logger.warn("Company event listing failed", ex);
+            return List.of();
+        }
+    }
+
+    /** Browsable (published/sold-out) events for the public event-map lookup picker. */
+    public List<EventSummaryDTO> searchBrowsableEvents() {
+        try {
+            return eventService.searchEvents(SearchEventsRequest.empty());
+        } catch (RuntimeException ex) {
+            logger.warn("Browsable event search failed", ex);
+            return List.of();
         }
     }
 
@@ -131,6 +200,24 @@ public class CompanyPresenter {
             return ActionResult.success("Role appointment offer sent.");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+        }
+    }
+
+    public List<PendingRoleOfferOption> listPendingRoleOffers() {
+        String token = memberToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return memberService.listPendingRoleOffers(token).stream()
+                    .map(offer -> new PendingRoleOfferOption(
+                            offer.getOfferId(),
+                            offer.getCompanyName(),
+                            offer.getRole()))
+                    .toList();
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to load pending role offers", ex);
+            return List.of();
         }
     }
 
@@ -186,6 +273,42 @@ public class CompanyPresenter {
             return ActionResult.success("Manager permissions updated.");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+        }
+    }
+
+    public PersonnelAccessResult loadPersonnelAccess(String companyName) {
+        CompanyAccessResult access = loadCompanyAccess(companyName);
+        if (access.owner()) {
+            return PersonnelAccessResult.allowed("Owner personnel controls available for " + access.companyName() + ".");
+        }
+        return PersonnelAccessResult.denied(access.staff()
+                ? "Only a company owner can manage personnel for " + access.companyName() + "."
+                : access.message());
+    }
+
+    public CompanyAccessResult loadCompanyAccess(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return CompanyAccessResult.denied(null, MEMBER_SESSION_REQUIRED);
+        }
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return CompanyAccessResult.denied(null, "Select a company to show permitted actions.");
+        }
+
+        try {
+            Optional<OrgNodeDTO> appointment = memberService.getCurrentCompanyAppointment(token, normalizedName);
+            if (appointment.isEmpty() || appointment.get().revoked()) {
+                return CompanyAccessResult.denied(normalizedName,
+                        "No active staff appointment for " + normalizedName + ".");
+            }
+            OrgNodeDTO current = appointment.get();
+            if (current.role() == StaffAppointment.StaffRole.OWNER) {
+                return CompanyAccessResult.owner(normalizedName);
+            }
+            return CompanyAccessResult.manager(normalizedName, current.permissions());
+        } catch (RuntimeException ex) {
+            return CompanyAccessResult.denied(normalizedName, userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
         }
     }
 
@@ -509,6 +632,9 @@ public class CompanyPresenter {
         if (lockMinutes == null || lockMinutes <= 0) {
             return EventActionResult.failure("Lock minutes must be positive.");
         }
+        if (zones == null || zones.isEmpty()) {
+            return EventActionResult.failure("At least one zone is required.");
+        }
         String normalizedCompanyName = blankToNull(companyName);
         if (normalizedCompanyName == null) {
             return EventActionResult.failure("Company name is required.");
@@ -517,13 +643,6 @@ public class CompanyPresenter {
         if (normalizedEventName == null) {
             return EventActionResult.failure("Event name is required.");
         }
-        if (zones == null || zones.isEmpty()) {
-            return EventActionResult.failure("At least one zone is required.");
-        }
-        if (sectionToZoneName == null || sectionToZoneName.isEmpty()) {
-            return EventActionResult.failure("At least one venue section mapping is required.");
-        }
-
         try {
             CreateEventRequest request = new CreateEventRequest(
                     normalizedCompanyName,
@@ -539,6 +658,43 @@ public class CompanyPresenter {
             return EventActionResult.created("Event created with " + zones.size() + " zone(s).", eventId);
         } catch (RuntimeException ex) {
             return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    /** Saves the visual grid layout on a DRAFT event ("save draft"). */
+    public ActionResult setEventLayout(UUID eventId, VenueLayout layout) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        if (layout == null) {
+            return ActionResult.failure("Layout is required.");
+        }
+        try {
+            eventService.setEventLayout(token, eventId, layout);
+            return ActionResult.success("Hall layout saved.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    /** Validates the event's saved layout before publishing. */
+    public ActionResult validateEventLayout(UUID eventId) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            eventService.validateEventLayout(token, eventId);
+            return ActionResult.success("Layout is valid.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
         }
     }
 
@@ -703,8 +859,22 @@ public class CompanyPresenter {
         return lifecycle(companyName, "Company reopened.", (token, name) -> companyService.reopenCompany(token, name));
     }
 
-    public ActionResult closeCompany(String companyName) {
-        return lifecycle(companyName, "Company closed.", (token, name) -> companyService.permanentCloseByFounder(token, name));
+    public LifecycleAccessResult loadLifecycleAccess(String companyName) {
+        String token = memberToken();
+        if (token == null) {
+            return LifecycleAccessResult.denied(MEMBER_SESSION_REQUIRED);
+        }
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return LifecycleAccessResult.denied("Select a company to show founder-only lifecycle controls.");
+        }
+
+        try {
+            companyService.verifyFounderLifecycleAccess(token, normalizedName);
+            return LifecycleAccessResult.allowed("Founder lifecycle controls available for " + normalizedName + ".");
+        } catch (RuntimeException ex) {
+            return LifecycleAccessResult.denied(userMessage(ex, LIFECYCLE_FAILURE_MESSAGE));
+        }
     }
 
     public PurchaseHistoryResult loadPurchaseHistory(String companyName) {
@@ -830,6 +1000,89 @@ public class CompanyPresenter {
 
         public static ActionResult failure(String message) {
             return new ActionResult(false, message);
+        }
+    }
+
+    public record PersonnelAccessResult(boolean canManagePersonnel, String message) {
+        public static PersonnelAccessResult allowed(String message) {
+            return new PersonnelAccessResult(true, message);
+        }
+
+        public static PersonnelAccessResult denied(String message) {
+            return new PersonnelAccessResult(false, message);
+        }
+    }
+
+    public record PendingRoleOfferOption(UUID offerId, String companyName, StaffAppointment.StaffRole role) {
+        public String label() {
+            return companyName + " — " + role.name();
+        }
+    }
+
+    public record LifecycleAccessResult(boolean canManageLifecycle, String message) {
+        public static LifecycleAccessResult allowed(String message) {
+            return new LifecycleAccessResult(true, message);
+        }
+
+        public static LifecycleAccessResult denied(String message) {
+            return new LifecycleAccessResult(false, message);
+        }
+    }
+
+    public record CompanyAccessResult(
+            boolean staff,
+            boolean owner,
+            String companyName,
+            Set<ManagerPermission> permissions,
+            String message
+    ) {
+        public CompanyAccessResult {
+            permissions = permissions == null ? Set.of() : Set.copyOf(permissions);
+        }
+
+        public static CompanyAccessResult owner(String companyName) {
+            return new CompanyAccessResult(true, true, companyName, Set.of(),
+                    "Owner controls available for " + companyName + ".");
+        }
+
+        public static CompanyAccessResult manager(String companyName, Set<ManagerPermission> permissions) {
+            Set<ManagerPermission> safe = permissions == null ? Set.of() : Set.copyOf(permissions);
+            String suffix = safe.isEmpty() ? "no manager permissions" : String.join(", ",
+                    safe.stream().map(ManagerPermission::name).sorted().toList());
+            return new CompanyAccessResult(true, false, companyName, safe,
+                    "Manager permissions for " + companyName + ": " + suffix + ".");
+        }
+
+        public static CompanyAccessResult denied(String companyName, String message) {
+            return new CompanyAccessResult(false, false, companyName, Set.of(), message);
+        }
+
+        public boolean has(ManagerPermission permission) {
+            return owner || permissions.contains(permission);
+        }
+
+        public boolean canManagePersonnelOffers() {
+            return has(ManagerPermission.PERSONNEL_MGMT);
+        }
+
+        public boolean canManageEvents() {
+            return has(ManagerPermission.EVENT_LIFECYCLE);
+        }
+
+        public boolean canManageInventory() {
+            return has(ManagerPermission.INVENTORY_MGMT) || has(ManagerPermission.MAP_DEFINITION);
+        }
+
+        public boolean canDefineMaps() {
+            return has(ManagerPermission.MAP_DEFINITION);
+        }
+
+        public boolean canManagePolicies() {
+            return has(ManagerPermission.POLICY_MODIFICATION);
+        }
+
+        public boolean canViewReports() {
+            return has(ManagerPermission.VIEW_REPORTS);
         }
     }
 

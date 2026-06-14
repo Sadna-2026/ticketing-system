@@ -10,12 +10,13 @@ import java.util.UUID;
 
 import javax.crypto.SecretKey;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.domain.exception.OptimisticLockException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtException;

@@ -1,10 +1,18 @@
 package com.ticketing.application;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.ticketing.application.auth.ISessionTokenService;
+
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
@@ -16,9 +24,6 @@ import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
-import com.ticketing.domain.order.TicketReservationDomainService;
-import com.ticketing.domain.services.QueueDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -26,16 +31,6 @@ import com.ticketing.infrastructure.InMemoryQueueRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.gateway.StubPaymentGateway;
 import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
-
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Base64;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for queue management operations within OrderService:
@@ -72,10 +67,7 @@ class QueueServiceTest {
 
         sessionTokenRepository = new InMemorySessionTokenRepository();
         tokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
-        TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock);
-        QueueDomainService queueDomainService = new QueueDomainService(queueRepo, eventRepo, clock);
-        orderService = new OrderService(tokenService, ticketReservationService, orderCheckoutService, queueDomainService, null, null);
+        orderService = new OrderService(tokenService, orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock, queueRepo, null, null);
 
         // Admin
         adminId = UUID.randomUUID();
@@ -98,6 +90,17 @@ class QueueServiceTest {
     void GivenAdmin_WhenCreateQueue_ThenQueueCreated() {
         UUID queueId = orderService.createQueue(adminToken, eventId, 10, 5);
         assertNotNull(queueId);
+    }
+
+    @Test
+    void GivenNoExplicitParams_WhenCreateQueue_ThenUsesConfigDefaultThresholdAndFlowRate() {
+        // V3-13: the no-param overload uses the config-driven defaults
+        // (ticketing.queue.threshold/flow-rate = 100/10; field-initializer fallback here).
+        UUID queueId = orderService.createQueue(adminToken, eventId);
+        com.ticketing.domain.queue.VirtualQueue queue = queueRepo.findByEventId(eventId).orElseThrow();
+        assertEquals(queueId, queue.getId());
+        assertEquals(100, queue.getConfig().getThreshold());
+        assertEquals(10, queue.getConfig().getFlowRate());
     }
 
     @Test

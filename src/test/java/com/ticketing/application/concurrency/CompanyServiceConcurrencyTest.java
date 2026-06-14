@@ -1,5 +1,11 @@
 package com.ticketing.application.concurrency;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -11,18 +17,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.application.services.CompanyService;
-import com.ticketing.domain.services.CompanyLifecycleDomainService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
@@ -216,13 +216,8 @@ public class CompanyServiceConcurrencyTest {
     }
 
     private CompanyService newCompanyServiceWithLifecycle(ICompanyRepository repo) {
-        CompanyLifecycleDomainService lifecycleDomainService = new CompanyLifecycleDomainService(
-                repo,
-                new InMemoryEventRepository(),
-                memberRepository,
-                new InMemoryOrderRepository(),
-                mock(IPaymentGateway.class));
-        return new CompanyService(repo, null, sessionTokenService, memberRepository, null, lifecycleDomainService, null);
+        return new CompanyService(repo, null, sessionTokenService, memberRepository,
+                new InMemoryEventRepository(), new InMemoryOrderRepository(), mock(IPaymentGateway.class));
     }
 
     private static void runSuspend(
@@ -302,6 +297,21 @@ public class CompanyServiceConcurrencyTest {
         @Override
         public List<Company> getAll() {
             return delegate.getAll();
+        }
+
+        @Override
+        public List<Company> findActiveCompanies(String query) {
+            return delegate.findActiveCompanies(query);
+        }
+
+        @Override
+        public List<Company> findLookupVisibleCompanies(UUID memberId, boolean systemAdmin, String query) {
+            return delegate.findLookupVisibleCompanies(memberId, systemAdmin, query);
+        }
+
+        @Override
+        public List<Company> findFounderLifecycleCompanies(UUID founderId, String query) {
+            return delegate.findFounderLifecycleCompanies(founderId, query);
         }
 
         @Override

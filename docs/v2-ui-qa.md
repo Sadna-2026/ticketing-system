@@ -28,7 +28,7 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 
 | Role | Username | Password | Notes |
 |---|---|---|---|
-| System admin seed | `admin` | `admin123` | Seeded as a member and in the admin repository. Admin-session login wiring is handled separately. |
+| System admin seed | `admin` | `admin123` | Seeded as a member and in the admin repository. Log in via the **Admin username/password** form on `/auth`. |
 | Member | `member` | `member123` | Adult buyer for successful purchase flow. |
 | Owner | `owner` | `owner123` | Owner/founder of `Demo Productions`. |
 | Manager | `manager` | `manager123` | Manager with only `VIEW_REPORTS`. Useful for permission-denied checks. |
@@ -51,6 +51,9 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 | Assigned seat IDs | `eeeeeeee-0000-0000-0000-000000000001`, `eeeeeeee-0000-0000-0000-000000000002`, `eeeeeeee-0000-0000-0000-000000000003` |
 | Second-company conference event ID | `44444444-4444-4444-4444-444444444444` |
 | Conference GA zone ID | `dddddddd-dddd-dddd-dddd-dddddddddddd` |
+| Mixed limited event ID | `88888888-8888-8888-8888-888888888888` |
+| Mixed limited seat zone ID | `88888888-0000-0000-0000-0000000000a1` |
+| Mixed limited GA zone ID | `88888888-0000-0000-0000-0000000000a2` |
 
 ## Test Checklist
 
@@ -72,14 +75,15 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 4. Load inventory, add GA ticket(s), checkout.
 5. Verify success message and purchase history.
 6. Repeat with assigned-seat event `33333333-3333-3333-3333-333333333333` and one of the assigned seat IDs to verify assigned-seat selection.
+7. Open `/orders`, create an order for Mixed Limited Event `88888888-8888-8888-8888-888888888888`. Add 1 assigned seat and 3 GA tickets. The system should block the addition of the 4th ticket due to the `MaxQuantityPolicy(3)`.
 
 ### Policy Failure
 
 1. Log in as `teen` / `teen123`.
-2. In `/orders`, create an order for event `22222222-2222-2222-2222-222222222222`.
-3. Load inventory, add GA ticket(s), checkout.
-4. Verify the age-policy message is shown from the domain/application result:
+2. On `/events`, search for `18+ Policy Test Event`, load its map, and try to add GA ticket(s).
+3. Verify the age-policy message is shown from the domain/application result when adding tickets:
    `You must be at least 18 years old to purchase tickets for this event`.
+4. Checkout stays disabled because no tickets were added to the cart.
 
 ### Owner
 
@@ -115,12 +119,94 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 ### Admin
 
 1. Verify admin-only actions are hidden for guest/member/owner/manager accounts.
-2. After the admin-login branch is merged, log in through that flow.
+2. On `/auth`, log in with the **Admin username/password** form as `admin` / `admin123`.
 3. Verify `Admin` navigation is visible.
 4. Open `/admin`.
 5. Load global purchase history.
 6. Try suspension/removal inputs using member UUIDs from the seed if needed.
 
-## Known UI Gap To Record
+## V2-INF-4.5 QA Findings
 
-Vaadin still does not provide real purchase/discount policy management controls. The domain/application layer has policy APIs, but the UI only exposes a placeholder/gap note. If V2-INF-4.5 is QA-only, create a follow-up UI task for policy management controls instead of implementing it in this branch.
+Evidence gathered for issue #193 by reading the Vaadin presentation layer
+(`src/main/java/com/ticketing/presentation/vaadin/`) and exercising the flows above. Each
+acceptance criterion was verified against the current code.
+
+### Role visibility (AC 1)
+
+Navigation links and route access are gated by session role — `MainLayout` shows/hides nav
+links, and views guard access:
+
+| Role | Adds to navigation | Guarding |
+|---|---|---|
+| No session | — (redirected to `/auth`) | `AuthNavigationGuard` forwards any route without a session to `/auth`. |
+| Guest session | Home, Events, Orders, Notifications | Member-only pages still guard on entry (below). |
+| Member | + Profile, Company | — |
+| System admin | + Admin | Admin controls hidden + guarded for non-admins. |
+
+Full-page member-only views guard on entry with a forward-to-Home + toast (consistent pattern):
+
+- `/notifications` → `NotificationsView.beforeEnter`
+- `/profile` → `MemberView.beforeEnter` (**added in this issue** so it matches `/notifications`;
+  previously it only rendered an inline "you must be logged in" message)
+
+Mixed-role views gate per section rather than per route:
+
+- `/company` — `CompanyView` shows/hides each tab and its controls by manager permission
+  (events, inventory, reports, policies, lifecycle, personnel); a denied section shows a
+  permission message instead of the controls.
+- `/admin` — `AdminView` hides the admin tabs/controls and shows an admin-only hint for
+  non-admin sessions.
+
+### Action feedback (AC 2)
+
+Every user action reports its outcome through `UiMessages` (success **and** failure toasts),
+and most also update an on-page status `Span`. Verified across Auth, Events, Orders, Company,
+Admin, Notifications, and Profile actions.
+
+### Error message sourcing (AC 3)
+
+Presenters surface the application/domain message **verbatim** rather than inventing a business
+reason. The shared pattern is a `userMessage(ex, fallback)` helper (e.g. `OrdersPresenter`):
+known validation exceptions (`IllegalArgumentException` / `IllegalStateException` /
+`SecurityException`) pass their message through to the UI; unexpected exceptions fall back to a
+safe generic message and are logged.
+
+Age-policy failure renders the domain message verbatim (matches the spec example):
+
+```text
+You must be at least 18 years old to purchase tickets for this event
+```
+
+Permission denials in `CompanyView` are shown with a UI-composed, context-rich message, e.g.:
+
+```text
+User "manager" doesn't have MANAGE_EVENTS permission for Demo Productions.
+```
+
+This summarises the backend `CompanyAccessResult` for the user — it states *which* permission is
+missing rather than inventing a business explanation, so it is consistent with req 3.5.
+
+### Generic backend/application messages (recorded)
+
+These appear only when an unexpected exception carries no user-facing message; specific domain
+validation messages are preserved on the normal paths. Recorded here so they can be made more
+specific if the application layer starts wrapping more failures in typed messages:
+
+- `AuthPresenter`: "Could not start guest session.", "Login failed. Please try again.",
+  "Registration failed. Please try again.", "Logout failed. Please try again.",
+  "Could not exit guest session."
+- `OrdersPresenter`: "Could not load active order. Please try again.",
+  "Could not add GA tickets. Please try again.", "Could not checkout. Please try again."
+
+### Password fields
+
+All password inputs use Vaadin `PasswordField` (not `TextField`): member login, member
+registration, and admin login (all in `AuthView`).
+
+### Result
+
+Acceptance criteria 1–3 are met. The single role-visibility inconsistency found (the profile
+page guarded with an inline message instead of a redirect) was fixed in this issue. No UI
+inventions of business explanations were found. Purchase/discount **policy management controls
+now exist** in the `CompanyView` Policies tab (load/set/remove for purchase and discount
+policies), so the earlier "no policy UI" gap is closed.

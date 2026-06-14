@@ -5,7 +5,16 @@ import java.time.Instant;
 
 import com.ticketing.domain.order.ActiveOrder;
 
-public class NoDiscountPolicy implements IDiscountPolicy {
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+
+@Entity
+@DiscriminatorValue("NONE")
+public class NoDiscountPolicy extends AbstractDiscountPolicy {
+
+    public NoDiscountPolicy() {
+    }
+
     @Override
     public BigDecimal priceAfterDiscount(ActiveOrder order, String couponCode, Instant systemClock) {
         BigDecimal finalPrice = order.getTotalPrice();

@@ -1,16 +1,4 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.lang.reflect.Field;
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,10 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -35,14 +19,28 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CompanyPublicDTO;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.initialization.InitializationService;
 import com.ticketing.application.services.CompanyService;
-import com.ticketing.domain.services.CompanyHistoryDomainService;
-import com.ticketing.domain.services.CompanyLifecycleDomainService;
-import com.ticketing.domain.services.CompanyQueryDomainService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
@@ -61,6 +59,7 @@ import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.member.communication.ManagerPermissionsChangedEvent;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
@@ -68,7 +67,6 @@ import com.ticketing.infrastructure.InMemoryEventPublisher;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
-
 
 @DisplayName("CompanyService")
 class CompanyServiceTest {
@@ -140,6 +138,71 @@ class CompanyServiceTest {
         }
 
         @Test
+        public void GivenSuspendedMember_WhenOpenProductionCompany_ThenThrowsAndCompanyIsNotCreated() {
+            UUID memberId = UUID.randomUUID();
+            String token = "valid-token";
+            String companyName = "BlockedCompany";
+
+            when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(memberId);
+
+            Member member = new Member(memberId, "blocked", "blocked@test.com", "pass");
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.saveIfUsernameAndEmailAvailable(member);
+
+            assertThrows(IllegalStateException.class,
+                    () -> companyService.openProductionCompany(token, companyName, "Description"));
+            assertFalse(companyRepository.existsByName(companyName));
+        }
+
+        @Test
+        public void GivenSuspendedOwner_WhenReadingCompanyPolicy_ThenAllowed() {
+            UUID memberId = UUID.randomUUID();
+            String token = "valid-token";
+            String companyName = "ReadableCompany";
+
+            when(sessionTokenServiceMock.isValid(token)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(token)).thenReturn(memberId);
+
+            Member member = new Member(memberId, "owner", "owner@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(member);
+            companyService.openProductionCompany(token, companyName, "Description");
+
+            Member saved = memberRepository.findById(memberId).orElseThrow();
+            saved.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "read-only"));
+            memberRepository.save(saved);
+
+            assertDoesNotThrow(() -> companyService.getCompanyPurchasePolicy(token, companyName));
+        }
+
+        @Test
+        public void GivenSuspendedOwner_WhenOfferRoleAppointment_ThenThrowsAndNoOfferIsCreated() {
+            UUID ownerId = UUID.randomUUID();
+            UUID targetId = UUID.randomUUID();
+            String companyName = "SuspendedOfferCo";
+            String ownerToken = "valid-" + ownerId.toString();
+
+            when(sessionTokenServiceMock.isValid(ownerToken)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(ownerToken)).thenReturn(ownerId);
+
+            Member owner = new Member(ownerId, "owner", "owner@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(owner);
+            companyService.openProductionCompany(ownerToken, companyName, "Desc");
+
+            Member target = new Member(targetId, "target", "target@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(target);
+
+            Member suspendedOwner = memberRepository.findById(ownerId).orElseThrow();
+            suspendedOwner.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(suspendedOwner);
+
+            assertThrows(IllegalStateException.class,
+                    () -> companyService.offerRoleAppointment(ownerToken, companyName, targetId,
+                            StaffAppointment.StaffRole.MANAGER, Collections.singleton(ManagerPermission.PERSONNEL_MGMT)));
+            assertTrue(memberRepository.findById(targetId).orElseThrow().getPendingOffers().isEmpty());
+        }
+
+        @Test
         public void GivenAcceptedResponse_WhenRespondToRoleAppointment_ThenNotifiesAppointee() {
             UUID appointerId = UUID.randomUUID();
             UUID targetId = UUID.randomUUID();
@@ -197,6 +260,41 @@ class CompanyServiceTest {
 
             assertNull(memberRepository.findById(targetId).get().getStaffAppointment(companyName));
             verify(notificationService).notify(eq(appointerId.toString()), contains("declined the manager role offer"));
+        }
+
+        @Test
+        public void GivenSuspendedTarget_WhenRespondToRoleAppointment_ThenThrowsAndOfferRemainsPending() {
+            UUID appointerId = UUID.randomUUID();
+            UUID targetId = UUID.randomUUID();
+            String companyName = "SuspendedResponseCo";
+            String appointerToken = "valid-" + appointerId.toString();
+            String targetToken = "valid-" + targetId.toString();
+
+            when(sessionTokenServiceMock.isValid(appointerToken)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(appointerToken)).thenReturn(appointerId);
+            when(sessionTokenServiceMock.isValid(targetToken)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(targetToken)).thenReturn(targetId);
+
+            Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(appointer);
+            companyService.openProductionCompany(appointerToken, companyName, "Desc");
+
+            Member target = new Member(targetId, "target", "target@test.com", "pass");
+            memberRepository.saveIfUsernameAndEmailAvailable(target);
+            companyService.offerRoleAppointment(appointerToken, companyName, targetId,
+                    StaffAppointment.StaffRole.MANAGER, Collections.singleton(ManagerPermission.PERSONNEL_MGMT));
+
+            PendingRoleOffer offer = memberRepository.findById(targetId).orElseThrow().getPendingOffers().get(0);
+            Member suspendedTarget = memberRepository.findById(targetId).orElseThrow();
+            suspendedTarget.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(suspendedTarget);
+
+            assertThrows(IllegalStateException.class,
+                    () -> companyService.respondToRoleAppointment(targetToken, offer.getOfferId(), true));
+
+            Member after = memberRepository.findById(targetId).orElseThrow();
+            assertNull(after.getStaffAppointment(companyName));
+            assertEquals(1, after.getPendingOffers().size());
         }
 
         @Test
@@ -512,8 +610,7 @@ class CompanyServiceTest {
             memberRepo = new InMemoryMemberRepository();
             orderRepo = new InMemoryOrderRepository();
             tokens = mock(ISessionTokenService.class);
-            CompanyHistoryDomainService historyDomainService = new CompanyHistoryDomainService(companyRepo, memberRepo, orderRepo, tokens);
-            service = new CompanyService(companyRepo, null, tokens, memberRepo, historyDomainService, null, null);
+            service = new CompanyService(companyRepo, null, tokens, memberRepo, null, orderRepo, null);
 
             ownerId = UUID.randomUUID();
             owner = new Member(ownerId, "owner", "owner@x.com", "pw");
@@ -658,10 +755,12 @@ class CompanyServiceTest {
         private InMemoryMemberRepository memberRepo;
         private InMemoryOrderRepository orderRepo;
         private IPaymentGateway paymentGateway;
+        private INotificationService notificationService;
         private ISessionTokenService tokens;
         private CompanyService service;
 
         private UUID founderId;
+        private UUID managerId;
         private Member founder;
         private Company company;
 
@@ -672,9 +771,10 @@ class CompanyServiceTest {
             memberRepo = new InMemoryMemberRepository();
             orderRepo = new InMemoryOrderRepository();
             paymentGateway = mock(IPaymentGateway.class);
+            notificationService = mock(INotificationService.class);
             tokens = mock(ISessionTokenService.class);
-            CompanyLifecycleDomainService lifecycleDomainService = new CompanyLifecycleDomainService(companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway);
-            service = new CompanyService(companyRepo, null, tokens, memberRepo, null, lifecycleDomainService, null);
+            service = new CompanyService(companyRepo, null, tokens, memberRepo,
+                eventRepo, orderRepo, paymentGateway, notificationService);
 
             founderId = UUID.randomUUID();
             founder = new Member(founderId, "founder", "founder@x.com", "pw");
@@ -682,6 +782,12 @@ class CompanyServiceTest {
                 COMPANY, founderId, StaffAppointment.StaffRole.OWNER, Set.of());
             founder.addStaffAppointment(COMPANY, ownerAppt);
             memberRepo.save(founder);
+
+            managerId = UUID.randomUUID();
+            Member manager = new Member(managerId, "manager", "manager@x.com", "pw");
+            manager.addStaffAppointment(COMPANY, new StaffAppointment(
+                COMPANY, founderId, StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.VIEW_REPORTS)));
+            memberRepo.save(manager);
 
             company = new Company(COMPANY, "desc", founderId);
             companyRepo.save(company);
@@ -701,6 +807,29 @@ class CompanyServiceTest {
 
             Company saved = companyRepo.findByName(COMPANY).orElseThrow();
             assertEquals(CompanyStatus.SUSPENDED, saved.getStatus());
+            verify(notificationService).notify(eq(founderId.toString()), contains("suspended"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("suspended"));
+        }
+
+        @Test
+        public void GivenFounder_WhenSearchingLifecycleCompanies_ThenActiveAndSuspendedCompaniesAreReturned() {
+            Company suspended = new Company("Suspended Co", "desc", founderId);
+            suspended.suspend();
+            companyRepo.save(suspended);
+            Company closed = new Company("Closed Co", "desc", founderId);
+            closed.close();
+            companyRepo.save(closed);
+            Company otherFounderCompany = new Company("Other Founder Co", "desc", UUID.randomUUID());
+            companyRepo.save(otherFounderCompany);
+
+            List<String> names = service.searchFounderLifecycleCompanies(FOUNDER_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name)
+                    .toList();
+
+            assertTrue(names.contains(COMPANY));
+            assertTrue(names.contains("Suspended Co"));
+            assertFalse(names.contains("Closed Co"));
+            assertFalse(names.contains("Other Founder Co"));
         }
 
         @Test
@@ -710,6 +839,35 @@ class CompanyServiceTest {
             service.reopenCompany(FOUNDER_TOKEN, COMPANY);
 
             assertEquals(CompanyStatus.ACTIVE, companyRepo.findByName(COMPANY).orElseThrow().getStatus());
+            verify(notificationService).notify(eq(founderId.toString()), contains("returned to activity"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("returned to activity"));
+        }
+
+        @Test
+        public void GivenSuspendedCompany_WhenPublicLookupAndSearch_ThenHiddenUntilReopened() {
+            Event event = seedEvent(UUID.randomUUID());
+            EventStatus originalStatus = event.getStatus();
+
+            service.suspendCompany(FOUNDER_TOKEN, COMPANY);
+
+            assertTrue(service.getCompanyInfo(COMPANY).isEmpty());
+            assertFalse(service.searchCompanies("").stream().map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertTrue(service.getCompanyInfoForLookup(FOUNDER_TOKEN, COMPANY).isPresent());
+            assertTrue(service.getCompanyInfoForLookup(ADMIN_TOKEN, COMPANY).isPresent());
+            assertTrue(service.getCompanyInfoForLookup(OUTSIDER_TOKEN, COMPANY).isEmpty());
+            assertTrue(service.searchCompaniesForLookup(FOUNDER_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertTrue(service.searchCompaniesForLookup(ADMIN_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertFalse(service.searchCompaniesForLookup(OUTSIDER_TOKEN, "").stream()
+                    .map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertEquals(originalStatus, eventRepo.findById(event.getId()).orElseThrow().getStatus());
+
+            service.reopenCompany(FOUNDER_TOKEN, COMPANY);
+
+            assertTrue(service.getCompanyInfo(COMPANY).isPresent());
+            assertTrue(service.searchCompanies("").stream().map(CompanySummaryDTO::name).toList().contains(COMPANY));
+            assertEquals(originalStatus, eventRepo.findById(event.getId()).orElseThrow().getStatus());
         }
 
         @Test
@@ -737,6 +895,8 @@ class CompanyServiceTest {
             // Founder's appointment must be preserved per the V0 spec
             Member f = memberRepo.findById(founderId).orElseThrow();
             assertNotNull(f.getStaffAppointment(COMPANY));
+            verify(notificationService).notify(eq(founderId.toString()), contains("closed"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("closed"));
         }
 
         @Test
@@ -744,8 +904,8 @@ class CompanyServiceTest {
             Event e1 = seedEvent(UUID.randomUUID());
 
             // seed a second staff member (manager) appointed to the same company
-            UUID managerId = UUID.randomUUID();
-            Member manager = new Member(managerId, "managerUser", "manager@x.com", "pw");
+            UUID adminClosedManagerId = UUID.randomUUID();
+            Member manager = new Member(adminClosedManagerId, "adminClosedManager", "admin-closed-manager@x.com", "pw");
             manager.addStaffAppointment(COMPANY, new StaffAppointment(
                 COMPANY, founderId, StaffAppointment.StaffRole.MANAGER,
                 Set.of(ManagerPermission.EVENT_LIFECYCLE)));
@@ -762,8 +922,10 @@ class CompanyServiceTest {
             // BOTH founder and manager appointments must be gone
             assertNull(memberRepo.findById(founderId).orElseThrow().getStaffAppointment(COMPANY),
                 "Admin close revokes founder appointment");
-            assertNull(memberRepo.findById(managerId).orElseThrow().getStaffAppointment(COMPANY),
+            assertNull(memberRepo.findById(adminClosedManagerId).orElseThrow().getStaffAppointment(COMPANY),
                 "Admin close revokes manager appointment");
+            verify(notificationService).notify(eq(founderId.toString()), contains("closed"));
+            verify(notificationService).notify(eq(adminClosedManagerId.toString()), contains("closed"));
         }
 
         @Test
@@ -820,8 +982,8 @@ class CompanyServiceTest {
                 companyRepo.findByName(COMPANY).orElseThrow().getStatus());
 
             // 3) simulate a service restart: build a fresh service whose in-memory queue is empty
-            CompanyLifecycleDomainService freshLifecycleDomainService = new CompanyLifecycleDomainService(companyRepo, eventRepo, memberRepo, orderRepo, paymentGateway);
-            CompanyService freshService = new CompanyService(companyRepo, null, tokens, memberRepo, null, freshLifecycleDomainService, null);
+            CompanyService freshService = new CompanyService(companyRepo, null, tokens, memberRepo,
+                eventRepo, orderRepo, paymentGateway, notificationService);
 
             // 4) gateway recovers; retry must rehydrate the queue from completedPurchaseRepo
             when(paymentGateway.refund(anyString(), anyDouble()))
@@ -831,6 +993,8 @@ class CompanyServiceTest {
 
             assertEquals(CompanyStatus.CLOSED,
                 companyRepo.findByName(COMPANY).orElseThrow().getStatus());
+            verify(notificationService).notify(eq(founderId.toString()), contains("closed"));
+            verify(notificationService).notify(eq(managerId.toString()), contains("closed"));
         }
 
         @Test
@@ -898,8 +1062,7 @@ class CompanyServiceTest {
         public void setUp() {
             companyRepo = new InMemoryCompanyRepository();
             eventRepo = new InMemoryEventRepository();
-            CompanyQueryDomainService queryDomainService = new CompanyQueryDomainService(companyRepo, eventRepo);
-            service = new CompanyService(companyRepo, null, null, null, null, null, queryDomainService);
+            service = new CompanyService(companyRepo, null, null, null, eventRepo, null, null);
         }
 
         @Test
@@ -1029,9 +1192,67 @@ class CompanyServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("CompanyService.searchCompanies")
+    class SearchCompanies {
 
+        private InMemoryCompanyRepository companyRepository;
+        private CompanyService companyService;
 
+        @BeforeEach
+        void setUp() {
+            companyRepository = new InMemoryCompanyRepository();
+            companyService = new CompanyService(companyRepository, null, null, null, new InMemoryEventRepository(), null, null);
+        }
 
+        @Test
+        void GivenActiveCompanies_WhenSearchingWithBlankQuery_ThenAllActiveCompaniesReturnedSortedByName() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+            companyRepository.save(new Company("Beta", "desc", UUID.randomUUID()));
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("");
+
+            assertEquals(List.of("Acme", "Beta"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenPartialQuery_WhenSearchingCompanies_ThenOnlyMatchingNamesReturned() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+            companyRepository.save(new Company("Beta", "desc", UUID.randomUUID()));
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("be");
+
+            assertEquals(List.of("Beta"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenMixedCaseQuery_WhenSearchingCompanies_ThenMatchIsCaseInsensitive() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("ACME");
+
+            assertEquals(List.of("Acme"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenSuspendedCompany_WhenSearchingCompanies_ThenInactiveCompaniesAreExcluded() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+            Company suspended = new Company("Beta", "desc", UUID.randomUUID());
+            suspended.suspend();
+            companyRepository.save(suspended);
+
+            List<CompanySummaryDTO> results = companyService.searchCompanies("");
+
+            assertEquals(List.of("Acme"), results.stream().map(CompanySummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenNoMatch_WhenSearchingCompanies_ThenEmptyListReturned() {
+            companyRepository.save(new Company("Acme", "desc", UUID.randomUUID()));
+
+            assertTrue(companyService.searchCompanies("zzz").isEmpty());
+        }
+    }
 
 
 }

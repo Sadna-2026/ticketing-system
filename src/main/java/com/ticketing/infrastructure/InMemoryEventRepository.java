@@ -6,6 +6,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.exception.OptimisticLockException;
@@ -17,6 +19,7 @@ import com.ticketing.domain.exception.OptimisticLockException;
  * OptimisticLockException is thrown, signaling the caller to retry.
  */
 @org.springframework.stereotype.Component
+@ConditionalOnProperty(name = "ticketing.persistence", havingValue = "memory", matchIfMissing = true)
 public class InMemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<UUID, Event> store = new ConcurrentHashMap<>();

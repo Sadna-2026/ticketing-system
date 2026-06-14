@@ -9,3 +9,13 @@ logs/
 application.properties
 self_assignments.md
 src/main/frontend/
+src/main/bundles/
+
+# Personal / local workspace artifacts (not part of the repo)
+.claude/
+.context/
+HANDOFF.md
+rewrite.yml
+requirements/
+node_modules
+.vscode/

@@ -7,14 +7,44 @@ import java.util.UUID;
 
 import com.ticketing.domain.member.StaffAppointment.StaffRole;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "pending_role_offers")
 public class PendingRoleOffer {
-    private final UUID offerId;
-    private final UUID offeredByMemberId;
-    private final String companyName;
-    private final StaffRole role;
-    private final Set<ManagerPermission> permissions;
-    private final LocalDateTime createdAt;
-    private final LocalDateTime dueDate;
+    @Id
+    @Column(name = "offer_id")
+    private UUID offerId;
+    @Column(name = "offered_by_member_id")
+    private UUID offeredByMemberId;
+    @Column(name = "company_name")
+    private String companyName;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role")
+    private StaffRole role;
+    @ElementCollection
+    @CollectionTable(
+            name = "pending_role_offer_permissions",
+            joinColumns = @JoinColumn(name = "offer_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "permission")
+    private Set<ManagerPermission> permissions;
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    @Column(name = "due_date")
+    private LocalDateTime dueDate;
+
+    // Required by JPA; do not use directly.
+    protected PendingRoleOffer() {
+    }
 
     public PendingRoleOffer(UUID offeredByMemberId, String companyName, StaffRole role, Set<ManagerPermission> permissions, LocalDateTime dueDate) {
         this(UUID.randomUUID(), offeredByMemberId, companyName, role, permissions, LocalDateTime.now(), dueDate);

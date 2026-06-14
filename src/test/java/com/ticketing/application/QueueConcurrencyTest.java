@@ -1,5 +1,8 @@
 package com.ticketing.application;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,12 +16,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.application.TestClock;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.services.OrderService;
@@ -28,9 +28,6 @@ import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.queue.VirtualQueue;
-import com.ticketing.domain.order.OrderCheckoutDomainService;
-import com.ticketing.domain.order.TicketReservationDomainService;
-import com.ticketing.domain.services.QueueDomainService;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
@@ -68,10 +65,7 @@ class QueueConcurrencyTest {
 
         InMemorySessionTokenRepository sessionTokenRepository = new InMemorySessionTokenRepository();
         tokenService = new SessionTokenService(secret, 120, sessionTokenRepository);
-        TicketReservationDomainService ticketReservationService = new TicketReservationDomainService(orderRepo, eventRepo, clock, memberRepo);
-        OrderCheckoutDomainService orderCheckoutService = new OrderCheckoutDomainService(orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock);
-        QueueDomainService queueDomainService = new QueueDomainService(queueRepo, eventRepo, clock);
-        orderService = new OrderService(tokenService, ticketReservationService, orderCheckoutService, queueDomainService, null, null);
+        orderService = new OrderService(tokenService, orderRepo, eventRepo, memberRepo, List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock, queueRepo, null, null);
 
         adminToken = tokenService.generateMemberToken(UUID.randomUUID(), UUID.randomUUID(), Set.of("Admin"));
 

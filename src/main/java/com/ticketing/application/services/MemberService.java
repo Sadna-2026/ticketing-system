@@ -1,7 +1,9 @@
 package com.ticketing.application.services;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,6 +12,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.auth.SessionTokenData;
@@ -19,6 +22,7 @@ import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.MemberMapper;
+import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
@@ -30,9 +34,16 @@ import com.ticketing.domain.member.response.RegisterResponse;
 import com.ticketing.domain.member.response.UpdateMemberDetailsResponse;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
+/**
+ * Application service for member registration, authentication and profile.
+ *
+ * <p>V3-10 (#268): class default {@code @Transactional(readOnly = true)} for queries;
+ * mutating use cases override with read-write {@code @Transactional}.
+ */
 @Service
+@Transactional(readOnly = true)
 public class MemberService {
-    
+
     private final IMemberRepository memberRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
     private final ISessionTokenService sessionTokenService;
@@ -62,6 +73,7 @@ public class MemberService {
 
     }
 
+    @Transactional
     public RegisterResponse register(RegisterRequest request, String guestToken) {
         if (request == null) {
             logger.warn("Registration attempt with null request");
@@ -135,6 +147,7 @@ public class MemberService {
         return RegisterResponse.success(MemberMapper.toDto(member), memberToken);
     }
 
+    @Transactional
     public LoginResponse login(LoginRequest request, String guestToken) {
 
         logger.info("Register requested: username={}", request == null ? null : request.username());
@@ -198,6 +211,7 @@ public class MemberService {
         return loginLocksByUsername.computeIfAbsent(username, ignored -> new Object());
     }
 
+    @Transactional
     public UpdateMemberDetailsResponse updateIdentifyingDetails(
             String sessionToken,
             UUID memberId,
@@ -233,6 +247,12 @@ public class MemberService {
             logger.warn("Failed to update member details: member not found " + memberId);
             return UpdateMemberDetailsResponse.failure("Member not found.");
         }
+        try {
+            member.rejectIfSuspended(java.time.Instant.now());
+        } catch (IllegalStateException ex) {
+            logger.warn("Failed to update member details: member suspended {}", memberId);
+            return UpdateMemberDetailsResponse.failure(ex.getMessage());
+        }
 
         String username = request.username() == null ? member.getUsername() : request.username();
         String email = request.email() == null ? member.getEmail() : request.email();
@@ -267,6 +287,7 @@ public class MemberService {
     }
 
 
+    @Transactional
     public LogoutResponse logout(String sessionToken) {
         if (sessionToken == null || sessionToken.isBlank()) {
             return LogoutResponse.failure("No authenticated member session exists.");
@@ -304,6 +325,7 @@ public class MemberService {
         return MemberMapper.toDto(member);
     }
 
+    @Transactional
     public MemberExitResponse exitPlatform(String sessionToken) {
         if (sessionToken == null || sessionToken.isBlank()) {
             return MemberExitResponse.failure("No authenticated member session exists.");
@@ -358,16 +380,20 @@ public class MemberService {
         Map<UUID, List<Member>> subordinatesByAppointer = companyMembers.stream()
                 .filter(m -> {
                     StaffAppointment sa = m.getStaffAppointment(companyName);
-                    return sa != null && sa.getAppointedByMemberId() != null;
+                    return sa != null
+                            && sa.getAppointedByMemberId() != null
+                            && !m.getId().equals(sa.getAppointedByMemberId());
                 })
                 .collect(Collectors.groupingBy(m -> m.getStaffAppointment(companyName).getAppointedByMemberId()));
 
-        // Identify roots: no appointer, or appointer is not in the company
+        // Identify roots: no appointer, self-appointed founder, or appointer is not in the company
         List<Member> roots = companyMembers.stream()
                 .filter(m -> {
                     StaffAppointment sa = m.getStaffAppointment(companyName);
                     UUID appointerId = sa.getAppointedByMemberId();
-                    return appointerId == null || !memberIdsInCompany.contains(appointerId);
+                    return appointerId == null
+                            || m.getId().equals(appointerId)
+                            || !memberIdsInCompany.contains(appointerId);
                 })
                 .sorted(Comparator.comparing(Member::getUsername))
                 .toList();
@@ -380,6 +406,41 @@ public class MemberService {
         return roots.stream()
                 .map(root -> buildSubtree(root, subordinatesByAppointer, companyName))
                 .collect(Collectors.toList());
+    }
+
+    // Returns pending role offers addressed to the authenticated member.
+    public List<PendingRoleOffer> listPendingRoleOffers(String token) {
+        UUID memberId = validateTokenForStaffAccess(token);
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new SecurityException("Authenticated member not found."));
+        return member.getActivePendingOffers();
+    }
+
+    // Returns only the authenticated member's own appointment in a company.
+    // This supports permission-scoped UI without exposing the full organization chart.
+    public Optional<OrgNodeDTO> getCurrentCompanyAppointment(String token, String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            throw new IllegalArgumentException("Company name is required.");
+        }
+
+        UUID memberId = validateTokenForStaffAccess(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests cannot view company permissions. Please log in.");
+        }
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new SecurityException("Authenticated member not found."));
+        StaffAppointment appt = member.getStaffAppointment(companyName);
+        if (appt == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new OrgNodeDTO(
+                member.getId(),
+                member.getUsername(),
+                appt.getRole(),
+                appt.getPermissions(),
+                appt.isRevoked(),
+                List.of()
+        ));
     }
 
     private OrgNodeDTO buildSubtree(Member member, Map<UUID, List<Member>> subordinatesByAppointer, String companyName) {
@@ -401,17 +462,21 @@ public class MemberService {
     }
 
     private UUID validateTokenForChart(String token) {
+        UUID memberId = validateTokenForStaffAccess(token);
+        if (memberId == null) {
+            throw new SecurityException("Guests cannot view the organization chart. Please log in.");
+        }
+        return memberId;
+    }
+
+    private UUID validateTokenForStaffAccess(String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Authentication token is required.");
         }
         if (!sessionTokenService.isValid(token)) {
             throw new IllegalArgumentException("Invalid or expired authentication token.");
         }
-        UUID memberId = sessionTokenService.extractMemberId(token);
-        if (memberId == null) {
-            throw new SecurityException("Guests cannot view the organization chart. Please log in.");
-        }
-        return memberId;
+        return sessionTokenService.extractMemberId(token);
     }
 
     private boolean isValidRegisterRequest(RegisterRequest request) {
