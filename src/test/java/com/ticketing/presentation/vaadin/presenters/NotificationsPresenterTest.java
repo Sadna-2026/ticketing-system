@@ -18,6 +18,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.MemberService;
 import com.ticketing.application.services.NotificationQueryService;
 import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.infrastructure.notification.WebSocketNotificationService;
@@ -32,13 +34,17 @@ class NotificationsPresenterTest {
 
     private NotificationQueryService notificationQueryService;
     private WebSocketNotificationService realtimeNotificationService;
+    private MemberService memberService;
+    private CompanyService companyService;
     private NotificationsPresenter presenter;
 
     @BeforeEach
     void setUp() {
         notificationQueryService = mock(NotificationQueryService.class);
         realtimeNotificationService = mock(WebSocketNotificationService.class);
-        presenter = new NotificationsPresenter(notificationQueryService, realtimeNotificationService);
+        memberService = mock(MemberService.class);
+        companyService = mock(CompanyService.class);
+        presenter = new NotificationsPresenter(notificationQueryService, realtimeNotificationService, memberService, companyService);
     }
 
     @Test

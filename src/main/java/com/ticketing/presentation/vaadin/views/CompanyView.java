@@ -642,6 +642,13 @@ public class CompanyView extends VerticalLayout {
             handlePersonnelResult(presenter.respondToRoleOffer(selectedPendingRoleOfferId(), false));
             refreshPendingRoleOffers();
         });
+        acceptOffer.setEnabled(pendingRoleOffer.getValue() != null);
+        rejectOffer.setEnabled(pendingRoleOffer.getValue() != null);
+        pendingRoleOffer.addValueChangeListener(e -> {
+            boolean has = e.getValue() != null;
+            acceptOffer.setEnabled(has);
+            rejectOffer.setEnabled(has);
+        });
         revokePersonnelButton = new Button("Revoke personnel", event -> {
             ActionResult result = presenter.revokePersonnel(companyNameOf(personnelCompanyName), selectedTargetMemberId());
             handlePersonnelResult(result);
