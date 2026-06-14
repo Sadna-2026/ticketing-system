@@ -28,6 +28,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
+import com.ticketing.application.dto.EventPolicyBadgeDTO;
+import com.ticketing.application.dto.EventPolicyBadgeDTO.Kind;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -151,10 +153,10 @@ class EventsViewTest {
         UUID seatId = loadedMap.zones().get(1).seats().get(0).id();
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        when(ordersPresenter.addAssignedSeats(event.id(), seatZoneId, List.of(seatId)))
+                .thenReturn(OrderMutationResult.success("Assigned seat added.", UUID.randomUUID(), null));
         when(ordersPresenter.addGATickets(event.id(), gaZoneId, 1))
                 .thenReturn(OrderMutationResult.success("GA tickets added.", UUID.randomUUID(), null));
-        when(ordersPresenter.addAssignedSeat(event.id(), seatZoneId, seatId))
-                .thenReturn(OrderMutationResult.success("Assigned seat added.", UUID.randomUUID(), null));
         EventsView view = new EventsView(presenter, ordersPresenter);
 
         clickButton(view, "Search events");
@@ -162,13 +164,13 @@ class EventsViewTest {
         clickButton(view, "View selected map");
         clickButton(view, "Add GA tickets");
         assertTrue(hasText(view, "GA tickets added."));
-        // Simulate the client-side seat click: the <seat-map> element calls back to
-        // the server with the chosen seat id.
-        findSeatMap(view).selectSeat(seatId.toString());
+
+        SeatMapComponent map = findSeatMap(view);
+        map.onCommitSelection(new String[] { seatId.toString() });
 
         assertTrue(hasText(view, "Assigned seat added."));
         verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 1);
-        verify(ordersPresenter).addAssignedSeat(event.id(), seatZoneId, seatId);
+        verify(ordersPresenter).addAssignedSeats(event.id(), seatZoneId, List.of(seatId));
     }
 
     @Test
@@ -248,6 +250,28 @@ class EventsViewTest {
         // Live availability is reflected per seat: A-10 is taken, A-1 is free.
         assertFalse(seatEntry(seats, "A", "1").getBoolean("taken"));
         assertTrue(seatEntry(seats, "A", "10").getBoolean("taken"));
+    }
+
+    @Test
+    void GivenEventMapWithPolicies_WhenViewMapClicked_ThenRestrictionAndDiscountCardsAreShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Policy Concert");
+        EventMapDTO loadedMap = policyEventMap(event.id());
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        assertTrue(hasText(view, "Purchase restrictions"));
+        assertTrue(hasText(view, "Available discounts"));
+        assertTrue(hasText(view, "Ticket limit"));
+        assertTrue(hasText(view, "10% off all tickets"));
+        assertFalse(hasText(view, "No discount"));
+        assertFalse(hasText(view, "Allow all"));
     }
 
     @Test
@@ -622,6 +646,29 @@ class EventsViewTest {
                 new EventSchedule(start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS)),
                 EventStatus.PUBLISHED
         );
+    }
+
+    private static EventMapDTO policyEventMap(UUID eventId) {
+        UUID floorId = UUID.randomUUID();
+        return new EventMapDTO(
+                eventId,
+                "Policy Concert",
+                "Acme",
+                EventStatus.PUBLISHED,
+                Map.of("Floor", floorId),
+                List.of(new EventMapDTO.ZoneInfo(
+                        floorId,
+                        "Floor",
+                        ZoneType.GENERAL_ADMISSION,
+                        new BigDecimal("45.00"),
+                        100,
+                        10,
+                        90,
+                        List.of())),
+                null,
+                "Requires at most 3 tickets.",
+                List.of(new EventPolicyBadgeDTO(Kind.RESTRICTION, "Ticket limit", "Up to 3 tickets per order")),
+                List.of(new EventPolicyBadgeDTO(Kind.DISCOUNT, "Discount", "10% off all tickets")));
     }
 
     private static EventMapDTO sampleEventMap(UUID eventId) {

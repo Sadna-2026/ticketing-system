@@ -151,6 +151,20 @@ class EventPolicyTest {
             PolicyResult result = bothFalse.isAllowed(dummyCtx());
             assertFalse(result.allowed());
             assertEquals("ALL_OR_CONDITIONS_FAILED", result.errorCode());
+            assertEquals("Failed\nFailed", result.reason());
+        }
+
+        @Test
+        void GivenOrPolicy_WhenAllBranchesFail_ThenCollectViolationsReturnsEachBranchReason() {
+            IPurchasePolicy orPolicy = new OrPolicy(List.of(
+                    new MinQuantityPolicy(3),
+                    new AgeRestrictionPolicy(21)));
+
+            List<String> violations = orPolicy.collectViolations(ctxWithTickets(1));
+
+            assertEquals(2, violations.size());
+            assertTrue(violations.stream().anyMatch(v -> v.contains("at least 3 tickets")));
+            assertTrue(violations.stream().anyMatch(v -> v.contains("Date of birth is required")));
         }
     }
 

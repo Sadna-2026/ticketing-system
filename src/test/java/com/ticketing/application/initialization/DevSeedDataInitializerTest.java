@@ -1,9 +1,11 @@
 package com.ticketing.application.initialization;
 
-import static com.ticketing.application.initialization.DevSeedDataInitializer.ADULT_EVENT_ID;
+import static com.ticketing.application.initialization.DevSeedDataInitializer.AND_POLICY_EVENT_ID;
 import static com.ticketing.application.initialization.DevSeedDataInitializer.CONCERT_ID;
 import static com.ticketing.application.initialization.DevSeedDataInitializer.COUPON_CHECKOUT_EVENT_ID;
+import static com.ticketing.application.initialization.DevSeedDataInitializer.MIN_QTY_EVENT_ID;
 import static com.ticketing.application.initialization.DevSeedDataInitializer.MIXED_LIMITED_EVENT_ID;
+import static com.ticketing.application.initialization.DevSeedDataInitializer.SIMPLE_DISCOUNT_EVENT_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -30,9 +32,11 @@ class DevSeedDataInitializerTest {
         initializer.run(new DefaultApplicationArguments(new String[0]));
 
         assertTrue(eventRepository.findById(CONCERT_ID).isPresent());
-        assertTrue(eventRepository.findById(ADULT_EVENT_ID).isPresent());
         assertTrue(eventRepository.findById(COUPON_CHECKOUT_EVENT_ID).isPresent());
         assertTrue(eventRepository.findById(MIXED_LIMITED_EVENT_ID).isPresent());
+        assertTrue(eventRepository.findById(MIN_QTY_EVENT_ID).isPresent());
+        assertTrue(eventRepository.findById(AND_POLICY_EVENT_ID).isPresent());
+        assertTrue(eventRepository.findById(SIMPLE_DISCOUNT_EVENT_ID).isPresent());
     }
 
     @Test

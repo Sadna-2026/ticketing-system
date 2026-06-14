@@ -15,6 +15,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuoteResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderComplianceResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
@@ -32,9 +33,13 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "orders", layout = MainLayout.class)
 @PageTitle("Orders")
+@SpringComponent
+@UIScope
 public class OrdersView extends VerticalLayout {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
@@ -54,6 +59,7 @@ public class OrdersView extends VerticalLayout {
     private static final String NO_TICKETS_CHECKOUT_MESSAGE = "Add tickets to your order before checkout.";
 
     private final TextField couponCode = new TextField("Coupon code");
+    private final Span policyComplianceStatus = new Span();
     private final Span checkoutStatus = new Span("Checkout is available once the active order has tickets.");
     private Button checkoutButton;
     private final Span historyStatus = new Span("Members can load purchase history.");
@@ -89,10 +95,16 @@ public class OrdersView extends VerticalLayout {
                 historySection
         );
         refreshSessionStatus();
-        loadActiveOrder();
+        loadActiveOrder(false);
+        addAttachListener(event -> {
+            refreshSessionStatus();
+            loadActiveOrder(false);
+        });
     }
 
     private void configureFields() {
+        orderActionStatus.getStyle().set("white-space", "pre-line");
+        policyComplianceStatus.getStyle().set("white-space", "pre-line");
         couponCode.setPlaceholder("Optional");
         couponCode.setValueChangeMode(ValueChangeMode.EAGER);
         couponCode.addValueChangeListener(event -> refreshCheckoutState());
@@ -151,7 +163,7 @@ public class OrdersView extends VerticalLayout {
         HorizontalLayout form = new HorizontalLayout(couponCode, checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, checkoutStatus);
+        VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, policyComplianceStatus, checkoutStatus);
         section.setPadding(false);
         return section;
     }
@@ -164,7 +176,11 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void loadActiveOrder() {
-        handleOrderResult(presenter.loadCurrentOrder());
+        loadActiveOrder(true);
+    }
+
+    private void loadActiveOrder(boolean notify) {
+        applyOrderResult(presenter.loadCurrentOrder(), notify);
     }
 
     private void removeSelectedItem() {
@@ -215,11 +231,29 @@ public class OrdersView extends VerticalLayout {
             return;
         }
         boolean ready = canCheckout();
-        checkoutButton.setEnabled(ready);
         if (!ready) {
+            checkoutButton.setEnabled(false);
+            policyComplianceStatus.setText("");
             checkoutStatus.setText("Checkout is available once the active order has tickets.");
             return;
         }
+
+        OrderComplianceResult compliance = presenter.checkOrderCompliance();
+        if (!compliance.success()) {
+            checkoutButton.setEnabled(false);
+            policyComplianceStatus.setText(compliance.message());
+            checkoutStatus.setText(compliance.message());
+            return;
+        }
+        if (!compliance.compliant()) {
+            checkoutButton.setEnabled(false);
+            policyComplianceStatus.setText("Purchase policy not met: " + compliance.message());
+            checkoutStatus.setText("Resolve the issue above before checkout.");
+            return;
+        }
+
+        checkoutButton.setEnabled(true);
+        policyComplianceStatus.setText(compliance.message());
 
         CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
         if (!quote.success()) {
@@ -250,19 +284,36 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void handleOrderResult(OrderResult result) {
+        applyOrderResult(result, true);
+    }
+
+    private void applyOrderResult(OrderResult result, boolean notify) {
         orderActionStatus.setText(result.message());
         if (!result.success()) {
             orderStatus.setText(result.message());
             currentOrder = null;
             refreshOrderDisplay();
-            UiMessages.error(result.message());
+            if (notify) {
+                UiMessages.error(result.message());
+            }
             return;
         }
 
+        UUID previousSelectionId = selectedOrderItem != null ? selectedOrderItem.getId() : null;
         currentOrder = result.order();
         refreshOrderDisplay();
+        if (previousSelectionId != null && currentOrder != null) {
+            currentOrder.getItems().stream()
+                    .filter(item -> item.getId().equals(previousSelectionId))
+                    .findFirst()
+                    .ifPresent(item -> {
+                        selectedOrderItem = item;
+                        orderItemsGrid.select(item);
+                        refreshItemActionState();
+                    });
+        }
         refreshSessionStatus();
-        if (currentOrder != null) {
+        if (notify && currentOrder != null) {
             UiMessages.success(result.message());
         }
     }

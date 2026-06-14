@@ -154,11 +154,18 @@ public class OrdersPresenter {
     }
 
     public OrderMutationResult addAssignedSeat(UUID eventId, UUID zoneId, UUID seatId) {
+        return addAssignedSeats(eventId, zoneId, List.of(seatId));
+    }
+
+    public OrderMutationResult addAssignedSeats(UUID eventId, UUID zoneId, List<UUID> seatIds) {
         if (eventId == null) {
             return OrderMutationResult.failure("Enter an event ID before adding tickets.");
         }
-        if (zoneId == null || seatId == null) {
-            return OrderMutationResult.failure("Select a zone and seat before adding an assigned seat.");
+        if (zoneId == null) {
+            return OrderMutationResult.failure("Select a zone before adding seats.");
+        }
+        if (seatIds == null || seatIds.isEmpty()) {
+            return OrderMutationResult.failure("Select at least one seat on the map, then click Add selected seats.");
         }
 
         String token = sessionToken();
@@ -167,9 +174,15 @@ public class OrdersPresenter {
         }
 
         try {
-            UUID itemId = orderService.addSeatToOrder(token, eventId, zoneId, seatId);
+            List<com.ticketing.application.SelectionRequest.SeatPick> picks = seatIds.stream()
+                    .map(seatId -> new com.ticketing.application.SelectionRequest.SeatPick(zoneId, seatId))
+                    .toList();
+            orderService.addSelectionToOrder(token,
+                    new com.ticketing.application.SelectionRequest(eventId, picks, List.of()));
             ActiveOrderDto order = enrichOrder(orderService.getActiveOrder(token));
-            return OrderMutationResult.success("Assigned seat added.", itemId, order);
+            int count = seatIds.size();
+            String message = count == 1 ? "Assigned seat added." : count + " assigned seats added.";
+            return OrderMutationResult.success(message, null, order);
         } catch (RuntimeException ex) {
             return OrderMutationResult.failure(userMessage(ex, ADD_SEAT_FAILURE_MESSAGE));
         }
@@ -246,6 +259,23 @@ public class OrdersPresenter {
             return CheckoutQuoteResult.success(quote.subtotal(), quote.total());
         } catch (RuntimeException ex) {
             return CheckoutQuoteResult.failure(userMessage(ex, CHECKOUT_FAILURE_MESSAGE));
+        }
+    }
+
+    public OrderComplianceResult checkOrderCompliance() {
+        String token = sessionToken();
+        if (token == null) {
+            return OrderComplianceResult.failure(NO_SESSION_MESSAGE);
+        }
+
+        try {
+            OrderService.PurchasePolicyStatus status = orderService.checkPurchasePolicy(token);
+            if (status.compliant()) {
+                return OrderComplianceResult.compliant("Order meets purchase requirements.");
+            }
+            return OrderComplianceResult.nonCompliant(status.reason());
+        } catch (RuntimeException ex) {
+            return OrderComplianceResult.failure(userMessage(ex, CHECKOUT_FAILURE_MESSAGE));
         }
     }
 
@@ -390,6 +420,20 @@ public class OrdersPresenter {
 
         public static CheckoutQuoteResult failure(String message) {
             return new CheckoutQuoteResult(false, message, null, null);
+        }
+    }
+
+    public record OrderComplianceResult(boolean success, boolean compliant, String message) {
+        public static OrderComplianceResult compliant(String message) {
+            return new OrderComplianceResult(true, true, message);
+        }
+
+        public static OrderComplianceResult nonCompliant(String message) {
+            return new OrderComplianceResult(true, false, message);
+        }
+
+        public static OrderComplianceResult failure(String message) {
+            return new OrderComplianceResult(false, false, message);
         }
     }
 

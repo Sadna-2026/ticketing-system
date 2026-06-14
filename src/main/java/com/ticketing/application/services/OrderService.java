@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -14,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.ISystemClock;
-import com.ticketing.application.SelectionRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
@@ -26,7 +26,6 @@ import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
-import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.PurchaseContext;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.exception.OptimisticLockException;
@@ -46,6 +45,7 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.domain.order.OrderStatus;
+import com.ticketing.domain.order.SelectionRequest;
 import com.ticketing.domain.queue.IQueueRepository;
 import com.ticketing.domain.queue.QueueConfig;
 import com.ticketing.domain.queue.QueueEntry;
@@ -155,8 +155,8 @@ public class OrderService {
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
         return addSelectionToOrder(sessionId, order,
-                new com.ticketing.domain.order.SelectionRequest(order.getEventId(),
-                        List.of(new com.ticketing.domain.order.SelectionRequest.SeatPick(zoneId, seatId)),
+                new SelectionRequest(order.getEventId(),
+                        List.of(new SelectionRequest.SeatPick(zoneId, seatId)),
                         List.of())).get(0);
     }
 
@@ -169,13 +169,13 @@ public class OrderService {
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
         return addSelectionToOrder(sessionId, order,
-                new com.ticketing.domain.order.SelectionRequest(order.getEventId(),
+                new SelectionRequest(order.getEventId(),
                         List.of(),
-                        List.of(new com.ticketing.domain.order.SelectionRequest.GAPick(zoneId, quantity)))).get(0);
+                        List.of(new SelectionRequest.GAPick(zoneId, quantity)))).get(0);
     }
 
     @Transactional
-    public List<UUID> addSelectionToOrder(String token, SelectionRequest request) {
+    public List<UUID> addSelectionToOrder(String token, com.ticketing.application.SelectionRequest request) {
         validateToken(token);
         if (request == null)
             throw new IllegalArgumentException("request is required");
@@ -183,13 +183,13 @@ public class OrderService {
         UUID memberId = sessionTokenService.extractMemberId(token);
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, request.eventId());
-        com.ticketing.domain.order.SelectionRequest domainRequest = new com.ticketing.domain.order.SelectionRequest(
+        SelectionRequest domainRequest = new SelectionRequest(
                 request.eventId(),
                 request.seats().stream()
-                        .map(s -> new com.ticketing.domain.order.SelectionRequest.SeatPick(s.zoneId(), s.seatId()))
+                        .map(s -> new SelectionRequest.SeatPick(s.zoneId(), s.seatId()))
                         .toList(),
                 request.gaQuantities().stream()
-                        .map(g -> new com.ticketing.domain.order.SelectionRequest.GAPick(g.zoneId(), g.quantity()))
+                        .map(g -> new SelectionRequest.GAPick(g.zoneId(), g.quantity()))
                         .toList());
         return addSelectionToOrder(sessionId, order, domainRequest);
     }
@@ -214,16 +214,14 @@ public class OrderService {
                     return new IllegalArgumentException("Item not found: " + itemId);
                 });
 
-        releaseInventoryForItem(event, item);
+        ActiveOrder orderAfterRemoval = order.simulateWithoutItem(itemId);
+        Set<UUID> seatsBecomingAvailable = item.isAssignedSeat() && item.getSeatId() != null
+                ? Set.of(item.getSeatId())
+                : Set.of();
+        requirePurchasePolicyCompliance(event, PurchaseContext.forRemoval(
+                event, orderAfterRemoval, memberId, getBuyerDateOfBirth(memberId), seatsBecomingAvailable));
 
-        if (item.isAssignedSeat()) {
-            PurchaseContext ctx = new PurchaseContext(order, memberId, null, event, java.util.Set.of());
-            PolicyResult policyResult = event.getEventPurchasePolicy().isAllowed(ctx);
-            if (!policyResult.allowed()) {
-                event.findZone(item.getZoneId()).lockSeat(item.getSeatId());
-                throw new IllegalStateException(policyResult.reason());
-            }
-        }
+        releaseInventoryForItem(event, item);
 
         checkAndPublishAvailable(event);
         saveEvent(event);
@@ -245,6 +243,13 @@ public class OrderService {
         validateOrderOwnership(sessionId, order);
         Event event = findEvent(order.getEventId());
         validateOrderNotExpired(order, event);
+
+        order.findItemByZoneId(zoneId)
+                .orElseThrow(() -> new IllegalArgumentException("No GA item found for zone: " + zoneId));
+
+        ActiveOrder orderAfterUpdate = order.simulateGAQuantity(zoneId, newQuantity);
+        requirePurchasePolicyCompliance(event, PurchaseContext.forOrder(
+                event, orderAfterUpdate, memberId, getBuyerDateOfBirth(memberId)));
 
         updateGAQuantityInternal(order, event, zoneId, newQuantity);
         checkAndPublishAvailable(event);
@@ -325,6 +330,41 @@ public class OrderService {
     }
 
     public record CheckoutQuote(BigDecimal subtotal, BigDecimal total) {
+    }
+
+    public record PurchasePolicyStatus(boolean compliant, String reason) {
+        public static PurchasePolicyStatus ok() {
+            return new PurchasePolicyStatus(true, "");
+        }
+
+        public static PurchasePolicyStatus violation(String reason) {
+            return new PurchasePolicyStatus(false, reason == null ? "" : reason);
+        }
+    }
+
+    /**
+     * Read-only check whether the active order satisfies the event purchase policy.
+     */
+    @Transactional(readOnly = true)
+    public PurchasePolicyStatus checkPurchasePolicy(String token) {
+        validateToken(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) {
+            throw new IllegalArgumentException("No active order found");
+        }
+        if (order.getItems().isEmpty()) {
+            return PurchasePolicyStatus.ok();
+        }
+        Event event = findEvent(order.getEventId());
+        LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
+        PurchaseContext ctx = PurchaseContext.forOrder(event, order, order.getMemberId(), buyerDob);
+        List<String> violations = event.getEventPurchasePolicy().collectViolations(ctx);
+        if (violations.isEmpty()) {
+            return PurchasePolicyStatus.ok();
+        }
+        return PurchasePolicyStatus.violation(String.join("\n", violations));
     }
 
     public record CheckoutCompletion(UUID purchaseId, BigDecimal chargedAmount) {
@@ -616,7 +656,7 @@ public class OrderService {
     }
 
     @Transactional
-    public List<UUID> addSelectionToOrder(UUID sessionId, ActiveOrder order, com.ticketing.domain.order.SelectionRequest request) {
+    public List<UUID> addSelectionToOrder(UUID sessionId, ActiveOrder order, SelectionRequest request) {
         rejectIfMemberSuspended(order.getMemberId());
         validateOrderOwnership(sessionId, order);
         if (!order.getEventId().equals(request.eventId())) {
@@ -627,14 +667,16 @@ public class OrderService {
         try {
             Event event = findEvent(order.getEventId());
             validateOrderNotExpired(order, event);
-            validateSelection(request, event);
-            validatePurchasePolicyOnReservation(event, order, request);
+            List<String> selectionErrors = collectSelectionErrors(event, order, request);
+            if (!selectionErrors.isEmpty()) {
+                throw new IllegalStateException(String.join("\n", selectionErrors));
+            }
 
             List<UUID> itemIds = new ArrayList<>();
-            for (com.ticketing.domain.order.SelectionRequest.SeatPick pick : request.seats()) {
+            for (SelectionRequest.SeatPick pick : request.seats()) {
                 itemIds.add(lockSeat(order, event, pick.zoneId(), pick.seatId()));
             }
-            for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
+            for (SelectionRequest.GAPick pick : request.gaQuantities()) {
                 itemIds.add(lockGA(order, event, pick.zoneId(), pick.quantity()));
             }
 
@@ -747,7 +789,8 @@ public class OrderService {
         // Re-check suspension as late as possible: a member could have been suspended
         // after checkout began but before any payment/issuance side effect runs.
         rejectIfMemberSuspended(order.getMemberId());
-        validatePurchasePolicy(event, order, order.getMemberId(), buyerDateOfBirth);
+        requirePurchasePolicyCompliance(event, PurchaseContext.forOrder(
+                event, order, order.getMemberId(), buyerDateOfBirth));
 
         BigDecimal finalAmount = discountedCheckoutAmount(order, event, couponCode);
 
@@ -799,34 +842,10 @@ public class OrderService {
         }
     }
 
-    private void validatePurchasePolicy(Event event, ActiveOrder order, UUID memberId, LocalDate buyerDateOfBirth) {
-        PurchaseContext ctx = new PurchaseContext(order, memberId, buyerDateOfBirth, event, java.util.Set.of());
-        PolicyResult validation = event.getEventPurchasePolicy().isAllowed(ctx);
-        if (!validation.allowed()) {
-            throw new IllegalStateException("Purchase policy violation: "
-                    + validation.errorCode() + " — " + validation.reason());
-        }
-    }
-
-    private void validatePurchasePolicyOnReservation(Event event, ActiveOrder order, com.ticketing.domain.order.SelectionRequest request) {
-        int additionalTickets = 0;
-        for (com.ticketing.domain.order.SelectionRequest.SeatPick ignored : request.seats()) {
-            additionalTickets++;
-        }
-        for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
-            additionalTickets += pick.quantity();
-        }
-
-        java.util.Set<UUID> incomingSeatIds = request.seats().stream()
-                .map(com.ticketing.domain.order.SelectionRequest.SeatPick::seatId)
-                .collect(java.util.stream.Collectors.toSet());
-
-        ActiveOrder simulatedOrder = order.simulateWithAdditionalTickets(additionalTickets);
-        LocalDate buyerDob = getBuyerDateOfBirth(order.getMemberId());
-        PurchaseContext ctx = new PurchaseContext(simulatedOrder, order.getMemberId(), buyerDob, event, incomingSeatIds);
-        PolicyResult result = event.getEventPurchasePolicy().isAllowed(ctx);
-        if (!result.allowed()) {
-            throw new IllegalStateException(result.reason());
+    private void requirePurchasePolicyCompliance(Event event, PurchaseContext ctx) {
+        List<String> violations = event.getEventPurchasePolicy().collectViolations(ctx);
+        if (!violations.isEmpty()) {
+            throw new IllegalStateException(String.join("\n", violations));
         }
     }
 
@@ -910,52 +929,84 @@ public class OrderService {
 
     // ── Selection validation ────────────────────────────────────────
 
-    private void validateSelection(com.ticketing.domain.order.SelectionRequest request, Event event) {
-        if (request == null) throw new IllegalArgumentException("request is required");
+    private List<String> collectSelectionErrors(
+            Event event,
+            ActiveOrder order,
+            SelectionRequest request
+    ) {
+        List<String> errors = new ArrayList<>();
+        if (request == null) {
+            errors.add("request is required");
+            return errors;
+        }
         if (request.isEmpty()) {
-            throw new IllegalArgumentException("selection must include at least one seat or quantity");
+            errors.add("selection must include at least one seat or quantity");
+            return errors;
         }
-
         if (event.getStatus() != EventStatus.PUBLISHED) {
-            throw new IllegalStateException("Event is not selectable in status: " + event.getStatus());
+            errors.add("Event is not selectable in status: " + event.getStatus());
+            return errors;
         }
 
-        for (com.ticketing.domain.order.SelectionRequest.SeatPick pick : request.seats()) {
-            InventoryZone zone = findZoneInEvent(event, pick.zoneId());
-            if (!zone.isAssigned()) {
-                throw new IllegalArgumentException(
-                        "Zone " + zone.getName() + " is GA — use a quantity, not a seat id");
-            }
-            Seat seat;
+        for (SelectionRequest.SeatPick pick : request.seats()) {
             try {
-                seat = zone.findSeat(pick.seatId());
-            } catch (IllegalArgumentException notFound) {
-                throw new IllegalArgumentException(
-                        "Seat " + pick.seatId() + " not found in zone " + zone.getName());
-            }
-            if (!seat.isAvailable()) {
-                throw new IllegalStateException(
-                        "Seat " + seat.getRow() + "-" + seat.getSeatNumber()
-                        + " is not available (status=" + seat.getStatus() + ")");
+                validateSeatPick(event, pick);
+            } catch (RuntimeException ex) {
+                if (ex.getMessage() != null && !ex.getMessage().isBlank()) {
+                    errors.add(ex.getMessage());
+                }
             }
         }
 
         Map<UUID, Integer> totalsByZone = new HashMap<>();
-        for (com.ticketing.domain.order.SelectionRequest.GAPick pick : request.gaQuantities()) {
+        for (SelectionRequest.GAPick pick : request.gaQuantities()) {
             totalsByZone.merge(pick.zoneId(), pick.quantity(), Integer::sum);
         }
         for (var entry : totalsByZone.entrySet()) {
-            InventoryZone zone = findZoneInEvent(event, entry.getKey());
-            int requested = entry.getValue();
-            if (!zone.isGA()) {
-                throw new IllegalArgumentException(
-                        "Zone " + zone.getName() + " is assigned-seating — pick specific seats, not a quantity");
+            try {
+                validateGAPick(event, entry.getKey(), entry.getValue());
+            } catch (RuntimeException ex) {
+                if (ex.getMessage() != null && !ex.getMessage().isBlank()) {
+                    errors.add(ex.getMessage());
+                }
             }
-            if (zone.getAvailableCount() < requested) {
-                throw new IllegalStateException(
-                        "Not enough tickets in zone " + zone.getName()
-                        + " (requested " + requested + ", available " + zone.getAvailableCount() + ")");
-            }
+        }
+
+        errors.addAll(event.getEventPurchasePolicy().collectViolations(PurchaseContext.forReservation(
+                event, order, order.getMemberId(), getBuyerDateOfBirth(order.getMemberId()), request)));
+        return errors.stream().distinct().toList();
+    }
+
+    private void validateSeatPick(Event event, SelectionRequest.SeatPick pick) {
+        InventoryZone zone = findZoneInEvent(event, pick.zoneId());
+        if (!zone.isAssigned()) {
+            throw new IllegalArgumentException(
+                    "Zone " + zone.getName() + " is GA — use a quantity, not a seat id");
+        }
+        Seat seat;
+        try {
+            seat = zone.findSeat(pick.seatId());
+        } catch (IllegalArgumentException notFound) {
+            throw new IllegalArgumentException(
+                    "Seat " + pick.seatId() + " not found in zone " + zone.getName());
+        }
+        if (!seat.isAvailable()) {
+            throw new IllegalStateException(
+                    "Seat " + seat.getRow() + "-" + seat.getSeatNumber()
+                    + " is not available (status=" + seat.getStatus() + ")");
+        }
+    }
+
+    private void validateGAPick(Event event, UUID zoneId, int requested) {
+        InventoryZone zone = findZoneInEvent(event, zoneId);
+        if (!zone.isGA()) {
+            throw new IllegalArgumentException(
+                    "Zone " + zone.getName() + " is assigned-seating — pick specific seats, not a quantity");
+        }
+        if (zone.getAvailableCount() < requested) {
+            throw new IllegalStateException(
+                    "Not enough tickets in zone " + zone.getName()
+                    + " (requested " + requested + ", available " + zone.getAvailableCount() + ")");
         }
     }
 
