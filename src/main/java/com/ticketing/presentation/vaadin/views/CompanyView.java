@@ -124,10 +124,10 @@ public class CompanyView extends VerticalLayout {
     private final ComboBox<EventSummaryDTO> lookupEventPicker = new ComboBox<>("Published event");
 
     private final ComboBox<CompanySummaryDTO> personnelCompanyName = new ComboBox<>("Personnel company name");
-    private final ComboBox<PersonnelTarget> targetMember = new ComboBox<>("Target member");
+    private final ComboBox<com.ticketing.application.dto.MemberSummaryDTO> offerTargetMember = new ComboBox<>("Member to appoint");
+    private final ComboBox<PersonnelTarget> targetMember = new ComboBox<>("Existing personnel");
     private final ComboBox<StaffAppointment.StaffRole> role = new ComboBox<>("Role");
     private final CheckboxGroup<ManagerPermission> permissions = new CheckboxGroup<>("Manager permissions");
-    private final ComboBox<CompanyPresenter.PendingRoleOfferOption> pendingRoleOffer = new ComboBox<>("Role offer");
     private final Span personnelStatus = new Span("Manage owner and manager appointments.");
     private final Span personnelAccessHint = new Span("Select a company to show owner-only permission controls.");
     private final VerticalLayout orgChartDisplay = new VerticalLayout();
@@ -334,11 +334,9 @@ public class CompanyView extends VerticalLayout {
         role.setItemLabelGenerator(StaffAppointment.StaffRole::name);
         role.setValue(StaffAppointment.StaffRole.MANAGER);
         permissions.setItems(ManagerPermission.values());
+        offerTargetMember.setItemLabelGenerator(com.ticketing.application.dto.MemberSummaryDTO::username);
         targetMember.setItemLabelGenerator(PersonnelTarget::label);
         targetMember.setPlaceholder("Select personnel after choosing a company");
-        pendingRoleOffer.setItemLabelGenerator(CompanyPresenter.PendingRoleOfferOption::label);
-        pendingRoleOffer.setPlaceholder("No pending role offers");
-        pendingRoleOffer.setClearButtonVisible(true);
 
         eventCategory.setItems(EventCategory.values());
         eventCategory.setItemLabelGenerator(EventCategory::name);
@@ -358,8 +356,6 @@ public class CompanyView extends VerticalLayout {
         markRequired(openCompanyName, "Company name is required.");
 
         markRequired(personnelCompanyName, "Select a company.");
-        markRequired(targetMember, "Target member is required.");
-        markRequired(role, "Select a role.");
 
         markRequired(eventCompanyName, "Select a company.");
         markRequired(eventName, "Event name is required.");
@@ -628,42 +624,46 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout personnelSection() {
-        offerRoleButton = new Button("Offer role appointment", event -> handlePersonnelResult(presenter.offerRoleAppointment(
+        offerRoleButton = new Button("Offer role appointment", event -> {
+            if (offerTargetMember.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select a member to appoint.");
+                return;
+            }
+            if (role.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select a role.");
+                return;
+            }
+            handlePersonnelResult(presenter.offerRoleAppointment(
                 companyNameOf(personnelCompanyName),
-                selectedTargetMemberId(),
+                selectedOfferTargetMemberId(),
                 role.getValue(),
                 permissions.getSelectedItems()
-        )));
-        Button acceptOffer = new Button("Accept role offer", event -> {
-            handlePersonnelResult(presenter.respondToRoleOffer(selectedPendingRoleOfferId(), true));
-            refreshPendingRoleOffers();
-        });
-        Button rejectOffer = new Button("Reject role offer", event -> {
-            handlePersonnelResult(presenter.respondToRoleOffer(selectedPendingRoleOfferId(), false));
-            refreshPendingRoleOffers();
-        });
-        acceptOffer.setEnabled(pendingRoleOffer.getValue() != null);
-        rejectOffer.setEnabled(pendingRoleOffer.getValue() != null);
-        pendingRoleOffer.addValueChangeListener(e -> {
-            boolean has = e.getValue() != null;
-            acceptOffer.setEnabled(has);
-            rejectOffer.setEnabled(has);
+            ));
         });
         revokePersonnelButton = new Button("Revoke personnel", event -> {
-            ActionResult result = presenter.revokePersonnel(companyNameOf(personnelCompanyName), selectedTargetMemberId());
+            if (targetMember.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select an existing personnel to revoke.");
+                return;
+            }
+            CompanyPresenter.ActionResult result = presenter.revokePersonnel(companyNameOf(personnelCompanyName), selectedTargetMemberId());
             handlePersonnelResult(result);
             if (result.success()) {
                 refreshPersonnelContext();
             }
         });
-        changeManagerPermissionsButton = new Button("Change manager permissions", event -> handlePersonnelResult(
-                presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), selectedTargetMemberId(),
-                        permissions.getSelectedItems())));
+        changeManagerPermissionsButton = new Button("Change manager permissions", event -> {
+            if (targetMember.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select an existing personnel to modify.");
+                return;
+            }
+            handlePersonnelResult(presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), selectedTargetMemberId(),
+                        permissions.getSelectedItems()));
+        });
         relinquishOwnershipButton = new Button("Relinquish ownership", event -> handlePersonnelResult(
                 presenter.relinquishOwnership(companyNameOf(personnelCompanyName))));
         loadOrganizationChartButton = new Button("Load organization chart", event -> loadOrganizationChart());
 
-        ownerPersonnelForm = new FormLayout(targetMember, role, permissions);
+        ownerPersonnelForm = new FormLayout(offerTargetMember, targetMember, role, permissions);
         ownerPersonnelForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
         ownerPersonnelActions = new HorizontalLayout(offerRoleButton, revokePersonnelButton,
                 changeManagerPermissionsButton, relinquishOwnershipButton, loadOrganizationChartButton);
@@ -677,26 +677,15 @@ public class CompanyView extends VerticalLayout {
         ownerPersonnelControls.setPadding(false);
         ownerPersonnelControls.setSpacing(true);
 
-        HorizontalLayout memberOfferActions = new HorizontalLayout(acceptOffer, rejectOffer);
-        memberOfferActions.setAlignItems(Alignment.BASELINE);
-        VerticalLayout memberOfferControls = new VerticalLayout(
-                new H4("Respond to role offers"),
-                pendingRoleOffer,
-                memberOfferActions
-        );
-        memberOfferControls.setPadding(false);
-        memberOfferControls.setSpacing(true);
         personnelCompanyName.setVisible(false);
         refreshPersonnelAccess();
-        refreshPendingRoleOffers();
 
         VerticalLayout section = new VerticalLayout(
                 new H3("Personnel and roles"),
-                new Paragraph("Owners appoint managers and other owners. Members can accept or reject role offers."),
+                new Paragraph("Owners appoint managers and other owners."),
                 personnelCompanyName,
                 ownerPersonnelControls,
                 personnelAccessHint,
-                memberOfferControls,
                 personnelStatus,
                 orgChartDisplay
         );
@@ -1256,6 +1245,8 @@ public class CompanyView extends VerticalLayout {
     private void refreshPersonnelContext() {
         CompanyPresenter.PersonnelAccessResult access = refreshPersonnelAccess();
         if (access.canManagePersonnel()) {
+            offerTargetMember.setEnabled(true);
+            offerTargetMember.setItems(presenter.listAppointableMembers());
             targetMember.setEnabled(true);
             reloadPersonnelTargets();
         } else {
@@ -1276,7 +1267,8 @@ public class CompanyView extends VerticalLayout {
 
     private void setPersonnelTargetItems(List<OrgNodeDTO> roots) {
         List<PersonnelTarget> targets = new ArrayList<>();
-        collectPersonnelTargets(roots, targets);
+        String currentUsername = presenter.currentSessionState().username();
+        collectPersonnelTargets(roots, targets, currentUsername);
         targetMember.clear();
         targetMember.setItems(targets);
         targetMember.setEnabled(true);
@@ -1293,15 +1285,15 @@ public class CompanyView extends VerticalLayout {
         targetMember.setPlaceholder(placeholder);
     }
 
-    private void collectPersonnelTargets(List<OrgNodeDTO> nodes, List<PersonnelTarget> targets) {
+    private void collectPersonnelTargets(List<OrgNodeDTO> nodes, List<PersonnelTarget> targets, String currentUsername) {
         if (nodes == null) {
             return;
         }
         for (OrgNodeDTO node : nodes) {
-            if (!node.revoked()) {
+            if (!node.revoked() && (currentUsername == null || !currentUsername.equals(node.username()))) {
                 targets.add(new PersonnelTarget(node.memberId(), node.username(), node.role()));
             }
-            collectPersonnelTargets(node.subordinates(), targets);
+            collectPersonnelTargets(node.subordinates(), targets, currentUsername);
         }
     }
 
@@ -1341,26 +1333,6 @@ public class CompanyView extends VerticalLayout {
         personnelAccessHint.setText(result.message());
         personnelAccessHint.setVisible(!canManagePersonnel);
         return result;
-    }
-
-    private void refreshPendingRoleOffers() {
-        CompanyPresenter.PendingRoleOfferOption selected = pendingRoleOffer.getValue();
-        List<CompanyPresenter.PendingRoleOfferOption> offers = orEmpty(presenter.listPendingRoleOffers());
-        pendingRoleOffer.setItems(offers);
-        pendingRoleOffer.setPlaceholder(offers.isEmpty()
-                ? "No pending role offers"
-                : "Select a pending role offer");
-        if (selected != null) {
-            offers.stream()
-                    .filter(offer -> offer.offerId().equals(selected.offerId()))
-                    .findFirst()
-                    .ifPresentOrElse(pendingRoleOffer::setValue, pendingRoleOffer::clear);
-        }
-    }
-
-    private UUID selectedPendingRoleOfferId() {
-        CompanyPresenter.PendingRoleOfferOption selected = pendingRoleOffer.getValue();
-        return selected == null ? null : selected.offerId();
     }
 
     private void refreshEventAccess() {
@@ -1459,6 +1431,11 @@ public class CompanyView extends VerticalLayout {
     private UUID selectedTargetMemberId() {
         PersonnelTarget selected = targetMember.getValue();
         return selected == null ? null : selected.memberId();
+    }
+
+    private UUID selectedOfferTargetMemberId() {
+        com.ticketing.application.dto.MemberSummaryDTO selected = offerTargetMember.getValue();
+        return selected == null ? null : selected.id();
     }
 
     private void refreshLifecycleAccess() {
@@ -1803,7 +1780,6 @@ public class CompanyView extends VerticalLayout {
     private void refreshSessionStatus() {
         sessionStatus.setText(presenter.currentSessionLabel());
         populatePickerItems();
-        refreshPendingRoleOffers();
         boolean member = presenter.currentSessionState().loggedInMember();
         memberOnlyCompanyHint.setVisible(!member);
         for (CompanyMode mode : CompanyMode.values()) {
