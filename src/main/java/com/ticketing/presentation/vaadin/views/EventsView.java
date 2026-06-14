@@ -254,6 +254,10 @@ public class EventsView extends VerticalLayout {
     }
 
     private void loadSelectedEventMap() {
+        loadSelectedEventMap(true);
+    }
+
+    private void loadSelectedEventMap(boolean notify) {
         UUID eventId = selectedEvent == null ? null : selectedEvent.id();
         MapResult result = presenter.loadEventMap(eventId);
 
@@ -270,7 +274,9 @@ public class EventsView extends VerticalLayout {
 
         renderEventMap(result.eventMap());
         startMapPolling();
-        UiMessages.success(result.message());
+        if (notify) {
+            UiMessages.success(result.message());
+        }
     }
 
     private void addGATickets(UUID zoneId, Integer quantity) {
@@ -280,8 +286,8 @@ public class EventsView extends VerticalLayout {
         }
         OrderMutationResult result = ordersPresenter.addGATickets(eventId, zoneId, quantity == null ? 0 : quantity);
         handleReservationResult(result);
-        if (result.success()) { // refresh the headers after adding GA tickets
-            loadSelectedEventMap();
+        if (result.success()) { // refresh inventory counts after adding GA tickets
+            loadSelectedEventMap(false);
         }
     }
 
