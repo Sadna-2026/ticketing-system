@@ -2,7 +2,6 @@ package  com.ticketing.infrastructure.gateway;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 
@@ -23,9 +22,28 @@ import com.ticketing.domain.gateway.TicketRequest;
 public class StubTicketSupplyGateway implements ITicketSupplyGateway {
 
     private boolean shouldFail = false;
+    private int failAfterCount = -1;
+    private int issueCount = 0;
+    private final List<String> lastCancelledTickets = new java.util.ArrayList<>();
 
     public void setShouldFail(boolean shouldFail) {
         this.shouldFail = shouldFail;
+    }
+
+    public void setFailAfterCount(int failAfterCount) {
+        this.failAfterCount = failAfterCount;
+        this.issueCount = 0;
+    }
+
+    public List<String> getLastCancelledTickets() {
+        return lastCancelledTickets;
+    }
+
+    public void reset() {
+        this.shouldFail = false;
+        this.failAfterCount = -1;
+        this.issueCount = 0;
+        this.lastCancelledTickets.clear();
     }
 
     @Override
@@ -39,9 +57,14 @@ public class StubTicketSupplyGateway implements ITicketSupplyGateway {
             return SupplyResult.failed("External ticket generation service unavailable.");
         }
         
-        List<String> generatedCodes = tickets.stream()
-                .map(t -> "TKT-" + UUID.randomUUID().toString().substring(0, 8))
-                .collect(Collectors.toList());
+        List<String> generatedCodes = new java.util.ArrayList<>();
+        for (int i = 0; i < tickets.size(); i++) {
+            if (failAfterCount != -1 && issueCount >= failAfterCount) {
+                return new SupplyResult(false, generatedCodes, "Failed after issuing " + issueCount + " tickets.");
+            }
+            generatedCodes.add("TKT-" + UUID.randomUUID().toString().substring(0, 8));
+            issueCount++;
+        }
                 
         return SupplyResult.successful(generatedCodes);
     }
@@ -50,6 +73,9 @@ public class StubTicketSupplyGateway implements ITicketSupplyGateway {
     public CancelResult cancelTickets(List<String> ticketCodes) {
         if (shouldFail) {
             return CancelResult.failed("Failed to communicate cancellation to external service.");
+        }
+        if (ticketCodes != null) {
+            lastCancelledTickets.addAll(ticketCodes);
         }
         return CancelResult.successful();
     }
