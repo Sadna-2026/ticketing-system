@@ -1258,6 +1258,45 @@ public class OrderServiceTest {
     }
 
     @Test
+    void GivenNoOrphanPolicy_WhenBatchSelectionLeavesMultipleOrphans_ThenAllOrphansAreReported() {
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID();
+        UUID seat2 = UUID.randomUUID();
+        UUID seat3 = UUID.randomUUID();
+        UUID seat4 = UUID.randomUUID();
+        UUID seat5 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "B", "1"));
+        zone.addSeat(new Seat(seat2, "B", "2"));
+        zone.addSeat(new Seat(seat3, "B", "3"));
+        zone.addSeat(new Seat(seat4, "B", "4"));
+        zone.addSeat(new Seat(seat5, "B", "5"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+
+        SelectionRequest batch = new SelectionRequest(orphanEventId,
+                List.of(
+                        new SelectionRequest.SeatPick(orphanZoneId, seat1),
+                        new SelectionRequest.SeatPick(orphanZoneId, seat3),
+                        new SelectionRequest.SeatPick(orphanZoneId, seat5)),
+                List.of());
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.addSelectionToOrder(guestToken, batch));
+        assertTrue(ex.getMessage().contains("B-2"));
+        assertTrue(ex.getMessage().contains("B-4"));
+    }
+
+    @Test
     void GivenNoOrphanPolicy_WhenBatchAdjacentSelection_ThenReservationAllowed() {
         UUID orphanEventId = UUID.randomUUID();
         UUID orphanZoneId = UUID.randomUUID();

@@ -27,13 +27,22 @@ public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
 
     @Override
     public PolicyResult isAllowed(PurchaseContext context) {
+        List<String> orphans = findOrphanSeatLabels(context);
+        if (orphans.isEmpty()) {
+            return PolicyResult.success();
+        }
+        return PolicyResult.failure("ORPHAN_SEAT", formatOrphanMessage(orphans));
+    }
+
+    private List<String> findOrphanSeatLabels(PurchaseContext context) {
         Event event = context.event();
         if (event == null) {
-            return PolicyResult.success();
+            return List.of();
         }
 
         Set<UUID> takenOrSelected = occupiedSeatIds(context);
         Set<UUID> becomingAvailable = context.seatsBecomingAvailable();
+        List<String> orphans = new ArrayList<>();
 
         for (InventoryZone zone : event.getZones()) {
             if (!zone.isAssigned()) {
@@ -64,16 +73,21 @@ public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
                             || !isFreeAfterSelection(sorted.get(i + 1), takenOrSelected, becomingAvailable);
 
                     if (leftTaken && rightTaken) {
-                        return PolicyResult.failure("ORPHAN_SEAT",
-                                "Your selection would leave seat "
-                                        + seat.getRow() + "-" + seat.getSeatNumber()
-                                        + " isolated. Please choose adjacent seats or adjust your selection.");
+                        orphans.add(seat.getRow() + "-" + seat.getSeatNumber());
                     }
                 }
             }
         }
 
-        return PolicyResult.success();
+        return orphans;
+    }
+
+    private static String formatOrphanMessage(List<String> orphanLabels) {
+        String seatPhrase = orphanLabels.size() == 1
+                ? "seat " + orphanLabels.get(0)
+                : "seats " + String.join(", ", orphanLabels);
+        return "Your selection would leave " + seatPhrase
+                + " isolated. Please choose adjacent seats or adjust your selection.";
     }
 
     /**

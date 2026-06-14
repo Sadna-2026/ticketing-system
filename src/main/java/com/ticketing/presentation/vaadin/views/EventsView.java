@@ -124,7 +124,10 @@ public class EventsView extends VerticalLayout {
         addAttachListener(event -> {
             refreshSessionStatus();
             refreshActiveOrderStatus();
-            if (currentEventMap != null) {
+            if (currentEventMap != null && !zoneSeatMaps.isEmpty()) {
+                refreshSeatMapsFromServer(false);
+                startMapPolling();
+            } else if (currentEventMap != null) {
                 startMapPolling();
             }
         });

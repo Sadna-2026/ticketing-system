@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -165,6 +166,54 @@ class EventPolicyTest {
             assertEquals(2, violations.size());
             assertTrue(violations.stream().anyMatch(v -> v.contains("at least 3 tickets")));
             assertTrue(violations.stream().anyMatch(v -> v.contains("Date of birth is required")));
+        }
+    }
+
+    @Nested
+    @DisplayName("NoOrphanSeatPolicy")
+    class NoOrphanSeatPolicyTests {
+
+        @Test
+        void GivenSelectionLeavesMultipleOrphans_ThenErrorListsEveryOrphanSeat() {
+            NoOrphanSeatPolicy policy = new NoOrphanSeatPolicy();
+            UUID zoneId = UUID.randomUUID();
+            UUID b1 = UUID.randomUUID();
+            UUID b2 = UUID.randomUUID();
+            UUID b3 = UUID.randomUUID();
+            UUID b4 = UUID.randomUUID();
+            UUID b5 = UUID.randomUUID();
+
+            Event event = new Event(UUID.randomUUID(), "Acme", "Orphan Demo", "desc", EventCategory.CONCERT,
+                    new EventSchedule(Instant.now().plus(30, ChronoUnit.DAYS),
+                            Instant.now().plus(31, ChronoUnit.DAYS),
+                            Instant.now().plus(29, ChronoUnit.DAYS)),
+                    new LockTimerDuration(Duration.ofMinutes(15)),
+                    policy,
+                    (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+
+            InventoryZone zone = InventoryZone.createAssigned(zoneId, "Main Hall", new BigDecimal("50.00"));
+            for (int i = 1; i <= 5; i++) {
+                Seat sold = new Seat(UUID.randomUUID(), "A", String.valueOf(i));
+                sold.lock();
+                sold.sell();
+                zone.addSeat(sold);
+            }
+            zone.addSeat(new Seat(b1, "B", "1"));
+            zone.addSeat(new Seat(b2, "B", "2"));
+            zone.addSeat(new Seat(b3, "B", "3"));
+            zone.addSeat(new Seat(b4, "B", "4"));
+            zone.addSeat(new Seat(b5, "B", "5"));
+            event.addZone(zone);
+
+            PurchaseContext context = new PurchaseContext(
+                    null, null, null, event, Set.of(b1, b3, b5), Set.of());
+
+            PolicyResult result = policy.isAllowed(context);
+
+            assertFalse(result.allowed());
+            assertTrue(result.reason().contains("B-2"));
+            assertTrue(result.reason().contains("B-4"));
+            assertTrue(result.reason().contains("seats B-2, B-4"));
         }
     }
 
