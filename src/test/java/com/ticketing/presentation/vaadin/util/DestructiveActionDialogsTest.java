@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +18,16 @@ import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 @DisplayName("DestructiveActionDialogs")
 @ExtendWith(VaadinSessionExtension.class)
 class DestructiveActionDialogsTest {
+
+    @BeforeEach
+    void setUp() {
+        ConfirmDialogTestSupport.install();
+    }
+
+    @AfterEach
+    void tearDown() {
+        ConfirmDialogTestSupport.reset();
+    }
 
     @Test
     void GivenOpenDialog_WhenCancelClicked_ThenActionDoesNotRun() {
