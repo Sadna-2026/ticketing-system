@@ -11,9 +11,14 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.PlatformInitializationService;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -48,12 +53,9 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
-/**
- * In-code QA dataset invoked by {@link DataBootstrapRunner} when
- * {@code ticketing.bootstrap.dataset=dev-seed} (or legacy {@code ticketing.seed.enabled=true}).
- */
 @Component
-public class DevSeedDataInitializer {
+@Order(50)
+public class DevSeedDataInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DevSeedDataInitializer.class);
 
@@ -112,6 +114,9 @@ public class DevSeedDataInitializer {
     public static final UUID CONDITIONAL_DISCOUNT_EVENT_ID = UUID.fromString("bbbb5555-5555-5555-5555-555555555555");
     public static final UUID CONDITIONAL_DISCOUNT_GA_ZONE_ID = UUID.fromString("bbbb5555-0000-0000-0000-000000000001");
 
+    private final boolean initializePlatform;
+    private final boolean seedEnabled;
+    private final PlatformInitializationService platformInitializationService;
     private final IMemberRepository memberRepository;
     private final IAdminRepository adminRepository;
     private final ICompanyRepository companyRepository;
@@ -121,6 +126,9 @@ public class DevSeedDataInitializer {
         private final AdminService adminService;
 
     public DevSeedDataInitializer(
+            @Value("${ticketing.startup.initialize-platform:true}") boolean initializePlatform,
+            @Value("${ticketing.seed.enabled:false}") boolean seedEnabled,
+            PlatformInitializationService platformInitializationService,
             IMemberRepository memberRepository,
             IAdminRepository adminRepository,
             ICompanyRepository companyRepository,
@@ -129,6 +137,9 @@ public class DevSeedDataInitializer {
             PasswordEncryptionUtils passwordEncryptionUtils,    
             AdminService adminService
     ) {
+        this.initializePlatform = initializePlatform;
+        this.seedEnabled = seedEnabled;
+        this.platformInitializationService = platformInitializationService;
         this.memberRepository = memberRepository;
         this.adminRepository = adminRepository;
         this.companyRepository = companyRepository;
@@ -139,7 +150,21 @@ public class DevSeedDataInitializer {
 
     }
 
-    public void runSeed() {
+    @Override
+    public void run(ApplicationArguments args) {
+        if (initializePlatform) {
+            PlatformInitializationService.InitializationResult result = platformInitializationService.initialize();
+            log.info("Platform initialization: {}", result.message());
+            if (!result.success()) {
+                // Don't seed onto a platform that failed to initialize (it is left inactive).
+                log.error("Platform initialization failed — skipping dev seed: {}", result.message());
+                return;
+            }
+        }
+        if (!seedEnabled) {
+            log.info("Dev seed data disabled");
+            return;
+        }
         seedMembersAndAdmin();
         seedCompanies();
         seedEvents();

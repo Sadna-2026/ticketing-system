@@ -43,14 +43,12 @@ ticketing:
     flow-rate: ${TICKETING_QUEUE_FLOW_RATE:10}
   startup:
     initialize-platform: true
-  bootstrap:
-    # dev-seed | initial-state-file | none — explicit choice; when unset, legacy rules apply:
-    # seed.enabled=true => dev-seed; else initial-state.file set => initial-state-file; else none.
-    dataset: ${TICKETING_BOOTSTRAP_DATASET:}
   seed:
     enabled: true
-  # Initial-state file (V3-15 / #415): used when bootstrap.dataset=initial-state-file, or when
-  # seed.enabled=false and this path is set. Supports filesystem paths and classpath: resources.
+  # Optional initial-state file (V3-15): when set to a readable path, InitialStateRunner
+  # parses it and executes the operations against the application layer on startup
+  # (all-or-nothing). Unset (default) => no-op; normal startup and DevSeedDataInitializer
+  # are unaffected. See README "Initial-state file".
   initial-state:
     file: ${TICKETING_INITIAL_STATE_FILE:}
   # External systems integration (V3-16): the WSEP payment + ticket endpoint is a single HTTP

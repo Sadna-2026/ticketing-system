@@ -9,11 +9,15 @@ import static com.ticketing.application.initialization.DevSeedDataInitializer.SI
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.DefaultApplicationArguments;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.PlatformInitializationService;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
@@ -24,11 +28,11 @@ import com.ticketing.infrastructure.PasswordEncryptionUtils;
 class DevSeedDataInitializerTest {
 
     @Test
-    void GivenEmptyRepositories_WhenSeedRuns_ThenKeyDemoEventsAreCreated() {
+    void GivenEmptyRepositories_WhenSeedRuns_ThenKeyDemoEventsAreCreated() throws Exception {
         InMemoryEventRepository eventRepository = new InMemoryEventRepository();
-        DevSeedDataInitializer initializer = initializer(eventRepository);
+        DevSeedDataInitializer initializer = initializer(true, eventRepository);
 
-        initializer.runSeed();
+        initializer.run(new DefaultApplicationArguments(new String[0]));
 
         assertTrue(eventRepository.findById(CONCERT_ID).isPresent());
         assertTrue(eventRepository.findById(COUPON_CHECKOUT_EVENT_ID).isPresent());
@@ -39,18 +43,31 @@ class DevSeedDataInitializerTest {
     }
 
     @Test
-    void GivenSeedAlreadyApplied_WhenSeedRunsAgain_ThenEventsAreNotDuplicated() {
+    void GivenSeedAlreadyApplied_WhenSeedRunsAgain_ThenEventsAreNotDuplicated() throws Exception {
         InMemoryEventRepository eventRepository = new InMemoryEventRepository();
-        DevSeedDataInitializer initializer = initializer(eventRepository);
+        DevSeedDataInitializer initializer = initializer(true, eventRepository);
+        DefaultApplicationArguments args = new DefaultApplicationArguments(new String[0]);
 
-        initializer.runSeed();
+        initializer.run(args);
         int eventsAfterFirst = eventRepository.findAll().size();
-        initializer.runSeed();
+        initializer.run(args);
 
         assertEquals(eventsAfterFirst, eventRepository.findAll().size());
     }
 
-    private static DevSeedDataInitializer initializer(InMemoryEventRepository eventRepository) {
+    @Test
+    void GivenSeedDisabled_WhenInitializerRuns_ThenNoEventsAreCreated() throws Exception {
+        InMemoryEventRepository eventRepository = new InMemoryEventRepository();
+        DevSeedDataInitializer initializer = initializer(false, eventRepository);
+
+        initializer.run(new DefaultApplicationArguments(new String[0]));
+
+        assertTrue(eventRepository.findAll().isEmpty());
+    }
+
+    @Test
+    void GivenPlatformInitializationFails_WhenSeedRuns_ThenNoDataIsSeeded() throws Exception {
+        InMemoryEventRepository eventRepository = new InMemoryEventRepository();
         InMemoryMemberRepository memberRepository = new InMemoryMemberRepository();
         InMemoryAdminRepository adminRepository = new InMemoryAdminRepository();
         InMemoryCompanyRepository companyRepository = new InMemoryCompanyRepository();
@@ -60,7 +77,36 @@ class DevSeedDataInitializerTest {
                 memberRepository, companyRepository, mock(ISessionTokenService.class),
                 adminRepository, orderRepository);
 
+        PlatformInitializationService platformInit = mock(PlatformInitializationService.class);
+        when(platformInit.initialize()).thenReturn(
+                PlatformInitializationService.InitializationResult.failure("Unable to connect to clearing service"));
+
+        // initializePlatform = true AND seedEnabled = true, but initialization fails.
+        DevSeedDataInitializer initializer = new DevSeedDataInitializer(
+                true, true, platformInit,
+                memberRepository, adminRepository, companyRepository, eventRepository,
+                orderRepository, passwords, adminService);
+
+        initializer.run(new DefaultApplicationArguments(new String[0]));
+
+        verify(platformInit).initialize();
+        assertTrue(eventRepository.findAll().isEmpty(), "no events should be seeded after a failed platform init");
+    }
+
+    private static DevSeedDataInitializer initializer(boolean seedEnabled, InMemoryEventRepository eventRepository) {
+        InMemoryMemberRepository memberRepository = new InMemoryMemberRepository();
+        InMemoryAdminRepository adminRepository = new InMemoryAdminRepository();
+        InMemoryCompanyRepository companyRepository = new InMemoryCompanyRepository();
+        InMemoryOrderRepository orderRepository = new InMemoryOrderRepository();
+        PasswordEncryptionUtils passwords = new PasswordEncryptionUtils();
+        AdminService adminService = new AdminService(
+                memberRepository, companyRepository, mock(com.ticketing.application.auth.ISessionTokenService.class),
+                adminRepository, orderRepository);
+
         return new DevSeedDataInitializer(
+                false,
+                seedEnabled,
+                mock(PlatformInitializationService.class),
                 memberRepository,
                 adminRepository,
                 companyRepository,

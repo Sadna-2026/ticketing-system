@@ -11,21 +11,27 @@ import com.ticketing.infrastructure.gateway.ExternalSystemsHandshakeRunner;
 
 /**
  * Pins the startup {@code ApplicationRunner} ordering: external handshake → platform
- * initialization + data bootstrap.
+ * initialization + dev seed → initial-state replay. {@link DevSeedDataInitializer} must carry an
+ * explicit {@code @Order} below {@link InitialStateRunner}'s, otherwise (with no annotation) it
+ * would default to lowest precedence and run *after* the initial-state replay — replaying a
+ * configured state file before the platform is initialized.
  */
 @DisplayName("Startup ApplicationRunner ordering")
 class StartupRunnerOrderingTest {
 
     @Test
-    void GivenStartupRunners_ThenOrderIsExternalThenBootstrap() {
+    void GivenStartupRunners_ThenOrderIsExternalThenSeedThenInitialState() {
         Integer external = OrderUtils.getOrder(ExternalSystemsHandshakeRunner.class);
-        Integer bootstrap = OrderUtils.getOrder(DataBootstrapRunner.class);
+        Integer seed = OrderUtils.getOrder(DevSeedDataInitializer.class);
+        Integer initialState = OrderUtils.getOrder(InitialStateRunner.class);
 
         assertEquals(Integer.valueOf(0), external, "ExternalSystemsHandshakeRunner should run first");
-        assertEquals(Integer.valueOf(50), bootstrap,
-                "DataBootstrapRunner runs platform init then data bootstrap");
+        assertEquals(Integer.valueOf(50), seed,
+                "DevSeedDataInitializer (platform init + seed) must run before the initial-state replay");
+        assertEquals(Integer.valueOf(100), initialState,
+                "InitialStateRunner replays last, on an initialized platform");
 
-        assertTrue(external < bootstrap,
-                "Order must be external handshake -> platform init + data bootstrap");
+        assertTrue(external < seed && seed < initialState,
+                "Order must be external handshake -> platform init/seed -> initial-state replay");
     }
 }

@@ -1,10 +1,5 @@
 package com.ticketing.application.initialization;
 
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -17,26 +12,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ticketing.application.CreateEventRequest;
-import com.ticketing.application.ISystemClock;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.CompanyService;
-import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.MemberService;
-import com.ticketing.domain.event.CouponDiscount;
-import com.ticketing.domain.event.Event;
-import com.ticketing.domain.event.EventCategory;
-import com.ticketing.domain.event.EventSchedule;
-import com.ticketing.domain.event.IEventRepository;
-import com.ticketing.domain.event.InventoryZone;
-import com.ticketing.domain.event.LayoutCell;
-import com.ticketing.domain.event.LockTimerDuration;
-import com.ticketing.domain.event.Seat;
-import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.PendingRoleOffer;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
@@ -46,7 +27,37 @@ import com.ticketing.domain.member.response.RegisterResponse;
 /**
  * Executes the ordered operations parsed from an initial-state file (V3-15) by invoking
  * the matching application-service use cases <strong>in order</strong>, against the real
- * application layer.
+ * application layer. Only legal operations run, and the whole run is all-or-nothing: any
+ * failure (unknown operation, wrong argument count, an unbound token reference, or an
+ * underlying use case throwing) aborts initialization with an
+ * {@link InitialStateExecutionException} that names the failing operation.
+ *
+ * <h2>Supported operations</h2>
+ * <ul>
+ *   <li>{@code guest-registration(username, email, password[, phone, dateOfBirth])}
+ *       (alias {@code register}) — mints a fresh guest token and registers a member.</li>
+ *   <li>{@code login(username, password)} — mints a fresh guest token and logs the member
+ *       in.</li>
+ *   <li>{@code open-production-company(token, name[, description])} — opens a company owned
+ *       by the authenticated member.</li>
+ *   <li>{@code appoint-manager(token, companyName, targetUsername[, permission...])} —
+ *       offers a manager role appointment to another member (alias
+ *       {@code offer-manager-role}).</li>
+ * </ul>
+ *
+ * <h2>Token threading</h2>
+ * When a {@code login} or {@code guest-registration} for username {@code X} succeeds, the
+ * returned member session token is bound under the symbol {@code X_token}. Whenever a later
+ * operation's argument equals a bound symbol, the real token value is substituted before the
+ * use case is called; otherwise the literal argument is passed through. This matches the V3
+ * spec example: {@code login(rina, pw)} then {@code open-production-company(rina_token, ...)}.
+ *
+ * <h2>All-or-nothing</h2>
+ * {@link #execute(List)} is {@code @Transactional} (default {@code REQUIRED} propagation), so
+ * the per-use-case {@code @Transactional} service calls join the single surrounding
+ * transaction. In {@code jpa} mode any failure rolls the whole initialization back; in the
+ * default {@code memory} mode the in-memory repositories are not transactional, so partial
+ * writes can remain, but the run still aborts at the first failure.
  */
 @Service
 public class InitialStateExecutor {
@@ -58,30 +69,30 @@ public class InitialStateExecutor {
 
     private final MemberService memberService;
     private final CompanyService companyService;
-    private final EventService eventService;
     private final ISessionTokenService sessionTokenService;
     private final IMemberRepository memberRepository;
-    private final IEventRepository eventRepository;
-    private final ISystemClock systemClock;
 
     public InitialStateExecutor(
             MemberService memberService,
             CompanyService companyService,
-            EventService eventService,
             ISessionTokenService sessionTokenService,
-            IMemberRepository memberRepository,
-            IEventRepository eventRepository,
-            ISystemClock systemClock
+            IMemberRepository memberRepository
     ) {
         this.memberService = memberService;
         this.companyService = companyService;
-        this.eventService = eventService;
         this.sessionTokenService = sessionTokenService;
         this.memberRepository = memberRepository;
-        this.eventRepository = eventRepository;
-        this.systemClock = systemClock;
     }
 
+    /**
+     * Executes the parsed operations in order. Bound token symbols accumulate across
+     * operations within a single call.
+     *
+     * @param ops the ordered operations from {@link InitialStateParser}; {@code null} or empty
+     *            is a no-op
+     * @throws InitialStateExecutionException if any operation cannot be executed; the message
+     *                                        names the failing operation (index + name)
+     */
     @Transactional
     public void execute(List<InitialStateOperation> ops) {
         if (ops == null || ops.isEmpty()) {
@@ -89,6 +100,7 @@ public class InitialStateExecutor {
             return;
         }
 
+        // username + "_token" -> real member session token, bound on a successful auth op.
         Map<String, String> boundTokens = new HashMap<>();
 
         for (int index = 0; index < ops.size(); index++) {
@@ -96,6 +108,9 @@ public class InitialStateExecutor {
             try {
                 executeOne(op, boundTokens);
             } catch (RuntimeException ex) {
+                // All-or-nothing: enrich every failure with the failing op (index + name) and
+                // its cause, then abort the whole run. A nested InitialStateExecutionException
+                // (raised by a handler/validation) keeps its detail message as the cause text.
                 throw new InitialStateExecutionException(
                         "Initial-state operation #" + index + " '" + op.name() + "' failed: "
                                 + ex.getMessage(), ex);
@@ -113,16 +128,12 @@ public class InitialStateExecutor {
             case "login" -> login(args, boundTokens);
             case "open-production-company" -> openProductionCompany(args, boundTokens);
             case "appoint-manager", "offer-manager-role" -> appointManager(args, boundTokens);
-            case "appoint-owner", "offer-owner-role" -> appointOwner(args, boundTokens);
-            case "accept-role-offer", "respond-role-offer" -> acceptRoleOffer(args, boundTokens);
-            case "create-event" -> createEvent(args, boundTokens);
-            case "set-event-seating-layout" -> setEventSeatingLayout(args, boundTokens);
-            case "set-company-coupon-discount" -> setCompanyCouponDiscount(args, boundTokens);
-            case "logout" -> logout(args, boundTokens);
             default -> throw new InitialStateExecutionException(
                     "Unknown initial-state operation '" + op.name() + "'");
         }
     }
+
+    // ── Operation handlers ──────────────────────────────────────────
 
     private void register(List<String> args, Map<String, String> boundTokens) {
         requireArity("guest-registration", args, 3, 5);
@@ -169,160 +180,35 @@ public class InitialStateExecutor {
 
     private void appointManager(List<String> args, Map<String, String> boundTokens) {
         requireArity("appoint-manager", args, 3, Integer.MAX_VALUE);
-        offerRole(args, boundTokens, StaffAppointment.StaffRole.MANAGER);
-    }
-
-    private void appointOwner(List<String> args, Map<String, String> boundTokens) {
-        requireArity("appoint-owner", args, 3, 3);
-        offerRole(args, boundTokens, StaffAppointment.StaffRole.OWNER);
-    }
-
-    private void offerRole(List<String> args, Map<String, String> boundTokens, StaffAppointment.StaffRole role) {
         String token = resolveToken(args.get(0), boundTokens);
         String companyName = args.get(1);
         String targetUsername = args.get(2);
 
         Member target = memberRepository.findByUsername(targetUsername)
                 .orElseThrow(() -> new InitialStateExecutionException(
-                        "role appointment target member '" + targetUsername + "' does not exist"));
+                        "appoint-manager target member '" + targetUsername + "' does not exist"));
 
-        Set<ManagerPermission> permissions = role == StaffAppointment.StaffRole.MANAGER
-                ? parsePermissions(args.subList(3, args.size()))
-                : Set.of();
+        Set<ManagerPermission> permissions = parsePermissions(args.subList(3, args.size()));
 
-        companyService.offerRoleAppointment(token, companyName, target.getId(), role, permissions);
-    }
-
-    private void acceptRoleOffer(List<String> args, Map<String, String> boundTokens) {
-        requireArity("accept-role-offer", args, 3, 3);
-        String token = resolveToken(args.get(0), boundTokens);
-        String companyName = args.get(1);
-        StaffAppointment.StaffRole role = parseRole(args.get(2));
-
-        PendingRoleOffer offer = memberService.listPendingRoleOffers(token).stream()
-                .filter(o -> companyName.equals(o.getCompanyName()) && role == o.getRole())
-                .findFirst()
-                .orElseThrow(() -> new InitialStateExecutionException(
-                        "no pending " + role + " offer for company '" + companyName + "'"));
-
-        companyService.respondToRoleAppointment(token, offer.getOfferId(), true);
-    }
-
-    private void createEvent(List<String> args, Map<String, String> boundTokens) {
-        requireArity("create-event", args, 12, 12);
-        String token = resolveToken(args.get(0), boundTokens);
-        String companyName = args.get(1);
-        String eventName = args.get(2);
-        String description = args.get(3);
-        EventCategory category = parseCategory(args.get(4));
-        String standingZoneName = args.get(5);
-        int standingCapacity = parsePositiveInt(args.get(6), "standing capacity");
-        BigDecimal standingPrice = parsePrice(args.get(7));
-        String seatingZoneName = args.get(8);
-        int seatingRows = parsePositiveInt(args.get(9), "seating rows");
-        int seatingCols = parsePositiveInt(args.get(10), "seating cols");
-        BigDecimal seatingPrice = parsePrice(args.get(11));
-
-        if (seatingRows > 26) {
-            throw new InitialStateExecutionException(
-                    "seating rows must be at most 26 (A-Z), got " + seatingRows);
-        }
-
-        List<CreateEventRequest.SeatSpec> seats = new ArrayList<>(seatingRows * seatingCols);
-        for (int r = 0; r < seatingRows; r++) {
-            String row = String.valueOf((char) ('A' + r));
-            for (int c = 1; c <= seatingCols; c++) {
-                seats.add(new CreateEventRequest.SeatSpec(row, String.valueOf(c)));
-            }
-        }
-
-        Instant start = systemClock.now().plus(Duration.ofDays(30));
-        CreateEventRequest request = new CreateEventRequest(
+        companyService.offerRoleAppointment(
+                token,
                 companyName,
-                eventName,
-                description,
-                category,
-                new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofHours(1))),
-                new LockTimerDuration(Duration.ofMinutes(10)),
-                List.of(
-                        new CreateEventRequest.GAZoneSpec(standingZoneName, standingPrice, standingCapacity),
-                        new CreateEventRequest.AssignedZoneSpec(seatingZoneName, seatingPrice, seats)),
-                Map.of(standingZoneName, standingZoneName, seatingZoneName, seatingZoneName));
-
-        eventService.createEvent(token, request);
+                target.getId(),
+                StaffAppointment.StaffRole.MANAGER,
+                permissions);
     }
 
-    private void setEventSeatingLayout(List<String> args, Map<String, String> boundTokens) {
-        requireArity("set-event-seating-layout", args, 6, 6);
-        String token = resolveToken(args.get(0), boundTokens);
-        String companyName = args.get(1);
-        String eventName = args.get(2);
-        String seatingZoneName = args.get(3);
-        int gridRows = parsePositiveInt(args.get(4), "grid rows");
-        int gridCols = parsePositiveInt(args.get(5), "grid cols");
-
-        Event event = findEvent(companyName, eventName);
-        InventoryZone zone = event.getZones().stream()
-                .filter(z -> seatingZoneName.equals(z.getName()))
-                .findFirst()
-                .orElseThrow(() -> new InitialStateExecutionException(
-                        "seating zone '" + seatingZoneName + "' not found on event '" + eventName + "'"));
-
-        List<Seat> seats = new ArrayList<>(zone.getSeats());
-        seats.sort(Comparator
-                .comparing(Seat::getRow)
-                .thenComparing(s -> Integer.parseInt(s.getSeatNumber())));
-
-        if (seats.size() != gridRows * gridCols) {
-            throw new InitialStateExecutionException(
-                    "zone '" + seatingZoneName + "' has " + seats.size()
-                            + " seats but layout is " + gridRows + "x" + gridCols);
-        }
-
-        List<LayoutCell> cells = new ArrayList<>(seats.size());
-        int seatIndex = 0;
-        for (int r = 0; r < gridRows; r++) {
-            for (int c = 0; c < gridCols; c++) {
-                Seat seat = seats.get(seatIndex++);
-                cells.add(LayoutCell.seat(r, c, zone.getId(), seat.getId()));
-            }
-        }
-
-        eventService.setEventLayout(token, event.getId(), new VenueLayout(gridRows, gridCols, cells));
-    }
-
-    private void setCompanyCouponDiscount(List<String> args, Map<String, String> boundTokens) {
-        requireArity("set-company-coupon-discount", args, 4, 5);
-        String token = resolveToken(args.get(0), boundTokens);
-        String companyName = args.get(1);
-        BigDecimal percent = parsePrice(args.get(2));
-        String couponCode = args.get(3);
-        int expiryDays = args.size() > 4 ? parsePositiveInt(args.get(4), "expiry days") : 365;
-
-        Instant expiresAt = systemClock.now().plus(Duration.ofDays(expiryDays));
-        companyService.setCompanyDiscountPolicy(
-                token, companyName, new CouponDiscount(percent, couponCode, expiresAt));
-    }
-
-    private void logout(List<String> args, Map<String, String> boundTokens) {
-        requireArity("logout", args, 1, 1);
-        String token = resolveToken(args.get(0), boundTokens);
-        memberService.logout(token);
-        boundTokens.entrySet().removeIf(e -> token.equals(e.getValue()));
-    }
-
-    private Event findEvent(String companyName, String eventName) {
-        return eventRepository.findByCompanyName(companyName).stream()
-                .filter(e -> eventName.equals(e.getName()))
-                .findFirst()
-                .orElseThrow(() -> new InitialStateExecutionException(
-                        "event '" + eventName + "' not found for company '" + companyName + "'"));
-    }
+    // ── Token threading ─────────────────────────────────────────────
 
     private static void bindToken(Map<String, String> boundTokens, String username, String token) {
         boundTokens.put(username + TOKEN_SUFFIX, token);
     }
 
+    /**
+     * Resolves a token argument: if it matches a bound symbol the real token value is
+     * returned; an argument that looks like a token symbol ({@code *_token}) but is not bound
+     * is an error. Any other literal is passed through unchanged.
+     */
     private static String resolveToken(String arg, Map<String, String> boundTokens) {
         if (boundTokens.containsKey(arg)) {
             return boundTokens.get(arg);
@@ -345,42 +231,6 @@ public class InitialStateExecutor {
             }
         }
         return permissions;
-    }
-
-    private static StaffAppointment.StaffRole parseRole(String raw) {
-        try {
-            return StaffAppointment.StaffRole.valueOf(raw.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            throw new InitialStateExecutionException("unknown staff role '" + raw + "'");
-        }
-    }
-
-    private static EventCategory parseCategory(String raw) {
-        try {
-            return EventCategory.valueOf(raw.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            throw new InitialStateExecutionException("unknown event category '" + raw + "'");
-        }
-    }
-
-    private static BigDecimal parsePrice(String raw) {
-        try {
-            return new BigDecimal(raw.trim());
-        } catch (NumberFormatException ex) {
-            throw new InitialStateExecutionException("invalid decimal value '" + raw + "'");
-        }
-    }
-
-    private static int parsePositiveInt(String raw, String label) {
-        try {
-            int value = Integer.parseInt(raw.trim());
-            if (value <= 0) {
-                throw new InitialStateExecutionException(label + " must be positive, got " + value);
-            }
-            return value;
-        } catch (NumberFormatException ex) {
-            throw new InitialStateExecutionException("invalid integer for " + label + ": '" + raw + "'");
-        }
     }
 
     private static void requireArity(String op, List<String> args, int min, int max) {
