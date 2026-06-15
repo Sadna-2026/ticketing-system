@@ -14,7 +14,6 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +43,6 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
-import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
@@ -99,8 +97,7 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Revoke personnel"));
         assertTrue(hasButton(view, "Change manager permissions"));
         assertTrue(hasButton(view, "Relinquish ownership"));
-        assertTrue(hasButton(view, "Create event with zones"));
-        assertTrue(hasButton(view, "Add zone"));
+        assertTrue(hasButton(view, "Create event"));
         assertTrue(hasButton(view, "Edit event details"));
         assertTrue(hasButton(view, "Publish event"));
         assertTrue(hasButton(view, "Cancel event"));
@@ -135,7 +132,7 @@ class CompanyViewTest {
         assertFalse(hasVisibleButton(view, "Open company"));
         assertFalse(hasVisibleButton(view, "Offer role appointment"));
         assertFalse(hasVisibleButton(view, "Relinquish ownership"));
-        assertFalse(hasVisibleButton(view, "Create event with zones"));
+        assertFalse(hasVisibleButton(view, "Create event"));
         assertFalse(hasVisibleButton(view, "Add seat"));
         assertFalse(hasVisibleButton(view, "Suspend company"));
         assertFalse(hasVisibleButton(view, "Load company purchase history"));
@@ -494,9 +491,6 @@ class CompanyViewTest {
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         EventSummaryDTO created = event("Show", eventId);
-        when(presenter.createEventWithZones(any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any()))
-                .thenReturn(EventActionResult.created("Event created.", eventId));
         when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(created));
         when(presenter.publishEvent(eventId)).thenReturn(ActionResult.success("Event published."));
         when(presenter.cancelEvent(eventId)).thenReturn(ActionResult.success("Event cancelled."));
@@ -507,11 +501,10 @@ class CompanyViewTest {
         when(presenter.decreaseGACapacity(eventId, zoneId, 5)).thenReturn(ActionResult.success("GA capacity decreased."));
         when(presenter.setZonePrice(eventId, zoneId, new BigDecimal("75.00"))).thenReturn(ActionResult.success("Zone price updated."));
         CompanyView view = new CompanyView(presenter);
-        fillCreateEventForm(view);
 
-        clickButton(view, "Create event with zones");
-        // Creating an event auto-selects it in the management picker.
-        assertEquals(eventId, findEventCombo(view, "Event to manage").getValue().id());
+        // Select company and pre-existing event in the management picker.
+        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
+        findEventCombo(view, "Event to manage").setValue(created);
 
         // Set up inventory section: select company and event to load zones.
         findCompanyCombo(view, "Inventory company name").setValue(company("Acme"));
@@ -780,7 +773,6 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Manager permissions for Acme: VIEW_REPORTS."));
 
         selectTab(view, "Events");
-        assertFalse(hasVisibleButton(view, "Create event with zones"));
         assertFalse(hasVisibleButton(view, "Publish event"));
         assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE permission for Acme."));
 
@@ -812,9 +804,8 @@ class CompanyViewTest {
 
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
         selectTab(view, "Events");
-        assertTrue(hasVisibleButton(view, "Create event with zones"));
+        assertTrue(hasVisibleButton(view, "Create event"));
         assertTrue(hasVisibleButton(view, "Publish event"));
-        assertTrue(hasVisibleButton(view, "Design hall layout (visual)"));
 
         selectTab(view, "Inventory");
         assertTrue(hasVisibleButton(view, "Add seat"));
@@ -854,29 +845,22 @@ class CompanyViewTest {
         assertTrue(findTargetMemberCombo(view).isRequiredIndicatorVisible());
         assertTrue(findComboByLabel(view, "Role").isRequiredIndicatorVisible());
         assertTrue(findCompanyCombo(view, "Event company name").isRequiredIndicatorVisible());
-        assertTrue(findTextField(view, "Event name").isRequiredIndicatorVisible());
-        assertTrue(findComboByLabel(view, "Event category").isRequiredIndicatorVisible());
-        assertTrue(findDateTimePicker(view, "Start time").isRequiredIndicatorVisible());
-        assertTrue(findDateTimePicker(view, "End time").isRequiredIndicatorVisible());
-        assertTrue(findIntegerField(view, "Lock minutes").isRequiredIndicatorVisible());
 
         assertFalse(findTextArea(view, "New company description").isRequiredIndicatorVisible());
-        assertFalse(findTextArea(view, "Event description").isRequiredIndicatorVisible());
-        assertFalse(findDateTimePicker(view, "Doors open time").isRequiredIndicatorVisible());
         assertFalse(findPendingRoleOfferCombo(view).isRequiredIndicatorVisible());
     }
 
     @Test
     void GivenRequiredField_WhenValueIsClearedToBlank_ThenItShowsInlineError() {
         CompanyView view = new CompanyView(mockPresenter());
-        TextField eventName = findTextField(view, "Event name");
+        TextField companyName = findTextField(view, "New company name");
 
-        eventName.setValue("Summer Concert");
-        assertFalse(eventName.isInvalid());
+        companyName.setValue("Acme Productions");
+        assertFalse(companyName.isInvalid());
 
-        eventName.setValue("");
-        assertTrue(eventName.isInvalid());
-        assertEquals("Event name is required.", eventName.getErrorMessage());
+        companyName.setValue("");
+        assertTrue(companyName.isInvalid());
+        assertEquals("Company name is required.", companyName.getErrorMessage());
     }
 
     @Test
@@ -1111,24 +1095,6 @@ class CompanyViewTest {
         return presenter;
     }
 
-    private void fillCreateEventForm(CompanyView view) {
-        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
-        findTextField(view, "Event name").setValue("Show");
-        findTextArea(view, "Event description").setValue("desc");
-        findDateTimePicker(view, "Start time").setValue(LocalDateTime.of(2026, 6, 1, 19, 0));
-        findDateTimePicker(view, "End time").setValue(LocalDateTime.of(2026, 6, 1, 21, 0));
-        findDateTimePicker(view, "Doors open time").setValue(LocalDateTime.of(2026, 6, 1, 18, 0));
-        findIntegerField(view, "Lock minutes").setValue(15);
-        // Add a zone via the zone builder
-        @SuppressWarnings("unchecked")
-        ComboBox<String> zoneTypeCombo = (ComboBox<String>) findComboByLabel(view, "Zone type");
-        zoneTypeCombo.setValue("General Admission");
-        findTextField(view, "Zone name").setValue("Floor");
-        findBigDecimalField(view, "Price per ticket").setValue(new BigDecimal("50.00"));
-        findIntegerField(view, "GA capacity").setValue(100);
-        findTextField(view, "Venue section name").setValue("Main Hall");
-        clickButton(view, "Add zone");
-    }
 
     private static EventSummaryDTO eventSummary() {
         Instant start = Instant.parse("2026-06-01T19:00:00Z");
