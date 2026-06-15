@@ -96,13 +96,15 @@ public class AdminView extends VerticalLayout {
     // ── Queue tab ────────────────────────────────────────────────────
     private final Span queueStatus = new Span("Load active queues to manage virtual queue settings.");
     private final Grid<QueueSummary> queuesGrid = new Grid<>(QueueSummary.class, false);
-    private final IntegerField newFlowRateField = new IntegerField("New flow rate");
+    private final IntegerField updateThresholdField = new IntegerField("Threshold");
+    private final IntegerField updateFlowRateField = new IntegerField("Flow rate");
     private final TextField createQueueEventIdField = new TextField("Event ID");
     private final IntegerField createQueueThresholdField = new IntegerField("Threshold");
     private final IntegerField createQueueFlowRateField = new IntegerField("Flow rate");
     private QueueSummary selectedQueue;
-    private Button updateFlowRateButton;
+    private Button updateQueueButton;
     private Button flushQueueButton;
+    private Button deleteQueueButton;
     private Registration queuePollRegistration;
 
     public AdminView(AdminPresenter presenter) {
@@ -127,6 +129,7 @@ public class AdminView extends VerticalLayout {
                 adminActionsSection()
         );
         refreshSessionStatus();
+        addAttachListener(e -> refreshSessionStatus());
         addDetachListener(e -> stopQueuePolling());
     }
 
@@ -206,26 +209,34 @@ public class AdminView extends VerticalLayout {
     }
 
     private VerticalLayout queueSection() {
-        newFlowRateField.setMin(1);
-        newFlowRateField.setValue(10);
+        updateThresholdField.setMin(1);
+        updateThresholdField.setValue(100);
+        updateFlowRateField.setMin(1);
+        updateFlowRateField.setValue(10);
         createQueueThresholdField.setMin(1);
         createQueueThresholdField.setValue(100);
         createQueueFlowRateField.setMin(1);
         createQueueFlowRateField.setValue(10);
         createQueueEventIdField.setPlaceholder("e.g. 11111111-1111-1111-1111-111111111111");
 
-        updateFlowRateButton = new Button("Update flow rate", e -> doUpdateFlowRate());
-        flushQueueButton = new Button("Clear queue", e -> doFlushQueue());
+        updateQueueButton = new Button("Update", e -> doUpdateQueue());
+        flushQueueButton = new Button("Clear entries", e -> doFlushQueue());
+        deleteQueueButton = new Button("Delete queue", e -> doDeleteQueue());
         flushQueueButton.getStyle().set("color", "var(--lumo-error-color)");
-        updateFlowRateButton.setEnabled(false);
+        deleteQueueButton.getStyle().set("color", "var(--lumo-error-color)");
+        updateQueueButton.setEnabled(false);
         flushQueueButton.setEnabled(false);
+        deleteQueueButton.setEnabled(false);
 
         Button refreshButton = new Button("Refresh", e -> refreshQueues());
         HorizontalLayout gridActions = new HorizontalLayout(refreshButton, queueStatus);
         gridActions.setAlignItems(Alignment.CENTER);
 
-        FormLayout selectedQueueForm = new FormLayout(newFlowRateField);
-        HorizontalLayout selectedQueueActions = new HorizontalLayout(updateFlowRateButton, flushQueueButton);
+        FormLayout selectedQueueForm = new FormLayout(updateThresholdField, updateFlowRateField);
+        selectedQueueForm.setResponsiveSteps(
+                new FormLayout.ResponsiveStep("0", 1),
+                new FormLayout.ResponsiveStep("400px", 2));
+        HorizontalLayout selectedQueueActions = new HorizontalLayout(updateQueueButton, flushQueueButton, deleteQueueButton);
         selectedQueueActions.setAlignItems(Alignment.BASELINE);
 
         Button createQueueButton = new Button("Create queue", e -> doCreateQueue());
@@ -240,7 +251,7 @@ public class AdminView extends VerticalLayout {
                 queuesGrid,
                 gridActions,
                 new H4("Selected queue controls"),
-                new Paragraph("Select a queue above to adjust its flow rate or clear all waiting entries."),
+                new Paragraph("Select a queue above to update its settings, clear waiting entries, or delete it entirely."),
                 selectedQueueForm,
                 selectedQueueActions,
                 new H4("Create queue"),
@@ -263,17 +274,18 @@ public class AdminView extends VerticalLayout {
         queuesGrid.setItems(result.queues());
     }
 
-    private void doUpdateFlowRate() {
+    private void doUpdateQueue() {
         if (selectedQueue == null) {
             UiMessages.error("Select a queue from the grid.");
             return;
         }
-        Integer flowRate = newFlowRateField.getValue();
-        if (flowRate == null || flowRate < 1) {
-            UiMessages.error("Enter a positive flow rate.");
+        Integer threshold = updateThresholdField.getValue();
+        Integer flowRate = updateFlowRateField.getValue();
+        if (threshold == null || threshold < 1 || flowRate == null || flowRate < 1) {
+            UiMessages.error("Threshold and flow rate must be positive integers.");
             return;
         }
-        ActionResult result = presenter.updateQueueFlowRate(selectedQueue.eventId(), selectedQueue.threshold(), flowRate);
+        ActionResult result = presenter.updateQueueConfig(selectedQueue.eventId(), threshold, flowRate);
         queueStatus.setText(result.message());
         notify(result);
         if (result.success()) {
@@ -287,13 +299,37 @@ public class AdminView extends VerticalLayout {
             return;
         }
         Dialog confirm = new Dialog();
-        confirm.setHeaderTitle("Clear queue?");
+        confirm.setHeaderTitle("Clear entries?");
         Paragraph text = new Paragraph("All WAITING entries for \"" + selectedQueue.eventName()
-                + "\" will be removed. This cannot be undone.");
+                + "\" will be removed. The queue itself remains active.");
         Button cancel = new Button("Cancel", e -> confirm.close());
-        Button clear = new Button("Yes, clear queue", e -> {
+        Button clear = new Button("Yes, clear entries", e -> {
             confirm.close();
             ActionResult result = presenter.flushEventQueue(selectedQueue.eventId());
+            queueStatus.setText(result.message());
+            notify(result);
+            if (result.success()) {
+                refreshQueues();
+            }
+        });
+        clear.getStyle().set("color", "var(--lumo-error-color)");
+        confirm.add(text, new HorizontalLayout(cancel, clear));
+        confirm.open();
+    }
+
+    private void doDeleteQueue() {
+        if (selectedQueue == null) {
+            UiMessages.error("Select a queue from the grid.");
+            return;
+        }
+        Dialog confirm = new Dialog();
+        confirm.setHeaderTitle("Delete queue?");
+        Paragraph text = new Paragraph("The virtual queue for \"" + selectedQueue.eventName()
+                + "\" will be permanently deleted. All waiting users will lose their place.");
+        Button cancel = new Button("Cancel", e -> confirm.close());
+        Button delete = new Button("Yes, delete queue", e -> {
+            confirm.close();
+            ActionResult result = presenter.deleteEventQueue(selectedQueue.eventId());
             queueStatus.setText(result.message());
             notify(result);
             if (result.success()) {
@@ -301,8 +337,8 @@ public class AdminView extends VerticalLayout {
                 refreshQueues();
             }
         });
-        clear.getStyle().set("color", "var(--lumo-error-color)");
-        confirm.add(text, new HorizontalLayout(cancel, clear));
+        delete.getStyle().set("color", "var(--lumo-error-color)");
+        confirm.add(text, new HorizontalLayout(cancel, delete));
         confirm.open();
     }
 
@@ -332,11 +368,18 @@ public class AdminView extends VerticalLayout {
 
     private void refreshQueueControlsState() {
         boolean hasSelection = selectedQueue != null;
-        if (updateFlowRateButton != null) {
-            updateFlowRateButton.setEnabled(hasSelection);
+        if (updateQueueButton != null) {
+            updateQueueButton.setEnabled(hasSelection);
         }
         if (flushQueueButton != null) {
             flushQueueButton.setEnabled(hasSelection);
+        }
+        if (deleteQueueButton != null) {
+            deleteQueueButton.setEnabled(hasSelection);
+        }
+        if (hasSelection) {
+            updateThresholdField.setValue(selectedQueue.threshold());
+            updateFlowRateField.setValue(selectedQueue.flowRate());
         }
     }
 

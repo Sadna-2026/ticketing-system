@@ -232,7 +232,7 @@ public class AdminPresenter {
         }
     }
 
-    public ActionResult updateQueueFlowRate(UUID eventId, int currentThreshold, int newFlowRate) {
+    public ActionResult updateQueueConfig(UUID eventId, int newThreshold, int newFlowRate) {
         String token = adminToken();
         if (token == null) {
             return ActionResult.failure(ADMIN_SESSION_REQUIRED);
@@ -241,8 +241,24 @@ public class AdminPresenter {
             return ActionResult.failure("Event ID is required.");
         }
         try {
-            orderService.updateQueueConfig(token, eventId, currentThreshold, newFlowRate);
-            return ActionResult.success("Flow rate updated to " + newFlowRate + ".");
+            orderService.updateQueueConfig(token, eventId, newThreshold, newFlowRate);
+            return ActionResult.success("Queue updated — threshold: " + newThreshold + ", flow rate: " + newFlowRate + ".");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult deleteEventQueue(UUID eventId) {
+        String token = adminToken();
+        if (token == null) {
+            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            orderService.deleteQueue(token, eventId);
+            return ActionResult.success("Queue deleted.");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
         }

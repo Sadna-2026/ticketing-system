@@ -568,6 +568,14 @@ public class OrderService {
         log.info("Queue flushed: eventId={}", eventId);
     }
 
+    @Transactional
+    public void deleteQueue(String token, UUID eventId) {
+        validateToken(token);
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queueRepository.delete(queue.getId());
+        log.info("Queue deleted: queueId={}, eventId={}", queue.getId(), eventId);
+    }
+
     public List<VirtualQueueDto> getAllActiveQueues(String token) {
         validateToken(token);
         log.info("Getting all active queues");

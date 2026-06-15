@@ -169,6 +169,21 @@ public class QueuePresenter {
         }
     }
 
+    /**
+     * Notifies the queue that this session is done browsing tickets for the given event.
+     * Safe to call even when no queue exists for the event.
+     */
+    public void notifyLeft(UUID eventId) {
+        if (eventId == null) {
+            return;
+        }
+        try {
+            orderService.userLeft(eventId);
+        } catch (RuntimeException ex) {
+            logger.warn("userLeft notification failed for event {}", eventId, ex);
+        }
+    }
+
     public String currentSessionLabel() {
         return SessionContext.currentSessionLabel();
     }

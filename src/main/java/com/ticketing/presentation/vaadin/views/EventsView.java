@@ -93,6 +93,7 @@ public class EventsView extends VerticalLayout {
     private EventMapDTO currentEventMap;
     private final Map<UUID, SeatMapComponent> zoneSeatMaps = new HashMap<>();
     private Registration mapPollRegistration;
+    private UUID directlyAdmittedEventId;
 
     public EventsView(EventsPresenter presenter, OrdersPresenter ordersPresenter, QueuePresenter queuePresenter) {
         this.presenter = presenter;
@@ -140,6 +141,7 @@ public class EventsView extends VerticalLayout {
     @Override
     protected void onDetach(DetachEvent detachEvent) {
         stopMapPolling();
+        releaseQueueSlot();
         super.onDetach(detachEvent);
     }
 
@@ -268,6 +270,9 @@ public class EventsView extends VerticalLayout {
     private void loadSelectedEventMap(boolean notify) {
         UUID eventId = selectedEvent == null ? null : selectedEvent.id();
 
+        // Release the previous queue slot before checking the gate for the new event
+        releaseQueueSlot();
+
         // Queue gate: if the event has an active queue and this session should wait, redirect
         if (eventId != null) {
             QueueResult gate = queuePresenter.enterQueueGate(eventId);
@@ -276,6 +281,8 @@ public class EventsView extends VerticalLayout {
                 getUI().ifPresent(ui -> ui.navigate("queue?eventId=" + eventId));
                 return;
             }
+            // Admitted directly — track so we can notify the queue when the user leaves
+            directlyAdmittedEventId = eventId;
         }
 
         MapResult result = presenter.loadEventMap(eventId);
@@ -372,7 +379,13 @@ public class EventsView extends VerticalLayout {
             mapPollRegistration.remove();
             mapPollRegistration = null;
         }
-        getUI().ifPresent(ui -> ui.setPollInterval(-1));
+    }
+
+    private void releaseQueueSlot() {
+        if (directlyAdmittedEventId != null) {
+            queuePresenter.notifyLeft(directlyAdmittedEventId);
+            directlyAdmittedEventId = null;
+        }
     }
 
     /**
