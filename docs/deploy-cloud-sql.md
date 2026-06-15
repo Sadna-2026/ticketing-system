@@ -24,9 +24,28 @@ The instance spec follows the V3 document's recommended cheapest-viable configur
 > [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy) is a drop-in
 > alternative — only the `DB_URL` changes (point it at `127.0.0.1:5432` with the proxy running).
 
+## What is GCP, and where do I run these commands?
+**GCP** (Google Cloud Platform) is Google's cloud — you rent computing resources that run on Google's
+servers instead of your own machine. Here we use one product, **Cloud SQL**, to run a managed PostgreSQL
+database remotely (the V3 "remote database" requirement). The course provides **$50 of credit**.
+
+The commands below are **`gcloud` CLI** commands. The easiest place to run them — no install, already
+signed in — is **Cloud Shell**, a terminal built into the web console:
+1. Go to <https://console.cloud.google.com> and sign in.
+2. Click the **`>_` (Activate Cloud Shell)** icon, top-right. A `bash` terminal opens in the browser.
+3. Paste the commands there. (Cloud Shell is `bash`, so the `export VAR=…` / `$(…)` syntax below works
+   as-is — unlike Windows PowerShell.)
+
+> Alternative: install the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) locally and run
+> `gcloud auth login` first. Cloud Shell is recommended for a first-time setup.
+
+## 0. One-time account + project setup (in the browser)
+1. In the console, redeem the course's **$50 credit** (or start the free trial) so **billing is enabled**.
+2. Create a project: project dropdown (top bar) → **New Project** → name it e.g. `ticketing-system`.
+3. Make sure that project is **linked to your billing account** (Billing → Account management).
+
 ## Prerequisites (you)
-- `gcloud` CLI installed and authenticated: `gcloud auth login`.
-- A GCP **project** with **billing enabled** (the $50 education credit applies).
+- Done step 0 above (project + billing), and opened **Cloud Shell** (or installed `gcloud` + `gcloud auth login`).
 - You'll choose a **DB password** below — keep it out of git (it goes in your shell / deployment secrets only).
 
 ```bash
@@ -61,11 +80,14 @@ gcloud sql databases create "$DB_NAME" --instance="$INSTANCE"
 gcloud sql users create "$DB_USER" --instance="$INSTANCE" --password="$DB_PASSWORD"
 ```
 
-## 3. Allow your machine / CI to connect (public IP + authorized network)
+## 3. Allow the machine that RUNS THE APP to connect (public IP + authorized network)
 ```bash
-# Whitelist your current public IP (re-run if your IP changes; add CI egress IPs the same way):
-MY_IP="$(curl -s ifconfig.me)"
+# IMPORTANT: authorize the public IP of the machine where you run the app (your laptop), NOT Cloud Shell.
+# Find it by opening https://ifconfig.me in a browser ON THAT MACHINE, then set it here:
+MY_IP="THE_IP_FROM_ifconfig.me"
 gcloud sql instances patch "$INSTANCE" --authorized-networks="${MY_IP}/32"
+# (--authorized-networks replaces the whole allowlist; list all IPs together if you add CI: ip1/32,ip2/32.
+#  Re-run if your home IP changes.)
 
 # (Recommended) require TLS:
 gcloud sql instances patch "$INSTANCE" --ssl-mode=ENCRYPTED_ONLY
