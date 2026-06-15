@@ -42,6 +42,8 @@ import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.presenters.QueuePresenter;
+import com.ticketing.presentation.vaadin.presenters.QueuePresenter.QueueResult;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
@@ -75,7 +77,7 @@ class EventsViewTest {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
 
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         assertTrue(hasButton(view, "Search events"));
         assertTrue(hasButton(view, "Clear filters"));
@@ -92,7 +94,7 @@ class EventsViewTest {
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
         EventSummaryDTO event = eventSummary("Spring Concert");
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
 
@@ -107,7 +109,7 @@ class EventsViewTest {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
         whenSearch(presenter).thenReturn(SearchResult.success("No events found for the current filters.", List.of()));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
 
@@ -124,7 +126,7 @@ class EventsViewTest {
         EventMapDTO loadedMap = sampleEventMap(event.id());
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -157,7 +159,7 @@ class EventsViewTest {
                 .thenReturn(OrderMutationResult.success("Assigned seat added.", UUID.randomUUID(), null));
         when(ordersPresenter.addGATickets(event.id(), gaZoneId, 1))
                 .thenReturn(OrderMutationResult.success("GA tickets added.", UUID.randomUUID(), null));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -187,7 +189,7 @@ class EventsViewTest {
         when(ordersPresenter.addGATickets(event.id(), gaZoneId, 3))
                 .thenReturn(OrderMutationResult.success("3 GA tickets added.", UUID.randomUUID(), null));
         
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -214,7 +216,7 @@ class EventsViewTest {
         when(ordersPresenter.addGATickets(event.id(), gaZoneId, 4))
                 .thenReturn(OrderMutationResult.failure("Cannot purchase more than 3 tickets"));
         
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -235,7 +237,7 @@ class EventsViewTest {
         EventMapDTO loadedMap = seatMapEventMap(event.id());
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -260,7 +262,7 @@ class EventsViewTest {
         EventMapDTO loadedMap = policyEventMap(event.id());
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -281,7 +283,7 @@ class EventsViewTest {
         EventSummaryDTO event = eventSummary("Spring Concert");
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.failure("Event map not found."));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -295,7 +297,7 @@ class EventsViewTest {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
         whenSearch(presenter).thenReturn(SearchResult.failure("Could not search events. Please try again."));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
 
@@ -309,7 +311,7 @@ class EventsViewTest {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
         whenSearch(presenter).thenReturn(SearchResult.failure("Minimum price cannot be greater than maximum price."));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
 
@@ -323,7 +325,7 @@ class EventsViewTest {
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
         when(presenter.searchCompanies("")).thenReturn(List.of(new CompanySummaryDTO("Acme")));
         whenSearch(presenter).thenReturn(SearchResult.success("No events found for the current filters.", List.of()));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
         findCompanyComboBox(view).setValue(new CompanySummaryDTO("Acme"));
 
         clickButton(view, "Search events");
@@ -364,7 +366,7 @@ class EventsViewTest {
                 eq(toDate)
         )).thenReturn(SearchResult.success("Found 1 event(s) for Acme.", List.of(event)));
         
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
         
         // Fill search form
         findTextField(view, "Search text").setValue("Festival");
@@ -402,7 +404,7 @@ class EventsViewTest {
                 any(), any(), any(), eq("Acme"), any(), any(), eq(fromDate), eq(toDate)
         )).thenReturn(SearchResult.failure("To Date cannot be before From Date."));
         
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
         
         findCompanyComboBox(view).setValue(new CompanySummaryDTO("Acme"));
         findDatePicker(view, "From date").setValue(fromDate);
@@ -423,7 +425,7 @@ class EventsViewTest {
         EventMapDTO loadedMap = sampleEventMap(event.id());
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -447,7 +449,7 @@ class EventsViewTest {
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
         when(ordersPresenter.addGATickets(event.id(), gaZoneId, 1))
                 .thenReturn(OrderMutationResult.failure("Not enough tickets available."));
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
@@ -520,6 +522,12 @@ class EventsViewTest {
         return result;
     }
 
+    private QueuePresenter mockQueuePresenter() {
+        QueuePresenter queuePresenter = mock(QueuePresenter.class);
+        when(queuePresenter.enterQueueGate(any())).thenReturn(QueueResult.directEntry("direct"));
+        return queuePresenter;
+    }
+
     private OrdersPresenter mockOrdersPresenter() {
         OrdersPresenter ordersPresenter = mock(OrdersPresenter.class);
         when(ordersPresenter.currentSessionLabel()).thenReturn("Current session: Guest");
@@ -577,7 +585,7 @@ class EventsViewTest {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
 
-        EventsView view = new EventsView(presenter, ordersPresenter);
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
 
         assertEquals("No events match your search yet — adjust the filters and search again.",
                 findGrid(view).getEmptyStateText());

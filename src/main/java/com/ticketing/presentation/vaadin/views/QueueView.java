@@ -2,6 +2,8 @@ package com.ticketing.presentation.vaadin.views;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.application.dto.QueueEntryDto;
@@ -11,13 +13,21 @@ import com.ticketing.presentation.vaadin.presenters.QueuePresenter.QueueResult;
 import com.ticketing.presentation.vaadin.presenters.QueuePresenter.QueueStatusResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
+import com.vaadin.flow.router.BeforeLeaveEvent;
+import com.vaadin.flow.router.BeforeLeaveObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.shared.Registration;
@@ -28,7 +38,7 @@ import com.vaadin.flow.spring.annotation.UIScope;
 @PageTitle("Virtual Queue")
 @SpringComponent
 @UIScope
-public class QueueView extends VerticalLayout {
+public class QueueView extends VerticalLayout implements BeforeEnterObserver, BeforeLeaveObserver {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -37,51 +47,83 @@ public class QueueView extends VerticalLayout {
 
     private final QueuePresenter presenter;
 
+    // ── Entry form ──────────────────────────────────────────────────
+    private final VerticalLayout entryForm = new VerticalLayout();
     private final Span sessionStatus = new Span();
     private final TextField eventIdField = new TextField("Event ID");
     private final Button joinButton = new Button("Join Queue");
-    private final Span statusMessage = new Span();
-    private final VerticalLayout entryDetails = new VerticalLayout();
+    private final Span entryStatus = new Span();
+
+    // ── Waiting room ────────────────────────────────────────────────
+    private final VerticalLayout waitingRoom = new VerticalLayout();
+    private final H2 waitingHeader = new H2("Virtual Queue");
+    private final Div leaveWarning = leaveWarningBanner();
+    private final Span positionLabel = new Span();
+    private final ProgressBar progressBar = new ProgressBar();
+    private final Span waitingStatus = new Span();
+    private final Span entryDetails = new Span();
     private final Button refreshButton = new Button("Refresh status");
 
     private UUID activeEventId;
     private Registration pollRegistration;
+    private boolean inWaitingRoom = false;
 
     public QueueView(QueuePresenter presenter) {
         this.presenter = presenter;
 
         setPadding(true);
         setSpacing(true);
-        setMaxWidth("640px");
+        setMaxWidth("660px");
         getStyle().set("margin", "0 auto");
 
-        eventIdField.setPlaceholder("e.g. 550e8400-e29b-41d4-a716-446655440000");
-        eventIdField.setWidthFull();
+        buildEntryForm();
+        buildWaitingRoom();
 
-        joinButton.addClickListener(e -> joinQueue());
-        refreshButton.addClickListener(e -> refreshStatus());
-        refreshButton.setVisible(false);
+        add(entryForm, waitingRoom);
+        showEntryForm();
+        addAttachListener(e -> refreshEntrySessionStatus());
+    }
 
-        entryDetails.setPadding(false);
-        entryDetails.setSpacing(true);
-        entryDetails.setVisible(false);
+    // ── Vaadin lifecycle ────────────────────────────────────────────
 
-        add(
-                new H2("Virtual Queue"),
-                new Paragraph(
-                        "Enter an event ID to join its virtual queue. "
-                        + "If the event is under high load, you will be placed in the queue "
-                        + "and this page will update automatically when it is your turn. "
-                        + "If no queue is active, you will be admitted directly."),
-                sessionStatus,
-                eventIdField,
-                joinButton,
-                statusMessage,
-                entryDetails,
-                refreshButton);
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        // Auto-join from EventsView redirect: /queue?eventId=<uuid>
+        Map<String, List<String>> params = event.getLocation().getQueryParameters().getParameters();
+        List<String> eventIdParam = params.get("eventId");
+        if (eventIdParam != null && !eventIdParam.isEmpty()) {
+            UUID eventId = parseUuid(eventIdParam.get(0));
+            if (eventId != null) {
+                autoEnterWaitingRoom(eventId);
+                return;
+            }
+        }
+        showEntryForm();
+        refreshEntrySessionStatus();
+    }
 
-        refreshSessionStatus();
-        addAttachListener(e -> refreshSessionStatus());
+    @Override
+    public void beforeLeave(BeforeLeaveEvent event) {
+        if (!inWaitingRoom) {
+            return;
+        }
+        // Warn the user that navigating away will lose their queue place
+        BeforeLeaveEvent.ContinueNavigationAction action = event.postpone();
+        Dialog confirm = new Dialog();
+        confirm.setHeaderTitle("Leave the queue?");
+        Paragraph text = new Paragraph(
+                "Are you sure you want to leave? You will lose your place in the virtual queue.");
+        Button leave = new Button("Yes, leave", e -> {
+            stopPolling();
+            inWaitingRoom = false;
+            confirm.close();
+            action.proceed();
+        });
+        Button stay = new Button("Stay in queue", e -> confirm.close());
+        leave.getStyle().set("color", "var(--lumo-error-color)");
+        HorizontalLayout buttons = new HorizontalLayout(stay, leave);
+        confirm.add(text, buttons);
+        confirm.open();
     }
 
     @Override
@@ -90,7 +132,31 @@ public class QueueView extends VerticalLayout {
         super.onDetach(detachEvent);
     }
 
-    private void refreshSessionStatus() {
+    // ── Entry form ──────────────────────────────────────────────────
+
+    private void buildEntryForm() {
+        entryForm.setPadding(false);
+        entryForm.setSpacing(true);
+
+        eventIdField.setPlaceholder("e.g. 11111111-1111-1111-1111-111111111111");
+        eventIdField.setWidthFull();
+        joinButton.addClickListener(e -> joinQueue());
+        entryStatus.getStyle().set("white-space", "pre-line");
+
+        entryForm.add(
+                new H2("Virtual Queue"),
+                new Paragraph(
+                        "Enter an event ID to join its virtual queue. "
+                        + "If the event is under high load you will be placed in the queue "
+                        + "and this page updates automatically when it is your turn. "
+                        + "If no queue is active you are admitted directly."),
+                sessionStatus,
+                eventIdField,
+                joinButton,
+                entryStatus);
+    }
+
+    private void refreshEntrySessionStatus() {
         sessionStatus.setText(presenter.currentSessionLabel());
         boolean hasSession = !presenter.currentSessionState().noSession();
         joinButton.setEnabled(hasSession);
@@ -98,34 +164,88 @@ public class QueueView extends VerticalLayout {
     }
 
     private void joinQueue() {
-        UUID eventId = parseEventId(eventIdField.getValue());
+        UUID eventId = parseUuid(eventIdField.getValue());
         if (eventId == null) {
-            statusMessage.setText("Enter a valid event ID (UUID format).");
+            entryStatus.setText("Enter a valid event ID (UUID format).");
             UiMessages.error("Enter a valid event ID (UUID format).");
-            clearEntryDetails();
             return;
         }
-
         QueueResult result = presenter.tryEnterOrQueue(eventId);
-        statusMessage.setText(result.message());
-
         if (!result.success()) {
+            entryStatus.setText(result.message());
             UiMessages.error(result.message());
-            clearEntryDetails();
             return;
         }
-
         if (result.queued()) {
             UiMessages.success(result.message());
-            activeEventId = eventId;
-            showEntryDetails(result.entry(), false);
-            startPolling();
+            enterWaitingRoom(eventId, result.entry());
         } else {
+            entryStatus.setText(result.message());
             UiMessages.success(result.message());
-            clearEntryDetails();
-            stopPolling();
-            activeEventId = null;
         }
+    }
+
+    // ── Waiting room ────────────────────────────────────────────────
+
+    private void buildWaitingRoom() {
+        waitingRoom.setPadding(false);
+        waitingRoom.setSpacing(true);
+
+        progressBar.setIndeterminate(true);
+        progressBar.setWidthFull();
+
+        refreshButton.addClickListener(e -> refreshStatus());
+
+        waitingStatus.getStyle().set("white-space", "pre-line");
+        entryDetails.getStyle().set("color", "var(--lumo-secondary-text-color)").set("font-size", "var(--lumo-font-size-s)");
+
+        waitingRoom.add(
+                waitingHeader,
+                leaveWarning,
+                positionLabel,
+                progressBar,
+                waitingStatus,
+                entryDetails,
+                refreshButton);
+    }
+
+    /** Called when we know the eventId and want to skip straight to the waiting room (from BeforeEnter redirect). */
+    private void autoEnterWaitingRoom(UUID eventId) {
+        // Check if already in queue (coming back to the page)
+        QueueStatusResult status = presenter.checkQueueStatus(eventId);
+        if (status.success() && status.inQueue()) {
+            enterWaitingRoom(eventId, status.entry());
+        } else {
+            // Not yet in queue — try to join
+            QueueResult join = presenter.tryEnterOrQueue(eventId);
+            if (join.queued()) {
+                enterWaitingRoom(eventId, join.entry());
+            } else {
+                // Direct entry or error — show the form with the message
+                eventIdField.setValue(eventId.toString());
+                entryStatus.setText(join.success()
+                        ? join.message()
+                        : join.message());
+                if (!join.success()) {
+                    UiMessages.error(join.message());
+                } else {
+                    UiMessages.success(join.message());
+                }
+                showEntryForm();
+            }
+        }
+    }
+
+    private void enterWaitingRoom(UUID eventId, QueueEntryDto entry) {
+        activeEventId = eventId;
+        inWaitingRoom = true;
+
+        String eventName = presenter.loadEventName(eventId);
+        waitingHeader.setText("Virtual Queue" + (eventName != null ? " — " + eventName : ""));
+
+        renderWaitingState(entry, -1);
+        showWaitingRoom();
+        startPolling();
     }
 
     private void refreshStatus() {
@@ -133,51 +253,95 @@ public class QueueView extends VerticalLayout {
             return;
         }
         QueueStatusResult result = presenter.checkQueueStatus(activeEventId);
-        statusMessage.setText(result.message());
+        waitingStatus.setText(result.message());
 
         if (!result.success()) {
             UiMessages.error(result.message());
             return;
         }
-
         if (result.admitted()) {
-            UiMessages.success(result.message());
-            showEntryDetails(result.entry(), true);
-            stopPolling();
-            activeEventId = null;
+            handleAdmitted(result.entry());
         } else if (result.inQueue()) {
-            showEntryDetails(result.entry(), false);
+            renderWaitingState(result.entry(), result.waitingAhead());
         } else {
-            clearEntryDetails();
-            stopPolling();
-            activeEventId = null;
+            // No longer in queue (expired / flushed)
+            handleQueueExpired();
         }
     }
 
-    private void showEntryDetails(QueueEntryDto entry, boolean admitted) {
-        entryDetails.removeAll();
-        entryDetails.add(new H3(admitted ? "Your turn!" : "Queue entry"));
+    private void renderWaitingState(QueueEntryDto entry, int waitingAhead) {
+        if (waitingAhead >= 0) {
+            positionLabel.setText(waitingAhead == 0
+                    ? "You are next in line!"
+                    : "Approximately " + waitingAhead + " people ahead of you.");
+        } else {
+            positionLabel.setText("You are in the virtual queue — hang tight.");
+        }
+        progressBar.setIndeterminate(true);
+
         if (entry != null) {
-            entryDetails.add(
-                    new Span("Entry ID: " + entry.getId()),
-                    new Span("Status: " + entry.getStatus()),
-                    new Span("Joined at: " + (entry.getJoinedAt() != null
-                            ? FORMATTER.format(entry.getJoinedAt()) : "—")));
+            String joined = entry.getJoinedAt() != null ? FORMATTER.format(entry.getJoinedAt()) : "—";
+            entryDetails.setText("Status: " + entry.getStatus() + "  |  Joined: " + joined
+                    + "  |  Entry ID: " + entry.getId());
         }
-        if (admitted) {
-            Span admittedBanner = new Span("You have been admitted — head to the Events page to browse and reserve tickets.");
-            admittedBanner.getStyle().set("font-weight", "bold").set("color", "var(--lumo-success-color)");
-            entryDetails.add(admittedBanner);
-        }
-        entryDetails.setVisible(true);
-        refreshButton.setVisible(!admitted);
+        waitingStatus.setText("This page checks for updates every 5 seconds. Do not close or navigate away.");
+        refreshButton.setVisible(true);
     }
 
-    private void clearEntryDetails() {
-        entryDetails.removeAll();
-        entryDetails.setVisible(false);
+    private void handleAdmitted(QueueEntryDto entry) {
+        stopPolling();
+        inWaitingRoom = false;
+        activeEventId = null;
+
+        progressBar.setIndeterminate(false);
+        progressBar.setValue(1.0);
+        positionLabel.setText("It's your turn!");
+        if (entry != null) {
+            String joined = entry.getJoinedAt() != null ? FORMATTER.format(entry.getJoinedAt()) : "—";
+            entryDetails.setText("Status: " + entry.getStatus() + "  |  Joined: " + joined);
+        }
         refreshButton.setVisible(false);
+
+        Span redirect = new Span("Redirecting to ticket selection in a moment…");
+        redirect.getStyle().set("font-weight", "bold").set("color", "var(--lumo-success-color)");
+        waitingRoom.add(redirect);
+
+        UiMessages.success("It's your turn! Heading to Events…");
+        // Navigate to Events after a brief pause so the user sees the message
+        UI.getCurrent().getPage().executeJs("setTimeout(() => window.location.href='/events', 2500)");
     }
+
+    private void handleQueueExpired() {
+        stopPolling();
+        inWaitingRoom = false;
+        progressBar.setIndeterminate(false);
+        progressBar.setValue(0);
+        positionLabel.setText("Your queue session has ended.");
+        waitingStatus.setText(
+                "Either all tickets have been sold or your queue slot has expired.\n"
+                + "Return to the Events page to check availability.");
+        refreshButton.setVisible(false);
+        Span link = new Span("→ Go to Events");
+        link.getStyle().set("cursor", "pointer").set("color", "var(--lumo-primary-color)");
+        link.addClickListener(e -> UI.getCurrent().navigate(EventsView.class));
+        waitingRoom.add(link);
+        UiMessages.info("Your queue session has ended.");
+    }
+
+    // ── View toggling ───────────────────────────────────────────────
+
+    private void showEntryForm() {
+        entryForm.setVisible(true);
+        waitingRoom.setVisible(false);
+        refreshEntrySessionStatus();
+    }
+
+    private void showWaitingRoom() {
+        entryForm.setVisible(false);
+        waitingRoom.setVisible(true);
+    }
+
+    // ── Polling ─────────────────────────────────────────────────────
 
     private void startPolling() {
         getUI().ifPresent(ui -> {
@@ -186,7 +350,6 @@ public class QueueView extends VerticalLayout {
                 pollRegistration = ui.addPollListener(e -> refreshStatus());
             }
         });
-        refreshButton.setVisible(true);
     }
 
     private void stopPolling() {
@@ -195,10 +358,23 @@ public class QueueView extends VerticalLayout {
             pollRegistration = null;
         }
         getUI().ifPresent(ui -> ui.setPollInterval(-1));
-        refreshButton.setVisible(false);
     }
 
-    private static UUID parseEventId(String value) {
+    // ── Helpers ─────────────────────────────────────────────────────
+
+    private static Div leaveWarningBanner() {
+        Span text = new Span("⚠  Do not leave this page — navigating away will remove you from the queue and you will lose your place.");
+        Div banner = new Div(text);
+        banner.getStyle()
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("border-left", "4px solid var(--lumo-error-color)")
+                .set("padding", "var(--lumo-space-s) var(--lumo-space-m)")
+                .set("border-radius", "var(--lumo-border-radius-s)")
+                .set("color", "var(--lumo-body-text-color)");
+        return banner;
+    }
+
+    private static UUID parseUuid(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }

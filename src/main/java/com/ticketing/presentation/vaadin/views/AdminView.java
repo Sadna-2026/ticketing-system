@@ -21,11 +21,14 @@ import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
+import com.ticketing.presentation.vaadin.presenters.AdminPresenter.QueueListResult;
+import com.ticketing.presentation.vaadin.presenters.AdminPresenter.QueueSummary;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
@@ -42,6 +45,7 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.shared.Registration;
 import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 
@@ -89,6 +93,18 @@ public class AdminView extends VerticalLayout {
     private Button cancelSuspensionButton;
     private SuspensionDTO selectedSuspension;
 
+    // ── Queue tab ────────────────────────────────────────────────────
+    private final Span queueStatus = new Span("Load active queues to manage virtual queue settings.");
+    private final Grid<QueueSummary> queuesGrid = new Grid<>(QueueSummary.class, false);
+    private final IntegerField newFlowRateField = new IntegerField("New flow rate");
+    private final TextField createQueueEventIdField = new TextField("Event ID");
+    private final IntegerField createQueueThresholdField = new IntegerField("Threshold");
+    private final IntegerField createQueueFlowRateField = new IntegerField("Flow rate");
+    private QueueSummary selectedQueue;
+    private Button updateFlowRateButton;
+    private Button flushQueueButton;
+    private Registration queuePollRegistration;
+
     public AdminView(AdminPresenter presenter) {
         this.presenter = presenter;
 
@@ -101,6 +117,7 @@ public class AdminView extends VerticalLayout {
         configureFields();
         configurePurchaseHistoryGrid();
         configureSuspensionsGrid();
+        configureQueuesGrid();
         add(
                 new H2("Admin"),
                 new Paragraph("Use system admin actions backed directly by application services."),
@@ -110,6 +127,7 @@ public class AdminView extends VerticalLayout {
                 adminActionsSection()
         );
         refreshSessionStatus();
+        addDetachListener(e -> stopQueuePolling());
     }
 
     private void configurePickers() {
@@ -172,6 +190,173 @@ public class AdminView extends VerticalLayout {
         }
     }
 
+    private void configureQueuesGrid() {
+        queuesGrid.setId("admin-queues-grid");
+        queuesGrid.setEmptyStateText("No active queues found.");
+        queuesGrid.addColumn(QueueSummary::eventName).setHeader("Event").setAutoWidth(true).setFlexGrow(1);
+        queuesGrid.addColumn(QueueSummary::waitingCount).setHeader("Waiting").setAutoWidth(true);
+        queuesGrid.addColumn(QueueSummary::flowRate).setHeader("Flow rate").setAutoWidth(true);
+        queuesGrid.addColumn(QueueSummary::threshold).setHeader("Threshold").setAutoWidth(true);
+        queuesGrid.addColumn(QueueSummary::activeUsers).setHeader("Active users").setAutoWidth(true);
+        queuesGrid.setMinHeight("160px");
+        queuesGrid.asSingleSelect().addValueChangeListener(event -> {
+            selectedQueue = event.getValue();
+            refreshQueueControlsState();
+        });
+    }
+
+    private VerticalLayout queueSection() {
+        newFlowRateField.setMin(1);
+        newFlowRateField.setValue(10);
+        createQueueThresholdField.setMin(1);
+        createQueueThresholdField.setValue(100);
+        createQueueFlowRateField.setMin(1);
+        createQueueFlowRateField.setValue(10);
+        createQueueEventIdField.setPlaceholder("e.g. 11111111-1111-1111-1111-111111111111");
+
+        updateFlowRateButton = new Button("Update flow rate", e -> doUpdateFlowRate());
+        flushQueueButton = new Button("Clear queue", e -> doFlushQueue());
+        flushQueueButton.getStyle().set("color", "var(--lumo-error-color)");
+        updateFlowRateButton.setEnabled(false);
+        flushQueueButton.setEnabled(false);
+
+        Button refreshButton = new Button("Refresh", e -> refreshQueues());
+        HorizontalLayout gridActions = new HorizontalLayout(refreshButton, queueStatus);
+        gridActions.setAlignItems(Alignment.CENTER);
+
+        FormLayout selectedQueueForm = new FormLayout(newFlowRateField);
+        HorizontalLayout selectedQueueActions = new HorizontalLayout(updateFlowRateButton, flushQueueButton);
+        selectedQueueActions.setAlignItems(Alignment.BASELINE);
+
+        Button createQueueButton = new Button("Create queue", e -> doCreateQueue());
+        FormLayout createForm = new FormLayout(createQueueEventIdField, createQueueThresholdField, createQueueFlowRateField);
+        createForm.setResponsiveSteps(
+                new FormLayout.ResponsiveStep("0", 1),
+                new FormLayout.ResponsiveStep("600px", 3));
+
+        VerticalLayout section = new VerticalLayout(
+                new H4("Active queues"),
+                new Paragraph("Active virtual queues update every 5 seconds while this tab is open."),
+                queuesGrid,
+                gridActions,
+                new H4("Selected queue controls"),
+                new Paragraph("Select a queue above to adjust its flow rate or clear all waiting entries."),
+                selectedQueueForm,
+                selectedQueueActions,
+                new H4("Create queue"),
+                new Paragraph("Create a virtual queue for a high-demand event."),
+                createForm,
+                createQueueButton
+        );
+        section.setPadding(false);
+        return section;
+    }
+
+    private void refreshQueues() {
+        QueueListResult result = presenter.loadActiveQueues();
+        queueStatus.setText(result.message());
+        if (!result.success()) {
+            UiMessages.error(result.message());
+            queuesGrid.setItems(List.of());
+            return;
+        }
+        queuesGrid.setItems(result.queues());
+    }
+
+    private void doUpdateFlowRate() {
+        if (selectedQueue == null) {
+            UiMessages.error("Select a queue from the grid.");
+            return;
+        }
+        Integer flowRate = newFlowRateField.getValue();
+        if (flowRate == null || flowRate < 1) {
+            UiMessages.error("Enter a positive flow rate.");
+            return;
+        }
+        ActionResult result = presenter.updateQueueFlowRate(selectedQueue.eventId(), selectedQueue.threshold(), flowRate);
+        queueStatus.setText(result.message());
+        notify(result);
+        if (result.success()) {
+            refreshQueues();
+        }
+    }
+
+    private void doFlushQueue() {
+        if (selectedQueue == null) {
+            UiMessages.error("Select a queue from the grid.");
+            return;
+        }
+        Dialog confirm = new Dialog();
+        confirm.setHeaderTitle("Clear queue?");
+        Paragraph text = new Paragraph("All WAITING entries for \"" + selectedQueue.eventName()
+                + "\" will be removed. This cannot be undone.");
+        Button cancel = new Button("Cancel", e -> confirm.close());
+        Button clear = new Button("Yes, clear queue", e -> {
+            confirm.close();
+            ActionResult result = presenter.flushEventQueue(selectedQueue.eventId());
+            queueStatus.setText(result.message());
+            notify(result);
+            if (result.success()) {
+                queuesGrid.asSingleSelect().clear();
+                refreshQueues();
+            }
+        });
+        clear.getStyle().set("color", "var(--lumo-error-color)");
+        confirm.add(text, new HorizontalLayout(cancel, clear));
+        confirm.open();
+    }
+
+    private void doCreateQueue() {
+        String rawId = createQueueEventIdField.getValue();
+        UUID eventId;
+        try {
+            eventId = UUID.fromString(rawId == null ? "" : rawId.trim());
+        } catch (IllegalArgumentException ex) {
+            UiMessages.error("Enter a valid event UUID.");
+            return;
+        }
+        Integer threshold = createQueueThresholdField.getValue();
+        Integer flowRate = createQueueFlowRateField.getValue();
+        if (threshold == null || threshold < 1 || flowRate == null || flowRate < 1) {
+            UiMessages.error("Threshold and flow rate must be positive integers.");
+            return;
+        }
+        ActionResult result = presenter.createEventQueue(eventId, threshold, flowRate);
+        queueStatus.setText(result.message());
+        notify(result);
+        if (result.success()) {
+            createQueueEventIdField.clear();
+            refreshQueues();
+        }
+    }
+
+    private void refreshQueueControlsState() {
+        boolean hasSelection = selectedQueue != null;
+        if (updateFlowRateButton != null) {
+            updateFlowRateButton.setEnabled(hasSelection);
+        }
+        if (flushQueueButton != null) {
+            flushQueueButton.setEnabled(hasSelection);
+        }
+    }
+
+    private void startQueuePolling() {
+        getUI().ifPresent(ui -> {
+            ui.setPollInterval(5_000);
+            if (queuePollRegistration == null) {
+                queuePollRegistration = ui.addPollListener(e -> refreshQueues());
+            }
+        });
+    }
+
+    private void stopQueuePolling() {
+        if (queuePollRegistration != null) {
+            queuePollRegistration.remove();
+            queuePollRegistration = null;
+        }
+        getUI().ifPresent(ui -> ui.setPollInterval(-1));
+    }
+
     private VerticalLayout adminActionsSection() {
         configureAdminPanels();
         configureAdminTabs();
@@ -194,6 +379,7 @@ public class AdminView extends VerticalLayout {
         panelByMode.put(AdminMode.COMPANIES, companySection());
         panelByMode.put(AdminMode.PURCHASES, purchaseHistorySection());
         panelByMode.put(AdminMode.SUSPENSIONS, suspensionSection());
+        panelByMode.put(AdminMode.QUEUES, queueSection());
         panelByMode.values().forEach(adminModeContent::add);
     }
 
@@ -213,8 +399,15 @@ public class AdminView extends VerticalLayout {
     private void showAdminPanel(Tab selectedTab) {
         panelByMode.values().forEach(panel -> panel.setVisible(false));
         AdminMode mode = modeByTab.get(selectedTab);
-        if (mode != null) {
+        if (mode == AdminMode.QUEUES) {
             panelByMode.get(mode).setVisible(true);
+            refreshQueues();
+            startQueuePolling();
+        } else {
+            stopQueuePolling();
+            if (mode != null) {
+                panelByMode.get(mode).setVisible(true);
+            }
         }
     }
 
@@ -463,7 +656,8 @@ public class AdminView extends VerticalLayout {
         MEMBERS("Members"),
         COMPANIES("Companies"),
         PURCHASES("Purchase history"),
-        SUSPENSIONS("Suspensions");
+        SUSPENSIONS("Suspensions"),
+        QUEUES("Queues");
 
         private final String label;
 

@@ -26,6 +26,8 @@ import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.EventService;
+import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
@@ -45,7 +47,7 @@ class AdminPresenterTest {
     void setUp() {
         adminService = mock(AdminService.class);
         companyService = mock(CompanyService.class);
-        presenter = new AdminPresenter(adminService, companyService);
+        presenter = new AdminPresenter(adminService, companyService, mock(OrderService.class), mock(EventService.class));
     }
 
     @Test

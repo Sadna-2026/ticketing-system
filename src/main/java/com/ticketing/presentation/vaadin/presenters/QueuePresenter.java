@@ -31,6 +31,10 @@ public class QueuePresenter {
         this.eventService = eventService;
     }
 
+    /**
+     * Explicit user action from QueueView: join the queue for an event.
+     * Returns a failure result on errors so the form can show the reason.
+     */
     public QueueResult tryEnterOrQueue(UUID eventId) {
         UUID sessionId = SessionContext.getSessionId();
         if (sessionId == null) {
@@ -59,8 +63,72 @@ public class QueuePresenter {
     }
 
     /**
-     * Checks the current session's entry in the queue for the given event.
+     * Transparent gate called by EventsView before loading the ticket map.
+     * If the event's queue is at capacity and the session is not yet admitted,
+     * returns QueueResult.queued so the caller can redirect to the waiting room.
+     * Defaults to directEntry on any error so a broken queue never blocks the user.
+     */
+    public QueueResult enterQueueGate(UUID eventId) {
+        UUID sessionId = SessionContext.getSessionId();
+        if (sessionId == null || eventId == null) {
+            return QueueResult.directEntry("No gate check needed.");
+        }
+        try {
+            VirtualQueueDto existing;
+            try {
+                existing = orderService.getQueueForEvent(eventId);
+            } catch (IllegalStateException ignored) {
+                // No queue for this event — let the user through
+                return QueueResult.directEntry("No active queue — entering directly.");
+            }
+
+            // If already admitted, let the user through
+            boolean alreadyAdmitted = existing.getEntries().stream()
+                    .anyMatch(e -> sessionId.equals(e.getSessionId()) && "ADMITTED".equals(e.getStatus()));
+            if (alreadyAdmitted) {
+                return QueueResult.directEntry("You have already been admitted — you can browse tickets.");
+            }
+
+            // If already waiting, redirect to waiting room without re-enqueuing
+            boolean alreadyWaiting = existing.getEntries().stream()
+                    .anyMatch(e -> sessionId.equals(e.getSessionId()) && "WAITING".equals(e.getStatus()));
+            if (alreadyWaiting) {
+                return QueueResult.queued("You are already in the virtual queue for this event.", null);
+            }
+
+            // Not in queue yet — try to enter
+            QueueEntryDto entry = orderService.tryEnterOrQueue(eventId, sessionId);
+            if (entry == null) {
+                return QueueResult.directEntry("No queue active — entering directly.");
+            }
+            return QueueResult.queued("You have been placed in the virtual queue.", entry);
+        } catch (RuntimeException ex) {
+            logger.warn("Queue gate check failed for event {}, allowing through", eventId, ex);
+            return QueueResult.directEntry("Queue check skipped — entering directly.");
+        }
+    }
+
+    /**
+     * Returns the event display name for the waiting room header, or null if not found.
+     */
+    public String loadEventName(UUID eventId) {
+        if (eventId == null) {
+            return null;
+        }
+        try {
+            return eventService.getEventMap(eventId)
+                    .map(map -> map.eventName())
+                    .orElse(null);
+        } catch (RuntimeException ex) {
+            logger.warn("Could not load event name for {}", eventId, ex);
+            return null;
+        }
+    }
+
+    /**
+     * Checks the current session's position and status in the queue.
      * Returns ADMITTED when it is the user's turn.
+     * {@code waitingAhead} is the approximate number of people ahead of this session.
      */
     public QueueStatusResult checkQueueStatus(UUID eventId) {
         UUID sessionId = SessionContext.getSessionId();
@@ -80,10 +148,19 @@ public class QueuePresenter {
                 return QueueStatusResult.notInQueue("You are not in the queue for this event.");
             }
             if ("ADMITTED".equals(myEntry.getStatus())) {
-                return QueueStatusResult.admitted("It's your turn! You have been admitted.", myEntry);
+                return QueueStatusResult.admitted("It's your turn! You have been admitted.", myEntry, 0);
             }
+            // Count WAITING entries that joined before this session
+            int waitingAhead = (int) queue.getEntries().stream()
+                    .filter(e -> "WAITING".equals(e.getStatus())
+                            && !sessionId.equals(e.getSessionId())
+                            && myEntry.getJoinedAt() != null
+                            && e.getJoinedAt() != null
+                            && e.getJoinedAt().isBefore(myEntry.getJoinedAt()))
+                    .count();
             return QueueStatusResult.waiting(
-                    "You are still in the virtual queue. Status: " + myEntry.getStatus() + ".", myEntry);
+                    "You are still in the virtual queue. Status: " + myEntry.getStatus() + ".",
+                    myEntry, waitingAhead);
         } catch (IllegalStateException ex) {
             return QueueStatusResult.notInQueue("No active queue for this event.");
         } catch (RuntimeException ex) {
@@ -116,22 +193,22 @@ public class QueuePresenter {
     }
 
     public record QueueStatusResult(boolean success, boolean admitted, boolean inQueue, String message,
-            QueueEntryDto entry) {
+            QueueEntryDto entry, int waitingAhead) {
 
-        public static QueueStatusResult admitted(String message, QueueEntryDto entry) {
-            return new QueueStatusResult(true, true, true, message, entry);
+        public static QueueStatusResult admitted(String message, QueueEntryDto entry, int waitingAhead) {
+            return new QueueStatusResult(true, true, true, message, entry, waitingAhead);
         }
 
-        public static QueueStatusResult waiting(String message, QueueEntryDto entry) {
-            return new QueueStatusResult(true, false, true, message, entry);
+        public static QueueStatusResult waiting(String message, QueueEntryDto entry, int waitingAhead) {
+            return new QueueStatusResult(true, false, true, message, entry, waitingAhead);
         }
 
         public static QueueStatusResult notInQueue(String message) {
-            return new QueueStatusResult(true, false, false, message, null);
+            return new QueueStatusResult(true, false, false, message, null, -1);
         }
 
         public static QueueStatusResult failure(String message) {
-            return new QueueStatusResult(false, false, false, message, null);
+            return new QueueStatusResult(false, false, false, message, null, -1);
         }
     }
 }

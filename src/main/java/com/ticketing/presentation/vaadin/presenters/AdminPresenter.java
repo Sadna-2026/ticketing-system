@@ -12,8 +12,11 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
+import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.EventService;
+import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
@@ -33,12 +36,20 @@ public class AdminPresenter {
     private static final String ADMIN_SUSPENSION_FAILURE_MESSAGE =
             "Could not complete suspension action. Please try again.";
 
+    private static final String ADMIN_QUEUE_FAILURE_MESSAGE =
+            "Could not complete queue action. Please try again.";
+
     private final AdminService adminService;
     private final CompanyService companyService;
+    private final OrderService orderService;
+    private final EventService eventService;
 
-    public AdminPresenter(AdminService adminService, CompanyService companyService) {
+    public AdminPresenter(AdminService adminService, CompanyService companyService,
+            OrderService orderService, EventService eventService) {
         this.adminService = adminService;
         this.companyService = companyService;
+        this.orderService = orderService;
+        this.eventService = eventService;
     }
 
     public ActionResult removeMember(UUID targetMemberId) {
@@ -180,6 +191,91 @@ public class AdminPresenter {
         }
     }
 
+    // ── Queue management ─────────────────────────────────────────────
+
+    public QueueListResult loadActiveQueues() {
+        String token = adminToken();
+        if (token == null) {
+            return QueueListResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        try {
+            List<VirtualQueueDto> queues = orderService.getAllActiveQueues(token);
+            List<QueueSummary> summaries = queues.stream()
+                    .map(q -> {
+                        String name = resolveEventName(q.getEventId());
+                        return new QueueSummary(q.getEventId(), name,
+                                q.getWaitingCount(), q.getFlowRate(),
+                                q.getThreshold(), q.getCurrentActiveUsers());
+                    })
+                    .toList();
+            String message = summaries.isEmpty()
+                    ? "No active queues." : "Loaded " + summaries.size() + " active queue(s).";
+            return QueueListResult.success(message, summaries);
+        } catch (RuntimeException ex) {
+            return QueueListResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult createEventQueue(UUID eventId, int threshold, int flowRate) {
+        String token = adminToken();
+        if (token == null) {
+            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            UUID queueId = orderService.createQueue(token, eventId, threshold, flowRate);
+            return ActionResult.success("Queue created: " + queueId + ".");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult updateQueueFlowRate(UUID eventId, int currentThreshold, int newFlowRate) {
+        String token = adminToken();
+        if (token == null) {
+            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            orderService.updateQueueConfig(token, eventId, currentThreshold, newFlowRate);
+            return ActionResult.success("Flow rate updated to " + newFlowRate + ".");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult flushEventQueue(UUID eventId) {
+        String token = adminToken();
+        if (token == null) {
+            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            orderService.flushQueue(token, eventId);
+            return ActionResult.success("Queue cleared.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    private String resolveEventName(UUID eventId) {
+        try {
+            return eventService.getEventMap(eventId)
+                    .map(m -> m.eventName())
+                    .orElse(eventId.toString());
+        } catch (RuntimeException ex) {
+            return eventId.toString();
+        }
+    }
+
+    // ── Session ──────────────────────────────────────────────────────
+
     public String currentSessionLabel() {
         return SessionContext.currentSessionLabel();
     }
@@ -270,6 +366,23 @@ public class AdminPresenter {
 
         public static SuspensionListResult failure(String message) {
             return new SuspensionListResult(false, message, List.of());
+        }
+    }
+
+    public record QueueSummary(UUID eventId, String eventName, int waitingCount,
+            int flowRate, int threshold, int activeUsers) {}
+
+    public record QueueListResult(boolean success, String message, List<QueueSummary> queues) {
+        public QueueListResult {
+            queues = queues == null ? List.of() : List.copyOf(queues);
+        }
+
+        public static QueueListResult success(String message, List<QueueSummary> queues) {
+            return new QueueListResult(true, message, queues);
+        }
+
+        public static QueueListResult failure(String message) {
+            return new QueueListResult(false, message, List.of());
         }
     }
 }

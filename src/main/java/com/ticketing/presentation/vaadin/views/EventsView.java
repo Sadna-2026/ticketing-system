@@ -28,6 +28,8 @@ import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.presenters.QueuePresenter;
+import com.ticketing.presentation.vaadin.presenters.QueuePresenter.QueueResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -66,6 +68,7 @@ public class EventsView extends VerticalLayout {
 
     private final EventsPresenter presenter;
     private final OrdersPresenter ordersPresenter;
+    private final QueuePresenter queuePresenter;
 
     private final TextField text = new TextField("Search text");
     private final TextField region = new TextField("Region");
@@ -91,9 +94,10 @@ public class EventsView extends VerticalLayout {
     private final Map<UUID, SeatMapComponent> zoneSeatMaps = new HashMap<>();
     private Registration mapPollRegistration;
 
-    public EventsView(EventsPresenter presenter, OrdersPresenter ordersPresenter) {
+    public EventsView(EventsPresenter presenter, OrdersPresenter ordersPresenter, QueuePresenter queuePresenter) {
         this.presenter = presenter;
         this.ordersPresenter = ordersPresenter;
+        this.queuePresenter = queuePresenter;
 
         setPadding(true);
         setSpacing(true);
@@ -263,6 +267,17 @@ public class EventsView extends VerticalLayout {
 
     private void loadSelectedEventMap(boolean notify) {
         UUID eventId = selectedEvent == null ? null : selectedEvent.id();
+
+        // Queue gate: if the event has an active queue and this session should wait, redirect
+        if (eventId != null) {
+            QueueResult gate = queuePresenter.enterQueueGate(eventId);
+            if (gate.queued()) {
+                UiMessages.info("This event is under high load — redirecting you to the virtual queue.");
+                getUI().ifPresent(ui -> ui.navigate("queue?eventId=" + eventId));
+                return;
+            }
+        }
+
         MapResult result = presenter.loadEventMap(eventId);
 
         mapDisplay.removeAll();

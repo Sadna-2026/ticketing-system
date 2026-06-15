@@ -70,7 +70,7 @@ class AdminViewTest {
         assertTrue(hasText(view, "Application services still enforce system-admin authorization for every action and their responses are shown here."));
         Tabs tabs = findTabs(view);
         assertNotNull(tabs);
-        assertEquals(List.of("Members", "Companies", "Purchase history", "Suspensions"), tabLabels(tabs));
+        assertEquals(List.of("Members", "Companies", "Purchase history", "Suspensions", "Queues"), tabLabels(tabs));
         assertTrue(hasButton(view, "Remove member"));
         assertTrue(hasButton(view, "Close company"));
         assertTrue(hasButton(view, "Load global purchase history"));
@@ -82,7 +82,7 @@ class AdminViewTest {
         assertNotNull(findComboBox(view, "Buyer member"));
         assertNotNull(findComboBox(view, "Suspension target member"));
         assertNotNull(findTextField(view, "Company name"));
-        assertEquals(2, findGrids(view).size());
+        assertEquals(3, findGrids(view).size());
     }
 
     @Test
@@ -559,7 +559,7 @@ class AdminViewTest {
         AdminView view = new AdminView(mockPresenter());
 
         List<Grid<?>> grids = findGrids(view);
-        assertEquals(2, grids.size());
+        assertEquals(3, grids.size());
         for (Grid<?> grid : grids) {
             assertTrue(grid.getEmptyStateText() != null && !grid.getEmptyStateText().isBlank(),
                     "every data grid should show an empty-state message");
