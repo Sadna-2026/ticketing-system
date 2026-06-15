@@ -26,6 +26,10 @@ public final class ConfirmDialogTestSupport {
         return DestructiveActionDialogs.pendingConfirmationMessage();
     }
 
+    public static String openDialogHeader() {
+        return DestructiveActionDialogs.pendingConfirmationHeader();
+    }
+
     public static void confirm() {
         DestructiveActionDialogs.confirmPending();
     }

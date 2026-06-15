@@ -301,7 +301,7 @@ public class AdminView extends VerticalLayout {
         if (target == null) {
             return;
         }
-        DestructiveActionDialogs.confirm("remove member", target.username(), () -> {
+        DestructiveActionDialogs.confirmRemoveMember(target.username(), () -> {
             ActionResult result = presenter.removeMember(target.id());
             handleMemberResult(result);
             if (result.success()) {
@@ -316,7 +316,7 @@ public class AdminView extends VerticalLayout {
         if (company == null) {
             return;
         }
-        DestructiveActionDialogs.confirm("permanently close company", company.name(), () -> {
+        DestructiveActionDialogs.confirmCloseCompany(company.name(), () -> {
             ActionResult result = presenter.closeCompany(company.name());
             companyStatus.setText(result.message());
             notify(result);
@@ -332,7 +332,7 @@ public class AdminView extends VerticalLayout {
         if (target == null) {
             return;
         }
-        DestructiveActionDialogs.confirm("suspend member", target.username(), () -> handleSuspensionAction(presenter.suspendUser(
+        DestructiveActionDialogs.confirmSuspendMember(target.username(), () -> handleSuspensionAction(presenter.suspendUser(
                 target.id(),
                 suspensionDurationDays.getValue(),
                 permanentSuspension.getValue(),
@@ -346,7 +346,7 @@ public class AdminView extends VerticalLayout {
             UiMessages.error("Select a suspension to cancel.");
             return;
         }
-        DestructiveActionDialogs.confirm("cancel suspension", selectedSuspension.memberUsername(), () -> {
+        DestructiveActionDialogs.confirmCancelSuspension(selectedSuspension.memberUsername(), () -> {
             ActionResult result = presenter.cancelSuspension(selectedSuspension.memberId(), selectedSuspension.suspensionId());
             handleSuspensionAction(result);
             if (result.success()) {

@@ -196,8 +196,8 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
             UiMessages.info(result.message());
             renderRoleOffers();
         });
-        Button reject = new Button("Reject", e -> DestructiveActionDialogs.confirm(
-                "reject role offer", offer.label(), () -> {
+        Button reject = new Button("Reject", e -> DestructiveActionDialogs.confirmRejectRoleOffer(
+                offer.label(), () -> {
                     ActionResult result = presenter.respondToRoleOffer(offer.offerId(), false);
                     UiMessages.info(result.message());
                     renderRoleOffers();

@@ -190,7 +190,7 @@ public class OrdersView extends VerticalLayout {
         if (selectedOrderItem == null) {
             return;
         }
-        DestructiveActionDialogs.confirm("remove order item", selectedOrderItemLabel(), () -> {
+        DestructiveActionDialogs.confirmRemoveOrderItem(selectedOrderItemLabel(), () -> {
             UUID itemId = selectedOrderItem.getId();
             handleMutationResult(presenter.removeItem(itemId));
         });
@@ -203,8 +203,8 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void clearCart() {
-        String target = currentOrder == null ? null : formatEventLabel(currentOrder) + " cart";
-        DestructiveActionDialogs.confirm("clear", target, () -> handleMutationResult(presenter.cancelOrder()));
+        String eventName = currentOrder == null ? null : formatEventLabel(currentOrder);
+        DestructiveActionDialogs.confirmClearCart(eventName, () -> handleMutationResult(presenter.cancelOrder()));
     }
 
     private void checkout() {
