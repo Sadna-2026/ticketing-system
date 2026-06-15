@@ -21,6 +21,7 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
@@ -200,6 +201,20 @@ public class CompanyPresenter {
             return ActionResult.success("Role appointment offer sent.");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+        }
+    }
+
+    public List<MemberSummaryDTO> listAppointableMembers() {
+        String token = memberToken();
+        if (token == null) {
+            return List.of();
+        }
+        UUID memberId = SessionContext.getMemberId();
+        try {
+            return memberService.searchAllMembersExcept(memberId);
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to load appointable members", ex);
+            return List.of();
         }
     }
 

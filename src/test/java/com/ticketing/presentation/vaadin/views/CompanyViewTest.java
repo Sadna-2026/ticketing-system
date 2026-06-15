@@ -48,7 +48,6 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventAction
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
-import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PersonnelAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
@@ -93,10 +92,8 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Define and manage purchase rules and discount policies at company or event level."));
         assertTrue(hasButton(view, "Open company"));
         assertTrue(hasButton(view, "Load company info"));
-        assertTrue(hasButton(view, "Offer role appointment"));
-        assertTrue(hasButton(view, "Accept role offer"));
-        assertTrue(hasButton(view, "Reject role offer"));
-        assertTrue(hasButton(view, "Revoke personnel"));
+        assertTrue(hasButton(view, "Relinquish ownership"));
+        assertTrue(hasButton(view, "Load organization chart"));
         assertTrue(hasButton(view, "Change manager permissions"));
         assertTrue(hasButton(view, "Relinquish ownership"));
         assertTrue(hasButton(view, "Create company event"));
@@ -248,31 +245,23 @@ class CompanyViewTest {
         UUID offerId = UUID.randomUUID();
         when(presenter.offerRoleAppointment(eq("Acme"), eq(targetId), eq(StaffAppointment.StaffRole.MANAGER), any()))
                 .thenReturn(ActionResult.success("Role appointment offer sent."));
-        when(presenter.respondToRoleOffer(offerId, true)).thenReturn(ActionResult.success("Role offer accepted."));
-        when(presenter.respondToRoleOffer(offerId, false)).thenReturn(ActionResult.success("Role offer rejected."));
         when(presenter.revokePersonnel("Acme", targetId)).thenReturn(ActionResult.success("Personnel revoked."));
         when(presenter.changeManagerPermissions(eq("Acme"), eq(targetId), any()))
                 .thenReturn(ActionResult.success("Manager permissions updated."));
         when(presenter.loadOrganizationChart("Acme"))
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
-        when(presenter.listPendingRoleOffers()).thenReturn(List.of(
-                new PendingRoleOfferOption(offerId, "Acme", StaffAppointment.StaffRole.MANAGER)));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
-        findPendingRoleOfferCombo(view).setValue(new PendingRoleOfferOption(offerId, "Acme", StaffAppointment.StaffRole.MANAGER));
+        selectOfferTargetMember(view, "manager", targetId);
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS));
 
         clickButton(view, "Offer role appointment");
-        clickButton(view, "Accept role offer");
-        clickButton(view, "Reject role offer");
         clickButton(view, "Change manager permissions");
         clickButton(view, "Revoke personnel");
 
         verify(presenter).offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER,
                 Set.of(ManagerPermission.VIEW_REPORTS));
-        verify(presenter).respondToRoleOffer(offerId, true);
-        verify(presenter).respondToRoleOffer(offerId, false);
         verify(presenter).revokePersonnel("Acme", targetId);
         verify(presenter).changeManagerPermissions("Acme", targetId, Set.of(ManagerPermission.VIEW_REPORTS));
         assertTrue(hasText(view, "Personnel revoked."));
@@ -309,8 +298,6 @@ class CompanyViewTest {
         assertFalse(isEffectivelyVisible(findTargetMemberCombo(view)));
         assertFalse(isEffectivelyVisible(findComboByLabel(view, "Role")));
         assertFalse(isEffectivelyVisible(findCheckboxGroup(view)));
-        assertTrue(hasVisibleButton(view, "Accept role offer"));
-        assertTrue(hasVisibleButton(view, "Reject role offer"));
         assertTrue(hasText(view, "Only a company owner can manage personnel for Acme."));
     }
 
@@ -848,8 +835,6 @@ class CompanyViewTest {
 
         assertTrue(findTextField(view, "New company name").isRequiredIndicatorVisible());
         assertTrue(findCompanyCombo(view, "Personnel company name").isRequiredIndicatorVisible());
-        assertTrue(findTargetMemberCombo(view).isRequiredIndicatorVisible());
-        assertTrue(findComboByLabel(view, "Role").isRequiredIndicatorVisible());
         assertTrue(findCompanyCombo(view, "Event company name").isRequiredIndicatorVisible());
         assertTrue(findTextField(view, "Event name").isRequiredIndicatorVisible());
         assertTrue(findComboByLabel(view, "Event category").isRequiredIndicatorVisible());
@@ -861,10 +846,10 @@ class CompanyViewTest {
         assertTrue(findIntegerField(view, "GA capacity").isRequiredIndicatorVisible());
         assertTrue(findTextField(view, "Venue section").isRequiredIndicatorVisible());
 
+        assertFalse(findTargetMemberCombo(view).isRequiredIndicatorVisible());
         assertFalse(findTextArea(view, "New company description").isRequiredIndicatorVisible());
         assertFalse(findTextArea(view, "Event description").isRequiredIndicatorVisible());
         assertFalse(findDateTimePicker(view, "Doors open time").isRequiredIndicatorVisible());
-        assertFalse(findPendingRoleOfferCombo(view).isRequiredIndicatorVisible());
     }
 
     @Test
@@ -922,7 +907,7 @@ class CompanyViewTest {
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
+        selectOfferTargetMember(view, "manager", targetId);
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.PERSONNEL_MGMT));
 
         clickButton(view, "Offer role appointment");
@@ -942,7 +927,7 @@ class CompanyViewTest {
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
+        selectOfferTargetMember(view, "manager", targetId);
 
         clickButton(view, "Offer role appointment");
 
@@ -1070,24 +1055,6 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Insufficient permissions: POLICY_MODIFICATION required"));
     }
 
-    @Test
-    void GivenPendingRoleOffers_WhenListedInPersonnelTab_ThenDropdownShowsCompanyAndRole() {
-        CompanyPresenter presenter = mockPresenter();
-        UUID offerId = UUID.randomUUID();
-        when(presenter.listPendingRoleOffers()).thenReturn(List.of(
-                new PendingRoleOfferOption(offerId, "Northwind Events", StaffAppointment.StaffRole.MANAGER)));
-
-        CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Personnel");
-
-        ComboBox<PendingRoleOfferOption> offerPicker = findPendingRoleOfferCombo(view);
-        List<String> labels = offerPicker.getDataProvider()
-                .fetch(new Query<>())
-                .map(PendingRoleOfferOption::label)
-                .toList();
-        assertEquals(List.of("Northwind Events — MANAGER"), labels);
-    }
-
     private CompanyPresenter mockPresenter() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
@@ -1188,6 +1155,15 @@ class CompanyViewTest {
                 .toList();
     }
 
+    private static void selectOfferTargetMember(CompanyView view, String username, UUID memberId) {
+        Object option = findOfferTargetMemberCombo(view).getDataProvider()
+                .fetch(new Query<>())
+                .filter(item -> username.equals(((com.ticketing.application.dto.MemberSummaryDTO) item).username()))
+                .findFirst()
+                .orElse(new com.ticketing.application.dto.MemberSummaryDTO(memberId, username)); // default fallback for tests
+        findOfferTargetMemberCombo(view).setValue(option);
+    }
+
     private static void selectTargetMember(
             CompanyView view,
             String username,
@@ -1239,11 +1215,6 @@ class CompanyViewTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static ComboBox<PendingRoleOfferOption> findPendingRoleOfferCombo(Component root) {
-        return (ComboBox<PendingRoleOfferOption>) findComboByLabel(root, "Role offer");
-    }
-
-    @SuppressWarnings("unchecked")
     private static ComboBox<EventMapDTO.ZoneInfo> findZoneCombo(Component root) {
         return (ComboBox<EventMapDTO.ZoneInfo>) findComboByLabel(root, "Inventory zone");
     }
@@ -1263,8 +1234,13 @@ class CompanyViewTest {
     }
 
     @SuppressWarnings("unchecked")
+    private static ComboBox<Object> findOfferTargetMemberCombo(Component root) {
+        return (ComboBox<Object>) findComboByLabel(root, "Member to appoint");
+    }
+
+    @SuppressWarnings("unchecked")
     private static ComboBox<Object> findTargetMemberCombo(Component root) {
-        return (ComboBox<Object>) findComboByLabel(root, "Target member");
+        return (ComboBox<Object>) findComboByLabel(root, "Existing personnel");
     }
 
     private static ComboBox<?> findComboByLabel(Component root, String label) {
