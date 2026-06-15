@@ -6,6 +6,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRole
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
+import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.UI;
@@ -195,11 +196,12 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
             UiMessages.info(result.message());
             renderRoleOffers();
         });
-        Button reject = new Button("Reject", e -> {
-            ActionResult result = presenter.respondToRoleOffer(offer.offerId(), false);
-            UiMessages.info(result.message());
-            renderRoleOffers();
-        });
+        Button reject = new Button("Reject", e -> DestructiveActionDialogs.confirm(
+                "reject role offer", offer.label(), () -> {
+                    ActionResult result = presenter.respondToRoleOffer(offer.offerId(), false);
+                    UiMessages.info(result.message());
+                    renderRoleOffers();
+                }));
         accept.getThemeNames().add("primary");
         reject.getThemeNames().add("error");
 

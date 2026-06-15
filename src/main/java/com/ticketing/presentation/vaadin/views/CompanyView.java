@@ -53,6 +53,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartRes
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PolicyViewResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
+import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
@@ -268,6 +269,7 @@ public class CompanyView extends VerticalLayout {
         );
         selectMode(CompanyMode.LOOKUP);
         refreshSessionStatus();
+        addAttachListener(event -> refreshSessionStatus());
     }
 
     private void initModePanels() {
@@ -483,6 +485,28 @@ public class CompanyView extends VerticalLayout {
         return seat == null ? null : seat.id();
     }
 
+    private String selectedSeatLabel() {
+        EventMapDTO.SeatInfo seat = seatPicker.getValue();
+        if (seat == null) {
+            return null;
+        }
+        return "row " + seat.row() + ", seat " + seat.seatNumber();
+    }
+
+    private String selectedZoneLabel() {
+        EventMapDTO.ZoneInfo zone = inventoryZonePicker.getValue();
+        return zone == null ? null : zone.name();
+    }
+
+    private String policyTargetLabel() {
+        EventSummaryDTO event = policyEventId.getValue();
+        if (event != null) {
+            return event.name();
+        }
+        CompanySummaryDTO company = policyCompanyName.getValue();
+        return company == null ? null : company.name();
+    }
+
     private void reloadCompanyEvents(ComboBox<EventSummaryDTO> picker, CompanySummaryDTO company) {
         picker.clear();
         List<EventSummaryDTO> events = company == null ? List.of() : orEmpty(presenter.listCompanyEvents(company.name()));
@@ -540,6 +564,13 @@ public class CompanyView extends VerticalLayout {
         if (company == null) {
             companyInfoStatus.setText("Select a company to view public details.");
             companyEventsGrid.setItems(List.of());
+            reloadCompanyEvents(eventId, null);
+            reloadCompanyEvents(inventoryEventId, null);
+            reloadCompanyEvents(policyEventId, null);
+        } else {
+            reloadCompanyEvents(eventId, company);
+            reloadCompanyEvents(inventoryEventId, company);
+            reloadCompanyEvents(policyEventId, company);
         }
     }
 
@@ -651,11 +682,15 @@ public class CompanyView extends VerticalLayout {
                 com.vaadin.flow.component.notification.Notification.show("Please select an existing personnel to revoke.");
                 return;
             }
-            CompanyPresenter.ActionResult result = presenter.revokePersonnel(companyNameOf(personnelCompanyName), selectedTargetMemberId());
-            handlePersonnelResult(result);
-            if (result.success()) {
-                refreshPersonnelContext();
-            }
+            PersonnelTarget target = targetMember.getValue();
+            DestructiveActionDialogs.confirm("revoke personnel", target.username(), () -> {
+                CompanyPresenter.ActionResult result = presenter.revokePersonnel(
+                        companyNameOf(personnelCompanyName), target.memberId());
+                handlePersonnelResult(result);
+                if (result.success()) {
+                    refreshPersonnelContext();
+                }
+            });
         });
         changeManagerPermissionsButton = new Button("Change manager permissions", event -> {
             if (targetMember.isEmpty()) {
@@ -665,8 +700,11 @@ public class CompanyView extends VerticalLayout {
             handlePersonnelResult(presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), selectedTargetMemberId(),
                         permissions.getSelectedItems()));
         });
-        relinquishOwnershipButton = new Button("Relinquish ownership", event -> handlePersonnelResult(
-                presenter.relinquishOwnership(companyNameOf(personnelCompanyName))));
+        relinquishOwnershipButton = new Button("Relinquish ownership", event -> {
+            String companyName = companyNameOf(personnelCompanyName);
+            DestructiveActionDialogs.confirm("relinquish ownership of company", companyName, () ->
+                    handlePersonnelResult(presenter.relinquishOwnership(companyName)));
+        });
         loadOrganizationChartButton = new Button("Load organization chart", event -> loadOrganizationChart());
 
         ownerPersonnelForm = new FormLayout(offerTargetMember, targetMember, role, permissions);
@@ -703,7 +741,11 @@ public class CompanyView extends VerticalLayout {
         createEventButton = new Button("Create company event", event -> createEvent());
         editEventButton = new Button("Edit event details", event -> editEvent());
         publishEventButton = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(selectedEventId(eventId))));
-        cancelEventButton = new Button("Cancel event", event -> handleEventAction(presenter.cancelEvent(selectedEventId(eventId))));
+        cancelEventButton = new Button("Cancel event", event -> {
+            EventSummaryDTO selected = eventId.getValue();
+            DestructiveActionDialogs.confirm("cancel event", selected == null ? null : selected.name(), () ->
+                    handleEventAction(presenter.cancelEvent(selectedEventId(eventId))));
+        });
         designHallButton = new Button("Design hall layout (visual)", event -> openVenueDesigner());
 
         eventSelectionForm = new FormLayout(eventCompanyName, eventId);
@@ -756,21 +798,24 @@ public class CompanyView extends VerticalLayout {
                 seatRow.getValue(),
                 seatNumber.getValue()
         )));
-        removeSeatButton = new Button("Remove seat", event -> handleInventoryResult(presenter.removeSeat(
-                selectedEventId(inventoryEventId),
-                selectedZoneId(),
-                selectedSeatId()
-        )));
+        removeSeatButton = new Button("Remove seat", event ->
+                DestructiveActionDialogs.confirm("remove seat", selectedSeatLabel(), () -> handleInventoryResult(presenter.removeSeat(
+                        selectedEventId(inventoryEventId),
+                        selectedZoneId(),
+                        selectedSeatId()
+                ))));
         increaseCapacityButton = new Button("Increase GA capacity", event -> handleInventoryResult(presenter.increaseGACapacity(
                 selectedEventId(inventoryEventId),
                 selectedZoneId(),
                 capacityDelta.getValue()
         )));
-        decreaseCapacityButton = new Button("Decrease GA capacity", event -> handleInventoryResult(presenter.decreaseGACapacity(
-                selectedEventId(inventoryEventId),
-                selectedZoneId(),
-                capacityDelta.getValue()
-        )));
+        decreaseCapacityButton = new Button("Decrease GA capacity", event ->
+                DestructiveActionDialogs.confirm("decrease GA capacity for zone", selectedZoneLabel(), () ->
+                        handleInventoryResult(presenter.decreaseGACapacity(
+                                selectedEventId(inventoryEventId),
+                                selectedZoneId(),
+                                capacityDelta.getValue()
+                        ))));
         setZonePriceButton = new Button("Set zone price", event -> handleInventoryResult(presenter.setZonePrice(
                 selectedEventId(inventoryEventId),
                 selectedZoneId(),
@@ -808,7 +853,11 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout lifecycleSection() {
-        suspendCompanyButton = new Button("Suspend company", event -> handleLifecycleResult(presenter.suspendCompany(companyNameOf(lifecycleCompanyName))));
+        suspendCompanyButton = new Button("Suspend company", event -> {
+            String companyName = companyNameOf(lifecycleCompanyName);
+            DestructiveActionDialogs.confirm("suspend company", companyName, () ->
+                    handleLifecycleResult(presenter.suspendCompany(companyName)));
+        });
         reopenCompanyButton = new Button("Reopen company", event -> handleLifecycleResult(presenter.reopenCompany(companyNameOf(lifecycleCompanyName))));
         lifecycleActions = new HorizontalLayout(suspendCompanyButton, reopenCompanyButton);
         lifecycleActions.setAlignItems(Alignment.BASELINE);
@@ -949,16 +998,18 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void removePurchasePolicy() {
-        UUID eventId = selectedEventId(policyEventId);
-        ActionResult result;
-        if (eventId != null) {
-            result = presenter.removeEventPurchasePolicy(eventId);
-        } else {
-            result = presenter.removeCompanyPurchasePolicy(companyNameOf(policyCompanyName));
-        }
-        policyStatus.setText(result.message());
-        currentPolicyDisplay.setText("");
-        notify(result);
+        DestructiveActionDialogs.confirm("remove purchase policy", policyTargetLabel(), () -> {
+            UUID eventId = selectedEventId(policyEventId);
+            ActionResult result;
+            if (eventId != null) {
+                result = presenter.removeEventPurchasePolicy(eventId);
+            } else {
+                result = presenter.removeCompanyPurchasePolicy(companyNameOf(policyCompanyName));
+            }
+            policyStatus.setText(result.message());
+            currentPolicyDisplay.setText("");
+            notify(result);
+        });
     }
 
     private void loadDiscountPolicy() {
@@ -994,16 +1045,18 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void removeDiscountPolicy() {
-        UUID eventId = selectedEventId(policyEventId);
-        ActionResult result;
-        if (eventId != null) {
-            result = presenter.removeEventDiscountPolicy(eventId);
-        } else {
-            result = presenter.removeCompanyDiscountPolicy(companyNameOf(policyCompanyName));
-        }
-        policyStatus.setText(result.message());
-        currentPolicyDisplay.setText("");
-        notify(result);
+        DestructiveActionDialogs.confirm("remove discount policy", policyTargetLabel(), () -> {
+            UUID eventId = selectedEventId(policyEventId);
+            ActionResult result;
+            if (eventId != null) {
+                result = presenter.removeEventDiscountPolicy(eventId);
+            } else {
+                result = presenter.removeCompanyDiscountPolicy(companyNameOf(policyCompanyName));
+            }
+            policyStatus.setText(result.message());
+            currentPolicyDisplay.setText("");
+            notify(result);
+        });
     }
 
     private IPurchasePolicy buildPurchasePolicy() {
