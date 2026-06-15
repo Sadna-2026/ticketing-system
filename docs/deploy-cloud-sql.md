@@ -66,6 +66,7 @@ gcloud services enable sqladmin.googleapis.com cloudbilling.googleapis.com billi
 ```bash
 gcloud sql instances create "$INSTANCE" \
   --database-version=POSTGRES_16 \
+  --edition=ENTERPRISE \             # REQUIRED: gcloud defaults to ENTERPRISE_PLUS, which rejects db-f1-micro
   --tier=db-f1-micro \
   --region="$REGION" \
   --storage-type=HDD \
@@ -73,6 +74,11 @@ gcloud sql instances create "$INSTANCE" \
   --no-backup \
   --availability-type=zonal          # zonal = no High Availability
 ```
+> If you omit `--edition=ENTERPRISE` you get
+> `Invalid Tier (db-f1-micro) for (ENTERPRISE_PLUS) Edition` — the cheap shared-core machine only exists
+> in the plain **Enterprise** edition (Enterprise Plus only offers the large `db-perf-optimized-*` tiers).
+> Also avoid the console's *"Create free instance"* / 30-day-trial button — it provisions a large MySQL
+> Enterprise Plus instance (wrong engine + not the cheapest tier).
 
 ## 2. Create the database and an application user
 ```bash
