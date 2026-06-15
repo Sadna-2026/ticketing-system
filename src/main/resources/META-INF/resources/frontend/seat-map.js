@@ -1,26 +1,19 @@
 import { LitElement, html, svg, css, nothing } from 'lit';
 
 /**
- * Scalable assigned-seating map rendered as a single SVG (one element, not one
- * Vaadin component per seat — see issue #255). The server pushes a compact,
- * already row/seat-ordered payload via the `seats` property; selection is
- * hit-tested here on the client and only the chosen seat id is sent back to the
- * server through `$server.selectSeat(id)`.
+ * Scalable assigned-seating map. Buyers stage seats locally (free -> selected -> free
+ * on click) and only commit to the server when the host view triggers
+ * {@link #requestAddSelection}. Matches common cinema UX: pick multiple seats first,
+ * then add to cart; inventory is locked only on commit.
  *
- * Accessibility: the SVG is an ARIA grid (`role="grid"` > `role="row"` >
- * `role="gridcell"`). Seats are keyboard-navigable with the arrow keys / Home /
- * End via a roving tabindex (exactly one cell is in the tab order at a time, so
- * the pattern stays usable even for venues with thousands of seats), activated
- * with Enter / Space, and each cell carries an `aria-label` announcing its seat
- * id and free/taken status. Taken seats are `aria-disabled`, marked with a
- * non-colour "✕" overlay (so status does not rely on colour alone — WCAG 1.4.1),
- * and stay focusable-but-not-activatable so assistive tech can still read them.
+ * States: free (green), selected / your pick (amber + check), taken (red + ✕).
  */
 class SeatMap extends LitElement {
   static get properties() {
     return {
       seats: { type: Array },
       _focus: { state: true },
+      disabled: { type: Boolean },
     };
   }
 
@@ -33,6 +26,7 @@ class SeatMap extends LitElement {
       }
       .legend {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--lumo-space-m, 1rem);
         margin-bottom: var(--lumo-space-s, 0.5rem);
         font-size: var(--lumo-font-size-s, 0.875rem);
@@ -44,22 +38,26 @@ class SeatMap extends LitElement {
       .legend .free::before {
         color: var(--lumo-success-color, #2dc26b);
       }
+      .legend .selected::before {
+        color: var(--lumo-warning-color, #f5a623);
+      }
       .legend .taken::before {
         color: var(--lumo-error-color, #e5484d);
       }
       g.cell {
         outline: none;
       }
-      g.cell.free {
+      g.cell.free,
+      g.cell.selected {
         cursor: pointer;
       }
       g.cell.taken {
         cursor: not-allowed;
       }
-      g.cell.free:hover rect.seat {
+      g.cell.free:hover rect.seat,
+      g.cell.selected:hover rect.seat {
         stroke-width: 2;
       }
-      /* Visible keyboard focus indicator (does not show on mouse click). */
       g.cell:focus-visible rect.seat {
         stroke: var(--lumo-primary-color, #1676f3);
         stroke-width: 3;
@@ -69,6 +67,13 @@ class SeatMap extends LitElement {
         stroke-width: 2;
         stroke-linecap: round;
         pointer-events: none;
+      }
+      text.selected-mark {
+        font-size: 14px;
+        font-weight: 700;
+        fill: var(--lumo-warning-text-color, #8a6116);
+        pointer-events: none;
+        user-select: none;
       }
       text.row-label {
         font-size: 12px;
@@ -88,11 +93,9 @@ class SeatMap extends LitElement {
     super();
     this.seats = [];
     this._focus = 0;
+    this.disabled = false;
   }
 
-  // Groups the (pre-ordered) seat payload into rows (preserving encounter
-  // order) and assigns each seat a flat index + (row, col) position so arrow-key
-  // navigation and the roving tabindex can address cells consistently.
   _layout() {
     const rows = [];
     const byLabel = new Map();
@@ -116,11 +119,33 @@ class SeatMap extends LitElement {
     return { rows, total: i };
   }
 
-  _select(seat) {
-    if (seat.taken) {
+  _selectedCount() {
+    return (this.seats || []).filter((s) => s.selected && !s.taken).length;
+  }
+
+  _notifySelectionCount() {
+    const ids = (this.seats || [])
+      .filter((s) => s.selected && !s.taken)
+      .map((s) => s.id);
+    if (this.$server) {
+      if (this.$server.notifySelectionCount) {
+        this.$server.notifySelectionCount(ids.length);
+      }
+      if (this.$server.onStagedSelectionChanged) {
+        this.$server.onStagedSelectionChanged(ids);
+      }
+    }
+  }
+
+  /** Toggle staged selection for a free seat; taken seats are ignored. */
+  _toggle(seat) {
+    if (this.disabled || seat.taken) {
       return;
     }
-    this.$server.selectSeat(seat.id);
+    this.seats = (this.seats || []).map((s) =>
+      s.id === seat.id ? { ...s, selected: !s.selected } : s
+    );
+    this._notifySelectionCount();
   }
 
   _onKeydown(event, cell, layout) {
@@ -131,7 +156,7 @@ class SeatMap extends LitElement {
       case ' ':
       case 'Spacebar':
         event.preventDefault();
-        this._select(cell.seat);
+        this._toggle(cell.seat);
         return;
       case 'ArrowRight':
         target = Math.min(cell.i + 1, total - 1);
@@ -175,11 +200,112 @@ class SeatMap extends LitElement {
     });
   }
 
-  /** Flip one seat free->taken in place after a successful server-side add. */
+  /** Called from the server when the buyer clicks Add selected seats. */
+  requestAddSelection() {
+    const ids = (this.seats || [])
+      .filter((s) => s.selected && !s.taken)
+      .map((s) => s.id);
+    if (ids.length === 0 || !this.$server || !this.$server.onCommitSelection) {
+      return;
+    }
+    this.$server.onCommitSelection(ids);
+  }
+
+  /** Flip committed seats to taken after a successful server-side add. */
   markTaken(id) {
+    this.markTakenMany([id]);
+  }
+
+  markTakenMany(ids) {
+    const idList = Array.isArray(ids) ? ids : [ids];
+    const idSet = new Set(idList);
     this.seats = (this.seats || []).map((seat) =>
-      seat.id === id ? { ...seat, taken: true } : seat
+      idSet.has(seat.id)
+        ? { ...seat, taken: true, selected: false }
+        : { ...seat, selected: false }
     );
+    this._notifySelectionCount();
+  }
+
+  /** Restore buyer's staged picks after the map re-attaches (e.g. tab navigation). */
+  applyStagedSelection(ids) {
+    const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
+    this.seats = (this.seats || []).map((seat) => ({
+      ...seat,
+      selected: idSet.has(seat.id) && !seat.taken,
+    }));
+    this._notifySelectionCount();
+  }
+
+  /**
+   * Apply server availability; drop staged picks on seats that became taken.
+   * Reports lost labels back to Java via onSyncComplete.
+   */
+  syncSeats(freshSeats) {
+    const byId = new Map((freshSeats || []).map((s) => [s.id, s]));
+    const lost = [];
+    this.seats = (this.seats || []).map((seat) => {
+      const fresh = byId.get(seat.id);
+      if (!fresh) {
+        return seat;
+      }
+      const wasSelected = seat.selected && !seat.taken;
+      const nowTaken = !!fresh.taken;
+      const keepSelected =
+        fresh.selected != null ? !!fresh.selected && !nowTaken : wasSelected && !nowTaken;
+      if ((wasSelected || fresh.selected) && nowTaken) {
+        lost.push(`${fresh.row}-${fresh.num}`);
+      }
+      return {
+        ...seat,
+        taken: nowTaken,
+        selected: keepSelected,
+      };
+    });
+    this._notifySelectionCount();
+    if (this.$server && this.$server.onSyncComplete) {
+      this.$server.onSyncComplete(lost);
+    }
+  }
+
+  _seatState(seat) {
+    if (seat.taken) {
+      return 'taken';
+    }
+    if (seat.selected) {
+      return 'selected';
+    }
+    return 'free';
+  }
+
+  _seatColors(state) {
+    if (state === 'taken') {
+      return {
+        fill: 'var(--lumo-error-color-10pct, #fbe9e9)',
+        stroke: 'var(--lumo-error-color-50pct, #ef9a9a)',
+      };
+    }
+    if (state === 'selected') {
+      return {
+        fill: 'var(--lumo-warning-color-10pct, #fff4e0)',
+        stroke: 'var(--lumo-warning-color-50pct, #f0c36d)',
+      };
+    }
+    return {
+      fill: 'var(--lumo-success-color-10pct, #e3f6ec)',
+      stroke: 'var(--lumo-success-color-50pct, #8fd6ab)',
+    };
+  }
+
+  _ariaLabel(rowLabel, seat) {
+    const state = this._seatState(seat);
+    if (state === 'taken') {
+      return `Row ${rowLabel} seat ${seat.num}, taken`;
+    }
+    if (state === 'selected') {
+      return `Row ${rowLabel} seat ${seat.num}, selected`;
+    }
+    return `Row ${rowLabel} seat ${seat.num}, free`;
   }
 
   render() {
@@ -201,7 +327,8 @@ class SeatMap extends LitElement {
 
     return html`
       <div class="legend">
-        <span class="free">Free</span>
+        <span class="free">Available</span>
+        <span class="selected">Your selection</span>
         <span class="taken">Taken</span>
       </div>
       <svg
@@ -219,22 +346,20 @@ class SeatMap extends LitElement {
               ${row.cells.map((cell) => {
                 const seat = cell.seat;
                 const x = LABEL_W + cell.c * (SEAT + GAP);
-                const fill = seat.taken
-                  ? 'var(--lumo-error-color-10pct, #fbe9e9)'
-                  : 'var(--lumo-success-color-10pct, #e3f6ec)';
-                const stroke = seat.taken
-                  ? 'var(--lumo-error-color-50pct, #ef9a9a)'
-                  : 'var(--lumo-success-color-50pct, #8fd6ab)';
-                const label = `Row ${row.label} seat ${seat.num}, ${seat.taken ? 'taken' : 'free'}`;
+                const state = this._seatState(seat);
+                const colors = this._seatColors(state);
                 return svg`
                   <g
-                    class="cell ${seat.taken ? 'taken' : 'free'}"
+                    class="cell ${state}"
                     role="gridcell"
                     data-i="${cell.i}"
                     tabindex="${cell.i === focusIdx ? 0 : -1}"
-                    aria-label="${label}"
-                    aria-disabled="${seat.taken ? 'true' : 'false'}"
-                    @click="${() => { this._focus = cell.i; this._select(seat); }}"
+                    aria-label="${this._ariaLabel(row.label, seat)}"
+                    aria-disabled="${state === 'taken' ? 'true' : 'false'}"
+                    @click="${() => {
+                      this._focus = cell.i;
+                      this._toggle(seat);
+                    }}"
                     @keydown="${(e) => this._onKeydown(e, cell, layout)}"
                   >
                     <rect
@@ -244,14 +369,25 @@ class SeatMap extends LitElement {
                       width="${SEAT}"
                       height="${SEAT}"
                       rx="5"
-                      fill="${fill}"
-                      stroke="${stroke}"
+                      fill="${colors.fill}"
+                      stroke="${colors.stroke}"
                       stroke-width="1"
                     ></rect>
-                    ${seat.taken
+                    ${state === 'taken'
                       ? svg`
                           <line class="taken-mark" x1="${x + 5}" y1="${y + 5}" x2="${x + SEAT - 5}" y2="${y + SEAT - 5}"></line>
                           <line class="taken-mark" x1="${x + SEAT - 5}" y1="${y + 5}" x2="${x + 5}" y2="${y + SEAT - 5}"></line>
+                        `
+                      : nothing}
+                    ${state === 'selected'
+                      ? svg`
+                          <text
+                            class="selected-mark"
+                            x="${x + SEAT / 2}"
+                            y="${y + SEAT / 2 + 5}"
+                            text-anchor="middle"
+                            aria-hidden="true"
+                          >✓</text>
                         `
                       : nothing}
                     <text

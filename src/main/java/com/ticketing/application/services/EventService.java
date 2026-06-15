@@ -681,7 +681,10 @@ public class EventService {
                 event.getStatus(),
                 event.getVenueMap().getSectionToZone(),
                 zoneDtos,
-                toLayoutInfo(event.getVenueLayout())));
+                toLayoutInfo(event.getVenueLayout()),
+                event.getDescription(),
+                BuyerPolicyCatalog.purchaseRestrictions(event),
+                BuyerPolicyCatalog.visibleDiscounts(event)));
     }
 
     // ── Visual hall layout (FIX-V2-25) ──────────────────────────────

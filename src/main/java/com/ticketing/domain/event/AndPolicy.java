@@ -52,4 +52,13 @@ public class AndPolicy extends AbstractPurchasePolicy {
         }
         return PolicyResult.success();
     }
+
+    @Override
+    public List<String> collectViolations(PurchaseContext context) {
+        List<String> violations = new ArrayList<>();
+        for (IPurchasePolicy policy : policies) {
+            violations.addAll(policy.collectViolations(context));
+        }
+        return violations;
+    }
 }

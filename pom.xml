@@ -163,6 +163,21 @@
         <version>3.2.5</version>
         <configuration>
           <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+          <!-- V3-25: isolated test configuration. Activate the `test` profile
+               (src/test/resources/application-test.yml) for every test run, and pin the datasource +
+               external endpoint as system properties. System properties outrank OS environment
+               variables (DB_URL / TICKETING_EXTERNAL_BASE_URL), so tests never touch a real database
+               or the real WSEP external systems even if those vars are exported. CI runs `mvn verify`,
+               so it inherits this automatically. The base-url is a single space, which trims to
+               empty everywhere (handshake skipped, stub gateways active). -->
+          <systemPropertyVariables>
+            <spring.profiles.active>test</spring.profiles.active>
+            <spring.datasource.url>jdbc:h2:mem:ticketing-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</spring.datasource.url>
+            <spring.datasource.driver-class-name>org.h2.Driver</spring.datasource.driver-class-name>
+            <spring.datasource.username>sa</spring.datasource.username>
+            <spring.jpa.database-platform>org.hibernate.dialect.H2Dialect</spring.jpa.database-platform>
+            <ticketing.external.base-url> </ticketing.external.base-url>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
 

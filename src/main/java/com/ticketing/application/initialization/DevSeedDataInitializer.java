@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.services.AdminService;
@@ -23,6 +24,8 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
+import com.ticketing.domain.event.AndPolicy;
+import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.CouponDiscount;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
@@ -32,10 +35,13 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxQuantityPolicy;
+import com.ticketing.domain.event.MinQuantityCondition;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
+import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.member.IMemberRepository;
@@ -48,6 +54,7 @@ import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @Component
+@Order(50)
 public class DevSeedDataInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DevSeedDataInitializer.class);
@@ -95,6 +102,17 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID NO_ORPHAN_EVENT_ID = UUID.fromString("aabbccdd-aabb-aabb-aabb-aabbccddeeff");
     public static final UUID NO_ORPHAN_SEAT_ZONE_ID = UUID.fromString("aabbccdd-0000-0000-0000-0000000000a1");
     public static final String CHECKOUT_COUPON_CODE = "SAVE20";
+    public static final UUID MIN_QTY_EVENT_ID = UUID.fromString("bbbb1111-1111-1111-1111-111111111111");
+    public static final UUID MIN_QTY_SEAT_ZONE_ID = UUID.fromString("bbbb1111-0000-0000-0000-0000000000a1");
+    public static final UUID MIN_QTY_GA_ZONE_ID = UUID.fromString("bbbb1111-0000-0000-0000-0000000000a2");
+    public static final UUID AND_POLICY_EVENT_ID = UUID.fromString("bbbb2222-2222-2222-2222-222222222222");
+    public static final UUID AND_POLICY_GA_ZONE_ID = UUID.fromString("bbbb2222-0000-0000-0000-000000000001");
+    public static final UUID OR_POLICY_EVENT_ID = UUID.fromString("bbbb3333-3333-3333-3333-333333333333");
+    public static final UUID OR_POLICY_GA_ZONE_ID = UUID.fromString("bbbb3333-0000-0000-0000-000000000001");
+    public static final UUID SIMPLE_DISCOUNT_EVENT_ID = UUID.fromString("bbbb4444-4444-4444-4444-444444444444");
+    public static final UUID SIMPLE_DISCOUNT_GA_ZONE_ID = UUID.fromString("bbbb4444-0000-0000-0000-000000000001");
+    public static final UUID CONDITIONAL_DISCOUNT_EVENT_ID = UUID.fromString("bbbb5555-5555-5555-5555-555555555555");
+    public static final UUID CONDITIONAL_DISCOUNT_GA_ZONE_ID = UUID.fromString("bbbb5555-0000-0000-0000-000000000001");
 
     private final boolean initializePlatform;
     private final boolean seedEnabled;
@@ -137,6 +155,11 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         if (initializePlatform) {
             PlatformInitializationService.InitializationResult result = platformInitializationService.initialize();
             log.info("Platform initialization: {}", result.message());
+            if (!result.success()) {
+                // Don't seed onto a platform that failed to initialize (it is left inactive).
+                log.error("Platform initialization failed — skipping dev seed: {}", result.message());
+                return;
+            }
         }
         if (!seedEnabled) {
             log.info("Dev seed data disabled");
@@ -315,6 +338,11 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         saveCouponCheckoutEventIfMissing();
         saveMixedLimitedEventIfMissing();
         saveNoOrphanSeatEventIfMissing();
+        saveMinQuantityEventIfMissing();
+        saveAndPolicyEventIfMissing();
+        saveOrPolicyEventIfMissing();
+        saveSimpleDiscountEventIfMissing();
+        saveConditionalDiscountEventIfMissing();
     }
 
     private void saveCouponCheckoutEventIfMissing() {
@@ -432,7 +460,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 EventCategory.PLAY,
                 new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofMinutes(45))),
                 new LockTimerDuration(Duration.ofMinutes(10)),
-                new MinQuantityPolicy(1),
+                new AlwaysAllowPolicy(),
                 new NoDiscountPolicy());
         event.setArtist("QA Theater");
         event.setRegion("Tel Aviv");
@@ -460,7 +488,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 EventCategory.PLAY,
                 new EventSchedule(start, start.plus(Duration.ofHours(2)), start.minus(Duration.ofMinutes(45))),
                 new LockTimerDuration(Duration.ofMinutes(10)),
-                new MinQuantityPolicy(1),
+                new AlwaysAllowPolicy(),
                 new NoDiscountPolicy());
         event.setArtist("QA Theater");
         event.setRegion("Tel Aviv");
@@ -644,5 +672,139 @@ public class DevSeedDataInitializer implements ApplicationRunner {
         event.publish();
         eventRepository.save(event);
         log.info("Seeded no-orphan-seat event '{}' with 2 rows x 5 seats", event.getName());
+    }
+
+    private void saveMinQuantityEventIfMissing() {
+        if (eventRepository.findById(MIN_QTY_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(26));
+        Event event = new Event(MIN_QTY_EVENT_ID, COMPANY_NAME, "Min Quantity Demo",
+                "UI-45 QA: requires at least 2 tickets per order. Same hall layout as Mixed Limited Event.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new MinQuantityPolicy(2),
+                new NoDiscountPolicy());
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+
+        InventoryZone seating = InventoryZone.createAssigned(MIN_QTY_SEAT_ZONE_ID, "Reserved Seating", new BigDecimal("120.00"));
+        Seat a1 = new Seat(UUID.randomUUID(), "A", "1");
+        Seat a2 = new Seat(UUID.randomUUID(), "A", "2");
+        Seat a3 = new Seat(UUID.randomUUID(), "A", "3");
+        seating.addSeat(a1);
+        seating.addSeat(a2);
+        seating.addSeat(a3);
+        event.addZone(seating);
+
+        event.addZone(InventoryZone.createGA(MIN_QTY_GA_ZONE_ID, "General Admission", new BigDecimal("50.00"), 200));
+
+        event.setVenueMap(new VenueMap(Map.of(
+                "Reserved Seating", MIN_QTY_SEAT_ZONE_ID,
+                "General Admission", MIN_QTY_GA_ZONE_ID)));
+
+        List<LayoutCell> cells = List.of(
+                LayoutCell.stage(0, 1, "Main Stage"),
+                LayoutCell.stage(0, 2, "Main Stage"),
+                LayoutCell.seat(1, 1, MIN_QTY_SEAT_ZONE_ID, a1.getId()),
+                LayoutCell.seat(1, 2, MIN_QTY_SEAT_ZONE_ID, a2.getId()),
+                LayoutCell.seat(1, 3, MIN_QTY_SEAT_ZONE_ID, a3.getId()),
+                LayoutCell.ga(2, 1, MIN_QTY_GA_ZONE_ID, "Floor"),
+                LayoutCell.ga(2, 2, MIN_QTY_GA_ZONE_ID, "Floor"),
+                LayoutCell.ga(2, 3, MIN_QTY_GA_ZONE_ID, "Floor"));
+        event.setVenueLayout(new VenueLayout(3, 4, cells));
+
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded min quantity demo event '{}' with mixed hall layout", event.getName());
+    }
+
+    private void saveAndPolicyEventIfMissing() {
+        if (eventRepository.findById(AND_POLICY_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(28));
+        Event event = new Event(AND_POLICY_EVENT_ID, COMPANY_NAME, "AND Policy Demo",
+                "UI-45 QA: buyers must be 18+ and may buy at most 2 tickets (both rules apply).",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AndPolicy(List.of(new AgeRestrictionPolicy(18), new MaxQuantityPolicy(2))),
+                new NoDiscountPolicy());
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        event.addZone(InventoryZone.createGA(AND_POLICY_GA_ZONE_ID, "Strict floor",
+                new BigDecimal("55.00"), 60));
+        event.setVenueMap(new VenueMap(Map.of("Strict floor", AND_POLICY_GA_ZONE_ID)));
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded AND policy demo event '{}'", event.getName());
+    }
+
+    private void saveOrPolicyEventIfMissing() {
+        if (eventRepository.findById(OR_POLICY_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(32));
+        Event event = new Event(OR_POLICY_EVENT_ID, COMPANY_NAME, "OR Policy Demo",
+                "UI-45 QA: purchase is allowed if you buy 3+ tickets OR you are 21+ (either path works).",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new OrPolicy(List.of(new MinQuantityPolicy(3), new AgeRestrictionPolicy(21))),
+                new NoDiscountPolicy());
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        event.addZone(InventoryZone.createGA(OR_POLICY_GA_ZONE_ID, "Flexible floor",
+                new BigDecimal("35.00"), 80));
+        event.setVenueMap(new VenueMap(Map.of("Flexible floor", OR_POLICY_GA_ZONE_ID)));
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded OR policy demo event '{}'", event.getName());
+    }
+
+    private void saveSimpleDiscountEventIfMissing() {
+        if (eventRepository.findById(SIMPLE_DISCOUNT_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(22));
+        Event event = new Event(SIMPLE_DISCOUNT_EVENT_ID, COMPANY_NAME, "Simple Discount Demo",
+                "UI-45 QA: 10% off all tickets is shown on the event map; no coupon required.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new SimpleDiscount(new BigDecimal("10")));
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        event.addZone(InventoryZone.createGA(SIMPLE_DISCOUNT_GA_ZONE_ID, "Promo floor",
+                new BigDecimal("50.00"), 100));
+        event.setVenueMap(new VenueMap(Map.of("Promo floor", SIMPLE_DISCOUNT_GA_ZONE_ID)));
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded simple discount demo event '{}'", event.getName());
+    }
+
+    private void saveConditionalDiscountEventIfMissing() {
+        if (eventRepository.findById(CONDITIONAL_DISCOUNT_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(24));
+        Event event = new Event(CONDITIONAL_DISCOUNT_EVENT_ID, COMPANY_NAME, "Conditional Discount Demo",
+                "UI-45 QA: 15% off appears on the map when buying 3+ tickets; checkout quote reflects it.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new ConditionalDiscount(new BigDecimal("15"), new MinQuantityCondition(3)));
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        event.addZone(InventoryZone.createGA(CONDITIONAL_DISCOUNT_GA_ZONE_ID, "Bundle floor",
+                new BigDecimal("40.00"), 100));
+        event.setVenueMap(new VenueMap(Map.of("Bundle floor", CONDITIONAL_DISCOUNT_GA_ZONE_ID)));
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded conditional discount demo event '{}'", event.getName());
     }
 }

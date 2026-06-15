@@ -42,9 +42,13 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "admin", layout = MainLayout.class)
 @PageTitle("Admin")
+@SpringComponent
+@UIScope
 public class AdminView extends VerticalLayout {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
@@ -136,6 +140,7 @@ public class AdminView extends VerticalLayout {
 
     private void configurePurchaseHistoryGrid() {
         purchaseHistoryGrid.setId("admin-global-purchases-grid");
+        purchaseHistoryGrid.setEmptyStateText("No purchases recorded yet.");
         purchaseHistoryGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
         purchaseHistoryGrid.addColumn(purchase -> valueOrEmpty(purchase.buyerUsername())).setHeader("Buyer").setAutoWidth(true);
@@ -146,6 +151,7 @@ public class AdminView extends VerticalLayout {
 
     private void configureSuspensionsGrid() {
         suspensionsGrid.setId("admin-suspensions-grid");
+        suspensionsGrid.setEmptyStateText("No suspensions — all members are in good standing.");
         suspensionsGrid.addColumn(suspension -> suspension.suspensionId().toString()).setHeader("Suspension ID").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::memberUsername).setHeader("Member").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::active).setHeader("Active").setAutoWidth(true);

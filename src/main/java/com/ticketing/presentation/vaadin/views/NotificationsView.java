@@ -20,9 +20,13 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "notifications", layout = MainLayout.class)
 @PageTitle("Notifications")
+@SpringComponent
+@UIScope
 public class NotificationsView extends VerticalLayout implements BeforeEnterObserver {
 
     private final NotificationsPresenter presenter;

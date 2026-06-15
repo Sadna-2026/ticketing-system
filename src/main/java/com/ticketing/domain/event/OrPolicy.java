@@ -54,6 +54,43 @@ public class OrPolicy extends AbstractPurchasePolicy {
                 return PolicyResult.success();
             }
         }
-        return PolicyResult.failure("ALL_OR_CONDITIONS_FAILED", "No policies in the OR condition passed.");
+        List<String> violations = branchViolations(context);
+        return PolicyResult.failure("ALL_OR_CONDITIONS_FAILED", String.join("\n", violations));
+    }
+
+    @Override
+    public List<String> collectViolations(PurchaseContext context) {
+        if (policies.isEmpty()) {
+            return List.of();
+        }
+        for (IPurchasePolicy policy : policies) {
+            if (policy.isAllowed(context).allowed()) {
+                return List.of();
+            }
+        }
+        return branchViolations(context);
+    }
+
+    /** When every OR branch fails, surface each branch's own violation text. */
+    private List<String> branchViolations(PurchaseContext context) {
+        List<String> violations = new ArrayList<>();
+        for (IPurchasePolicy policy : policies) {
+            List<String> childViolations = policy.collectViolations(context);
+            if (!childViolations.isEmpty()) {
+                violations.addAll(childViolations);
+                continue;
+            }
+            PolicyResult result = policy.isAllowed(context);
+            if (!result.allowed()) {
+                String reason = result.reason();
+                if (reason != null && !reason.isBlank()) {
+                    violations.add(reason);
+                }
+            }
+        }
+        if (violations.isEmpty()) {
+            return List.of("No policies in the OR condition passed.");
+        }
+        return violations;
     }
 }

@@ -77,9 +77,13 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.Query;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "company", layout = MainLayout.class)
 @PageTitle("Company")
+@SpringComponent
+@UIScope
 public class CompanyView extends VerticalLayout {
 
     private enum CompanyMode {
@@ -550,6 +554,7 @@ public class CompanyView extends VerticalLayout {
 
     private void configureCompanyEventsGrid() {
         companyEventsGrid.setId("company-events-grid");
+        companyEventsGrid.setEmptyStateText("No events yet — create one to start selling tickets.");
         companyEventsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
         companyEventsGrid.addColumn(event -> event.category().name()).setHeader("Category").setAutoWidth(true);
         companyEventsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts").setAutoWidth(true);
@@ -559,6 +564,7 @@ public class CompanyView extends VerticalLayout {
 
     private void configurePurchasesGrid() {
         purchasesGrid.setId("company-purchases-grid");
+        purchasesGrid.setEmptyStateText("No purchases recorded for this company yet.");
         purchasesGrid.addColumn(PurchaseRecordDTO::eventName).setHeader("Event").setAutoWidth(true);
         purchasesGrid.addColumn(PurchaseRecordDTO::companyName).setHeader("Company").setAutoWidth(true);
         purchasesGrid.addColumn(purchase -> formatPrice(purchase.amount())).setHeader("Amount").setAutoWidth(true);
@@ -1001,6 +1007,16 @@ public class CompanyView extends VerticalLayout {
     }
 
     private IPurchasePolicy buildPurchasePolicy() {
+        try {
+            return buildPurchasePolicyInternal();
+        } catch (IllegalArgumentException ex) {
+            policyStatus.setText(ex.getMessage());
+            UiMessages.error(ex.getMessage());
+            return null;
+        }
+    }
+
+    private IPurchasePolicy buildPurchasePolicyInternal() {
         IPurchasePolicy leaf = buildSinglePurchaseRule();
         if (leaf == null) return null;
 
@@ -1015,14 +1031,14 @@ public class CompanyView extends VerticalLayout {
             if (policyMaxTickets.getValue() != null && policyMaxTickets.getValue() > 0) {
                 rules.add(new MaxQuantityPolicy(policyMaxTickets.getValue()));
             }
-            if (policyMinTickets.getValue() != null && policyMinTickets.getValue() > 0) {
+            if (policyMinTickets.getValue() != null && policyMinTickets.getValue() >= 2) {
                 rules.add(new MinQuantityPolicy(policyMinTickets.getValue()));
             }
         } else if ("Max quantity".equals(purchasePolicyType.getValue())) {
             if (policyAge.getValue() != null && policyAge.getValue() > 0) {
                 rules.add(new AgeRestrictionPolicy(policyAge.getValue()));
             }
-            if (policyMinTickets.getValue() != null && policyMinTickets.getValue() > 0) {
+            if (policyMinTickets.getValue() != null && policyMinTickets.getValue() >= 2) {
                 rules.add(new MinQuantityPolicy(policyMinTickets.getValue()));
             }
         } else {
@@ -1065,9 +1081,9 @@ public class CompanyView extends VerticalLayout {
                 return new NoOrphanSeatPolicy();
             } else {
                 Integer min = policyMinTickets.getValue();
-                if (min == null || min <= 0) {
-                    policyStatus.setText("Min tickets must be positive.");
-                    UiMessages.error("Min tickets must be positive.");
+                if (min == null || min < 2) {
+                    policyStatus.setText("Min tickets must be at least 2.");
+                    UiMessages.error("Min tickets must be at least 2.");
                     return null;
                 }
                 return new MinQuantityPolicy(min);

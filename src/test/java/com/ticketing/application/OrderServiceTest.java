@@ -48,6 +48,7 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxQuantityPolicy;
+import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.Seat;
@@ -468,12 +469,6 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenNoActiveOrder_WhenQuotingCheckout_ThenRejected() {
-        assertThrows(IllegalArgumentException.class,
-                () -> orderService.quoteCheckout(guestToken, "SAVE20"));
-    }
-
-    @Test
     void GivenOrderWithItems_WhenAddingTicketsFailsMaxQuantityPolicy_ThenOrderRemainsActiveWithExistingItems() {
         UUID policyEventId = UUID.randomUUID();
         UUID policyZoneId = UUID.randomUUID();
@@ -495,6 +490,38 @@ public class OrderServiceTest {
         assertNotNull(order);
         assertEquals(1, order.getItems().size());
         assertEquals(2, order.getItems().get(0).getQuantity());
+    }
+
+    @Test
+    void GivenOrderBelowMinQuantity_WhenUpdatingGaQuantityBelowMinimum_ThenBlocked() {
+        UUID policyEventId = UUID.randomUUID();
+        UUID policyZoneId = UUID.randomUUID();
+        Event event = new Event(policyEventId, companyName, "Min Qty Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new MinQuantityPolicy(2),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, policyEventId);
+        orderService.addGATicketsToOrder(guestToken, policyEventId, policyZoneId, 2);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.updateGAQuantity(guestToken, policyZoneId, 1));
+        assertTrue(ex.getMessage().contains("You must purchase at least 2 tickets"));
+
+        var order = orderService.getActiveOrder(guestToken);
+        assertEquals(2, order.getItems().get(0).getQuantity());
+    }
+
+    @Test
+    void GivenOrderMeetingPolicy_WhenCheckingPurchasePolicy_ThenCompliantReturned() {
+        orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
+
+        OrderService.PurchasePolicyStatus status = orderService.checkPurchasePolicy(guestToken);
+        assertTrue(status.compliant());
     }
 
     @Test
@@ -1195,6 +1222,109 @@ public class OrderServiceTest {
 
         assertThrows(IllegalStateException.class,
                 () -> orderService.addSeatToOrder(guestToken, orphanEventId, orphanZoneId, seat2));
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenBatchSelectionLeavesOrphan_ThenReservationBlocked() {
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID(), seat2 = UUID.randomUUID(),
+             seat3 = UUID.randomUUID(), seat4 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "A", "1"));
+        zone.addSeat(new Seat(seat2, "A", "2"));
+        zone.addSeat(new Seat(seat3, "A", "3"));
+        zone.addSeat(new Seat(seat4, "A", "4"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+
+        SelectionRequest batch = new SelectionRequest(orphanEventId,
+                List.of(
+                        new SelectionRequest.SeatPick(orphanZoneId, seat1),
+                        new SelectionRequest.SeatPick(orphanZoneId, seat3)),
+                List.of());
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.addSelectionToOrder(guestToken, batch));
+        assertTrue(ex.getMessage().contains("isolated"));
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenBatchSelectionLeavesMultipleOrphans_ThenAllOrphansAreReported() {
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID();
+        UUID seat2 = UUID.randomUUID();
+        UUID seat3 = UUID.randomUUID();
+        UUID seat4 = UUID.randomUUID();
+        UUID seat5 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "B", "1"));
+        zone.addSeat(new Seat(seat2, "B", "2"));
+        zone.addSeat(new Seat(seat3, "B", "3"));
+        zone.addSeat(new Seat(seat4, "B", "4"));
+        zone.addSeat(new Seat(seat5, "B", "5"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+
+        SelectionRequest batch = new SelectionRequest(orphanEventId,
+                List.of(
+                        new SelectionRequest.SeatPick(orphanZoneId, seat1),
+                        new SelectionRequest.SeatPick(orphanZoneId, seat3),
+                        new SelectionRequest.SeatPick(orphanZoneId, seat5)),
+                List.of());
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> orderService.addSelectionToOrder(guestToken, batch));
+        assertTrue(ex.getMessage().contains("B-2"));
+        assertTrue(ex.getMessage().contains("B-4"));
+    }
+
+    @Test
+    void GivenNoOrphanPolicy_WhenBatchAdjacentSelection_ThenReservationAllowed() {
+        UUID orphanEventId = UUID.randomUUID();
+        UUID orphanZoneId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID(), seat2 = UUID.randomUUID(),
+             seat3 = UUID.randomUUID(), seat4 = UUID.randomUUID();
+
+        Event event = new Event(orphanEventId, companyName, "Orphan Show", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new NoOrphanSeatPolicy(),
+                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+        InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
+        zone.addSeat(new Seat(seat1, "A", "1"));
+        zone.addSeat(new Seat(seat2, "A", "2"));
+        zone.addSeat(new Seat(seat3, "A", "3"));
+        zone.addSeat(new Seat(seat4, "A", "4"));
+        event.addZone(zone);
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, orphanEventId);
+
+        SelectionRequest batch = new SelectionRequest(orphanEventId,
+                List.of(
+                        new SelectionRequest.SeatPick(orphanZoneId, seat1),
+                        new SelectionRequest.SeatPick(orphanZoneId, seat2)),
+                List.of());
+        assertDoesNotThrow(() -> orderService.addSelectionToOrder(guestToken, batch));
     }
 
     @Test

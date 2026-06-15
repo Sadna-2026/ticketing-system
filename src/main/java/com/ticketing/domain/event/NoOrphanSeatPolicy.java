@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.ticketing.domain.order.OrderItem;
+
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
@@ -25,12 +27,22 @@ public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
 
     @Override
     public PolicyResult isAllowed(PurchaseContext context) {
-        Event event = context.event();
-        if (event == null) {
+        List<String> orphans = findOrphanSeatLabels(context);
+        if (orphans.isEmpty()) {
             return PolicyResult.success();
         }
+        return PolicyResult.failure("ORPHAN_SEAT", formatOrphanMessage(orphans));
+    }
 
-        Set<UUID> incomingSeatIds = context.incomingSeatIds();
+    private List<String> findOrphanSeatLabels(PurchaseContext context) {
+        Event event = context.event();
+        if (event == null) {
+            return List.of();
+        }
+
+        Set<UUID> takenOrSelected = occupiedSeatIds(context);
+        Set<UUID> becomingAvailable = context.seatsBecomingAvailable();
+        List<String> orphans = new ArrayList<>();
 
         for (InventoryZone zone : event.getZones()) {
             if (!zone.isAssigned()) {
@@ -51,33 +63,62 @@ public class NoOrphanSeatPolicy extends AbstractPurchasePolicy {
 
                 for (int i = 0; i < sorted.size(); i++) {
                     Seat seat = sorted.get(i);
-                    if (!isFreeAfterSelection(seat, incomingSeatIds)) {
+                    if (!isFreeAfterSelection(seat, takenOrSelected, becomingAvailable)) {
                         continue;
                     }
 
                     boolean leftTaken = (i == 0)
-                            || !isFreeAfterSelection(sorted.get(i - 1), incomingSeatIds);
+                            || !isFreeAfterSelection(sorted.get(i - 1), takenOrSelected, becomingAvailable);
                     boolean rightTaken = (i == sorted.size() - 1)
-                            || !isFreeAfterSelection(sorted.get(i + 1), incomingSeatIds);
+                            || !isFreeAfterSelection(sorted.get(i + 1), takenOrSelected, becomingAvailable);
 
                     if (leftTaken && rightTaken) {
-                        return PolicyResult.failure("ORPHAN_SEAT",
-                                "Your selection would leave seat "
-                                        + seat.getRow() + "-" + seat.getSeatNumber()
-                                        + " isolated. Please choose adjacent seats or adjust your selection.");
+                        orphans.add(seat.getRow() + "-" + seat.getSeatNumber());
                     }
                 }
             }
         }
 
-        return PolicyResult.success();
+        return orphans;
     }
 
-    private boolean isFreeAfterSelection(Seat seat, Set<UUID> incomingSeatIds) {
-        if (!seat.isAvailable()) {
+    private static String formatOrphanMessage(List<String> orphanLabels) {
+        String seatPhrase = orphanLabels.size() == 1
+                ? "seat " + orphanLabels.get(0)
+                : "seats " + String.join(", ", orphanLabels);
+        return "Your selection would leave " + seatPhrase
+                + " isolated. Please choose adjacent seats or adjust your selection.";
+    }
+
+    /**
+     * Seat ids treated as occupied when checking for orphans:
+     * <ul>
+     *   <li><b>In cart</b> — assigned seats already on the active order</li>
+     *   <li><b>Staged batch</b> — seats in {@code incomingSeatIds} (the current
+     *       "Add selected seats" request, before inventory is locked)</li>
+     * </ul>
+     * Seats locked or sold by other buyers are excluded via {@link Seat#isAvailable()}.
+     */
+    private static Set<UUID> occupiedSeatIds(PurchaseContext context) {
+        Set<UUID> occupied = new java.util.HashSet<>(context.incomingSeatIds());
+        if (context.order() != null) {
+            for (OrderItem item : context.order().getItems()) {
+                if (item.isAssignedSeat() && item.getSeatId() != null) {
+                    occupied.add(item.getSeatId());
+                }
+            }
+        }
+        return occupied;
+    }
+
+    private boolean isFreeAfterSelection(Seat seat, Set<UUID> occupied, Set<UUID> becomingAvailable) {
+        if (becomingAvailable.contains(seat.getId())) {
+            return true;
+        }
+        if (occupied.contains(seat.getId())) {
             return false;
         }
-        return !incomingSeatIds.contains(seat.getId());
+        return seat.isAvailable();
     }
 
     private int parseSeatNumber(String seatNumber) {
