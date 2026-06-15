@@ -88,6 +88,8 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID SEAT_A1_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000001");
     public static final UUID SEAT_A2_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000002");
     public static final UUID SEAT_B1_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000003");
+    public static final UUID NO_ORPHAN_EVENT_ID = UUID.fromString("aabbccdd-aabb-aabb-aabb-aabbccddeeff");
+    public static final UUID NO_ORPHAN_SEAT_ZONE_ID = UUID.fromString("aabbccdd-0000-0000-0000-0000000000a1");
     public static final UUID DESIGNER_DEMO_EVENT_ID = UUID.fromString("66666666-6666-6666-6666-666666666666");
     public static final UUID DESIGNER_SEAT_ZONE_ID = UUID.fromString("66666666-0000-0000-0000-0000000000a1");
     public static final UUID DESIGNER_GA_ZONE_ID = UUID.fromString("66666666-0000-0000-0000-0000000000a2");
@@ -99,8 +101,6 @@ public class DevSeedDataInitializer implements ApplicationRunner {
     public static final UUID MIXED_LIMITED_GA_ZONE_ID = UUID.fromString("88888888-0000-0000-0000-0000000000a2");
     public static final UUID COUPON_CHECKOUT_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     public static final UUID COUPON_CHECKOUT_GA_ZONE_ID = UUID.fromString("99999999-0000-0000-0000-000000000001");
-    public static final UUID NO_ORPHAN_EVENT_ID = UUID.fromString("aabbccdd-aabb-aabb-aabb-aabbccddeeff");
-    public static final UUID NO_ORPHAN_SEAT_ZONE_ID = UUID.fromString("aabbccdd-0000-0000-0000-0000000000a1");
     public static final String CHECKOUT_COUPON_CODE = "SAVE20";
     public static final UUID MIN_QTY_EVENT_ID = UUID.fromString("bbbb1111-1111-1111-1111-111111111111");
     public static final UUID MIN_QTY_SEAT_ZONE_ID = UUID.fromString("bbbb1111-0000-0000-0000-0000000000a1");
@@ -325,6 +325,7 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 EventCategory.CONCERT, new AgeRestrictionPolicy(18), ADULT_GA_ZONE_ID, "18+ floor",
                 new BigDecimal("30.00"), 80);
         saveAssignedEventIfMissing();
+        saveNoOrphanSeatEventIfMissing();
         saveLargeAssignedEventIfMissing();
         saveDesignerDemoEventIfMissing();
         saveGaEventIfMissing(CONFERENCE_EVENT_ID, SECOND_COMPANY_NAME, "Northwind Tech Summit",
@@ -337,7 +338,6 @@ public class DevSeedDataInitializer implements ApplicationRunner {
                 new BigDecimal("25.00"), 40);
         saveCouponCheckoutEventIfMissing();
         saveMixedLimitedEventIfMissing();
-        saveNoOrphanSeatEventIfMissing();
         saveMinQuantityEventIfMissing();
         saveAndPolicyEventIfMissing();
         saveOrPolicyEventIfMissing();
