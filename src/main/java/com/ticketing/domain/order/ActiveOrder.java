@@ -171,6 +171,33 @@ public class ActiveOrder{
         return simulated;
     }
 
+    /** Snapshot with one line item removed — used to validate policies after a removal. */
+    public ActiveOrder simulateWithoutItem(UUID itemId) {
+        ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        for (OrderItem item : items) {
+            if (!item.getId().equals(itemId)) {
+                simulated.items.add(item);
+            }
+        }
+        return simulated;
+    }
+
+    /** Snapshot with a GA zone quantity replaced — used before applying a quantity update. */
+    public ActiveOrder simulateGAQuantity(UUID zoneId, int newQuantity) {
+        ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        for (OrderItem item : items) {
+            if (!item.isAssignedSeat() && item.getZoneId().equals(zoneId)) {
+                if (newQuantity > 0) {
+                    simulated.items.add(OrderItem.forGA(
+                            item.getId(), zoneId, newQuantity, item.getPricePerTicket()));
+                }
+            } else {
+                simulated.items.add(item);
+            }
+        }
+        return simulated;
+    }
+
     public void expire() {
         if (status == OrderStatus.COMPLETED) {
             throw new IllegalStateException("Cannot expire a completed order");

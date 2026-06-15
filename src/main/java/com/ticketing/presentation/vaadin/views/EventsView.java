@@ -4,11 +4,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.CompanySummaryDTO;
@@ -18,6 +20,7 @@ import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.MainLayout;
+import com.ticketing.presentation.vaadin.components.PolicyBadgesPanel;
 import com.ticketing.presentation.vaadin.components.SeatMapComponent;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
@@ -27,6 +30,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutatio
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
@@ -46,9 +50,14 @@ import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.shared.Registration;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "events", layout = MainLayout.class)
 @PageTitle("Events")
+@SpringComponent
+@UIScope
 public class EventsView extends VerticalLayout {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
@@ -75,8 +84,12 @@ public class EventsView extends VerticalLayout {
     private final Span reservationStatus = new Span("Add tickets to your active order from the map below.");
     private final VerticalLayout mapDisplay = new VerticalLayout();
 
+    private static final int MAP_POLL_INTERVAL_MS = 10_000;
+
     private EventSummaryDTO selectedEvent;
     private EventMapDTO currentEventMap;
+    private final Map<UUID, SeatMapComponent> zoneSeatMaps = new HashMap<>();
+    private Registration mapPollRegistration;
 
     public EventsView(EventsPresenter presenter, OrdersPresenter ordersPresenter) {
         this.presenter = presenter;
@@ -108,9 +121,26 @@ public class EventsView extends VerticalLayout {
                 mapDisplay);
         refreshSessionStatus();
         refreshActiveOrderStatus();
+        addAttachListener(event -> {
+            refreshSessionStatus();
+            refreshActiveOrderStatus();
+            if (currentEventMap != null && !zoneSeatMaps.isEmpty()) {
+                refreshSeatMapsFromServer(false);
+                startMapPolling();
+            } else if (currentEventMap != null) {
+                startMapPolling();
+            }
+        });
+    }
+
+    @Override
+    protected void onDetach(DetachEvent detachEvent) {
+        stopMapPolling();
+        super.onDetach(detachEvent);
     }
 
     private void configureFields() {
+        reservationStatus.getStyle().set("white-space", "pre-line");
         category.setItems(EventCategory.values());
         category.setItemLabelGenerator(this::formatCategory);
 
@@ -127,6 +157,7 @@ public class EventsView extends VerticalLayout {
     }
 
     private void configureResultsGrid() {
+        resultsGrid.setEmptyStateText("No events match your search yet — adjust the filters and search again.");
         resultsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
         resultsGrid.addColumn(event -> formatCategory(event.category())).setHeader("Category").setAutoWidth(true);
         resultsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts")
@@ -185,6 +216,8 @@ public class EventsView extends VerticalLayout {
 
         selectedEvent = null;
         currentEventMap = null;
+        zoneSeatMaps.clear();
+        stopMapPolling();
         viewMap.setEnabled(false);
         resetMapDisplay();
 
@@ -216,6 +249,8 @@ public class EventsView extends VerticalLayout {
         resultsGrid.setItems(List.of());
         selectedEvent = null;
         currentEventMap = null;
+        zoneSeatMaps.clear();
+        stopMapPolling();
         viewMap.setEnabled(false);
         resultsStatus.setText("Search for events to see results.");
         resetMapDisplay();
@@ -223,10 +258,16 @@ public class EventsView extends VerticalLayout {
     }
 
     private void loadSelectedEventMap() {
+        loadSelectedEventMap(true);
+    }
+
+    private void loadSelectedEventMap(boolean notify) {
         UUID eventId = selectedEvent == null ? null : selectedEvent.id();
         MapResult result = presenter.loadEventMap(eventId);
 
         mapDisplay.removeAll();
+        zoneSeatMaps.clear();
+        stopMapPolling();
         currentEventMap = result.success() ? result.eventMap() : null;
         mapStatus.setText(result.message());
         if (!result.success()) {
@@ -236,7 +277,10 @@ public class EventsView extends VerticalLayout {
         }
 
         renderEventMap(result.eventMap());
-        UiMessages.success(result.message());
+        startMapPolling();
+        if (notify) {
+            UiMessages.success(result.message());
+        }
     }
 
     private void addGATickets(UUID zoneId, Integer quantity) {
@@ -246,20 +290,22 @@ public class EventsView extends VerticalLayout {
         }
         OrderMutationResult result = ordersPresenter.addGATickets(eventId, zoneId, quantity == null ? 0 : quantity);
         handleReservationResult(result);
-        if (result.success()) { // refresh the headers after adding GA tickets
-            loadSelectedEventMap();
+        if (result.success()) { // refresh inventory counts after adding GA tickets
+            loadSelectedEventMap(false);
         }
     }
 
-    private void addAssignedSeat(UUID zoneId, UUID seatId, SeatMapComponent map) {
+    private void addAssignedSeats(UUID zoneId, List<UUID> seatIds, SeatMapComponent map) {
         UUID eventId = currentEventId();
         if (eventId == null) {
             return;
         }
-        OrderMutationResult result = ordersPresenter.addAssignedSeat(eventId, zoneId, seatId);
+        OrderMutationResult result = ordersPresenter.addAssignedSeats(eventId, zoneId, seatIds);
         handleReservationResult(result);
         if (result.success()) {
-            map.markSeatTaken(seatId);
+            map.markSeatsTaken(seatIds);
+        } else {
+            refreshSeatMapsFromServer(true);
         }
     }
 
@@ -286,9 +332,84 @@ public class EventsView extends VerticalLayout {
     }
 
     private void resetMapDisplay() {
+        zoneSeatMaps.clear();
+        stopMapPolling();
         mapStatus.setText("Select an event from the results to load its map.");
         mapDisplay.removeAll();
         mapDisplay.add(new Paragraph("Select an event from the results, then load its map to add tickets."));
+    }
+
+    private void startMapPolling() {
+        getUI().ifPresent(ui -> {
+            ui.setPollInterval(MAP_POLL_INTERVAL_MS);
+            if (mapPollRegistration == null) {
+                mapPollRegistration = ui.addPollListener(event -> {
+                    if (currentEventMap != null && !zoneSeatMaps.isEmpty()) {
+                        refreshSeatMapsFromServer(false);
+                    }
+                });
+            }
+        });
+    }
+
+    private void stopMapPolling() {
+        if (mapPollRegistration != null) {
+            mapPollRegistration.remove();
+            mapPollRegistration = null;
+        }
+        getUI().ifPresent(ui -> ui.setPollInterval(-1));
+    }
+
+    /**
+     * Reload seat availability from the server and reconcile staged picks on every open map.
+     * When {@code notifyLost} is true (typically after a failed add), tell the buyer which
+     * seats were dropped from their selection because another cart took them.
+     */
+    private void refreshSeatMapsFromServer(boolean notifyLost) {
+        if (selectedEvent == null || zoneSeatMaps.isEmpty()) {
+            return;
+        }
+        MapResult result = presenter.loadEventMap(selectedEvent.id());
+        if (!result.success() || result.eventMap() == null) {
+            return;
+        }
+        currentEventMap = result.eventMap();
+
+        List<EventMapDTO.ZoneInfo> assignedZones = currentEventMap.zones().stream()
+                .filter(zone -> zone.type() == ZoneType.ASSIGNED_SEATING && zoneSeatMaps.containsKey(zone.id()))
+                .toList();
+        if (assignedZones.isEmpty()) {
+            return;
+        }
+
+        List<String> allLost = new ArrayList<>();
+        AtomicInteger pending = new AtomicInteger(assignedZones.size());
+        for (EventMapDTO.ZoneInfo zone : assignedZones) {
+            SeatMapComponent map = zoneSeatMaps.get(zone.id());
+            map.syncAvailability(orderSeats(zone.seats()), lost -> {
+                allLost.addAll(lost);
+                if (pending.decrementAndGet() == 0) {
+                    notifyLostSeats(allLost, notifyLost);
+                }
+            });
+        }
+    }
+
+    private void notifyLostSeats(List<String> lost, boolean prominent) {
+        if (lost.isEmpty()) {
+            return;
+        }
+        String labels = String.join(", ", lost);
+        if (prominent) {
+            String extra = " Seat map refreshed. These seats are no longer available and were removed from your selection: "
+                    + labels;
+            reservationStatus.setText(reservationStatus.getText() + extra);
+            UiMessages.info(extra.trim());
+        } else {
+            String message = "Seat availability changed. Removed from your selection: " + labels;
+            reservationStatus.setText(message);
+            UiMessages.info(message);
+        }
     }
 
     private void renderEventMap(EventMapDTO eventMap) {
@@ -296,6 +417,14 @@ public class EventsView extends VerticalLayout {
                 new H4(eventMap.eventName()),
                 new Span("Company: " + eventMap.companyName()),
                 new Span("Status: " + eventMap.status().name()));
+
+        if (eventMap.description() != null && !eventMap.description().isBlank()) {
+            mapDisplay.add(new Paragraph(eventMap.description()));
+        }
+
+        if (!eventMap.purchaseRestrictions().isEmpty() || !eventMap.visibleDiscounts().isEmpty()) {
+            mapDisplay.add(new PolicyBadgesPanel(eventMap.purchaseRestrictions(), eventMap.visibleDiscounts()));
+        }
 
         if (eventMap.venueMap().isEmpty()) {
             mapDisplay.add(new Paragraph("No venue sections are available for this event."));
@@ -413,23 +542,36 @@ public class EventsView extends VerticalLayout {
     }
 
     /**
-     * Renders the assigned-seating zone as a single client-side {@code <seat-map>}
-     * element (no per-seat server component — see #255), fed a compact,
-     * row/seat-ordered
-     * payload. Clicking a free seat routes through the existing reservation/lock
-     * flow;
-     * on success the clicked seat is flipped to taken client-side.
+     * Assigned-seating zone: stage seats locally (green/yellow toggle), then commit in one
+     * batch so purchase policies (min qty, no-orphan, etc.) evaluate the full pick.
      */
     private Component seatMap(EventMapDTO.ZoneInfo zone) {
         SeatMapComponent map = new SeatMapComponent(orderSeats(zone.seats()));
-        map.setSelectionListener(seatId -> addAssignedSeat(zone.id(), seatId, map));
+        Button addSelected = new Button("Add selected seats");
+        addSelected.setEnabled(false);
+        Span stagingHint = new Span("Click available seats to select them (amber), click again to deselect, then add to cart.");
+
         boolean canReserve = !ordersPresenter.currentSessionState().noSession();
+        map.setSelectionCountListener(count -> {
+            addSelected.setEnabled(canReserve && count > 0);
+            addSelected.setText(count == 0 ? "Add selected seats" : "Add selected seats (" + count + ")");
+        });
+        map.setCommitListener(seatIds -> addAssignedSeats(zone.id(), seatIds, map));
+        addSelected.addClickListener(event -> map.requestAddSelection());
+
         map.setEnabled(canReserve);
+        addSelected.setEnabled(false);
+        zoneSeatMaps.put(zone.id(), map);
         if (!canReserve) {
             map.getStyle().set("opacity", "0.5");
             map.getStyle().set("pointer-events", "none");
+            stagingHint.setText("Start a guest or member session to select seats.");
         }
-        return map;
+
+        VerticalLayout box = new VerticalLayout(stagingHint, map, addSelected);
+        box.setPadding(false);
+        box.setSpacing(true);
+        return box;
     }
 
     /**

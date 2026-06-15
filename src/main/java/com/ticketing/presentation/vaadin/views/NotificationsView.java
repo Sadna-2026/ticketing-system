@@ -1,6 +1,8 @@
 package com.ticketing.presentation.vaadin.views;
 
 import com.ticketing.presentation.vaadin.MainLayout;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
@@ -18,9 +20,13 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "notifications", layout = MainLayout.class)
 @PageTitle("Notifications")
+@SpringComponent
+@UIScope
 public class NotificationsView extends VerticalLayout implements BeforeEnterObserver {
 
     private final NotificationsPresenter presenter;
@@ -28,6 +34,8 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
     private final Span connectionStatus = new Span("Open this page as a logged-in member to connect notifications.");
     private final Span notificationsStatus = new Span("Notifications have not been loaded yet.");
     private final VerticalLayout notificationsList = new VerticalLayout();
+    private final VerticalLayout roleOffersList = new VerticalLayout();
+    private final Span roleOffersStatus = new Span();
     private final Button refresh = new Button("Refresh notifications");
     private final Button clear = new Button("Clear notifications");
 
@@ -45,11 +53,18 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
 
         configureActions();
         renderNotifications(java.util.List.of());
+        renderRoleOffers();
+
+        roleOffersList.setPadding(false);
+        roleOffersList.setSpacing(true);
 
         add(
                 new H2("Notifications"),
                 new Paragraph("View pending account notifications and receive new notifications while this page is open."),
                 connectionStatus,
+                new H3("Pending role offers"),
+                roleOffersStatus,
+                roleOffersList,
                 actions(),
                 new H3("Notification history"),
                 notificationsStatus,
@@ -58,6 +73,7 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
 
         addAttachListener(event -> {
             registerRealtimeNotifications(event.getUI());
+            renderRoleOffers();
         });
         addDetachListener(event -> unregisterRealtimeNotifications());
     }
@@ -144,6 +160,12 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
             return;
         }
 
+        renderRoleOffers();
+
+        if (message.startsWith("You have a new role offer")) {
+            return;
+        }
+
         if (visibleNotificationCount == 0) {
             notificationsList.removeAll();
         }
@@ -151,6 +173,49 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
         visibleNotificationCount++;
         notificationsStatus.setText("Showing " + visibleNotificationCount + " notification(s).");
         UiMessages.info(message);
+    }
+
+    void renderRoleOffers() {
+        java.util.List<PendingRoleOfferOption> offers = presenter.listPendingRoleOffers();
+        roleOffersList.removeAll();
+        if (offers.isEmpty()) {
+            roleOffersStatus.setText("No pending role offers.");
+            return;
+        }
+        roleOffersStatus.setText(offers.size() + " pending offer(s).");
+        offers.forEach(offer -> roleOffersList.add(offerCard(offer)));
+    }
+
+    private VerticalLayout offerCard(PendingRoleOfferOption offer) {
+        Span label = new Span(offer.label());
+        label.getStyle().set("font-weight", "600");
+
+        Button accept = new Button("Accept", e -> {
+            ActionResult result = presenter.respondToRoleOffer(offer.offerId(), true);
+            UiMessages.info(result.message());
+            renderRoleOffers();
+        });
+        Button reject = new Button("Reject", e -> {
+            ActionResult result = presenter.respondToRoleOffer(offer.offerId(), false);
+            UiMessages.info(result.message());
+            renderRoleOffers();
+        });
+        accept.getThemeNames().add("primary");
+        reject.getThemeNames().add("error");
+
+        HorizontalLayout buttons = new HorizontalLayout(accept, reject);
+        buttons.setAlignItems(Alignment.BASELINE);
+        buttons.setPadding(false);
+
+        VerticalLayout card = new VerticalLayout(label, buttons);
+        card.setPadding(true);
+        card.setSpacing(false);
+        card.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-20pct)")
+                .set("border-left", "4px solid var(--lumo-primary-color)")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("background", "var(--lumo-base-color)");
+        return card;
     }
 
     private void renderNotifications(java.util.List<String> notifications) {

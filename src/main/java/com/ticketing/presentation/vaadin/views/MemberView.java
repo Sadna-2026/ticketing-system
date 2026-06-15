@@ -22,9 +22,13 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.SpringComponent;
+import com.vaadin.flow.spring.annotation.UIScope;
 
 @Route(value = "profile", layout = MainLayout.class)
 @PageTitle("Profile")
+@SpringComponent
+@UIScope
 public class MemberView extends VerticalLayout implements BeforeEnterObserver {
 
     private final MemberPresenter presenter;

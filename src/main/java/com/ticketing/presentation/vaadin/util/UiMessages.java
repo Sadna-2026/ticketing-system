@@ -2,6 +2,7 @@ package com.ticketing.presentation.vaadin.util;
 
 import com.vaadin.flow.component.ComponentUtil;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.Notification.Position;
 import com.vaadin.flow.component.notification.NotificationVariant;
@@ -54,8 +55,14 @@ public final class UiMessages {
             }
         }
 
-        Notification notification = Notification.show(message, durationMillis, Position.TOP_CENTER);
+        Notification notification = new Notification();
+        notification.setDuration(durationMillis);
+        notification.setPosition(Position.TOP_CENTER);
+        Span content = new Span(message == null ? "" : message);
+        content.getStyle().set("white-space", "pre-line");
+        notification.add(content);
         notification.addThemeVariants(variant);
+        notification.open();
 
         if (variant == NotificationVariant.LUMO_ERROR) {
             ComponentUtil.setData(ui, "lastErrorNotification", notification);

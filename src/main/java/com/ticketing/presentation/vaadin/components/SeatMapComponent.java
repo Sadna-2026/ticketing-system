@@ -1,6 +1,10 @@
 package com.ticketing.presentation.vaadin.components;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.ticketing.application.dto.EventMapDTO;
@@ -16,27 +20,131 @@ import elemental.json.JsonArray;
 import elemental.json.JsonObject;
 
 /**
- * A scalable assigned-seating map. Instead of rendering one server-side
- * {@link com.vaadin.flow.component.button.Button} per seat (the approach #254
- * shipped, which does not scale past a few seats — see issue #255), this is a
- * single client-side {@code <seat-map>} Lit element fed a compact, already
- * row/seat-ordered seat payload. Selection is hit-tested in the browser; only
- * the chosen seat id is sent back via {@link #selectSeat(String)}, which routes
- * through the existing reservation/lock flow. After a successful add the view
- * flips just that seat to taken with {@link #markSeatTaken(UUID)} — no full
- * re-render.
+ * Assigned-seating map with staged selection: clicks toggle amber "your selection"
+ * seats locally; inventory is locked only when {@link #requestAddSelection()} runs.
  */
 @Tag("seat-map")
 @JsModule("./seat-map.js")
 public class SeatMapComponent extends Component implements HasEnabled {
 
-    private transient SerializableConsumer<UUID> selectionListener;
+    private final Set<UUID> stagedSeatIds = new LinkedHashSet<>();
+
+    private transient SerializableConsumer<Integer> selectionCountListener;
+    private transient SerializableConsumer<List<UUID>> commitListener;
+    private transient SerializableConsumer<List<String>> syncCompleteListener;
+
+    public SeatMapComponent(List<EventMapDTO.SeatInfo> orderedSeats) {
+        applySeatsProperty(orderedSeats);
+        getElement().addAttachListener(event -> restoreStagedSelectionOnClient());
+    }
+
+    /** Exposed for tests: staged picks survive route navigation while the map is off-screen. */
+    Set<UUID> stagedSeatIds() {
+        return Set.copyOf(stagedSeatIds);
+    }
+
+    public void setSelectionCountListener(SerializableConsumer<Integer> listener) {
+        this.selectionCountListener = listener;
+    }
+
+    public void setCommitListener(SerializableConsumer<List<UUID>> listener) {
+        this.commitListener = listener;
+    }
+
+    /** Ask the client to send staged seat ids to {@link #onCommitSelection(String[])}. */
+    public void requestAddSelection() {
+        getElement().callJsFunction("requestAddSelection");
+    }
+
+    @ClientCallable
+    public void notifySelectionCount(int count) {
+        if (selectionCountListener != null) {
+            selectionCountListener.accept(count);
+        }
+    }
+
+    /** Keeps staged seat ids on the server so tab switches can restore client selection. */
+    @ClientCallable
+    public void onStagedSelectionChanged(String[] seatIds) {
+        stagedSeatIds.clear();
+        if (seatIds != null) {
+            for (String seatId : seatIds) {
+                if (seatId != null && !seatId.isBlank()) {
+                    stagedSeatIds.add(UUID.fromString(seatId));
+                }
+            }
+        }
+        notifySelectionCount(stagedSeatIds.size());
+    }
+
+    @ClientCallable
+    public void onCommitSelection(String[] seatIds) {
+        if (commitListener == null || seatIds == null || seatIds.length == 0) {
+            return;
+        }
+        List<UUID> ids = new ArrayList<>(seatIds.length);
+        for (String seatId : seatIds) {
+            if (seatId != null && !seatId.isBlank()) {
+                ids.add(UUID.fromString(seatId));
+            }
+        }
+        if (!ids.isEmpty()) {
+            commitListener.accept(ids);
+        }
+    }
+
+    public void markSeatsTaken(Collection<UUID> seatIds) {
+        if (seatIds == null || seatIds.isEmpty()) {
+            return;
+        }
+        seatIds.stream().filter(java.util.Objects::nonNull).forEach(stagedSeatIds::remove);
+        JsonArray payload = Json.createArray();
+        int i = 0;
+        for (UUID seatId : seatIds) {
+            if (seatId != null) {
+                payload.set(i++, seatId.toString());
+            }
+        }
+        if (payload.length() > 0) {
+            getElement().callJsFunction("markTakenMany", payload);
+        }
+        notifySelectionCount(stagedSeatIds.size());
+    }
 
     /**
-     * @param orderedSeats seats already ordered by row then seat number; the
-     *                     client renders them in the given order.
+     * Refresh taken/available state from the server and clear staged picks on seats
+     * that are no longer free. {@code onComplete} receives row-seat labels removed from selection.
      */
-    public SeatMapComponent(List<EventMapDTO.SeatInfo> orderedSeats) {
+    public void syncAvailability(List<EventMapDTO.SeatInfo> freshSeats, SerializableConsumer<List<String>> onComplete) {
+        this.syncCompleteListener = onComplete;
+        stagedSeatIds.removeIf(id -> freshSeats.stream()
+                .noneMatch(seat -> seat.id().equals(id) && seat.available()));
+        JsonArray payload = buildSeatPayload(freshSeats);
+        getElement().setPropertyJson("seats", payload);
+        getElement().callJsFunction("syncSeats", payload);
+    }
+
+    @ClientCallable
+    public void onSyncComplete(String[] lostLabels) {
+        List<String> lost = new ArrayList<>();
+        if (lostLabels != null) {
+            for (String label : lostLabels) {
+                if (label != null && !label.isBlank()) {
+                    lost.add(label);
+                }
+            }
+        }
+        if (syncCompleteListener != null) {
+            syncCompleteListener.accept(lost);
+            syncCompleteListener = null;
+        }
+    }
+
+    private void applySeatsProperty(List<EventMapDTO.SeatInfo> orderedSeats) {
+        getElement().setPropertyJson("seats", buildSeatPayload(orderedSeats));
+    }
+
+    private JsonArray buildSeatPayload(List<EventMapDTO.SeatInfo> orderedSeats) {
         JsonArray payload = Json.createArray();
         int i = 0;
         for (EventMapDTO.SeatInfo seat : orderedSeats) {
@@ -44,30 +152,35 @@ public class SeatMapComponent extends Component implements HasEnabled {
             entry.put("id", seat.id().toString());
             entry.put("row", seat.row());
             entry.put("num", seat.seatNumber());
-            entry.put("taken", !seat.available());
+            boolean taken = !seat.available();
+            entry.put("taken", taken);
+            entry.put("selected", !taken && stagedSeatIds.contains(seat.id()));
             payload.set(i++, entry);
         }
-        getElement().setPropertyJson("seats", payload);
+        return payload;
     }
 
-    /** Registers the callback invoked when the buyer clicks a free seat. */
-    public void setSelectionListener(SerializableConsumer<UUID> listener) {
-        this.selectionListener = listener;
-    }
-
-    /** Invoked from the client when a free seat is clicked. */
-    @ClientCallable
-    public void selectSeat(String seatId) {
-        if (seatId == null || seatId.isBlank() || selectionListener == null) {
+    private void restoreStagedSelectionOnClient() {
+        if (stagedSeatIds.isEmpty()) {
+            notifySelectionCount(0);
             return;
         }
-        selectionListener.accept(UUID.fromString(seatId));
+        JsonArray payload = Json.createArray();
+        int i = 0;
+        for (UUID seatId : stagedSeatIds) {
+            payload.set(i++, seatId.toString());
+        }
+        getElement().callJsFunction("applyStagedSelection", payload);
+        notifySelectionCount(stagedSeatIds.size());
     }
 
-    /** Flips a single seat to taken on the client after a successful add. */
-    public void markSeatTaken(UUID seatId) {
-        if (seatId != null) {
-            getElement().callJsFunction("markTaken", seatId.toString());
-        }
+    @Override
+    public void setEnabled(boolean enabled) {
+        getElement().setProperty("disabled", !enabled);
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return !getElement().getProperty("disabled", false);
     }
 }

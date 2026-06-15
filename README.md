@@ -220,4 +220,19 @@ or in `application.yml` / on the command line:
 
 When the property is unset (the default) the runner is a no-op: normal startup, the existing
 tests and `DevSeedDataInitializer` are unaffected.
-    
+
+## Testing
+
+The test suite runs under a **dedicated, isolated configuration** (V3-25) so it never touches the
+real external systems or a real / working database. The `test` Spring profile
+(`src/test/resources/application-test.yml`) pins the datasource to a throwaway in-memory H2
+(`ticketing-test`) and leaves the external base-url blank (so the stub gateways are used and the
+startup handshake is skipped).
+
+The profile is activated for **every** test run by the Surefire plugin (`pom.xml`), so
+`mvn test` / `mvn verify` — and therefore CI — use it automatically; no per-test annotation is
+needed. As defence-in-depth, Surefire also pins `spring.datasource.url` and
+`ticketing.external.base-url` as JVM **system properties**, which outrank OS environment variables
+(`DB_URL` / `TICKETING_EXTERNAL_BASE_URL`), so isolation holds even when those are exported locally.
+A test that legitimately needs a different datasource (e.g. the DB connection-recovery test) overrides
+`spring.datasource.url` via `@DynamicPropertySource`, which outranks both.
