@@ -49,6 +49,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartRes
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PersonnelAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
+import com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
@@ -256,7 +257,7 @@ class CompanyViewTest {
 
         clickButton(view, "Offer role appointment");
         clickButton(view, "Change manager permissions");
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER,
                 Set.of(ManagerPermission.VIEW_REPORTS));
@@ -441,7 +442,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view, "Personnel revoked."));
@@ -464,7 +465,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view,
@@ -508,11 +509,11 @@ class CompanyViewTest {
         findBigDecimalField(view, "Zone price update").setValue(new BigDecimal("75.00"));
 
         clickButton(view, "Publish event");
-        clickButton(view, "Cancel event");
+        clickDestructive(view, "Cancel event");
         clickButton(view, "Add seat");
-        clickButton(view, "Remove seat");
+        clickDestructive(view, "Remove seat");
         clickButton(view, "Increase GA capacity");
-        clickButton(view, "Decrease GA capacity");
+        clickDestructive(view, "Decrease GA capacity");
         clickButton(view, "Set zone price");
 
         verify(presenter).publishEvent(eventId);
@@ -575,7 +576,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
         findCompanyCombo(view, "Reporting company name").setValue(company("Acme"));
 
-        clickButton(view, "Suspend company");
+        clickDestructive(view, "Suspend company");
         clickButton(view, "Reopen company");
         clickButton(view, "Load company purchase history");
         clickButton(view, "Load sales report");
@@ -633,7 +634,7 @@ class CompanyViewTest {
         ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
         lifecyclePicker.setValue(company("Acme"));
 
-        clickButton(view, "Suspend company");
+        clickDestructive(view, "Suspend company");
 
         assertEquals(List.of("Acme"), companyNames(lifecyclePicker));
         assertEquals("Acme", lifecyclePicker.getValue().name());
@@ -662,7 +663,7 @@ class CompanyViewTest {
         ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
         lifecyclePicker.setValue(company("Acme"));
 
-        clickButton(view, "Suspend company");
+        clickDestructive(view, "Suspend company");
 
         assertEquals(List.of("Acme"), companyNames(findCompanyCombo(view, "Company info name")));
         assertEquals(List.of("Acme"), companyNames(findCompanyCombo(view, "Personnel company name")));
@@ -931,7 +932,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view, "Personnel revoked."));
@@ -949,7 +950,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view, "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."));
@@ -962,7 +963,7 @@ class CompanyViewTest {
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
 
-        clickButton(view, "Relinquish ownership");
+        clickDestructive(view, "Relinquish ownership");
 
         verify(presenter).relinquishOwnership("Acme");
         assertTrue(hasText(view, "Ownership relinquished for Acme."));
@@ -976,7 +977,7 @@ class CompanyViewTest {
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
 
-        clickButton(view, "Relinquish ownership");
+        clickDestructive(view, "Relinquish ownership");
 
         verify(presenter).relinquishOwnership("Acme");
         assertTrue(hasText(view, "Only non-founder owners may relinquish ownership."));
@@ -1166,6 +1167,28 @@ class CompanyViewTest {
                 .map(Button.class::cast)
                 .filter(button -> text.equals(button.getText()))
                 .anyMatch(CompanyViewTest::isEffectivelyVisible);
+    }
+
+    @Test
+    void GivenCancelEventDialog_WhenCancelClicked_ThenPresenterIsNotCalled() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
+        findEventCombo(view, "Event to manage").setValue(event("Show", eventId));
+
+        clickButton(view, "Cancel event");
+        assertTrue(ConfirmDialogTestSupport.isOpen());
+        assertTrue(ConfirmDialogTestSupport.openDialogText().contains("Show"));
+        ConfirmDialogTestSupport.cancel();
+
+        verify(presenter, never()).cancelEvent(any());
+    }
+
+    private static void clickDestructive(Component root, String text) {
+        clickButton(root, text);
+        ConfirmDialogTestSupport.confirm();
     }
 
     private static void clickButton(Component root, String text) {
