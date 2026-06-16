@@ -11,6 +11,7 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.MemberService;
 import com.ticketing.application.services.OrderService;
+import com.ticketing.application.services.SystemAnalyticsCollector;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.request.RegisterRequest;
@@ -32,12 +33,22 @@ public class AuthPresenter {
     private final AdminService adminService;
     private final ISessionTokenService sessionTokenService;
     private final OrderService orderService;
+    private final SystemAnalyticsCollector analyticsCollector;
 
-    public AuthPresenter(MemberService memberService, AdminService adminService, ISessionTokenService sessionTokenService, OrderService orderService) {
+    public AuthPresenter(MemberService memberService, AdminService adminService,
+            ISessionTokenService sessionTokenService, OrderService orderService) {
+        this(memberService, adminService, sessionTokenService, orderService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthPresenter(MemberService memberService, AdminService adminService,
+            ISessionTokenService sessionTokenService, OrderService orderService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) SystemAnalyticsCollector analyticsCollector) {
         this.memberService = memberService;
         this.adminService = adminService;
         this.sessionTokenService = sessionTokenService;
         this.orderService = orderService;
+        this.analyticsCollector = analyticsCollector;
     }
 
     public AuthResult startGuestSession() {
@@ -48,6 +59,7 @@ public class AuthPresenter {
         try {
             String guestToken = sessionTokenService.generateGuestToken();
             storeGuestSession(guestToken);
+            recordVisitorEnter();
             return AuthResult.success("Guest session started.");
         } catch (RuntimeException ex) {
             return safeFailure("Could not start guest session.", ex);
@@ -221,6 +233,7 @@ public class AuthPresenter {
             if (!success) {
                 return AuthResult.failure("Failed to exit guest session.");
             }
+            recordVisitorExit();
             SessionContext.clear();
             return AuthResult.success("Guest session ended.");
         } catch (RuntimeException ex) {
@@ -250,7 +263,20 @@ public class AuthPresenter {
         }
         String newToken = sessionTokenService.generateGuestToken();
         storeGuestSession(newToken);
+        recordVisitorEnter();
         return newToken;
+    }
+
+    private void recordVisitorEnter() {
+        if (analyticsCollector != null) {
+            analyticsCollector.recordVisitorEnter();
+        }
+    }
+
+    private void recordVisitorExit() {
+        if (analyticsCollector != null) {
+            analyticsCollector.recordVisitorExit();
+        }
     }
 
     private void storeGuestSession(String guestToken) {

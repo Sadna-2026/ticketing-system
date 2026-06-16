@@ -24,12 +24,16 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsMetricsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsRateDTO;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SystemAnalyticsResult;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
@@ -278,5 +282,45 @@ class AdminPresenterTest {
                 false,
                 "Spam"
         );
+    }
+
+    @Test
+    void GivenAdminSession_WhenLoadingSystemAnalytics_ThenServiceIsCalledAndAnalyticsReturned() {
+        SessionContext.setSessionToken("admin-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setUsername("admin");
+        SessionContext.setPermissions(Set.of("SYSTEM_ADMIN"));
+
+        SystemAnalyticsDTO analytics = sampleAnalytics();
+        when(adminService.getSystemAnalytics("admin-token")).thenReturn(analytics);
+
+        SystemAnalyticsResult result = presenter.loadSystemAnalytics();
+
+        assertTrue(result.success());
+        assertEquals(analytics, result.analytics());
+        verify(adminService).getSystemAnalytics("admin-token");
+    }
+
+    @Test
+    void GivenGuestSession_WhenLoadingSystemAnalytics_ThenAdminSessionMessageReturned() {
+        SessionContext.setSessionToken("guest-token");
+
+        SystemAnalyticsResult result = presenter.loadSystemAnalytics();
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        verifyNoInteractions(adminService);
+    }
+
+    private static SystemAnalyticsDTO sampleAnalytics() {
+        AnalyticsRateDTO rate = new AnalyticsRateDTO(3, 0.6);
+        AnalyticsMetricsDTO metrics = new AnalyticsMetricsDTO(rate, rate, rate, rate, rate);
+        return new SystemAnalyticsDTO(
+                Instant.parse("2026-06-01T12:00:00Z"),
+                2,
+                "last 5 minute(s)",
+                "last 10 minute(s)",
+                metrics,
+                metrics);
     }
 }
