@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.VenueLayout;
+import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
 
 import jakarta.persistence.EntityManager;
@@ -91,6 +92,10 @@ public class JpaEventRepository implements IEventRepository {
         VenueLayout layout = event.getVenueLayout();
         if (layout != null) {
             layout.getCells().size();
+        }
+        VenueMap venueMap = event.getVenueMap();
+        if (venueMap != null) {
+            venueMap.getSectionToZone().size();
         }
         entityManager.detach(event);
         return event;

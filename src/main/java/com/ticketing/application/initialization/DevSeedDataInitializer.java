@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -449,6 +450,7 @@ public class DevSeedDataInitializer {
         event.addZone(InventoryZone.createGA(COUPON_CHECKOUT_GA_ZONE_ID, "Discount floor",
                 new BigDecimal("50.00"), 100));
         event.setVenueMap(new VenueMap(Map.of("Discount floor", COUPON_CHECKOUT_GA_ZONE_ID)));
+        event.setVenueLayout(simpleGaLayout(COUPON_CHECKOUT_GA_ZONE_ID, "Discount floor"));
         event.publish();
         eventRepository.save(event);
         log.info("Seeded coupon checkout demo event '{}' with coupon {}", event.getName(), CHECKOUT_COUPON_CODE);
@@ -531,6 +533,7 @@ public class DevSeedDataInitializer {
         event.setRegion("Beer Sheva");
         event.addZone(InventoryZone.createGA(zoneId, zoneName, price, capacity));
         event.setVenueMap(new VenueMap(Map.of(zoneName, zoneId)));
+        event.setVenueLayout(simpleGaLayout(zoneId, zoneName));
         event.publish();
         eventRepository.save(event);
     }
@@ -555,6 +558,11 @@ public class DevSeedDataInitializer {
         zone.addSeat(new Seat(SEAT_B1_ID, "B", "1"));
         event.addZone(zone);
         event.setVenueMap(new VenueMap(Map.of("Orchestra", ASSIGNED_SEAT_ZONE_ID)));
+        event.setVenueLayout(new VenueLayout(3, 3, List.of(
+                LayoutCell.stage(0, 1, "Stage"),
+                LayoutCell.seat(1, 0, ASSIGNED_SEAT_ZONE_ID, SEAT_A1_ID),
+                LayoutCell.seat(1, 1, ASSIGNED_SEAT_ZONE_ID, SEAT_A2_ID),
+                LayoutCell.seat(2, 0, ASSIGNED_SEAT_ZONE_ID, SEAT_B1_ID))));
         event.publish();
         eventRepository.save(event);
     }
@@ -578,14 +586,28 @@ public class DevSeedDataInitializer {
         event.setArtist("QA Theater");
         event.setRegion("Tel Aviv");
         InventoryZone zone = InventoryZone.createAssigned(LARGE_ASSIGNED_ZONE_ID, "Auditorium", new BigDecimal("95.00"));
+        List<Seat> seats = new ArrayList<>(rows * seatsPerRow);
         for (int r = 0; r < rows; r++) {
             String row = Character.toString((char) ('A' + r));
             for (int s = 1; s <= seatsPerRow; s++) {
-                zone.addSeat(new Seat(UUID.randomUUID(), row, String.valueOf(s)));
+                Seat seat = new Seat(UUID.randomUUID(), row, String.valueOf(s));
+                seats.add(seat);
+                zone.addSeat(seat);
             }
         }
         event.addZone(zone);
         event.setVenueMap(new VenueMap(Map.of("Auditorium", LARGE_ASSIGNED_ZONE_ID)));
+        List<LayoutCell> cells = new ArrayList<>();
+        for (int c = 10; c < 15; c++) {
+            cells.add(LayoutCell.stage(0, c, "Stage"));
+        }
+        int seatIndex = 0;
+        for (int r = 0; r < rows; r++) {
+            for (int s = 0; s < seatsPerRow; s++) {
+                cells.add(LayoutCell.seat(r + 1, s, LARGE_ASSIGNED_ZONE_ID, seats.get(seatIndex++).getId()));
+            }
+        }
+        event.setVenueLayout(new VenueLayout(rows + 1, seatsPerRow, cells));
         event.publish();
         eventRepository.save(event);
         log.info("Seeded large assigned event '{}' with {} seats", event.getName(), rows * seatsPerRow);
@@ -822,6 +844,7 @@ public class DevSeedDataInitializer {
         event.addZone(InventoryZone.createGA(AND_POLICY_GA_ZONE_ID, "Strict floor",
                 new BigDecimal("55.00"), 60));
         event.setVenueMap(new VenueMap(Map.of("Strict floor", AND_POLICY_GA_ZONE_ID)));
+        event.setVenueLayout(simpleGaLayout(AND_POLICY_GA_ZONE_ID, "Strict floor"));
         event.publish();
         eventRepository.save(event);
         log.info("Seeded AND policy demo event '{}'", event.getName());
@@ -844,6 +867,7 @@ public class DevSeedDataInitializer {
         event.addZone(InventoryZone.createGA(OR_POLICY_GA_ZONE_ID, "Flexible floor",
                 new BigDecimal("35.00"), 80));
         event.setVenueMap(new VenueMap(Map.of("Flexible floor", OR_POLICY_GA_ZONE_ID)));
+        event.setVenueLayout(simpleGaLayout(OR_POLICY_GA_ZONE_ID, "Flexible floor"));
         event.publish();
         eventRepository.save(event);
         log.info("Seeded OR policy demo event '{}'", event.getName());
@@ -866,6 +890,7 @@ public class DevSeedDataInitializer {
         event.addZone(InventoryZone.createGA(SIMPLE_DISCOUNT_GA_ZONE_ID, "Promo floor",
                 new BigDecimal("50.00"), 100));
         event.setVenueMap(new VenueMap(Map.of("Promo floor", SIMPLE_DISCOUNT_GA_ZONE_ID)));
+        event.setVenueLayout(simpleGaLayout(SIMPLE_DISCOUNT_GA_ZONE_ID, "Promo floor"));
         event.publish();
         eventRepository.save(event);
         log.info("Seeded simple discount demo event '{}'", event.getName());
@@ -888,8 +913,20 @@ public class DevSeedDataInitializer {
         event.addZone(InventoryZone.createGA(CONDITIONAL_DISCOUNT_GA_ZONE_ID, "Bundle floor",
                 new BigDecimal("40.00"), 100));
         event.setVenueMap(new VenueMap(Map.of("Bundle floor", CONDITIONAL_DISCOUNT_GA_ZONE_ID)));
+        event.setVenueLayout(simpleGaLayout(CONDITIONAL_DISCOUNT_GA_ZONE_ID, "Bundle floor"));
         event.publish();
         eventRepository.save(event);
         log.info("Seeded conditional discount demo event '{}'", event.getName());
+    }
+
+    /** Minimal buyer-facing hall grid for GA-only seeded events. */
+    private static VenueLayout simpleGaLayout(UUID zoneId, String label) {
+        List<LayoutCell> cells = List.of(
+                LayoutCell.stage(0, 0, "Stage"),
+                LayoutCell.ga(1, 0, zoneId, label),
+                LayoutCell.ga(1, 1, zoneId, label),
+                LayoutCell.ga(2, 0, zoneId, label),
+                LayoutCell.ga(2, 1, zoneId, label));
+        return new VenueLayout(3, 2, cells);
     }
 }
