@@ -202,6 +202,12 @@ public class EventService {
         saveEvent(event);
         log.info("Event created: eventId={}, companyName={}, status=DRAFT",
                 event.getId(), company.getName());
+
+        if (orderService != null) {
+            orderService.createQueue(token, event.getId());
+            log.info("Default virtual queue created for event: eventId={}", event.getId());
+        }
+
         return event.getId();
     }
 

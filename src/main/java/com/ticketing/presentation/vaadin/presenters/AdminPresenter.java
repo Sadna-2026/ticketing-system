@@ -193,42 +193,29 @@ public class AdminPresenter {
 
     // ── Queue management ─────────────────────────────────────────────
 
-    public QueueListResult loadActiveQueues() {
+    private static final int DORMANT_THRESHOLD = 10_000;
+
+    public QueueListResult loadAllQueues() {
         String token = adminToken();
         if (token == null) {
             return QueueListResult.failure(ADMIN_SESSION_REQUIRED);
         }
         try {
-            List<VirtualQueueDto> queues = orderService.getAllActiveQueues(token);
+            List<VirtualQueueDto> queues = orderService.getAllQueues(token);
             List<QueueSummary> summaries = queues.stream()
                     .map(q -> {
                         String name = resolveEventName(q.getEventId());
+                        String status = q.getThreshold() >= DORMANT_THRESHOLD ? "Dormant" : "Configured";
                         return new QueueSummary(q.getEventId(), name,
                                 q.getWaitingCount(), q.getFlowRate(),
-                                q.getThreshold(), q.getCurrentActiveUsers());
+                                q.getThreshold(), q.getCurrentActiveUsers(), status);
                     })
                     .toList();
             String message = summaries.isEmpty()
-                    ? "No active queues." : "Loaded " + summaries.size() + " active queue(s).";
+                    ? "No event queues." : "Loaded " + summaries.size() + " event queue(s).";
             return QueueListResult.success(message, summaries);
         } catch (RuntimeException ex) {
             return QueueListResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
-        }
-    }
-
-    public ActionResult createEventQueue(UUID eventId, int threshold, int flowRate) {
-        String token = adminToken();
-        if (token == null) {
-            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
-        }
-        if (eventId == null) {
-            return ActionResult.failure("Event ID is required.");
-        }
-        try {
-            UUID queueId = orderService.createQueue(token, eventId, threshold, flowRate);
-            return ActionResult.success("Queue created: " + queueId + ".");
-        } catch (RuntimeException ex) {
-            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
         }
     }
 
@@ -243,22 +230,6 @@ public class AdminPresenter {
         try {
             orderService.updateQueueConfig(token, eventId, newThreshold, newFlowRate);
             return ActionResult.success("Queue updated — threshold: " + newThreshold + ", flow rate: " + newFlowRate + ".");
-        } catch (RuntimeException ex) {
-            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
-        }
-    }
-
-    public ActionResult deleteEventQueue(UUID eventId) {
-        String token = adminToken();
-        if (token == null) {
-            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
-        }
-        if (eventId == null) {
-            return ActionResult.failure("Event ID is required.");
-        }
-        try {
-            orderService.deleteQueue(token, eventId);
-            return ActionResult.success("Queue deleted.");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
         }
@@ -386,7 +357,7 @@ public class AdminPresenter {
     }
 
     public record QueueSummary(UUID eventId, String eventName, int waitingCount,
-            int flowRate, int threshold, int activeUsers) {}
+            int flowRate, int threshold, int activeUsers, String status) {}
 
     public record QueueListResult(boolean success, String message, List<QueueSummary> queues) {
         public QueueListResult {

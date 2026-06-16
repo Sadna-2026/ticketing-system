@@ -46,6 +46,9 @@ import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.domain.queue.IQueueRepository;
+import com.ticketing.domain.queue.QueueConfig;
+import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 /**
@@ -117,8 +120,14 @@ public class DevSeedDataInitializer {
     private final ICompanyRepository companyRepository;
     private final IEventRepository eventRepository;
     private final IOrderRepository orderRepository;
+    private final IQueueRepository queueRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
-        private final AdminService adminService;
+    private final AdminService adminService;
+
+    @org.springframework.beans.factory.annotation.Value("${ticketing.queue.threshold:#{T(Integer).MAX_VALUE}}")
+    private int defaultQueueThreshold = Integer.MAX_VALUE;
+    @org.springframework.beans.factory.annotation.Value("${ticketing.queue.flow-rate:50}")
+    private int defaultQueueFlowRate = 50;
 
     public DevSeedDataInitializer(
             IMemberRepository memberRepository,
@@ -126,7 +135,8 @@ public class DevSeedDataInitializer {
             ICompanyRepository companyRepository,
             IEventRepository eventRepository,
             IOrderRepository orderRepository,
-            PasswordEncryptionUtils passwordEncryptionUtils,    
+            IQueueRepository queueRepository,
+            PasswordEncryptionUtils passwordEncryptionUtils,
             AdminService adminService
     ) {
         this.memberRepository = memberRepository;
@@ -134,9 +144,9 @@ public class DevSeedDataInitializer {
         this.companyRepository = companyRepository;
         this.eventRepository = eventRepository;
         this.orderRepository = orderRepository;
+        this.queueRepository = queueRepository;
         this.passwordEncryptionUtils = passwordEncryptionUtils;
         this.adminService = adminService;
-
     }
 
     public void runSeed() {
@@ -318,6 +328,35 @@ public class DevSeedDataInitializer {
         saveOrPolicyEventIfMissing();
         saveSimpleDiscountEventIfMissing();
         saveConditionalDiscountEventIfMissing();
+        seedEventQueues();
+    }
+
+    private void seedEventQueues() {
+        List<UUID> seededEventIds = List.of(
+                CONCERT_ID, ADULT_EVENT_ID, ASSIGNED_EVENT_ID, NO_ORPHAN_EVENT_ID,
+                LARGE_ASSIGNED_EVENT_ID, DESIGNER_DEMO_EVENT_ID, CONFERENCE_EVENT_ID,
+                ADMIN_CLOSE_EVENT_ID, COUPON_CHECKOUT_EVENT_ID, MIXED_LIMITED_EVENT_ID,
+                MIN_QTY_EVENT_ID, AND_POLICY_EVENT_ID, OR_POLICY_EVENT_ID,
+                SIMPLE_DISCOUNT_EVENT_ID, CONDITIONAL_DISCOUNT_EVENT_ID);
+        int created = 0;
+        for (UUID eventId : seededEventIds) {
+            if (createDefaultQueueIfMissing(eventId)) {
+                created++;
+            }
+        }
+        if (created > 0) {
+            log.info("Seeded default virtual queues for {} event(s)", created);
+        }
+    }
+
+    private boolean createDefaultQueueIfMissing(UUID eventId) {
+        if (queueRepository.findByEventId(eventId).isPresent()) {
+            return false;
+        }
+        QueueConfig config = new QueueConfig(defaultQueueThreshold, defaultQueueFlowRate);
+        VirtualQueue queue = new VirtualQueue(UUID.randomUUID(), eventId, config);
+        queueRepository.save(queue);
+        return true;
     }
 
     private void saveCouponCheckoutEventIfMissing() {

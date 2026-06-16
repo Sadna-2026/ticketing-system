@@ -95,17 +95,14 @@ public class AdminView extends VerticalLayout {
     private SuspensionDTO selectedSuspension;
 
     // ── Queue tab ────────────────────────────────────────────────────
-    private final Span queueStatus = new Span("Load active queues to manage virtual queue settings.");
+    private final Span queueStatus = new Span("Event queue configurations update every 20 seconds while this tab is open.");
     private final Grid<QueueSummary> queuesGrid = new Grid<>(QueueSummary.class, false);
     private final IntegerField updateThresholdField = new IntegerField("Threshold");
     private final IntegerField updateFlowRateField = new IntegerField("Flow rate");
-    private final TextField createQueueEventIdField = new TextField("Event ID");
-    private final IntegerField createQueueThresholdField = new IntegerField("Threshold");
-    private final IntegerField createQueueFlowRateField = new IntegerField("Flow rate");
+    private final Checkbox showAllQueues = new Checkbox("Show dormant queues");
     private QueueSummary selectedQueue;
     private Button updateQueueButton;
     private Button flushQueueButton;
-    private Button deleteQueueButton;
     private Registration queuePollRegistration;
 
     public AdminView(AdminPresenter presenter) {
@@ -196,8 +193,9 @@ public class AdminView extends VerticalLayout {
 
     private void configureQueuesGrid() {
         queuesGrid.setId("admin-queues-grid");
-        queuesGrid.setEmptyStateText("No active queues found.");
+        queuesGrid.setEmptyStateText("No event queues found.");
         queuesGrid.addColumn(QueueSummary::eventName).setHeader("Event").setAutoWidth(true).setFlexGrow(1);
+        queuesGrid.addColumn(QueueSummary::status).setHeader("Status").setAutoWidth(true);
         queuesGrid.addColumn(QueueSummary::waitingCount).setHeader("Waiting").setAutoWidth(true);
         queuesGrid.addColumn(QueueSummary::flowRate).setHeader("Flow rate").setAutoWidth(true);
         queuesGrid.addColumn(QueueSummary::threshold).setHeader("Threshold").setAutoWidth(true);
@@ -214,65 +212,58 @@ public class AdminView extends VerticalLayout {
         updateThresholdField.setValue(100);
         updateFlowRateField.setMin(1);
         updateFlowRateField.setValue(10);
-        createQueueThresholdField.setMin(1);
-        createQueueThresholdField.setValue(100);
-        createQueueFlowRateField.setMin(1);
-        createQueueFlowRateField.setValue(10);
-        createQueueEventIdField.setPlaceholder("e.g. 11111111-1111-1111-1111-111111111111");
 
         updateQueueButton = new Button("Update", e -> doUpdateQueue());
         flushQueueButton = new Button("Clear entries", e -> doFlushQueue());
-        deleteQueueButton = new Button("Delete queue", e -> doDeleteQueue());
         flushQueueButton.getStyle().set("color", "var(--lumo-error-color)");
-        deleteQueueButton.getStyle().set("color", "var(--lumo-error-color)");
         updateQueueButton.setEnabled(false);
         flushQueueButton.setEnabled(false);
-        deleteQueueButton.setEnabled(false);
+
+        showAllQueues.setValue(false);
+        showAllQueues.addValueChangeListener(e -> refreshQueues());
 
         Button refreshButton = new Button("Refresh", e -> refreshQueues());
-        HorizontalLayout gridActions = new HorizontalLayout(refreshButton, queueStatus);
+        HorizontalLayout gridActions = new HorizontalLayout(refreshButton, showAllQueues, queueStatus);
         gridActions.setAlignItems(Alignment.CENTER);
 
         FormLayout selectedQueueForm = new FormLayout(updateThresholdField, updateFlowRateField);
         selectedQueueForm.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 1),
                 new FormLayout.ResponsiveStep("400px", 2));
-        HorizontalLayout selectedQueueActions = new HorizontalLayout(updateQueueButton, flushQueueButton, deleteQueueButton);
+        HorizontalLayout selectedQueueActions = new HorizontalLayout(updateQueueButton, flushQueueButton);
         selectedQueueActions.setAlignItems(Alignment.BASELINE);
 
-        Button createQueueButton = new Button("Create queue", e -> doCreateQueue());
-        FormLayout createForm = new FormLayout(createQueueEventIdField, createQueueThresholdField, createQueueFlowRateField);
-        createForm.setResponsiveSteps(
-                new FormLayout.ResponsiveStep("0", 1),
-                new FormLayout.ResponsiveStep("600px", 3));
-
         VerticalLayout section = new VerticalLayout(
-                new H4("Active queues"),
-                new Paragraph("Active virtual queues update every 5 seconds while this tab is open."),
+                new H4("Event queue configurations"),
+                new Paragraph("Every event has a virtual queue. Queues with high thresholds are dormant by default. "
+                        + "Adjust threshold and flow rate to activate queueing for high-demand events. "
+                        + "Configurations update every 20 seconds while this tab is open."),
                 queuesGrid,
                 gridActions,
                 new H4("Selected queue controls"),
-                new Paragraph("Select a queue above to update its settings, clear waiting entries, or delete it entirely."),
+                new Paragraph("Select a queue above to update its settings or clear waiting entries."),
                 selectedQueueForm,
-                selectedQueueActions,
-                new H4("Create queue"),
-                new Paragraph("Create a virtual queue for a high-demand event."),
-                createForm,
-                createQueueButton
+                selectedQueueActions
         );
         section.setPadding(false);
         return section;
     }
 
     private void refreshQueues() {
-        QueueListResult result = presenter.loadActiveQueues();
+        QueueListResult result = presenter.loadAllQueues();
         queueStatus.setText(result.message());
         if (!result.success()) {
             UiMessages.error(result.message());
             queuesGrid.setItems(List.of());
             return;
         }
-        queuesGrid.setItems(result.queues());
+        List<QueueSummary> queues = result.queues();
+        if (!Boolean.TRUE.equals(showAllQueues.getValue())) {
+            queues = queues.stream()
+                    .filter(q -> !"Dormant".equals(q.status()))
+                    .toList();
+        }
+        queuesGrid.setItems(queues);
     }
 
     private void doUpdateQueue() {
@@ -318,55 +309,6 @@ public class AdminView extends VerticalLayout {
         confirm.open();
     }
 
-    private void doDeleteQueue() {
-        if (selectedQueue == null) {
-            UiMessages.error("Select a queue from the grid.");
-            return;
-        }
-        Dialog confirm = new Dialog();
-        confirm.setHeaderTitle("Delete queue?");
-        Paragraph text = new Paragraph("The virtual queue for \"" + selectedQueue.eventName()
-                + "\" will be permanently deleted. All waiting users will lose their place.");
-        Button cancel = new Button("Cancel", e -> confirm.close());
-        Button delete = new Button("Yes, delete queue", e -> {
-            confirm.close();
-            ActionResult result = presenter.deleteEventQueue(selectedQueue.eventId());
-            queueStatus.setText(result.message());
-            notify(result);
-            if (result.success()) {
-                queuesGrid.asSingleSelect().clear();
-                refreshQueues();
-            }
-        });
-        delete.getStyle().set("color", "var(--lumo-error-color)");
-        confirm.add(text, new HorizontalLayout(cancel, delete));
-        confirm.open();
-    }
-
-    private void doCreateQueue() {
-        String rawId = createQueueEventIdField.getValue();
-        UUID eventId;
-        try {
-            eventId = UUID.fromString(rawId == null ? "" : rawId.trim());
-        } catch (IllegalArgumentException ex) {
-            UiMessages.error("Enter a valid event UUID.");
-            return;
-        }
-        Integer threshold = createQueueThresholdField.getValue();
-        Integer flowRate = createQueueFlowRateField.getValue();
-        if (threshold == null || threshold < 1 || flowRate == null || flowRate < 1) {
-            UiMessages.error("Threshold and flow rate must be positive integers.");
-            return;
-        }
-        ActionResult result = presenter.createEventQueue(eventId, threshold, flowRate);
-        queueStatus.setText(result.message());
-        notify(result);
-        if (result.success()) {
-            createQueueEventIdField.clear();
-            refreshQueues();
-        }
-    }
-
     private void refreshQueueControlsState() {
         boolean hasSelection = selectedQueue != null;
         if (updateQueueButton != null) {
@@ -374,9 +316,6 @@ public class AdminView extends VerticalLayout {
         }
         if (flushQueueButton != null) {
             flushQueueButton.setEnabled(hasSelection);
-        }
-        if (deleteQueueButton != null) {
-            deleteQueueButton.setEnabled(hasSelection);
         }
         if (hasSelection) {
             updateThresholdField.setValue(selectedQueue.threshold());
@@ -386,7 +325,7 @@ public class AdminView extends VerticalLayout {
 
     private void startQueuePolling() {
         getUI().ifPresent(ui -> {
-            ui.setPollInterval(5_000);
+            ui.setPollInterval(20_000);
             if (queuePollRegistration == null) {
                 queuePollRegistration = ui.addPollListener(e -> refreshQueues());
             }

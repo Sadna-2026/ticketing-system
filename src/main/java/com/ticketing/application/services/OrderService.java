@@ -546,6 +546,11 @@ public class OrderService {
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue != null) {
             queue.userLeft();
+            if (queue.getWaitingCount() > 0 && !queue.shouldQueue()) {
+                List<QueueEntry> admitted = queue.admitNextBatch();
+                log.info("Auto-admitted {} users from queue for eventId={} after user left",
+                        admitted.size(), eventId);
+            }
             saveQueue(queue);
         }
     }
@@ -580,6 +585,14 @@ public class OrderService {
         validateToken(token);
         log.info("Getting all active queues");
         return queueRepository.findAllActive().stream()
+                .map(VirtualQueue::toVirtualQueueDto)
+                .collect(Collectors.toList());
+    }
+
+    public List<VirtualQueueDto> getAllQueues(String token) {
+        validateToken(token);
+        log.info("Getting all event queues");
+        return queueRepository.findAll().stream()
                 .map(VirtualQueue::toVirtualQueueDto)
                 .collect(Collectors.toList());
     }

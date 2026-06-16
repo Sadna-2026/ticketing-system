@@ -43,7 +43,7 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.systemDefault());
-    private static final int POLL_INTERVAL_MS = 5_000;
+    private static final int POLL_INTERVAL_MS = 10_000;
 
     private final QueuePresenter presenter;
 
@@ -300,13 +300,14 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
             entryDetails.setText("Status: " + entry.getStatus() + "  |  Joined: " + joined
                     + "  |  Entry ID: " + entry.getId());
         }
-        waitingStatus.setText("This page checks for updates every 5 seconds. Do not close or navigate away.");
+        waitingStatus.setText("This page checks for updates every 10 seconds. Do not close or navigate away.");
         refreshButton.setVisible(true);
     }
 
     private void handleAdmitted(QueueEntryDto entry) {
         stopPolling();
         inWaitingRoom = false;
+        UUID admittedEventId = activeEventId;
         activeEventId = null;
 
         progressBar.setIndeterminate(false);
@@ -322,9 +323,11 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
         redirect.getStyle().set("font-weight", "bold").set("color", "var(--lumo-success-color)");
         waitingRoom.add(redirect);
 
-        UiMessages.success("It's your turn! Heading to Events…");
-        // Navigate to Events after a brief pause so the user sees the message
-        UI.getCurrent().getPage().executeJs("setTimeout(() => window.location.href='/events', 2500)");
+        UiMessages.success("It's your turn! Heading to ticket selection…");
+        String target = admittedEventId != null
+                ? "/events?eventId=" + admittedEventId
+                : "/events";
+        UI.getCurrent().getPage().executeJs("setTimeout(() => window.location.href=$0, 2500)", target);
     }
 
     private void handleQueueExpired() {
