@@ -115,3 +115,107 @@ vaadin-number-field[required]::part(required-indicator)::after {
   font-size: 1.1em;
   line-height: 1;
 }
+
+/* ============================================================
+   App shell (navbar) — Phase 2
+   ============================================================ */
+vaadin-app-layout::part(navbar) {
+  background-color: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.app-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
+  margin: 0 var(--lumo-space-m) 0 var(--lumo-space-s);
+  white-space: nowrap;
+}
+.app-brandmark {
+  flex: none;
+}
+.app-brandmark rect {
+  fill: var(--app-cyan);
+}
+.app-brandmark rect:nth-child(n + 3) {
+  fill: var(--app-magenta);
+}
+
+.app-nav {
+  margin-left: var(--lumo-space-s);
+}
+
+/* Push the theme toggle to the far end of the navbar. */
+.app-theme-toggle {
+  margin-inline-start: auto;
+  margin-inline-end: var(--lumo-space-s);
+  color: var(--app-muted);
+}
+.app-theme-toggle:hover {
+  color: var(--app-cyan);
+}
+
+/* ============================================================
+   Reusable patterns (consumed per-surface in Phase 3)
+   ============================================================ */
+
+/* Grouped surface card — replaces bare stacked VerticalLayouts. */
+.app-card {
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-l);
+  padding: var(--lumo-space-l);
+}
+
+/* Section heading in the display face. */
+.app-section-title {
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--app-text);
+}
+
+/* Status badges — squared tags with an LED dot (Confirmed / Pending /
+   Refunded, Active / Revoked, etc.). Pair color with the text label so
+   meaning never relies on color alone. */
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.app-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex: none;
+}
+.app-badge--success {
+  color: var(--app-success);
+  background-color: color-mix(in srgb, var(--app-success) 14%, transparent);
+}
+.app-badge--pending {
+  color: var(--app-cyan);
+  background-color: var(--app-cyan-soft);
+}
+.app-badge--danger {
+  color: var(--app-danger);
+  background-color: color-mix(in srgb, var(--app-danger) 14%, transparent);
+}
+.app-badge--neutral {
+  color: var(--app-muted);
+  background-color: var(--app-surface-2);
+}
+

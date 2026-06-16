@@ -141,10 +141,14 @@ Each phase is its own stacked PR (small, reviewable). Functionality unchanged th
 - ⏳ Migrate the 38 inline styles + 14 hardcoded hex + `seat-map.js` colors → tokens (per-surface, in
   Phase 3 as each view is touched).
 
-**Phase 2 — Global shell**
-- `MainLayout`: branded wordmark (spotlight bulb), restyled role-based nav, user-menu chip,
-  notification bell, theme toggle; mobile drawer/hamburger.
-- Roll out semantic button variants, card/section, badge, toast, dialog patterns app-wide.
+**Phase 2 — Global shell** — ✅ core done
+- ✅ `MainLayout`: branded wordmark (cyan→magenta EQ mark + name in Sora), restyled nav, working
+  **light/dark toggle** (persisted to localStorage). Styling via theme classes, no inline styles.
+- ✅ Component patterns: `components/vaadin-button.css` (primary=cyan / secondary / ghost / danger
+  hierarchy), `components/vaadin-grid.css` (uppercase Sora header, hairline rows, cyan hover/selected).
+- ✅ Reusable helper classes in `styles.css`: `.app-card`, `.app-section-title`, `.app-badge--*`.
+- ⏳ Applying primary-variant to the right CTAs, and `.app-card`/`.app-badge` usage, happens
+  per-surface in Phase 3. (Mobile drawer/hamburger + user-menu chip also Phase 3/later.)
 
 **Phase 3 — Per-surface (one PR each)**
 - **3a Auth + Home** — auth 3 stacked forms → **centered card with tab switcher** (login/register/
