@@ -1,0 +1,117 @@
+/* ============================================================
+   Showpass theme — "Waveform / Soundstage"
+   Dark-first, with an optional light mode (html[theme~="dark"]
+   is the default via @Theme(variant = Lumo.DARK); removing the
+   "dark" theme attribute switches to light).
+   Signature (cyan -> magenta waveform / EQ) lives on specific
+   surfaces only; geometry is crisp/engineered, not soft-blob.
+   See docs/ui-overhaul-plan.md.
+   ============================================================ */
+
+html {
+  /* ---- Brand tokens: LIGHT mode defaults ---- */
+  --app-base: #F6F8FC;
+  --app-surface: #FFFFFF;
+  --app-surface-2: #EEF2F8;
+  --app-cyan: #0FB5AC;          /* primary signal */
+  --app-magenta: #D6347E;       /* secondary signal */
+  --app-text: #131722;
+  --app-muted: #5B6472;
+  --app-border: #E2E8F2;
+  --app-success: #1F9D57;
+  --app-danger: #D63B49;
+  --app-cyan-soft: rgba(15, 181, 172, .12);
+  --app-magenta-soft: rgba(214, 52, 126, .12);
+  --app-shadow: 0 6px 16px -12px rgba(19, 23, 34, .22);
+  --app-grad: linear-gradient(90deg, var(--app-cyan), var(--app-magenta));
+}
+
+/* ---- Map Lumo design tokens onto the brand ----
+   Selector list includes html[theme~="dark"] so these win over Lumo's own
+   dark-variant rules (same specificity, loaded later). Values reference
+   --app-* so they still follow the active mode. ---- */
+html,
+html[theme~="dark"] {
+  --lumo-base-color: var(--app-surface);
+  --lumo-body-text-color: var(--app-text);
+  --lumo-secondary-text-color: var(--app-muted);
+  --lumo-primary-color: var(--app-cyan);
+  --lumo-primary-text-color: var(--app-cyan);
+  --lumo-primary-color-50pct: color-mix(in srgb, var(--app-cyan) 50%, transparent);
+  --lumo-primary-color-10pct: var(--app-cyan-soft);
+  --lumo-error-color: var(--app-danger);
+  --lumo-error-text-color: var(--app-danger);
+  --lumo-error-color-10pct: color-mix(in srgb, var(--app-danger) 12%, transparent);
+  --lumo-success-color: var(--app-success);
+  --lumo-success-text-color: var(--app-success);
+  --lumo-success-color-10pct: color-mix(in srgb, var(--app-success) 12%, transparent);
+
+  /* ---- Crisp, engineered geometry (no soft-blob radii) ---- */
+  --lumo-border-radius-s: 3px;
+  --lumo-border-radius-m: 5px;
+  --lumo-border-radius-l: 8px;
+
+  /* ---- Typography: Inter for body/data, Sora for display ---- */
+  --lumo-font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ---- Brand tokens: DARK mode (default) ---- */
+html[theme~="dark"] {
+  --app-base: #101218;
+  --app-surface: #181B24;
+  --app-surface-2: #20242F;
+  --app-cyan: #34E1D6;
+  --app-magenta: #FF5CA8;
+  --app-text: #EAEEF5;
+  --app-muted: #99A0AE;
+  --app-border: rgba(255, 255, 255, .08);
+  --app-success: #46C277;
+  --app-danger: #FF6B7A;
+  --app-cyan-soft: rgba(52, 225, 214, .14);
+  --app-magenta-soft: rgba(255, 92, 168, .14);
+  --app-shadow: 0 6px 18px -10px rgba(0, 0, 0, .6);
+}
+
+/* The page sits on --app-base; component surfaces use --lumo-base-color
+   (= --app-surface) so cards/dialogs read one step lighter than the page. */
+html,
+body {
+  background-color: var(--app-base);
+}
+body {
+  color: var(--app-text);
+}
+
+/* Display face for headings + the brand wordmark. */
+h1, h2, h3, h4, h5, h6,
+.app-wordmark {
+  font-family: "Sora", var(--lumo-font-family);
+  letter-spacing: -0.01em;
+}
+
+/* Prices, dates, seat numbers, IDs — keep columns from shifting. */
+.app-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   FIX-V2-15 (folded in from required-fields.css):
+   render the required-field indicator as a red asterisk
+   (uses --lumo-error-text-color, now the brand danger color).
+   ============================================================ */
+vaadin-text-field[required]::part(required-indicator)::after,
+vaadin-password-field[required]::part(required-indicator)::after,
+vaadin-email-field[required]::part(required-indicator)::after,
+vaadin-text-area[required]::part(required-indicator)::after,
+vaadin-combo-box[required]::part(required-indicator)::after,
+vaadin-date-picker[required]::part(required-indicator)::after,
+vaadin-time-picker[required]::part(required-indicator)::after,
+vaadin-date-time-picker[required]::part(required-indicator)::after,
+vaadin-integer-field[required]::part(required-indicator)::after,
+vaadin-big-decimal-field[required]::part(required-indicator)::after,
+vaadin-number-field[required]::part(required-indicator)::after {
+  content: "*";
+  color: var(--lumo-error-text-color, #e53935);
+  font-size: 1.1em;
+  line-height: 1;
+}
