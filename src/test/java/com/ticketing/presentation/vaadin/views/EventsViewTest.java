@@ -80,7 +80,7 @@ class EventsViewTest {
 
         assertTrue(hasButton(view, "Search events"));
         assertTrue(hasButton(view, "Clear filters"));
-        assertTrue(hasButton(view, "View selected map"));
+        assertTrue(hasButton(view, "Select tickets"));
         assertEquals(2, countComponents(view, TextField.class));
         assertEquals(2, countComponents(view, ComboBox.class));
         assertEquals(2, countComponents(view, BigDecimalField.class));
@@ -129,7 +129,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         assertTrue(hasText(view, "Event map loaded."));
         assertTrue(hasText(view, "Company: Acme"));
@@ -158,7 +158,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         // GA: clicking a GA area opens a quantity popup; confirming adds to the cart.
         Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
@@ -192,7 +192,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
         findIntegerField(gaDialog, "Quantity").setValue(3);
@@ -220,7 +220,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
         findIntegerField(gaDialog, "Quantity").setValue(4);
@@ -244,7 +244,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         // A taken seat isn't a selectable cell, so trying to stage it is a no-op.
         view.toggleSeat(takenSeat);
@@ -265,7 +265,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         assertTrue(hasText(view, "Purchase restrictions"));
         assertTrue(hasText(view, "Available discounts"));
@@ -286,7 +286,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         assertTrue(hasText(view, "Event map not found."));
     }
@@ -428,7 +428,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         assertTrue(containsText(view, "Start a guest or member session to select tickets."));
         // With no session, seat cells aren't wired for selection, so staging is a no-op.
@@ -453,7 +453,7 @@ class EventsViewTest {
 
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
-        clickButton(view, "View selected map");
+        clickButton(view, "Select tickets");
 
         Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
         clickButton(gaDialog, "Add to cart");
@@ -555,7 +555,11 @@ class EventsViewTest {
         if (root instanceof Button button && text.equals(button.getText())) {
             return true;
         }
-        return root.getChildren().anyMatch(child -> hasButton(child, text));
+        boolean found = root.getChildren().anyMatch(child -> hasButton(child, text));
+        if (!found && root instanceof EventsView view && view.activeTicketDialog != null) {
+            found = hasButton(view.activeTicketDialog, text);
+        }
+        return found;
     }
 
     private void clickButton(Component root, String text) {
@@ -568,18 +572,26 @@ class EventsViewTest {
         if (root instanceof Button button && text.equals(button.getText())) {
             return button;
         }
-        return root.getChildren()
+        Button found = root.getChildren()
                 .map(child -> findButton(child, text))
                 .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElse(null);
+        if (found == null && root instanceof EventsView view && view.activeTicketDialog != null) {
+            found = findButton(view.activeTicketDialog, text);
+        }
+        return found;
     }
 
     private boolean hasText(Component root, String text) {
         if (root instanceof HasText hasText && text.equals(hasText.getText())) {
             return true;
         }
-        return root.getChildren().anyMatch(child -> hasText(child, text));
+        boolean found = root.getChildren().anyMatch(child -> hasText(child, text));
+        if (!found && root instanceof EventsView view && view.activeTicketDialog != null) {
+            found = hasText(view.activeTicketDialog, text);
+        }
+        return found;
     }
 
     @Test
@@ -615,7 +627,11 @@ class EventsViewTest {
         if (root instanceof HasText hasText && hasText.getText() != null && hasText.getText().contains(fragment)) {
             return true;
         }
-        return root.getChildren().anyMatch(child -> containsText(child, fragment));
+        boolean found = root.getChildren().anyMatch(child -> containsText(child, fragment));
+        if (!found && root instanceof EventsView view && view.activeTicketDialog != null) {
+            found = containsText(view.activeTicketDialog, fragment);
+        }
+        return found;
     }
 
     private long countComponents(Component root, Class<? extends Component> type) {

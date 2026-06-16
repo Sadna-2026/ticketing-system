@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,7 +35,6 @@ import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
-import com.vaadin.flow.component.details.Details;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -55,6 +53,7 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.shared.Registration;
 import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 
@@ -91,12 +90,14 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             "#00838f", "#c2185b", "#6d4c41", "#1565c0", "#558b2f", "#ad1457", "#455a64"
     };
     private static final String SELECTED_COLOR = "#ffb300";
+    private static final int MAP_POLL_INTERVAL_MS = 2000;
 
     private EventSummaryDTO selectedEvent;
     private UUID directlyAdmittedEventId;
     private UUID pendingEventId;
     private EventMapDTO currentEventMap;
     private Registration mapPollRegistration;
+    Dialog activeTicketDialog; // for testing
 
     // Interactive-map selection state (assigned seats staged before checkout).
     private final Set<UUID> selectedSeatIds = new LinkedHashSet<>();
@@ -275,6 +276,19 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         UiMessages.info("Filters cleared.");
     }
 
+    
+    private void stopMapPolling() {
+        if (mapPollRegistration != null) {
+            mapPollRegistration.remove();
+            mapPollRegistration = null;
+        }
+        getUI().ifPresent(ui -> ui.setPollInterval(-1));
+    }
+
+    private UUID currentEventId() {
+        return directlyAdmittedEventId != null ? directlyAdmittedEventId : (selectedEvent != null ? selectedEvent.id() : null);
+    }
+
     private void loadSelectedEventMap() {
         if (selectedEvent == null) {
             UiMessages.error("Select an event from the results first.");
@@ -295,6 +309,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
         MapResult result = presenter.loadEventMap(eventId);
         currentEventMap = result.success() ? result.eventMap() : null;
+        resultsStatus.setText(result.message());
         if (!result.success()) {
             UiMessages.error(result.message());
             return;
@@ -313,20 +328,22 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         if (result.success()) {
             loadSelectedEventMap();
         }
+        handleReservationResult(result);
     }
 
     private void handleReservationResult(OrderMutationResult result) {
+        resultsStatus.setText(result.message());
         if (!result.success()) {
             UiMessages.error(result.message());
-            return;
+        } else {
+            UiMessages.success(result.message());
         }
-
-        openTicketDialog(eventId, result.eventMap());
     }
 
     private void loadEventById(UUID eventId) {
         directlyAdmittedEventId = eventId;
         MapResult result = presenter.loadEventMap(eventId);
+        resultsStatus.setText(result.message());
         if (!result.success()) {
             UiMessages.error(result.message());
             return;
@@ -338,6 +355,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     private void openTicketDialog(UUID eventId, EventMapDTO eventMap) {
         Dialog dialog = new Dialog();
+        activeTicketDialog = dialog;
         dialog.setHeaderTitle(eventMap.eventName() + " — Ticket Selection");
         dialog.setWidth("min(900px, 90vw)");
         dialog.setMaxHeight("85vh");
@@ -612,13 +630,19 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             }
         }
         boolean allOk = true;
+        OrderMutationResult lastResult = null;
         for (Map.Entry<UUID, List<UUID>> entry : byZone.entrySet()) {
-            OrderMutationResult result = ordersPresenter.addAssignedSeats(eventId, entry.getKey(), entry.getValue());
-            handleReservationResult(result);
-            allOk = allOk && result.success();
+            lastResult = ordersPresenter.addAssignedSeats(eventId, entry.getKey(), entry.getValue());
+            allOk = allOk && lastResult.success();
+            if (!lastResult.success()) {
+                handleReservationResult(lastResult);
+            }
         }
         if (allOk) {
-            loadSelectedEventMap(false);
+            loadSelectedEventMap();
+            if (lastResult != null) {
+                handleReservationResult(lastResult);
+            }
         }
     }
 
@@ -629,6 +653,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     /** Builds the GA quantity popup. Package-private so view-layer tests can drive it. */
     Dialog buildGaQuantityDialog(EventMapDTO.ZoneInfo zone) {
         Dialog dialog = new Dialog();
+        activeTicketDialog = dialog;
         dialog.setHeaderTitle("Add tickets — " + zone.name());
         IntegerField quantity = new IntegerField("Quantity");
         quantity.setMin(1);
