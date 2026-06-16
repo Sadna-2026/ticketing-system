@@ -226,6 +226,7 @@ class NotificationsViewTest {
 
         NotificationsView view = new NotificationsView(presenter);
         clickButton(view, "Reject");
+        com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport.confirm();
 
         verify(presenter).respondToRoleOffer(offerId, false);
     }
