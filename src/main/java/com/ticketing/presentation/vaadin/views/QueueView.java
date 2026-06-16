@@ -63,6 +63,7 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
     private final Span waitingStatus = new Span();
     private final Span entryDetails = new Span();
     private final Button refreshButton = new Button("Refresh status");
+    private final Button leaveQueueButton = new Button("Leave queue", e -> confirmLeaveQueue());
 
     private UUID activeEventId;
     private Registration pollRegistration;
@@ -107,8 +108,22 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
         if (!inWaitingRoom) {
             return;
         }
-        // Warn the user that navigating away will lose their queue place
+        // Use JS window.confirm — Vaadin Dialog + postpone() causes the router to get
+        // stuck after the user dismisses, making subsequent navigation impossible.
         BeforeLeaveEvent.ContinueNavigationAction action = event.postpone();
+        getUI().ifPresent(ui -> ui.getPage()
+                .executeJs("return window.confirm($0)",
+                        "Leave the virtual queue? You will lose your place in the queue.")
+                .then(Boolean.class, confirmed -> {
+                    if (Boolean.TRUE.equals(confirmed)) {
+                        stopPolling();
+                        inWaitingRoom = false;
+                        action.proceed();
+                    }
+                }));
+    }
+
+    private void confirmLeaveQueue() {
         Dialog confirm = new Dialog();
         confirm.setHeaderTitle("Leave the queue?");
         Paragraph text = new Paragraph(
@@ -117,12 +132,11 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
             stopPolling();
             inWaitingRoom = false;
             confirm.close();
-            action.proceed();
+            UI.getCurrent().navigate(EventsView.class);
         });
         Button stay = new Button("Stay in queue", e -> confirm.close());
         leave.getStyle().set("color", "var(--lumo-error-color)");
-        HorizontalLayout buttons = new HorizontalLayout(stay, leave);
-        confirm.add(text, buttons);
+        confirm.add(text, new HorizontalLayout(stay, leave));
         confirm.open();
     }
 
@@ -199,6 +213,8 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
         waitingStatus.getStyle().set("white-space", "pre-line");
         entryDetails.getStyle().set("color", "var(--lumo-secondary-text-color)").set("font-size", "var(--lumo-font-size-s)");
 
+        leaveQueueButton.getStyle().set("color", "var(--lumo-error-color)");
+
         waitingRoom.add(
                 waitingHeader,
                 leaveWarning,
@@ -206,7 +222,7 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
                 progressBar,
                 waitingStatus,
                 entryDetails,
-                refreshButton);
+                new HorizontalLayout(refreshButton, leaveQueueButton));
     }
 
     /** Called when we know the eventId and want to skip straight to the waiting room (from BeforeEnter redirect). */

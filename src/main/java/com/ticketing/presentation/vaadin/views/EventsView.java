@@ -270,18 +270,17 @@ public class EventsView extends VerticalLayout {
     private void loadSelectedEventMap(boolean notify) {
         UUID eventId = selectedEvent == null ? null : selectedEvent.id();
 
-        // Release the previous queue slot before checking the gate for the new event
-        releaseQueueSlot();
-
-        // Queue gate: if the event has an active queue and this session should wait, redirect
-        if (eventId != null) {
+        // Only run the queue gate when switching to a different event.
+        // Refreshing the same event (e.g. after adding tickets) skips the gate so we never
+        // accidentally redirect mid-session or trigger spurious userLeft/userEntered calls.
+        if (eventId != null && !eventId.equals(directlyAdmittedEventId)) {
+            releaseQueueSlot();
             QueueResult gate = queuePresenter.enterQueueGate(eventId);
             if (gate.queued()) {
                 UiMessages.info("This event is under high load — redirecting you to the virtual queue.");
                 getUI().ifPresent(ui -> ui.navigate("queue?eventId=" + eventId));
                 return;
             }
-            // Admitted directly — track so we can notify the queue when the user leaves
             directlyAdmittedEventId = eventId;
         }
 
