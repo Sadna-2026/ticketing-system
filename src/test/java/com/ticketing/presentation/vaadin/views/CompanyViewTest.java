@@ -759,7 +759,7 @@ class CompanyViewTest {
 
         selectTab(view, "Events");
         assertFalse(hasVisibleButton(view, "Edit event"));
-        assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE permission for Acme."));
+        assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE, MAP_DEFINITION permissions for Acme."));
 
         selectTab(view, "Inventory");
         assertFalse(hasVisibleButton(view, "Add seat"));
@@ -791,6 +791,7 @@ class CompanyViewTest {
         selectTab(view, "Events");
         assertTrue(hasVisibleButton(view, "Create event"));
         assertTrue(hasVisibleButton(view, "Edit event"));
+        assertTrue(hasVisibleButton(view, "Edit venue layout"));
 
         selectTab(view, "Inventory");
         assertTrue(hasVisibleButton(view, "Add seat"));
@@ -803,6 +804,25 @@ class CompanyViewTest {
         selectTab(view, "Reports");
         assertFalse(hasVisibleButton(view, "Load sales report"));
         assertTrue(hasText(view, "User \"alice\" doesn't have VIEW_REPORTS permission for Acme."));
+    }
+
+    @Test
+    void GivenManagerWithMapDefinitionOnly_WhenCompanySelected_ThenEditVenueLayoutIsReachable() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadCompanyAccess("Acme"))
+                .thenReturn(CompanyAccessResult.manager("Acme", Set.of(ManagerPermission.MAP_DEFINITION)));
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.denied("Only the founder can perform this lifecycle action."));
+
+        CompanyView view = new CompanyView(presenter);
+
+        findCompanyCombo(view, "Selected company").setValue(company("Acme"));
+        
+        selectTab(view, "Events");
+        assertTrue(hasVisibleButton(view, "Edit venue layout"));
+        assertFalse(hasVisibleButton(view, "Create event"));
+        assertFalse(hasVisibleButton(view, "Edit event"));
+        assertFalse(hasText(view, "doesn't have EVENT_LIFECYCLE, MAP_DEFINITION permissions"));
     }
 
 
