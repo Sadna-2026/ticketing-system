@@ -98,6 +98,7 @@ public class EventsView extends VerticalLayout {
         setSpacing(true);
         setMaxWidth("1100px");
         getStyle().set("margin", "0 auto");
+        addClassName("app-events");
 
         configureFields();
         configureResultsGrid();

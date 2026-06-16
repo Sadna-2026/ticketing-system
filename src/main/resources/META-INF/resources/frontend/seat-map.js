@@ -13,6 +13,8 @@ class SeatMap extends LitElement {
     return {
       seats: { type: Array },
       _focus: { state: true },
+      _zoom: { state: true },
+      _maxw: { state: true },
       disabled: { type: Boolean },
     };
   }
@@ -21,8 +23,56 @@ class SeatMap extends LitElement {
     return css`
       :host {
         display: block;
+        position: relative;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+      /* The wide seat grid scrolls inside this viewport (both axes), never
+         the whole page. */
+      .viewport {
         overflow: auto;
         max-width: 100%;
+        max-height: 70vh;
+      }
+      /* Compact, non-disruptive zoom control floating on the side; stays put
+         while the map scrolls. */
+      .zoombar {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        width: fit-content;
+        padding: 2px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--app-surface, #181b24) 86%, transparent);
+        border: 1px solid var(--app-border, rgba(255, 255, 255, 0.08));
+        backdrop-filter: blur(4px);
+      }
+      .zoombar button {
+        height: 24px;
+        min-width: 24px;
+        padding: 0 4px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--app-text, #eaeef5);
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+      }
+      .zoombar button.zlabel {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        color: var(--app-muted, #99a0ae);
+        min-width: 3.4em;
+      }
+      .zoombar button:hover {
+        background: var(--app-surface-2, #20242f);
+        color: var(--app-cyan, #34e1d6);
       }
       .legend {
         display: flex;
@@ -107,7 +157,56 @@ class SeatMap extends LitElement {
     super();
     this.seats = [];
     this._focus = 0;
+    this._zoom = 1;
+    this._maxw = 0;
     this.disabled = false;
+  }
+
+  /** Fit the map to the available width once it's first laid out, and wire
+   *  pinch / Ctrl+wheel / keyboard zoom shortcuts. */
+  firstUpdated() {
+    this._zoomFit();
+    this.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
+    this.addEventListener('keydown', (e) => this._onZoomKey(e));
+  }
+
+  _onWheel(e) {
+    // Trackpad pinch and Ctrl/Cmd + wheel zoom the map itself, not the page.
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      this._zoom = Math.max(0.25, Math.min(2.5, (this._zoom || 1) * factor));
+    }
+  }
+
+  _onZoomKey(e) {
+    if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      this._zoomIn();
+    } else if (e.key === '-' || e.key === '_') {
+      e.preventDefault();
+      this._zoomOut();
+    } else if (e.key === '0') {
+      e.preventDefault();
+      this._zoomFit();
+    }
+  }
+
+  _zoomFit() {
+    // Bound the scroll viewport to the actually-visible width (the Vaadin flex
+    // ancestors don't constrain it), then fit the map into that width.
+    const rect = this.getBoundingClientRect();
+    const avail = Math.max(240, (window.innerWidth || 1000) - rect.left - 24);
+    this._maxw = avail;
+    this._zoom = this._w ? Math.max(0.25, Math.min(1, avail / this._w)) : 1;
+  }
+
+  _zoomIn() {
+    this._zoom = Math.min(2.5, (this._zoom || 1) * 1.25);
+  }
+
+  _zoomOut() {
+    this._zoom = Math.max(0.25, (this._zoom || 1) / 1.25);
   }
 
   _layout() {
@@ -338,16 +437,25 @@ class SeatMap extends LitElement {
     const width = LABEL_W + maxSeats * (SEAT + GAP) + PAD;
     const height = rows.length * ROW_H + PAD * 2;
     const focusIdx = Math.min(this._focus, total - 1);
+    this._w = width;
+    this._h = height;
+    const zoom = this._zoom || 1;
 
     return html`
+      <div class="zoombar" role="group" aria-label="Zoom controls">
+        <button @click="${() => this._zoomOut()}" title="Zoom out (−)" aria-label="Zoom out">&minus;</button>
+        <button class="zlabel" @click="${() => this._zoomFit()}" title="Fit to width (press 0)">${Math.round(zoom * 100)}%</button>
+        <button @click="${() => this._zoomIn()}" title="Zoom in (+)" aria-label="Zoom in">+</button>
+      </div>
       <div class="legend">
         <span class="free">Available</span>
         <span class="selected">Your selection</span>
         <span class="taken">Taken</span>
       </div>
+      <div class="viewport" style="max-width:${this._maxw ? this._maxw + 'px' : '100%'}">
       <svg
-        width="${width}"
-        height="${height}"
+        width="${width * zoom}"
+        height="${height * zoom}"
         viewBox="0 0 ${width} ${height}"
         role="grid"
         aria-label="Seat map"
@@ -424,6 +532,7 @@ class SeatMap extends LitElement {
           `;
         })}
       </svg>
+      </div>
     `;
   }
 }

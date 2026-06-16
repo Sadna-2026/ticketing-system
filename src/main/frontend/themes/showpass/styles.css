@@ -511,3 +511,11 @@ vaadin-text-area::part(input-field) {
    EventsView.colorFor) so the *configured* stage reads as the signature —
    there is no fabricated/standalone stage bar. */
 
+/* Wide content (the seat map) must not stretch the page: let the flex layout
+   shrink past its content so the seat map's own viewport scrolls instead. */
+.app-events vaadin-vertical-layout,
+.app-events vaadin-details,
+.app-events vaadin-details::part(content) {
+  min-width: 0;
+}
+
