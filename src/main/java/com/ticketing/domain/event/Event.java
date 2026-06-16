@@ -230,6 +230,17 @@ public class Event{
         zones.add(zone);
     }
 
+    /**
+     * Clears all zones, the venue map, and the visual layout so a DRAFT event's hall can be
+     * redefined from scratch. DRAFT-only (orphanRemoval deletes the old zones/seats on save).
+     */
+    public void resetVenue() {
+        validateModifiable();
+        zones.clear();
+        venueMap = null;
+        venueLayout = null;
+    }
+
     // Two distinct guards by design:
     //   validateModifiable() — DRAFT-only — gates STRUCTURAL changes (zones, venue map)
     //   rejectIfCancelled()  — not-CANCELLED — gates EDITORIAL changes (name, schedule, etc.)

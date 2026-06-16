@@ -3,6 +3,7 @@ package com.ticketing.presentation.vaadin.views;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -79,9 +80,9 @@ class VenueDesignerDialogTest {
     @Test
     void GivenSeatingZonePaintedAndStartSet_WhenSaveDraft_ThenShowsSuccessMessage() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
-        when(presenter.createEventWithZones(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(presenter.defineVenue(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                anyInt(), anyInt(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
-        when(presenter.setEventLayout(any(), any())).thenReturn(new ActionResult(true, "Layout saved."));
 
         try (var uiMessagesMock = mockStatic(UiMessages.class)) {
             VenueDesignerDialog dialog = new VenueDesignerDialog(presenter, COMPANY);
@@ -97,9 +98,9 @@ class VenueDesignerDialogTest {
     @Test
     void GivenMultipleZones_WhenPaintedAndSaved_ThenAllZonesIncludedInCreateCall() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
-        when(presenter.createEventWithZones(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(presenter.defineVenue(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                anyInt(), anyInt(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
-        when(presenter.setEventLayout(any(), any())).thenReturn(new ActionResult(true, "Layout saved."));
 
         try (var uiMessagesMock = mockStatic(UiMessages.class)) {
             VenueDesignerDialog dialog = new VenueDesignerDialog(presenter, COMPANY);
@@ -114,12 +115,12 @@ class VenueDesignerDialogTest {
 
             clickButton(dialog, "Save draft");
 
-            verify(presenter).createEventWithZones(
-                    any(), any(), any(), any(), any(), any(), any(), any(),
+            verify(presenter).defineVenue(
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt(),
                     argThat(zones -> zones.size() == 2
                             && zones.stream().anyMatch(z -> z instanceof CreateEventRequest.AssignedZoneSpec a && "Orchestra".equals(a.name()))
                             && zones.stream().anyMatch(z -> z instanceof CreateEventRequest.GAZoneSpec g && "Floor".equals(g.name()))),
-                    any());
+                    any(), any());
         }
     }
 
@@ -138,9 +139,9 @@ class VenueDesignerDialogTest {
     @Test
     void GivenSavedDraft_WhenValidateFailsThenPublishSucceeds_ThenEachOutcomeIsSurfaced() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
-        when(presenter.createEventWithZones(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(presenter.defineVenue(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                anyInt(), anyInt(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
-        when(presenter.setEventLayout(any(), any())).thenReturn(new ActionResult(true, "Layout saved."));
         when(presenter.validateEventLayout(any()))
                 .thenReturn(new ActionResult(false, "Layout invalid: a seat overlaps the stage."));
         when(presenter.publishEvent(any())).thenReturn(new ActionResult(true, "Event published."));

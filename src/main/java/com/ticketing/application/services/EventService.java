@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.CreateEventRequest;
+import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.application.EditEventRequest;
 import com.ticketing.application.ISystemClock;
 import com.ticketing.application.SearchEventsRequest;
@@ -40,6 +41,7 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.MaxCompositeDiscount;
 import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.event.VenueLayout;
@@ -203,6 +205,101 @@ public class EventService {
         log.info("Event created: eventId={}, companyName={}, status=DRAFT",
                 event.getId(), company.getName());
         return event.getId();
+    }
+
+    /**
+     * Creates or rebuilds a DRAFT event's hall from a single painted grid. Zones, seats, the
+     * venue map, and the visual layout are all derived together so the buyable inventory and
+     * the on-screen map stay in lockstep. DRAFT-only for the rebuild path.
+     */
+    @Transactional
+    public UUID defineVenue(String token, DefineVenueRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+        UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
+
+        Event event;
+        if (request.isCreate()) {
+            Company company = loadActiveCompany(request.companyName());
+            StaffAppointment appointment = loadAppointment(memberId, company.getName());
+            authorizeEventCreation(appointment);
+            event = new Event(
+                    UUID.randomUUID(), company.getName(), request.name(), request.description(),
+                    request.category(), request.schedule(), request.lockTimerDuration(),
+                    company.getPurchasePolicy(), company.getDiscountPolicy(),
+                    SaleMethod.REGULAR, null);
+        } else {
+            event = eventRepository.findById(request.eventId())
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
+            Company company = loadActiveCompany(event.getCompanyName());
+            StaffAppointment appointment = loadAppointment(memberId, company.getName());
+            authorizeEventCreation(appointment);
+            event.resetVenue();
+            if (request.name() != null) {
+                event.setName(request.name());
+            }
+            if (request.description() != null) {
+                event.setDescription(request.description());
+            }
+            if (request.schedule() != null) {
+                event.setSchedule(request.schedule());
+            }
+        }
+
+        // 1) Zones + seats, tracking the generated ids so the layout can reference them.
+        Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
+        Map<String, Map<String, UUID>> seatIdsByZone = new HashMap<>();
+        for (CreateEventRequest.ZoneSpec spec : request.zones()) {
+            InventoryZone zone = buildZone(spec);
+            if (zoneIdsByName.put(spec.name(), zone.getId()) != null) {
+                throw new IllegalArgumentException("Duplicate zone name: " + spec.name());
+            }
+            if (zone.isAssigned()) {
+                Map<String, UUID> byKey = new HashMap<>();
+                for (Seat seat : zone.getSeats()) {
+                    byKey.put(seatKey(seat.getRow(), seat.getSeatNumber()), seat.getId());
+                }
+                seatIdsByZone.put(spec.name(), byKey);
+            }
+            event.addZone(zone);
+        }
+
+        // 2) Section → zone venue map.
+        event.setVenueMap(buildVenueMap(request.sectionToZoneName(), zoneIdsByName));
+
+        // 3) Visual layout, linked cell-by-cell to the inventory built above.
+        List<LayoutCell> cells = new ArrayList<>();
+        for (DefineVenueRequest.CellSpec c : request.cells()) {
+            switch (c.type()) {
+                case SEAT -> {
+                    UUID zoneId = zoneIdsByName.get(c.zoneName());
+                    UUID seatId = seatIdsByZone.getOrDefault(c.zoneName(), Map.of())
+                            .get(seatKey(c.seatRow(), c.seatNumber()));
+                    cells.add(LayoutCell.seat(c.row(), c.col(), zoneId, seatId));
+                }
+                case GENERAL_ADMISSION ->
+                        cells.add(LayoutCell.ga(c.row(), c.col(), zoneIdsByName.get(c.zoneName()), c.label()));
+                case BLOCKED -> cells.add(LayoutCell.blocked(c.row(), c.col()));
+                case STAGE -> cells.add(LayoutCell.stage(c.row(), c.col(), c.label()));
+                case OBJECT -> cells.add(LayoutCell.object(c.row(), c.col(), c.label()));
+            }
+        }
+        if (!cells.isEmpty()) {
+            VenueLayout layout = new VenueLayout(request.rows(), request.cols(), cells);
+            validateLayoutReferences(event, layout);
+            event.setVenueLayout(layout);
+        }
+
+        saveEvent(event);
+        log.info("Venue defined: eventId={}, zones={}, cells={}",
+                event.getId(), zoneIdsByName.size(), cells.size());
+        return event.getId();
+    }
+
+    private static String seatKey(String row, String seatNumber) {
+        return row + " " + seatNumber;
     }
 
     @Transactional

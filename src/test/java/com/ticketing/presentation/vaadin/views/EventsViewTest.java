@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,8 +35,8 @@ import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
+import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
-import com.ticketing.presentation.vaadin.components.SeatMapComponent;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
@@ -49,14 +50,12 @@ import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.Query;
-
-import elemental.json.JsonArray;
-import elemental.json.JsonObject;
 
 @DisplayName("EventsView")
 @ExtendWith(VaadinSessionExtension.class)
@@ -132,14 +131,10 @@ class EventsViewTest {
 
         assertTrue(hasText(view, "Event map loaded."));
         assertTrue(hasText(view, "Company: Acme"));
-        assertTrue(hasText(view, "Available: 10"));
-
-        // The assigned-seating zone renders as a single client-side seat map fed a
-        // compact payload, with availability reflected per seat (no per-seat component).
-        JsonArray seats = seatMapPayload(view);
-        assertEquals(2, seats.length());
-        assertFalse(seatEntry(seats, "A", "1").getBoolean("taken"));
-        assertTrue(seatEntry(seats, "A", "2").getBoolean("taken"));
+        assertTrue(hasText(view, "Choose your tickets"));
+        // Legend reflects live availability per zone.
+        assertTrue(containsText(view, "avail 10/100"));
+        assertTrue(containsText(view, "1 free"));
     }
 
     @Test
@@ -162,11 +157,15 @@ class EventsViewTest {
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
-        clickButton(view, "Add GA tickets");
+
+        // GA: clicking a GA area opens a quantity popup; confirming adds to the cart.
+        Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
+        clickButton(gaDialog, "Add to cart");
         assertTrue(hasText(view, "GA tickets added."));
 
-        SeatMapComponent map = findSeatMap(view);
-        map.onCommitSelection(new String[] { seatId.toString() });
+        // Seats: select on the map, then add the staged selection.
+        view.toggleSeat(seatId);
+        view.addSelectedSeats();
 
         assertTrue(hasText(view, "Assigned seat added."));
         verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 1);
@@ -193,8 +192,9 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
 
-        findIntegerField(view, "Quantity").setValue(3);
-        clickButton(view, "Add GA tickets");
+        Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
+        findIntegerField(gaDialog, "Quantity").setValue(3);
+        clickButton(gaDialog, "Add to cart");
 
         assertTrue(hasText(view, "3 GA tickets added."));
         verify(ordersPresenter).addGATickets(event.id(), gaZoneId, 3);
@@ -220,19 +220,22 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
 
-        findIntegerField(view, "Quantity").setValue(4);
-        clickButton(view, "Add GA tickets");
+        Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
+        findIntegerField(gaDialog, "Quantity").setValue(4);
+        clickButton(gaDialog, "Add to cart");
 
         assertTrue(hasText(view, "Cannot purchase more than 3 tickets"));
     }
 
     @Test
-    @DisplayName("Assigned-seating zone feeds the client seat map an ordered payload with free/taken status")
-    void GivenAssignedZone_WhenMapRendered_ThenSeatPayloadIsOrderedWithFreeTakenStatus() {
+    @DisplayName("Taken seats on the map cannot be added to the cart; free seats can")
+    void GivenAssignedZone_WhenSeatTaken_ThenItIsNotSelectable() {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
         EventSummaryDTO event = eventSummary("Spring Concert");
         EventMapDTO loadedMap = seatMapEventMap(event.id());
+        UUID takenSeat = loadedMap.zones().get(0).seats().stream()
+                .filter(seat -> !seat.available()).findFirst().orElseThrow().id();
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
         when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", loadedMap));
         EventsView view = new EventsView(presenter, ordersPresenter);
@@ -241,15 +244,11 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
 
-        // The assigned zone renders as a single <seat-map> element (no per-seat component).
-        JsonArray seats = seatMapPayload(view);
+        // A taken seat isn't a selectable cell, so trying to stage it is a no-op.
+        view.toggleSeat(takenSeat);
+        view.addSelectedSeats();
 
-        // The payload is ordered by row label, then by seat number numerically (not lexicographically).
-        assertEquals(List.of("A-1", "A-2", "A-10", "B-1"), seatLabels(seats));
-
-        // Live availability is reflected per seat: A-10 is taken, A-1 is free.
-        assertFalse(seatEntry(seats, "A", "1").getBoolean("taken"));
-        assertTrue(seatEntry(seats, "A", "10").getBoolean("taken"));
+        verify(ordersPresenter, never()).addAssignedSeats(any(), any(), any());
     }
 
     @Test
@@ -429,11 +428,12 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
 
-        Button addGa = findButton(view, "Add GA tickets");
-        assertFalse(addGa.isEnabled(), "GA button should be disabled with no session");
-
-        SeatMapComponent map = findSeatMap(view);
-        assertFalse(map.isEnabled(), "Seat map should be disabled with no session");
+        assertTrue(containsText(view, "Start a guest or member session to select tickets."));
+        // With no session, seat cells aren't wired for selection, so staging is a no-op.
+        UUID seatId = loadedMap.zones().get(1).seats().get(0).id();
+        view.toggleSeat(seatId);
+        view.addSelectedSeats();
+        verify(ordersPresenter, never()).addAssignedSeats(any(), any(), any());
     }
 
     @Test
@@ -452,7 +452,9 @@ class EventsViewTest {
         clickButton(view, "Search events");
         findGrid(view).asSingleSelect().setValue(event);
         clickButton(view, "View selected map");
-        clickButton(view, "Add GA tickets");
+
+        Dialog gaDialog = view.buildGaQuantityDialog(loadedMap.zones().get(0));
+        clickButton(gaDialog, "Add to cart");
 
         assertTrue(hasText(view, "Not enough tickets available."));
     }
@@ -601,44 +603,11 @@ class EventsViewTest {
                 .or(() -> Optional.empty());
     }
 
-    private SeatMapComponent findSeatMap(Component root) {
-        SeatMapComponent map = findSeatMapOrNull(root);
-        assertNotNull(map, "SeatMapComponent not found");
-        return map;
-    }
-
-    private SeatMapComponent findSeatMapOrNull(Component root) {
-        if (root instanceof SeatMapComponent map) {
-            return map;
+    private boolean containsText(Component root, String fragment) {
+        if (root instanceof HasText hasText && hasText.getText() != null && hasText.getText().contains(fragment)) {
+            return true;
         }
-        return root.getChildren()
-                .map(this::findSeatMapOrNull)
-                .filter(java.util.Objects::nonNull)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private JsonArray seatMapPayload(Component root) {
-        return (JsonArray) findSeatMap(root).getElement().getPropertyRaw("seats");
-    }
-
-    private List<String> seatLabels(JsonArray seats) {
-        List<String> labels = new java.util.ArrayList<>();
-        for (int i = 0; i < seats.length(); i++) {
-            JsonObject seat = seats.getObject(i);
-            labels.add(seat.getString("row") + "-" + seat.getString("num"));
-        }
-        return labels;
-    }
-
-    private JsonObject seatEntry(JsonArray seats, String row, String num) {
-        for (int i = 0; i < seats.length(); i++) {
-            JsonObject seat = seats.getObject(i);
-            if (row.equals(seat.getString("row")) && num.equals(seat.getString("num"))) {
-                return seat;
-            }
-        }
-        throw new AssertionError("Seat not found in payload: " + row + "-" + num);
+        return root.getChildren().anyMatch(child -> containsText(child, fragment));
     }
 
     private long countComponents(Component root, Class<? extends Component> type) {
@@ -685,6 +654,12 @@ class EventsViewTest {
     private static EventMapDTO sampleEventMap(UUID eventId) {
         UUID floorId = UUID.randomUUID();
         UUID balconyId = UUID.randomUUID();
+        EventMapDTO.SeatInfo a1 = new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "1", true);
+        EventMapDTO.SeatInfo a2 = new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "2", false);
+        EventMapDTO.LayoutInfo layout = new EventMapDTO.LayoutInfo(1, 3, List.of(
+                new EventMapDTO.CellInfo(0, 0, LayoutCellType.GENERAL_ADMISSION, "Floor", floorId, null),
+                new EventMapDTO.CellInfo(0, 1, LayoutCellType.SEAT, null, balconyId, a1.id()),
+                new EventMapDTO.CellInfo(0, 2, LayoutCellType.SEAT, null, balconyId, a2.id())));
         return new EventMapDTO(
                 eventId,
                 "Spring Concert",
@@ -693,30 +668,12 @@ class EventsViewTest {
                 Map.of("Floor", floorId, "Balcony", balconyId),
                 List.of(
                         new EventMapDTO.ZoneInfo(
-                                floorId,
-                                "Floor",
-                                ZoneType.GENERAL_ADMISSION,
-                                new BigDecimal("45.00"),
-                                100,
-                                10,
-                                90,
-                                List.of()
-                        ),
+                                floorId, "Floor", ZoneType.GENERAL_ADMISSION,
+                                new BigDecimal("45.00"), 100, 10, 90, List.of()),
                         new EventMapDTO.ZoneInfo(
-                                balconyId,
-                                "Balcony",
-                                ZoneType.ASSIGNED_SEATING,
-                                new BigDecimal("95.00"),
-                                null,
-                                null,
-                                null,
-                                List.of(
-                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "1", true),
-                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "2", false)
-                                )
-                        )
-                )
-        );
+                                balconyId, "Balcony", ZoneType.ASSIGNED_SEATING,
+                                new BigDecimal("95.00"), null, null, null, List.of(a1, a2))),
+                layout);
     }
 
     // Assigned zone with seats supplied out of order (across rows and seat numbers)
@@ -724,6 +681,15 @@ class EventsViewTest {
     // numerically. A-10 is taken to exercise free/taken status alongside ordering.
     private static EventMapDTO seatMapEventMap(UUID eventId) {
         UUID balconyId = UUID.randomUUID();
+        EventMapDTO.SeatInfo a10 = new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "10", false);
+        EventMapDTO.SeatInfo b1 = new EventMapDTO.SeatInfo(UUID.randomUUID(), "B", "1", true);
+        EventMapDTO.SeatInfo a1 = new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "1", true);
+        EventMapDTO.SeatInfo a2 = new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "2", true);
+        EventMapDTO.LayoutInfo layout = new EventMapDTO.LayoutInfo(1, 4, List.of(
+                new EventMapDTO.CellInfo(0, 0, LayoutCellType.SEAT, null, balconyId, a10.id()),
+                new EventMapDTO.CellInfo(0, 1, LayoutCellType.SEAT, null, balconyId, b1.id()),
+                new EventMapDTO.CellInfo(0, 2, LayoutCellType.SEAT, null, balconyId, a1.id()),
+                new EventMapDTO.CellInfo(0, 3, LayoutCellType.SEAT, null, balconyId, a2.id())));
         return new EventMapDTO(
                 eventId,
                 "Spring Concert",
@@ -732,21 +698,9 @@ class EventsViewTest {
                 Map.of("Balcony", balconyId),
                 List.of(
                         new EventMapDTO.ZoneInfo(
-                                balconyId,
-                                "Balcony",
-                                ZoneType.ASSIGNED_SEATING,
-                                new BigDecimal("95.00"),
-                                null,
-                                null,
-                                null,
-                                List.of(
-                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "10", false),
-                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "B", "1", true),
-                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "1", true),
-                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "2", true)
-                                )
-                        )
-                )
-        );
+                                balconyId, "Balcony", ZoneType.ASSIGNED_SEATING,
+                                new BigDecimal("95.00"), null, null, null,
+                                List.of(a10, b1, a1, a2))),
+                layout);
     }
 }
