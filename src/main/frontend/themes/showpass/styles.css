@@ -428,7 +428,7 @@ vaadin-app-layout::part(navbar) {
   @keyframes app-wave {
     0%,
     100% {
-      transform: scaleY(0.5);
+      transform: scaleY(var(--lo, 0.5));
     }
     50% {
       transform: scaleY(1);
@@ -437,7 +437,10 @@ vaadin-app-layout::part(navbar) {
   .app-hero-wave rect {
     transform-box: fill-box;
     transform-origin: center bottom;
-    animation: app-wave 1.6s ease-in-out infinite;
+    animation-name: app-wave;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    /* duration + delay set per-bar inline for a natural, non-uniform shimmer */
   }
 }
 

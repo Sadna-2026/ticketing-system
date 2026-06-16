@@ -64,11 +64,11 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver {
     /** Decorative animated waveform behind the hero — the brand's signature opener.
      *  CSS-animated (scaleY pulse), gated on prefers-reduced-motion in the theme. */
     private Html heroWave() {
-        int n = 48;
+        int n = 90;
         int w = 1200;
         int h = 120;
         double step = (double) w / n;
-        double barW = step * 0.5;
+        double barW = step * 0.52;
         StringBuilder sb = new StringBuilder();
         sb.append("<span class='app-hero-wave' aria-hidden='true'>");
         sb.append("<svg viewBox='0 0 ").append(w).append(' ').append(h)
@@ -77,17 +77,35 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver {
                 .append("<stop offset='0' stop-color='var(--app-cyan)'/>")
                 .append("<stop offset='1' stop-color='var(--app-magenta)'/></linearGradient></defs>");
         for (int i = 0; i < n; i++) {
-            double frac = (double) i / n;
-            double base = 0.30 + 0.70 * Math.abs(Math.sin(frac * Math.PI * 3));
+            // Jagged, audio-like silhouette: layered sines including a high-frequency
+            // term so neighbouring bars differ (not a few smooth humps).
+            double v = Math.sin(i * 0.9) * 0.5
+                    + Math.sin(i * 2.3 + 1.7) * 0.3
+                    + Math.sin(i * 5.1 + 0.4) * 0.2;
+            double base = 0.12 + 0.88 * ((v + 1.0) / 2.0);
             double bh = base * h;
             double x = i * step;
             double y = h - bh;
+            // Per-bar pseudo-random timing so bars shimmer independently, like a
+            // spectrum analyser, rather than pulsing in unison.
+            double r1 = pseudo(i * 12.9898);
+            double r2 = pseudo(i * 78.233 + 3.1);
+            double dur = 0.9 + r1 * 1.5; // 0.9..2.4s
+            double delay = r2 * 1.8; // 0..1.8s
+            double lo = 0.28 + r1 * 0.5; // per-bar trough 0.28..0.78
             sb.append(String.format(java.util.Locale.US,
-                    "<rect x='%.2f' y='%.2f' width='%.2f' height='%.2f' rx='%.2f' fill='url(#hw)' style='animation-delay:%.2fs'/>",
-                    x, y, barW, bh, barW / 2, i * 0.045));
+                    "<rect x='%.2f' y='%.2f' width='%.2f' height='%.2f' rx='%.2f' fill='url(#hw)'"
+                            + " style='--lo:%.2f;animation-duration:%.2fs;animation-delay:%.2fs'/>",
+                    x, y, barW, bh, barW / 2, lo, dur, delay));
         }
         sb.append("</svg></span>");
         return new Html(sb.toString());
+    }
+
+    /** Deterministic pseudo-random in [0,1) so the waveform is stable per render. */
+    private static double pseudo(double seed) {
+        double s = Math.sin(seed) * 43758.5453;
+        return s - Math.floor(s);
     }
 
     private Div quickActions() {
