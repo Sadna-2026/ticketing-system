@@ -4,10 +4,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.ticketing.application.dto.ActiveOrderDto;
@@ -19,7 +22,6 @@ import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.components.PolicyBadgesPanel;
-import com.ticketing.presentation.vaadin.components.SeatMapComponent;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
@@ -84,9 +86,25 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     private final Grid<EventSummaryDTO> resultsGrid = new Grid<>(EventSummaryDTO.class, false);
     private final Button viewMap = new Button("Select tickets");
 
+    private static final String[] ZONE_COLORS = {
+            "#1976d2", "#2e7d32", "#d32f2f", "#f57c00", "#7b1fa2",
+            "#00838f", "#c2185b", "#6d4c41", "#1565c0", "#558b2f", "#ad1457", "#455a64"
+    };
+    private static final String SELECTED_COLOR = "#ffb300";
+
     private EventSummaryDTO selectedEvent;
     private UUID directlyAdmittedEventId;
     private UUID pendingEventId;
+    private EventMapDTO currentEventMap;
+    private Registration mapPollRegistration;
+
+    // Interactive-map selection state (assigned seats staged before checkout).
+    private final Set<UUID> selectedSeatIds = new LinkedHashSet<>();
+    private final Map<UUID, Button> seatCellButtons = new HashMap<>();
+    private final Map<UUID, String> seatBaseColor = new HashMap<>();
+    private final Map<UUID, UUID> seatZoneId = new HashMap<>();
+    private Span selectionSummary;
+    private Button addSelectedButton;
 
     public EventsView(EventsPresenter presenter, OrdersPresenter ordersPresenter, QueuePresenter queuePresenter) {
         this.presenter = presenter;
@@ -120,6 +138,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             if (pendingEventId != null) {
                 loadEventById(pendingEventId);
                 pendingEventId = null;
+            }
+            if (currentEventMap != null) {
+                startMapPolling();
             }
         });
     }
@@ -214,6 +235,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
                 toDate.getValue());
 
         selectedEvent = null;
+        currentEventMap = null;
+        clearSelectionState();
+        stopMapPolling();
         viewMap.setEnabled(false);
 
         if (!result.success()) {
@@ -243,6 +267,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         toDate.clear();
         resultsGrid.setItems(List.of());
         selectedEvent = null;
+        currentEventMap = null;
+        clearSelectionState();
+        stopMapPolling();
         viewMap.setEnabled(false);
         resultsStatus.setText("Search for events to see results.");
         UiMessages.info("Filters cleared.");
@@ -267,6 +294,28 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         }
 
         MapResult result = presenter.loadEventMap(eventId);
+        currentEventMap = result.success() ? result.eventMap() : null;
+        if (!result.success()) {
+            UiMessages.error(result.message());
+            return;
+        }
+
+        openTicketDialog(eventId, result.eventMap());
+        startMapPolling();
+    }
+
+    private void addGATickets(UUID zoneId, Integer quantity) {
+        UUID eventId = directlyAdmittedEventId != null ? directlyAdmittedEventId : (selectedEvent != null ? selectedEvent.id() : null);
+        if (eventId == null) {
+            return;
+        }
+        OrderMutationResult result = ordersPresenter.addGATickets(eventId, zoneId, quantity == null ? 0 : quantity);
+        if (result.success()) {
+            loadSelectedEventMap();
+        }
+    }
+
+    private void handleReservationResult(OrderMutationResult result) {
         if (!result.success()) {
             UiMessages.error(result.message());
             return;
@@ -318,10 +367,24 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             if (!e.isOpened()) {
                 releaseQueueSlot();
                 refreshActiveOrderStatus();
+                stopMapPolling();
             }
         });
 
         dialog.open();
+    }
+
+    private void startMapPolling() {
+        getUI().ifPresent(ui -> {
+            ui.setPollInterval(MAP_POLL_INTERVAL_MS);
+            if (mapPollRegistration == null) {
+                mapPollRegistration = ui.addPollListener(event -> {
+                    if (currentEventMap != null && selectedSeatIds.isEmpty()) {
+                        loadSelectedEventMap();
+                    }
+                });
+            }
+        });
     }
 
     private void renderTicketDialogContent(VerticalLayout content, UUID eventId,
@@ -335,112 +398,20 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         if (eventMap.description() != null && !eventMap.description().isBlank()) {
             content.add(new Paragraph(eventMap.description()));
         }
-
         if (!eventMap.purchaseRestrictions().isEmpty() || !eventMap.visibleDiscounts().isEmpty()) {
             content.add(new PolicyBadgesPanel(eventMap.purchaseRestrictions(), eventMap.visibleDiscounts()));
         }
-
         content.add(orderStatus, resStatus);
 
         if (eventMap.zones().isEmpty()) {
-            content.add(new Paragraph("No inventory zones available for this event."));
+            content.add(new Paragraph("No tickets are available for this event."));
             return;
         }
-
-        for (EventMapDTO.ZoneInfo zone : eventMap.zones()) {
-            content.add(dialogZoneDetails(zone, eventId, content, orderStatus, resStatus));
+        if (eventMap.layout() == null || eventMap.layout().cells().isEmpty()) {
+            content.add(new Paragraph("This event has no seating map yet."));
+            return;
         }
-
-        if (eventMap.layout() != null && !eventMap.layout().cells().isEmpty()) {
-            content.add(renderLayoutGrid(eventMap.layout()));
-        }
-    }
-
-    private Details dialogZoneDetails(EventMapDTO.ZoneInfo zone, UUID eventId,
-            VerticalLayout dialogContent, Span orderStatus, Span resStatus) {
-        VerticalLayout zoneContent = new VerticalLayout();
-        zoneContent.setPadding(false);
-        zoneContent.setSpacing(false);
-        zoneContent.add(
-                new Span("Type: " + zone.type().name()),
-                new Span("Price: " + formatPrice(zone.pricePerTicket())));
-
-        boolean canReserve = !ordersPresenter.currentSessionState().noSession();
-
-        if (zone.type() == ZoneType.GENERAL_ADMISSION) {
-            IntegerField quantity = new IntegerField("Quantity");
-            quantity.setMin(1);
-            quantity.setValue(1);
-            Button addGA = new Button("Add GA tickets", event -> {
-                int qty = quantity.getValue() == null ? 0 : quantity.getValue();
-                OrderMutationResult result = ordersPresenter.addGATickets(eventId, zone.id(), qty);
-                resStatus.setText(result.message());
-                if (!result.success()) {
-                    UiMessages.error(result.message());
-                    return;
-                }
-                UiMessages.success(result.message());
-                refreshDialogOrderStatus(orderStatus);
-                MapResult mapResult = presenter.loadEventMap(eventId);
-                if (mapResult.success()) {
-                    renderTicketDialogContent(dialogContent, eventId, mapResult.eventMap(),
-                            orderStatus, resStatus);
-                }
-            });
-            addGA.setEnabled(canReserve);
-            zoneContent.add(
-                    new Span("Capacity: " + zone.maxCapacity()),
-                    new Span("Available: " + zone.availableCount()),
-                    new Span("Sold: " + zone.soldCount()),
-                    new HorizontalLayout(quantity, addGA));
-        } else {
-            zoneContent.add(new Span("Seats: " + zone.seats().size()));
-            zoneContent.add(dialogSeatMap(zone, eventId, resStatus, orderStatus));
-        }
-
-        Details details = new Details(zone.name(), zoneContent);
-        details.setOpened(true);
-        return details;
-    }
-
-    private Component dialogSeatMap(EventMapDTO.ZoneInfo zone, UUID eventId,
-            Span resStatus, Span orderStatus) {
-        SeatMapComponent map = new SeatMapComponent(orderSeats(zone.seats()));
-        Button addSelected = new Button("Add selected seats");
-        addSelected.setEnabled(false);
-        Span stagingHint = new Span(
-                "Click available seats to select them, click again to deselect, then add to cart.");
-
-        boolean canReserve = !ordersPresenter.currentSessionState().noSession();
-        map.setSelectionCountListener(count -> {
-            addSelected.setEnabled(canReserve && count > 0);
-            addSelected.setText(count == 0
-                    ? "Add selected seats"
-                    : "Add selected seats (" + count + ")");
-        });
-        map.setCommitListener(seatIds -> {
-            OrderMutationResult result = ordersPresenter.addAssignedSeats(eventId, zone.id(), seatIds);
-            resStatus.setText(result.message());
-            if (!result.success()) {
-                UiMessages.error(result.message());
-            } else {
-                UiMessages.success(result.message());
-                refreshDialogOrderStatus(orderStatus);
-                map.markSeatsTaken(seatIds);
-            }
-        });
-        addSelected.addClickListener(event -> map.requestAddSelection());
-
-        map.setEnabled(canReserve);
-        if (!canReserve) {
-            map.getStyle().set("opacity", "0.5").set("pointer-events", "none");
-            stagingHint.setText("Start a session to select seats.");
-        }
-
-        VerticalLayout box = new VerticalLayout(stagingHint, map, addSelected);
-        box.setPadding(false);
-        box.setSpacing(true);
-        return box;
+        content.add(renderInteractiveMap(eventMap));
     }
 
     private void refreshDialogOrderStatus(Span target) {
@@ -469,41 +440,220 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         }
     }
 
-    private Component renderLayoutGrid(EventMapDTO.LayoutInfo layout) {
+    /**
+     * One interactive venue map: every zone gets its own colour, assigned seats toggle into the
+     * selection (amber) and general-admission areas open a quantity popup. The buyable inventory
+     * and this map come from the same layout cells, so what you see is what you can buy.
+     */
+    private Component renderInteractiveMap(EventMapDTO eventMap) {
+        clearSelectionState();
+
+        Map<UUID, String> zoneColor = new HashMap<>();
+        Map<UUID, EventMapDTO.ZoneInfo> zoneById = new HashMap<>();
+        int ci = 0;
+        for (EventMapDTO.ZoneInfo zone : eventMap.zones()) {
+            zoneById.put(zone.id(), zone);
+            zoneColor.put(zone.id(), ZONE_COLORS[ci++ % ZONE_COLORS.length]);
+        }
+        Map<UUID, EventMapDTO.SeatInfo> seatById = new HashMap<>();
+        for (EventMapDTO.ZoneInfo zone : eventMap.zones()) {
+            for (EventMapDTO.SeatInfo seat : zone.seats()) {
+                seatById.put(seat.id(), seat);
+                seatZoneId.put(seat.id(), zone.id());
+            }
+        }
+
+        boolean canReserve = !ordersPresenter.currentSessionState().noSession();
+        EventMapDTO.LayoutInfo layout = eventMap.layout();
         Div gridBox = new Div();
         gridBox.getStyle()
                 .set("display", "grid")
-                .set("grid-template-columns", "repeat(" + layout.cols() + ", 26px)")
-                .set("gap", "2px")
-                .set("margin-top", "var(--lumo-space-s)");
+                .set("grid-template-columns", "repeat(" + layout.cols() + ", 28px)")
+                .set("gap", "2px").set("margin-top", "var(--lumo-space-s)");
         Map<Long, EventMapDTO.CellInfo> byPos = new HashMap<>();
         for (EventMapDTO.CellInfo cell : layout.cells()) {
             byPos.put((long) cell.row() * layout.cols() + cell.col(), cell);
         }
         for (int r = 0; r < layout.rows(); r++) {
             for (int c = 0; c < layout.cols(); c++) {
-                EventMapDTO.CellInfo cell = byPos.get((long) r * layout.cols() + c);
-                Div d = new Div();
-                d.getStyle()
-                        .set("width", "26px").set("height", "26px")
-                        .set("border", "1px solid var(--lumo-contrast-20pct)")
-                        .set("font-size", "10px").set("text-align", "center")
-                        .set("line-height", "26px").set("color", "white");
-                if (cell == null) {
-                    d.getStyle().set("background", "var(--lumo-contrast-5pct)");
-                } else {
-                    d.setText(glyphFor(cell.type()));
-                    d.getStyle().set("background", colorFor(cell.type()));
-                    if (cell.label() != null) {
-                        d.setTitle(cell.label());
-                    }
-                }
-                gridBox.add(d);
+                gridBox.add(buildMapCell(byPos.get((long) r * layout.cols() + c),
+                        zoneById, zoneColor, seatById, canReserve));
             }
         }
-        VerticalLayout box = new VerticalLayout(new H4("Hall layout"), gridBox);
+
+        selectionSummary = new Span("No seats selected.");
+        addSelectedButton = new Button("Add selected seats to cart", e -> addSelectedSeats());
+        addSelectedButton.setEnabled(false);
+
+        VerticalLayout box = new VerticalLayout(
+                new H4("Choose your tickets"),
+                buildLegend(eventMap, zoneColor),
+                gridBox,
+                selectionSummary,
+                addSelectedButton);
         box.setPadding(false);
+        if (!canReserve) {
+            box.add(new Span("Start a guest or member session to select tickets."));
+        }
         return box;
+    }
+
+    private Component buildMapCell(EventMapDTO.CellInfo cell,
+            Map<UUID, EventMapDTO.ZoneInfo> zoneById, Map<UUID, String> zoneColor,
+            Map<UUID, EventMapDTO.SeatInfo> seatById, boolean canReserve) {
+        Button d = new Button();
+        d.getStyle().set("min-width", "28px").set("width", "28px").set("height", "28px")
+                .set("padding", "0").set("border", "1px solid var(--lumo-contrast-20pct)")
+                .set("font-size", "10px").set("color", "white").set("background", "var(--lumo-contrast-5pct)");
+        if (cell == null) {
+            d.setEnabled(false);
+            d.getStyle().set("color", "inherit");
+            return d;
+        }
+        switch (cell.type()) {
+            case SEAT -> {
+                EventMapDTO.SeatInfo seat = cell.seatId() == null ? null : seatById.get(cell.seatId());
+                String color = zoneColor.getOrDefault(cell.zoneId(), "#1976d2");
+                if (seat == null || !seat.available()) {
+                    d.setText("×");
+                    d.getStyle().set("background", "#9e9e9e");
+                    d.setEnabled(false);
+                } else {
+                    d.setText("S");
+                    d.getStyle().set("background", color);
+                    d.getElement().setAttribute("title", "Seat " + seat.row() + seat.seatNumber());
+                    d.setEnabled(canReserve);
+                    if (canReserve) {
+                        UUID seatId = seat.id();
+                        seatCellButtons.put(seatId, d);
+                        seatBaseColor.put(seatId, color);
+                        d.addClickListener(e -> toggleSeat(seatId));
+                    }
+                }
+            }
+            case GENERAL_ADMISSION -> {
+                EventMapDTO.ZoneInfo zone = zoneById.get(cell.zoneId());
+                d.setText("G");
+                d.getStyle().set("background", zoneColor.getOrDefault(cell.zoneId(), "#2e7d32"));
+                if (zone != null) {
+                    d.getElement().setAttribute("title", zone.name() + " — " + formatPrice(zone.pricePerTicket())
+                            + " (avail " + zone.availableCount() + ")");
+                    boolean sellable = canReserve && zone.availableCount() > 0;
+                    d.setEnabled(sellable);
+                    if (sellable) {
+                        d.addClickListener(e -> openGaQuantityDialog(zone));
+                    }
+                }
+            }
+            default -> {
+                d.setText(glyphFor(cell.type()));
+                d.getStyle().set("background", colorFor(cell.type()));
+                d.setEnabled(false);
+                if (cell.label() != null) {
+                    d.getElement().setAttribute("title", cell.label());
+                }
+            }
+        }
+        return d;
+    }
+
+    private Component buildLegend(EventMapDTO eventMap, Map<UUID, String> zoneColor) {
+        VerticalLayout legend = new VerticalLayout();
+        legend.setPadding(false);
+        legend.setSpacing(false);
+        for (EventMapDTO.ZoneInfo zone : eventMap.zones()) {
+            Div swatch = new Div();
+            swatch.getStyle().set("width", "14px").set("height", "14px").set("flex-shrink", "0")
+                    .set("background", zoneColor.get(zone.id())).set("border-radius", "3px");
+            boolean ga = zone.type() == ZoneType.GENERAL_ADMISSION;
+            String avail = ga
+                    ? "avail " + zone.availableCount() + "/" + zone.maxCapacity()
+                    : zone.seats().stream().filter(EventMapDTO.SeatInfo::available).count() + " free";
+            Span label = new Span(zone.name() + " (" + (ga ? "GA" : "Seats") + ") — "
+                    + formatPrice(zone.pricePerTicket()) + " · " + avail);
+            label.getStyle().set("font-size", "var(--lumo-font-size-s)");
+            HorizontalLayout row = new HorizontalLayout(swatch, label);
+            row.setAlignItems(com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment.CENTER);
+            legend.add(row);
+        }
+        return legend;
+    }
+
+    // Package-private for view-layer tests (a detached view can't drive overlay dialogs/clicks).
+    void toggleSeat(UUID seatId) {
+        Button btn = seatCellButtons.get(seatId);
+        if (btn == null) {
+            return;
+        }
+        if (selectedSeatIds.remove(seatId)) {
+            btn.getStyle().set("background", seatBaseColor.getOrDefault(seatId, "#1976d2"));
+        } else {
+            selectedSeatIds.add(seatId);
+            btn.getStyle().set("background", SELECTED_COLOR);
+        }
+        int n = selectedSeatIds.size();
+        selectionSummary.setText(n == 0 ? "No seats selected." : n + " seat(s) selected.");
+        addSelectedButton.setEnabled(n > 0);
+        addSelectedButton.setText(n == 0
+                ? "Add selected seats to cart"
+                : "Add selected seats to cart (" + n + ")");
+    }
+
+    void addSelectedSeats() {
+        UUID eventId = currentEventId();
+        if (eventId == null || selectedSeatIds.isEmpty()) {
+            return;
+        }
+        Map<UUID, List<UUID>> byZone = new HashMap<>();
+        for (UUID seatId : selectedSeatIds) {
+            UUID zoneId = seatZoneId.get(seatId);
+            if (zoneId != null) {
+                byZone.computeIfAbsent(zoneId, k -> new ArrayList<>()).add(seatId);
+            }
+        }
+        boolean allOk = true;
+        for (Map.Entry<UUID, List<UUID>> entry : byZone.entrySet()) {
+            OrderMutationResult result = ordersPresenter.addAssignedSeats(eventId, entry.getKey(), entry.getValue());
+            handleReservationResult(result);
+            allOk = allOk && result.success();
+        }
+        if (allOk) {
+            loadSelectedEventMap(false);
+        }
+    }
+
+    private void openGaQuantityDialog(EventMapDTO.ZoneInfo zone) {
+        buildGaQuantityDialog(zone).open();
+    }
+
+    /** Builds the GA quantity popup. Package-private so view-layer tests can drive it. */
+    Dialog buildGaQuantityDialog(EventMapDTO.ZoneInfo zone) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Add tickets — " + zone.name());
+        IntegerField quantity = new IntegerField("Quantity");
+        quantity.setMin(1);
+        quantity.setMax(zone.availableCount());
+        quantity.setValue(1);
+        Button add = new Button("Add to cart", e -> {
+            Integer qty = quantity.getValue();
+            dialog.close();
+            addGATickets(zone.id(), qty);
+        });
+        add.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY);
+        Button cancel = new Button("Cancel", e -> dialog.close());
+        dialog.add(new VerticalLayout(
+                new Span("Price: " + formatPrice(zone.pricePerTicket())),
+                new Span("Available: " + zone.availableCount()),
+                quantity,
+                new HorizontalLayout(add, cancel)));
+        return dialog;
+    }
+
+    private void clearSelectionState() {
+        selectedSeatIds.clear();
+        seatCellButtons.clear();
+        seatBaseColor.clear();
+        seatZoneId.clear();
     }
 
     private static String glyphFor(LayoutCellType type) {
@@ -526,25 +676,6 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         };
     }
 
-    /**
-     * Orders seats by row label, then by seat number (numerically when parseable,
-     * falling back to lexicographic order).
-     */
-    private List<EventMapDTO.SeatInfo> orderSeats(List<EventMapDTO.SeatInfo> seats) {
-        return seats.stream()
-                .sorted(Comparator.comparing(EventMapDTO.SeatInfo::row)
-                        .thenComparingInt(seat -> seatNumberOrder(seat.seatNumber()))
-                        .thenComparing(EventMapDTO.SeatInfo::seatNumber))
-                .toList();
-    }
-
-    private int seatNumberOrder(String seatNumber) {
-        try {
-            return Integer.parseInt(seatNumber.trim());
-        } catch (NumberFormatException ex) {
-            return Integer.MAX_VALUE;
-        }
-    }
 
     private void refreshSessionStatus() {
         sessionStatus.setText(ordersPresenter.currentSessionLabel());

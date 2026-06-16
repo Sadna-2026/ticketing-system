@@ -25,7 +25,9 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.SystemAnalyticsCollector;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -330,5 +332,39 @@ public class AdminServiceTest {
         when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
 
         assertThrows(SecurityException.class, () -> adminService.searchMembers(token, ""));
+    }
+
+    @Test
+    public void GivenAdmin_WhenGetSystemAnalytics_ThenMetricsAreReturned() {
+        TestClock clock = new TestClock(Instant.parse("2026-06-01T12:00:00Z"));
+        SystemAnalyticsCollector collector = new SystemAnalyticsCollector(clock);
+        collector.recordVisitorEnter();
+        collector.recordRegistration();
+        adminService = new AdminService(
+                memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository,
+                null, collector);
+
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        SystemAnalyticsDTO analytics = adminService.getSystemAnalytics(adminToken);
+
+        assertEquals(1, analytics.activeVisitors());
+        assertEquals(1, analytics.historical().registration().count());
+        assertTrue(analytics.live().visitorEnter().perMinute() > 0);
+    }
+
+    @Test
+    public void GivenNonAdmin_WhenGetSystemAnalytics_ThenSecurityExceptionThrown() {
+        TestClock clock = new TestClock();
+        SystemAnalyticsCollector collector = new SystemAnalyticsCollector(clock);
+        adminService = new AdminService(
+                memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository,
+                null, collector);
+
+        String token = "user-token";
+        when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
+
+        assertThrows(SecurityException.class, () -> adminService.getSystemAnalytics(token));
     }
 }

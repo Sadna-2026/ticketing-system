@@ -47,6 +47,7 @@ public class MemberService {
     private final IMemberRepository memberRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
     private final ISessionTokenService sessionTokenService;
+    private final SystemAnalyticsCollector analyticsCollector;
     private final ConcurrentHashMap<String, Object> loginLocksByUsername = new ConcurrentHashMap<>();
     private static final Logger logger = LoggerFactory.getLogger(MemberService.class);
 
@@ -54,6 +55,16 @@ public class MemberService {
             IMemberRepository memberRepository,
             PasswordEncryptionUtils passwordEncryptionUtils,
             ISessionTokenService sessionTokenService
+    ) {
+        this(memberRepository, passwordEncryptionUtils, sessionTokenService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemberService(
+            IMemberRepository memberRepository,
+            PasswordEncryptionUtils passwordEncryptionUtils,
+            ISessionTokenService sessionTokenService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) SystemAnalyticsCollector analyticsCollector
     ) {
         if (memberRepository == null) {
             throw new IllegalArgumentException("memberRepository cannot be null");
@@ -70,6 +81,7 @@ public class MemberService {
         this.memberRepository = memberRepository;
         this.passwordEncryptionUtils = passwordEncryptionUtils;
         this.sessionTokenService = sessionTokenService;
+        this.analyticsCollector = analyticsCollector;
 
     }
 
@@ -144,6 +156,9 @@ public class MemberService {
        
 
         logger.info("New member registered: " + username );
+        if (analyticsCollector != null) {
+            analyticsCollector.recordRegistration();
+        }
         return RegisterResponse.success(MemberMapper.toDto(member), memberToken);
     }
 
@@ -306,6 +321,9 @@ public class MemberService {
         String guestToken = sessionTokenService.logout(sessionToken);
 
         logger.info("Member logged out: " + memberId);
+        if (analyticsCollector != null) {
+            analyticsCollector.recordVisitorExit();
+        }
 
         return LogoutResponse.success(guestToken);
     }
@@ -345,6 +363,9 @@ public class MemberService {
         sessionTokenService.revokeToken(sessionToken);
 
         logger.info("exited platform: " + tokenData.getUsername());
+        if (analyticsCollector != null) {
+            analyticsCollector.recordVisitorExit();
+        }
 
         return MemberExitResponse.successResponse(tokenData.getUsername());
     }

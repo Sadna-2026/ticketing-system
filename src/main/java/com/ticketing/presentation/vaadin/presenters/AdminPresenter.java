@@ -1,6 +1,8 @@
 package com.ticketing.presentation.vaadin.presenters;
 
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,6 +14,7 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
 import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.CompanyService;
@@ -35,6 +38,11 @@ public class AdminPresenter {
             "Could not load global purchase history. Please try again.";
     private static final String ADMIN_SUSPENSION_FAILURE_MESSAGE =
             "Could not complete suspension action. Please try again.";
+    private static final String ADMIN_ANALYTICS_FAILURE_MESSAGE =
+            "Could not load system analytics. Please try again.";
+    private static final DateTimeFormatter ANALYTICS_TIMESTAMP = DateTimeFormatter
+            .ofPattern("dd/MM/yyyy HH:mm:ss")
+            .withZone(ZoneId.systemDefault());
 
     private static final String ADMIN_QUEUE_FAILURE_MESSAGE =
             "Could not complete queue action. Please try again.";
@@ -190,7 +198,6 @@ public class AdminPresenter {
             return List.of();
         }
     }
-
     // ── Queue management ─────────────────────────────────────────────
 
     private static final int DORMANT_THRESHOLD = 10_000;
@@ -258,6 +265,24 @@ public class AdminPresenter {
                     .orElse(eventId.toString());
         } catch (RuntimeException ex) {
             return eventId.toString();
+        }
+    }
+
+    // ── Analytics ────────────────────────────────────────────────────
+
+    public SystemAnalyticsResult loadSystemAnalytics() {
+        String token = adminToken();
+        if (token == null) {
+            return SystemAnalyticsResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+
+        try {
+            SystemAnalyticsDTO analytics = adminService.getSystemAnalytics(token);
+            return SystemAnalyticsResult.success(
+                    "Loaded system analytics at " + ANALYTICS_TIMESTAMP.format(analytics.generatedAt()) + ".",
+                    analytics);
+        } catch (RuntimeException ex) {
+            return SystemAnalyticsResult.failure(userMessage(ex, ADMIN_ANALYTICS_FAILURE_MESSAGE));
         }
     }
 
@@ -370,6 +395,16 @@ public class AdminPresenter {
 
         public static QueueListResult failure(String message) {
             return new QueueListResult(false, message, List.of());
+        }
+    }
+
+    public record SystemAnalyticsResult(boolean success, String message, SystemAnalyticsDTO analytics) {
+        public static SystemAnalyticsResult success(String message, SystemAnalyticsDTO analytics) {
+            return new SystemAnalyticsResult(true, message, analytics);
+        }
+
+        public static SystemAnalyticsResult failure(String message) {
+            return new SystemAnalyticsResult(false, message, null);
         }
     }
 }

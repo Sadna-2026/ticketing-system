@@ -96,9 +96,7 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Change manager permissions"));
         assertTrue(hasButton(view, "Relinquish ownership"));
         assertTrue(hasButton(view, "Create event"));
-        assertTrue(hasButton(view, "Edit event details"));
-        assertTrue(hasButton(view, "Publish event"));
-        assertTrue(hasButton(view, "Cancel event"));
+        assertTrue(hasButton(view, "Edit event"));
         assertTrue(hasButton(view, "Load event map"));
         assertTrue(hasButton(view, "Add seat"));
         assertTrue(hasButton(view, "Remove seat"));
@@ -112,7 +110,6 @@ class CompanyViewTest {
         assertTrue(hasButton(view, "Load sales report"));
         assertNotNull(findTextField(view, "New company name"));
         assertNotNull(findTargetMemberCombo(view));
-        assertNotNull(findEventCombo(view, "Event to manage"));
         assertNotNull(findCompanyCombo(view, "Event company name"));
         assertEquals(2, findGrids(view).size());
     }
@@ -505,8 +502,6 @@ class CompanyViewTest {
         UUID seatId = UUID.randomUUID();
         EventSummaryDTO created = event("Show", eventId);
         when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(created));
-        when(presenter.publishEvent(eventId)).thenReturn(ActionResult.success("Event published."));
-        when(presenter.cancelEvent(eventId)).thenReturn(ActionResult.success("Event cancelled."));
         when(presenter.loadEventMapForManagement(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
         when(presenter.addSeat(eventId, zoneId, "A", "1")).thenReturn(ActionResult.success("Seat added."));
         when(presenter.removeSeat(eventId, zoneId, seatId)).thenReturn(ActionResult.success("Seat removed."));
@@ -514,10 +509,6 @@ class CompanyViewTest {
         when(presenter.decreaseGACapacity(eventId, zoneId, 5)).thenReturn(ActionResult.success("GA capacity decreased."));
         when(presenter.setZonePrice(eventId, zoneId, new BigDecimal("75.00"))).thenReturn(ActionResult.success("Zone price updated."));
         CompanyView view = new CompanyView(presenter);
-
-        // Select company and pre-existing event in the management picker.
-        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
-        findEventCombo(view, "Event to manage").setValue(created);
 
         // Set up inventory section: select company and event to load zones.
         findCompanyCombo(view, "Inventory company name").setValue(company("Acme"));
@@ -533,16 +524,12 @@ class CompanyViewTest {
         findIntegerField(view, "Capacity delta").setValue(5);
         findBigDecimalField(view, "Zone price update").setValue(new BigDecimal("75.00"));
 
-        clickButton(view, "Publish event");
-        clickDestructive(view, "Cancel event");
         clickButton(view, "Add seat");
         clickDestructive(view, "Remove seat");
         clickButton(view, "Increase GA capacity");
         clickDestructive(view, "Decrease GA capacity");
         clickButton(view, "Set zone price");
 
-        verify(presenter).publishEvent(eventId);
-        verify(presenter).cancelEvent(eventId);
         // Selecting the inventory event triggers the zone load.
         verify(presenter).loadEventMapForManagement(eventId);
         verify(presenter).addSeat(eventId, zoneId, "A", "1");
@@ -753,21 +740,6 @@ class CompanyViewTest {
         assertEquals(purchase.purchaseId(), rows.get(0).purchaseId());
     }
 
-    @Test
-    void GivenUnauthorizedApplicationResponse_WhenManagerActionClicked_ThenMessageIsDisplayed() {
-        CompanyPresenter presenter = mockPresenter();
-        UUID eventId = UUID.randomUUID();
-        when(presenter.publishEvent(eventId)).thenReturn(ActionResult.failure("Insufficient permissions to publish events"));
-        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
-        CompanyView view = new CompanyView(presenter);
-        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
-        findEventCombo(view, "Event to manage").setValue(event("Show", eventId));
-
-        clickButton(view, "Publish event");
-
-        verify(presenter).publishEvent(eventId);
-        assertTrue(hasText(view, "Insufficient permissions to publish events"));
-    }
 
     @Test
     void GivenManagerWithViewReportsOnly_WhenCompanySelected_ThenOnlyReportActionsAreReachable() {
@@ -786,7 +758,7 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Manager permissions for Acme: VIEW_REPORTS."));
 
         selectTab(view, "Events");
-        assertFalse(hasVisibleButton(view, "Publish event"));
+        assertFalse(hasVisibleButton(view, "Edit event"));
         assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE permission for Acme."));
 
         selectTab(view, "Inventory");
@@ -818,7 +790,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
         selectTab(view, "Events");
         assertTrue(hasVisibleButton(view, "Create event"));
-        assertTrue(hasVisibleButton(view, "Publish event"));
+        assertTrue(hasVisibleButton(view, "Edit event"));
 
         selectTab(view, "Inventory");
         assertTrue(hasVisibleButton(view, "Add seat"));
@@ -833,21 +805,6 @@ class CompanyViewTest {
         assertTrue(hasText(view, "User \"alice\" doesn't have VIEW_REPORTS permission for Acme."));
     }
 
-    @Test
-    void GivenCompanySelection_WhenEventPickerCascades_ThenPlaceholderReflectsState() {
-        CompanyPresenter presenter = mockPresenter();
-        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", UUID.randomUUID())));
-        when(presenter.listCompanyEvents("Empty Co")).thenReturn(List.of());
-        CompanyView view = new CompanyView(presenter);
-        ComboBox<EventSummaryDTO> eventPicker = findEventCombo(view, "Event to manage");
-        assertEquals("Select a company first", eventPicker.getPlaceholder());
-
-        findCompanyCombo(view, "Selected company").setValue(company("Acme"));
-        assertEquals("Select an event", eventPicker.getPlaceholder());
-
-        findCompanyCombo(view, "Selected company").setValue(company("Empty Co"));
-        assertEquals("No events for this company", eventPicker.getPlaceholder());
-    }
 
     @Test
     void GivenCompanyView_WhenRendered_ThenMandatoryFieldsShowRequiredIndicatorAndOptionalFieldsDoNot() {
@@ -859,8 +816,6 @@ class CompanyViewTest {
 
         assertFalse(findTargetMemberCombo(view).isRequiredIndicatorVisible());
         assertFalse(findTextArea(view, "New company description").isRequiredIndicatorVisible());
-        assertFalse(findTextArea(view, "New event description").isRequiredIndicatorVisible());
-        assertFalse(findDateTimePicker(view, "New doors open time").isRequiredIndicatorVisible());
     }
 
     @Test
@@ -1192,23 +1147,6 @@ class CompanyViewTest {
                 .map(Button.class::cast)
                 .filter(button -> text.equals(button.getText()))
                 .anyMatch(CompanyViewTest::isEffectivelyVisible);
-    }
-
-    @Test
-    void GivenCancelEventDialog_WhenCancelClicked_ThenPresenterIsNotCalled() {
-        CompanyPresenter presenter = mockPresenter();
-        UUID eventId = UUID.randomUUID();
-        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
-        CompanyView view = new CompanyView(presenter);
-        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
-        findEventCombo(view, "Event to manage").setValue(event("Show", eventId));
-
-        clickButton(view, "Cancel event");
-        assertTrue(ConfirmDialogTestSupport.isOpen());
-        assertTrue(ConfirmDialogTestSupport.openDialogText().contains("Show"));
-        ConfirmDialogTestSupport.cancel();
-
-        verify(presenter, never()).cancelEvent(any());
     }
 
     private static void clickDestructive(Component root, String text) {

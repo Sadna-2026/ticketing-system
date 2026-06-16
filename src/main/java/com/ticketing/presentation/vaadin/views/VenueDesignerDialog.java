@@ -11,10 +11,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.application.CreateEventRequest;
+import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.domain.event.EventCategory;
-import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.LayoutCellType;
-import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
@@ -518,7 +517,6 @@ public class VenueDesignerDialog extends Dialog {
 
         List<CreateEventRequest.ZoneSpec> zoneSpecs = new ArrayList<>();
         Map<String, String> sectionToZone = new LinkedHashMap<>();
-        List<LayoutCell> layoutCells = new ArrayList<>();
 
         for (ZoneDefinition zone : zones) {
             sectionToZone.put(zone.name, zone.name);
@@ -552,23 +550,27 @@ public class VenueDesignerDialog extends Dialog {
             return;
         }
 
-        // Build layout cells from the full grid
+        // Build linked layout cell specs from the full grid.
+        List<DefineVenueRequest.CellSpec> cellSpecs = new ArrayList<>();
         for (int r = 0; r < cellStates.length; r++) {
             for (int c = 0; c < cellStates[r].length; c++) {
                 CellState s = cellStates[r][c];
                 if (s == null) continue;
                 if (s.isZone()) {
                     if (s.zone.kind == ZoneKind.SEATING) {
-                        layoutCells.add(new LayoutCell(r, c, LayoutCellType.SEAT, null, null, null));
+                        cellSpecs.add(new DefineVenueRequest.CellSpec(r, c, LayoutCellType.SEAT,
+                                null, s.zone.name, rowLetter(r), String.valueOf(c + 1)));
                     } else {
-                        layoutCells.add(new LayoutCell(r, c, LayoutCellType.GENERAL_ADMISSION, s.zone.name, null, null));
+                        cellSpecs.add(new DefineVenueRequest.CellSpec(r, c, LayoutCellType.GENERAL_ADMISSION,
+                                s.zone.name, s.zone.name, null, null));
                     }
                 } else {
-                    switch (s.structural) {
-                        case BLOCKED -> layoutCells.add(LayoutCell.blocked(r, c));
-                        case STAGE -> layoutCells.add(LayoutCell.stage(r, c, s.label));
-                        case OBJECT -> layoutCells.add(LayoutCell.object(r, c, s.label));
-                    }
+                    LayoutCellType type = switch (s.structural) {
+                        case BLOCKED -> LayoutCellType.BLOCKED;
+                        case STAGE -> LayoutCellType.STAGE;
+                        case OBJECT -> LayoutCellType.OBJECT;
+                    };
+                    cellSpecs.add(new DefineVenueRequest.CellSpec(r, c, type, s.label, null, null, null));
                 }
             }
         }
@@ -585,24 +587,17 @@ public class VenueDesignerDialog extends Dialog {
         }
         Instant doors = toInstant(doorsOpenTime.getValue());
 
-        EventActionResult created = presenter.createEventWithZones(
-                companyName, eventName.getValue(), description.getValue(), category.getValue(),
-                start, end, doors, lockMinutes.getValue(), zoneSpecs, sectionToZone);
-        if (!created.success() || created.eventId() == null) {
-            status.setText("Save failed: " + created.message());
-            UiMessages.error(created.message());
+        EventActionResult result = presenter.defineVenue(
+                null, companyName, eventName.getValue(), description.getValue(), category.getValue(),
+                start, end, doors, lockMinutes.getValue(),
+                cellStates.length, cellStates[0].length, zoneSpecs, sectionToZone, cellSpecs);
+        if (!result.success() || result.eventId() == null) {
+            status.setText("Save failed: " + result.message());
+            UiMessages.error(result.message());
             return;
         }
 
-        VenueLayout layout = new VenueLayout(cellStates.length, cellStates[0].length, layoutCells);
-        ActionResult layoutResult = presenter.setEventLayout(created.eventId(), layout);
-        if (!layoutResult.success()) {
-            status.setText("Event created, but layout save failed: " + layoutResult.message());
-            UiMessages.error(layoutResult.message());
-            return;
-        }
-
-        eventId = created.eventId();
+        eventId = result.eventId();
         validate.setEnabled(true);
         publish.setEnabled(true);
         int totalSeats = zoneSpecs.stream()
@@ -610,7 +605,7 @@ public class VenueDesignerDialog extends Dialog {
                 .mapToInt(z -> ((CreateEventRequest.AssignedZoneSpec) z).seats().size())
                 .sum();
         status.setText("Draft saved (" + totalSeats + " seats, " + zoneSpecs.size()
-                + " zones, " + layoutCells.size() + " cells). Validate, then Publish.");
+                + " zones, " + cellSpecs.size() + " cells). Validate, then Publish.");
         UiMessages.success("Draft saved.");
     }
 

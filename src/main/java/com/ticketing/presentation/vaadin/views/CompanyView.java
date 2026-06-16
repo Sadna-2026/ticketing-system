@@ -16,7 +16,6 @@ import java.util.UUID;
 
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.CompanySummaryDTO;
-import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
@@ -46,7 +45,6 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
-import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PolicyViewResult;
@@ -145,20 +143,10 @@ public class CompanyView extends VerticalLayout {
 
     private final ComboBox<CompanySummaryDTO> eventCompanyName = new ComboBox<>("Event company name");
 
-    private final ComboBox<EventSummaryDTO> eventId = new ComboBox<>("Event to manage");
-    private final TextField newEventName = new TextField("New event name");
-    private final TextArea newEventDescription = new TextArea("New event description");
-    private final TextField newArtist = new TextField("New artist");
-    private final DateTimePicker newStartTime = new DateTimePicker("New start time");
-    private final DateTimePicker newEndTime = new DateTimePicker("New end time");
-    private final DateTimePicker newDoorsOpenTime = new DateTimePicker("New doors open time");
-    private final Span eventStatus = new Span("Create, edit, or cancel company events.");
+    private final Span eventStatus = new Span();
     private Button editEventButton;
-    private Button publishEventButton;
-    private Button cancelEventButton;
     private Button designHallButton;
     private FormLayout eventSelectionForm;
-    private FormLayout eventEditForm;
     private HorizontalLayout eventActions;
     private VerticalLayout eventControls;
 
@@ -360,8 +348,6 @@ public class CompanyView extends VerticalLayout {
             picker.setVisible(false);
         }
 
-        eventId.setItemLabelGenerator(EventSummaryDTO::name);
-        eventId.setPlaceholder("Select a company first");
         inventoryEventId.setItemLabelGenerator(EventSummaryDTO::name);
         inventoryEventId.setPlaceholder("Select a company first");
         lookupEventPicker.setItemLabelGenerator(EventSummaryDTO::name);
@@ -379,10 +365,7 @@ public class CompanyView extends VerticalLayout {
         seatPicker.setPlaceholder("Select a zone to list seats");
 
         personnelCompanyName.addValueChangeListener(e -> refreshPersonnelContext());
-        eventCompanyName.addValueChangeListener(e -> {
-            reloadCompanyEvents(eventId, e.getValue());
-            refreshEventAccess();
-        });
+        eventCompanyName.addValueChangeListener(e -> refreshEventAccess());
         inventoryCompanyName.addValueChangeListener(e -> {
             reloadCompanyEvents(inventoryEventId, e.getValue());
             refreshInventoryAccess();
@@ -532,11 +515,9 @@ public class CompanyView extends VerticalLayout {
         if (company == null) {
             companyInfoStatus.setText("Select a company to view public details.");
             companyEventsGrid.setItems(List.of());
-            reloadCompanyEvents(eventId, null);
             reloadCompanyEvents(inventoryEventId, null);
             reloadCompanyEvents(policyEventId, null);
         } else {
-            reloadCompanyEvents(eventId, company);
             reloadCompanyEvents(inventoryEventId, company);
             reloadCompanyEvents(policyEventId, company);
         }
@@ -706,38 +687,19 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout eventManagementSection() {
-        editEventButton = new Button("Edit event details", event -> editEvent());
-        publishEventButton = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(selectedEventId(eventId))));
-        cancelEventButton = new Button("Cancel event", event -> {
-            EventSummaryDTO selected = eventId.getValue();
-            DestructiveActionDialogs.confirmCancelEvent(selected == null ? null : selected.name(), () ->
-                    handleEventAction(presenter.cancelEvent(selectedEventId(eventId))));
-        });
+        editEventButton = new Button("Edit event", event -> openEditEventDialog());
         designHallButton = new Button("Create event", event -> openVenueDesigner());
 
-        eventSelectionForm = new FormLayout(eventCompanyName, eventId);
+        eventSelectionForm = new FormLayout(eventCompanyName);
         eventSelectionForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
 
-        eventEditForm = new FormLayout(newEventName, newEventDescription, newArtist, newStartTime, newEndTime, newDoorsOpenTime);
-        eventEditForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
-
-        eventActions = new HorizontalLayout(designHallButton, editEventButton, publishEventButton, cancelEventButton);
+        eventActions = new HorizontalLayout(designHallButton, editEventButton);
         eventActions.setAlignItems(Alignment.BASELINE);
-        eventControls = new VerticalLayout(
-                new H4("Event controls"),
-                eventSelectionForm,
-                eventEditForm,
-                eventActions
-        );
+        eventControls = new VerticalLayout(eventSelectionForm, eventActions);
         eventControls.setPadding(false);
         refreshEventAccess();
 
-        VerticalLayout section = new VerticalLayout(
-                new H3("Event management"),
-                new Paragraph("Create, edit, publish, and cancel company events."),
-                eventStatus,
-                eventControls
-        );
+        VerticalLayout section = new VerticalLayout(eventControls, eventStatus);
         section.setPadding(false);
         return section;
     }
@@ -1363,16 +1325,15 @@ public class CompanyView extends VerticalLayout {
         boolean eventLifecycle = access.canManageEvents();
         boolean mapDefinition = access.canDefineMaps();
         eventControls.setVisible(eventLifecycle || mapDefinition);
-        eventSelectionForm.setVisible(eventLifecycle);
-        eventEditForm.setVisible(eventLifecycle);
+        eventSelectionForm.setVisible(eventLifecycle || mapDefinition);
         eventActions.setVisible(eventLifecycle || mapDefinition);
         designHallButton.setVisible(eventLifecycle || mapDefinition);
         editEventButton.setVisible(eventLifecycle);
-        publishEventButton.setVisible(eventLifecycle);
-        cancelEventButton.setVisible(eventLifecycle);
-        eventStatus.setText(access.companyName() == null || eventLifecycle || mapDefinition
-                ? access.message()
-                : missingPermissionsMessage(access, ManagerPermission.EVENT_LIFECYCLE));
+        boolean denied = access.companyName() != null && !eventLifecycle && !mapDefinition;
+        eventStatus.setText(denied
+                ? missingPermissionsMessage(access, ManagerPermission.EVENT_LIFECYCLE)
+                : "");
+        eventStatus.setVisible(denied);
     }
 
     private void refreshInventoryAccess() {
@@ -1486,35 +1447,16 @@ public class CompanyView extends VerticalLayout {
             UiMessages.error("Select a company first.");
             return;
         }
-        VenueDesignerDialog dialog = new VenueDesignerDialog(presenter, company);
-        dialog.addOpenedChangeListener(e -> {
-            if (!e.isOpened()) {
-                reloadCompanyEvents(eventId, eventCompanyName.getValue());
-            }
-        });
-        dialog.open();
+        new VenueDesignerDialog(presenter, company).open();
     }
 
-    private void selectEventInPicker(ComboBox<EventSummaryDTO> picker, String companyName, UUID eventId) {
-        List<EventSummaryDTO> events = orEmpty(presenter.listCompanyEvents(companyName));
-        picker.setItems(events);
-        events.stream()
-                .filter(e -> e.id().equals(eventId))
-                .findFirst()
-                .ifPresent(picker::setValue);
-    }
-
-    private void editEvent() {
-        EventActionResult result = presenter.editEvent(
-                selectedEventId(eventId),
-                newEventName.getValue(),
-                newEventDescription.getValue(),
-                newArtist.getValue(),
-                instant(newStartTime),
-                instant(newEndTime),
-                instant(newDoorsOpenTime)
-        );
-        handleEventAction(result);
+    private void openEditEventDialog() {
+        String company = companyNameOf(eventCompanyName);
+        if (company == null) {
+            UiMessages.error("Select a company first.");
+            return;
+        }
+        new EditEventDialog(presenter, company).open();
     }
 
     private void loadEventMap() {
@@ -1575,35 +1517,6 @@ public class CompanyView extends VerticalLayout {
     private void handlePersonnelResult(ActionResult result) {
         personnelStatus.setText(result.message());
         notify(result);
-    }
-
-    private void handleEventAction(ActionResult result) {
-        eventStatus.setText(result.message());
-        if (result.success()) {
-            lookupEventPicker.setItems(orEmpty(presenter.searchBrowsableEvents()));
-        }
-        notify(result);
-    }
-
-    private void handleEventAction(EventActionResult result) {
-        if (result == null) {
-            eventStatus.setText("No response from event action.");
-            UiMessages.error("No response from event action.");
-            return;
-        }
-        if (result.eventDetails() != null) {
-            EventDetailsDTO details = result.eventDetails();
-            eventStatus.setText(result.message() + " " + details.name() + " | " + details.status());
-        } else if (result.eventId() != null) {
-            eventStatus.setText(result.message() + " Event ID: " + result.eventId());
-        } else {
-            eventStatus.setText(result.message());
-        }
-        if (result.success()) {
-            UiMessages.success(result.message());
-        } else {
-            UiMessages.error(result.message());
-        }
     }
 
     private void handleInventoryResult(ActionResult result) {
@@ -1777,11 +1690,6 @@ public class CompanyView extends VerticalLayout {
     private static UUID selectedEventId(ComboBox<EventSummaryDTO> picker) {
         EventSummaryDTO selected = picker.getValue();
         return selected == null ? null : selected.id();
-    }
-
-    private Instant instant(DateTimePicker picker) {
-        LocalDateTime value = picker.getValue();
-        return value == null ? null : value.atZone(ZoneId.systemDefault()).toInstant();
     }
 
     private void refreshSessionStatus() {

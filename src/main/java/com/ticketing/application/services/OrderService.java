@@ -80,6 +80,7 @@ public class OrderService {
     private final IQueueRepository queueRepository;
     private final OrderTimeDomainService orderTimeDomainService;
     private final INotificationService notificationService;
+    private final SystemAnalyticsCollector analyticsCollector;
 
     // V3-13 (#271): per-event virtual-queue defaults are config-driven (ticketing.queue.*).
     // The field initializers are the fallback for `new`-built unit tests, where Spring does
@@ -100,7 +101,7 @@ public class OrderService {
             OrderTimeDomainService orderTimeDomainService,
             @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
         this(sessionTokenService, orderRepository, eventRepository, null, memberRepository, paymentGateways,
-                ticketSupplyGateways, systemClock, queueRepository, orderTimeDomainService, notificationService);
+                ticketSupplyGateways, systemClock, queueRepository, orderTimeDomainService, notificationService, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -114,7 +115,8 @@ public class OrderService {
             ISystemClock systemClock,
             IQueueRepository queueRepository,
             OrderTimeDomainService orderTimeDomainService,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) SystemAnalyticsCollector analyticsCollector) {
         if (sessionTokenService == null)
             throw new IllegalArgumentException("sessionTokenService is required");
         if (orderRepository == null)
@@ -133,6 +135,7 @@ public class OrderService {
         this.queueRepository = queueRepository;
         this.orderTimeDomainService = orderTimeDomainService;
         this.notificationService = notificationService;
+        this.analyticsCollector = analyticsCollector;
     }
 
     // ── Order creation & ticket reservation ─────────────────────────
@@ -439,6 +442,9 @@ public class OrderService {
         if (notificationService != null && memberId != null) {
             notificationService.notify(memberId.toString(), "Your checkout was completed successfully.");
         }
+        if (analyticsCollector != null) {
+            analyticsCollector.recordPurchase(order.getTotalTicketCount());
+        }
         return new CheckoutCompletion(purchase.purchaseId(), purchase.amount());
     }
 
@@ -704,6 +710,9 @@ public class OrderService {
             saveEvent(event);
             saveOrder(order);
             checkAndPublishSoldOut(event);
+            if (analyticsCollector != null) {
+                analyticsCollector.recordReservation(request.additionalTicketCount());
+            }
             return itemIds;
         } catch (RuntimeException ex) {
             discardEmptyActiveOrder(order);

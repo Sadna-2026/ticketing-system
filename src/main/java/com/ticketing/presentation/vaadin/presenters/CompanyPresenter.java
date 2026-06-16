@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.CreateEventRequest;
+import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.application.EditEventRequest;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.CompanyPublicDTO;
@@ -671,6 +672,66 @@ public class CompanyPresenter {
             );
             UUID eventId = eventService.createEvent(token, request);
             return EventActionResult.created("Event created with " + zones.size() + " zone(s).", eventId);
+        } catch (RuntimeException ex) {
+            return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    /**
+     * Creates ({@code eventId == null}) or rebuilds a DRAFT event's hall from a painted grid,
+     * so the buyable inventory and the visual map are defined together.
+     */
+    public EventActionResult defineVenue(
+            UUID eventId,
+            String companyName,
+            String name,
+            String description,
+            EventCategory category,
+            Instant startTime,
+            Instant endTime,
+            Instant doorsOpenTime,
+            Integer lockMinutes,
+            int rows,
+            int cols,
+            List<CreateEventRequest.ZoneSpec> zones,
+            Map<String, String> sectionToZoneName,
+            List<DefineVenueRequest.CellSpec> cells
+    ) {
+        String token = memberToken();
+        if (token == null) {
+            return EventActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (zones == null || zones.isEmpty()) {
+            return EventActionResult.failure("At least one zone is required.");
+        }
+        boolean create = eventId == null;
+        EventSchedule schedule = startTime == null && endTime == null && doorsOpenTime == null
+                ? null
+                : new EventSchedule(startTime, endTime, doorsOpenTime);
+        LockTimerDuration lock = lockMinutes != null && lockMinutes > 0
+                ? new LockTimerDuration(Duration.ofMinutes(lockMinutes))
+                : null;
+        if (create) {
+            if (blankToNull(companyName) == null) {
+                return EventActionResult.failure("Company name is required.");
+            }
+            if (blankToNull(name) == null) {
+                return EventActionResult.failure("Event name is required.");
+            }
+            if (schedule == null) {
+                return EventActionResult.failure("Start and end times are required.");
+            }
+            if (lock == null) {
+                return EventActionResult.failure("Lock minutes must be positive.");
+            }
+        }
+        try {
+            DefineVenueRequest request = new DefineVenueRequest(
+                    eventId, blankToNull(companyName), blankToNull(name), blankToNull(description),
+                    category, schedule, lock, rows, cols, zones, sectionToZoneName, cells);
+            UUID id = eventService.defineVenue(token, request);
+            return EventActionResult.created(
+                    create ? "Event created with " + zones.size() + " zone(s)." : "Event updated.", id);
         } catch (RuntimeException ex) {
             return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
         }

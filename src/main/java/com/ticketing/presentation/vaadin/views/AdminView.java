@@ -17,6 +17,9 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsMetricsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsRateDTO;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
@@ -24,6 +27,7 @@ import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHisto
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.QueueListResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.QueueSummary;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SystemAnalyticsResult;
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
@@ -72,6 +76,11 @@ public class AdminView extends VerticalLayout {
     private VerticalLayout companyControls;
     private VerticalLayout purchaseHistoryControls;
     private VerticalLayout suspensionControls;
+    private VerticalLayout analyticsControls;
+
+    private final Span analyticsStatus = new Span("Load live and historical platform analytics.");
+    private final Span activeVisitorsDisplay = new Span();
+    private final Grid<AnalyticsRow> analyticsGrid = new Grid<>(AnalyticsRow.class, false);
 
     private final Span memberStatus = new Span("Remove members using system admin authorization.");
     private final ComboBox<MemberSummaryDTO> removeMemberPicker = new ComboBox<>("Target member");
@@ -118,6 +127,7 @@ public class AdminView extends VerticalLayout {
         configurePurchaseHistoryGrid();
         configureSuspensionsGrid();
         configureQueuesGrid();
+        configureAnalyticsGrid();
         add(
                 new H2("Admin"),
                 new Paragraph("Use system admin actions backed directly by application services."),
@@ -183,6 +193,18 @@ public class AdminView extends VerticalLayout {
             selectedSuspension = event.getValue();
             refreshCancelSuspensionState();
         });
+    }
+
+    private void configureAnalyticsGrid() {
+        analyticsGrid.setId("admin-analytics-grid");
+        analyticsGrid.setEmptyStateText("Load analytics to see visitor, registration and reservation rates.");
+        analyticsGrid.addColumn(AnalyticsRow::metric).setHeader("Metric").setAutoWidth(true);
+        analyticsGrid.addColumn(AnalyticsRow::liveCount).setHeader("Live count").setAutoWidth(true);
+        analyticsGrid.addColumn(AnalyticsRow::liveRate).setHeader("Live / min").setAutoWidth(true);
+        analyticsGrid.addColumn(AnalyticsRow::historicalCount).setHeader("Historical count").setAutoWidth(true);
+        analyticsGrid.addColumn(AnalyticsRow::historicalRate).setHeader("Historical / min").setAutoWidth(true);
+        analyticsGrid.setAllRowsVisible(true);
+        analyticsGrid.setWidthFull();
     }
 
     private void refreshCancelSuspensionState() {
@@ -363,6 +385,7 @@ public class AdminView extends VerticalLayout {
         panelByMode.put(AdminMode.PURCHASES, purchaseHistorySection());
         panelByMode.put(AdminMode.SUSPENSIONS, suspensionSection());
         panelByMode.put(AdminMode.QUEUES, queueSection());
+        panelByMode.put(AdminMode.ANALYTICS, analyticsSection());
         panelByMode.values().forEach(adminModeContent::add);
     }
 
@@ -470,6 +493,65 @@ public class AdminView extends VerticalLayout {
         section.setPadding(false);
         suspensionControls = section;
         return section;
+    }
+
+    private VerticalLayout analyticsSection() {
+        Button loadAnalytics = new Button("Load system analytics", event -> loadSystemAnalytics());
+
+        VerticalLayout section = new VerticalLayout(
+                new H4("System analytics"),
+                new Paragraph("Live and historical rates for visitor traffic, registrations, reservations and purchases."),
+                loadAnalytics,
+                activeVisitorsDisplay,
+                analyticsStatus,
+                analyticsGrid
+        );
+        section.setPadding(false);
+        analyticsControls = section;
+        return section;
+    }
+
+    private void loadSystemAnalytics() {
+        SystemAnalyticsResult result = presenter.loadSystemAnalytics();
+        if (!result.success() || result.analytics() == null) {
+            analyticsStatus.setText(result.message());
+            activeVisitorsDisplay.setText("");
+            analyticsGrid.setItems(List.of());
+            UiMessages.error(result.message());
+            return;
+        }
+
+        SystemAnalyticsDTO analytics = result.analytics();
+        analyticsStatus.setText(result.message() + " Live window: " + analytics.liveWindowLabel()
+                + ". Historical window: " + analytics.historicalWindowLabel() + ".");
+        activeVisitorsDisplay.setText("Active visitors: " + analytics.activeVisitors());
+        analyticsGrid.setItems(analyticsRows(analytics.live(), analytics.historical()));
+        UiMessages.success(result.message());
+    }
+
+    private static List<AnalyticsRow> analyticsRows(AnalyticsMetricsDTO live, AnalyticsMetricsDTO historical) {
+        return List.of(
+                row("Visitor enter", live.visitorEnter(), historical.visitorEnter()),
+                row("Visitor exit", live.visitorExit(), historical.visitorExit()),
+                row("Member registration", live.registration(), historical.registration()),
+                row("Ticket reservation", live.reservation(), historical.reservation()),
+                row("Ticket purchase", live.purchase(), historical.purchase()));
+    }
+
+    private static AnalyticsRow row(String metric, AnalyticsRateDTO live, AnalyticsRateDTO historical) {
+        return new AnalyticsRow(
+                metric,
+                Long.toString(live.count()),
+                formatRate(live.perMinute()),
+                Long.toString(historical.count()),
+                formatRate(historical.perMinute()));
+    }
+
+    private static String formatRate(double perMinute) {
+        return String.format("%.2f", perMinute);
+    }
+
+    private record AnalyticsRow(String metric, String liveCount, String liveRate, String historicalCount, String historicalRate) {
     }
 
     private void removeMember() {
@@ -647,7 +729,8 @@ public class AdminView extends VerticalLayout {
         COMPANIES("Companies"),
         PURCHASES("Purchase history"),
         SUSPENSIONS("Suspensions"),
-        QUEUES("Queues");
+        QUEUES("Queues"),
+        ANALYTICS("Analytics");
 
         private final String label;
 

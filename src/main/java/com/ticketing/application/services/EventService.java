@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.CreateEventRequest;
+import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.application.EditEventRequest;
 import com.ticketing.application.ISystemClock;
 import com.ticketing.application.SearchEventsRequest;
@@ -40,6 +41,7 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.MaxCompositeDiscount;
 import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.event.VenueLayout;

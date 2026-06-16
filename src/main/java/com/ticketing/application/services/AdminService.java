@@ -18,6 +18,7 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
 import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
@@ -53,6 +54,7 @@ public class AdminService {
     private final IOrderRepository orderRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils = new PasswordEncryptionUtils();
     private final INotificationService notificationService;
+    private final SystemAnalyticsCollector analyticsCollector;
 
     public AdminService(
             IMemberRepository memberRepository,
@@ -60,7 +62,18 @@ public class AdminService {
             ISessionTokenService sessionTokenService,
             IAdminRepository adminRepository,
             IOrderRepository orderRepository) {
-        this(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository, null);
+        this(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository, null, null);
+    }
+
+    public AdminService(
+            IMemberRepository memberRepository,
+            ICompanyRepository companyRepository,
+            ISessionTokenService sessionTokenService,
+            IAdminRepository adminRepository,
+            IOrderRepository orderRepository,
+            INotificationService notificationService) {
+        this(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository,
+                notificationService, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -70,7 +83,8 @@ public class AdminService {
             ISessionTokenService sessionTokenService,
             IAdminRepository adminRepository,
             IOrderRepository orderRepository,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService) {
+            @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) SystemAnalyticsCollector analyticsCollector) {
         if (memberRepository == null || companyRepository == null || sessionTokenService == null || adminRepository == null || orderRepository == null) {
             throw new IllegalArgumentException("Dependencies cannot be null");
         }
@@ -80,6 +94,7 @@ public class AdminService {
         this.adminRepository = adminRepository;
         this.orderRepository = orderRepository;
         this.notificationService = notificationService;
+        this.analyticsCollector = analyticsCollector;
     }
 
     @Transactional
@@ -283,6 +298,20 @@ public class AdminService {
         return purchases.stream()
                 .map(PurchaseRecordDTO::from)
                 .collect(Collectors.toList());
+    }
+
+    public SystemAnalyticsDTO getSystemAnalytics(String adminToken) {
+        log.info("Admin system analytics requested");
+        if (!isAdmin(adminToken)) {
+            log.warn("Admin system analytics denied: missing system admin permission");
+            throw new SecurityException("System admin permission required");
+        }
+        if (analyticsCollector == null) {
+            throw new IllegalStateException("System analytics are not available.");
+        }
+        SystemAnalyticsDTO analytics = SystemAnalyticsDTO.from(analyticsCollector.snapshot());
+        log.info("Admin system analytics delivered: activeVisitors={}", analytics.activeVisitors());
+        return analytics;
     }
 
     private boolean isAdmin(String token) {

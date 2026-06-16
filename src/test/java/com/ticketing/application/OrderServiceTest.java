@@ -1164,7 +1164,7 @@ public class OrderServiceTest {
         company.suspend();
         companyRepo.save(company);
         OrderService guardedOrderService = new OrderService(sessionService, orderRepo, eventRepo, companyRepo,
-                memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null, null, null);
+                memberRepo, List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null, null, null, null);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> guardedOrderService.createOrder(guestToken, eventId));
