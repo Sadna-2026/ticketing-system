@@ -32,6 +32,7 @@ import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.details.Details;
@@ -179,6 +180,7 @@ public class EventsView extends VerticalLayout {
 
     private VerticalLayout searchSection() {
         Button search = new Button("Search events", event -> searchEvents());
+        search.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         Button clear = new Button("Clear filters", event -> clearFilters());
 
         FormLayout form = new FormLayout(
@@ -524,6 +526,7 @@ public class EventsView extends VerticalLayout {
             quantity.setMin(1);
             quantity.setValue(1);
             Button addGA = new Button("Add GA tickets", event -> addGATickets(zone.id(), quantity.getValue()));
+            addGA.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
             boolean canReserve = !ordersPresenter.currentSessionState().noSession();
             addGA.setEnabled(canReserve);
             content.add(
@@ -548,8 +551,9 @@ public class EventsView extends VerticalLayout {
     private Component seatMap(EventMapDTO.ZoneInfo zone) {
         SeatMapComponent map = new SeatMapComponent(orderSeats(zone.seats()));
         Button addSelected = new Button("Add selected seats");
+        addSelected.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addSelected.setEnabled(false);
-        Span stagingHint = new Span("Click available seats to select them (amber), click again to deselect, then add to cart.");
+        Span stagingHint = new Span("Click available seats to select them, click again to deselect, then add to cart.");
 
         boolean canReserve = !ordersPresenter.currentSessionState().noSession();
         map.setSelectionCountListener(count -> {

@@ -154,8 +154,11 @@ Each phase is its own stacked PR (small, reviewable). Functionality unchanged th
 - ✅ **3a Auth + Home** — auth wrapped in a **centered card** ("Welcome" + the tab switcher), primary
   cyan CTAs on all four actions; Home → hero (eyebrow + Sora headline + "Browse events" CTA) +
   responsive quick-action card grid. Presentation only; verified 0 contrast violations both themes.
-- **3b Events + seat selection** — event cards grid; **lit seat map** (restyle `SeatMapComponent` +
-  `seat-map.js` for both themes); filter bar; `PolicyBadgesPanel` restyle; cart summary panel.
+- ✅ **3b Events + seat selection (core)** — **lit seat map**: `seat-map.js` restyled to the EQ
+  signature (available = quiet chip, selected = cyan→magenta gradient + glow + dark ✓, taken =
+  dimmed); primary cyan CTAs (Search events, Add GA tickets, Add selected seats). Verified seat
+  toggle + 0 contrast violations. ⏳ remaining polish: `PolicyBadgesPanel` brand pass, venue
+  layout-preview colors → tokens, optional section cards.
 - **3c Orders** — active order/cart panel, checkout polish, history table w/ status badges,
   currency + tabular price formatting.
 - **3d Company** — 8-tab row → **side-nav**; group controls into cards; restyle `VenueDesignerDialog`

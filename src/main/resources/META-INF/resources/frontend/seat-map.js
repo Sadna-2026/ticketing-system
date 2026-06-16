@@ -35,14 +35,17 @@ class SeatMap extends LitElement {
         content: '\\25CF';
         margin-right: 0.35em;
       }
+      .legend {
+        color: var(--app-text, #eaeef5);
+      }
       .legend .free::before {
-        color: var(--lumo-success-color, #2dc26b);
+        color: var(--app-muted, #99a0ae);
       }
       .legend .selected::before {
-        color: var(--lumo-warning-color, #f5a623);
+        color: var(--app-cyan, #34e1d6);
       }
       .legend .taken::before {
-        color: var(--lumo-error-color, #e5484d);
+        color: var(--app-muted, #99a0ae);
       }
       g.cell {
         outline: none;
@@ -54,35 +57,46 @@ class SeatMap extends LitElement {
       g.cell.taken {
         cursor: not-allowed;
       }
-      g.cell.free:hover rect.seat,
-      g.cell.selected:hover rect.seat {
+      /* Taken seats sink toward the background. */
+      g.cell.taken rect.seat {
+        opacity: 0.45;
+      }
+      g.cell.free:hover rect.seat {
+        stroke: var(--app-cyan, #34e1d6);
         stroke-width: 2;
       }
+      /* Selected seats are lit — the EQ signature. */
+      g.cell.selected rect.seat {
+        filter: drop-shadow(0 0 5px color-mix(in srgb, var(--app-cyan, #34e1d6) 70%, transparent));
+      }
       g.cell:focus-visible rect.seat {
-        stroke: var(--lumo-primary-color, #1676f3);
+        stroke: var(--app-cyan, #34e1d6);
         stroke-width: 3;
       }
       line.taken-mark {
-        stroke: var(--lumo-error-color, #b3271e);
+        stroke: var(--app-muted, #99a0ae);
         stroke-width: 2;
         stroke-linecap: round;
         pointer-events: none;
       }
       text.selected-mark {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
-        fill: var(--lumo-warning-text-color, #8a6116);
+        fill: #08110f;
         pointer-events: none;
         user-select: none;
+      }
+      g.cell.selected text.seat-label {
+        fill: #08110f;
       }
       text.row-label {
         font-size: 12px;
         font-weight: 600;
-        fill: var(--lumo-body-text-color, #1a1a1a);
+        fill: var(--app-text, #eaeef5);
       }
       text.seat-label {
         font-size: 9px;
-        fill: var(--lumo-secondary-text-color, #555);
+        fill: var(--app-muted, #99a0ae);
         pointer-events: none;
         user-select: none;
       }
@@ -281,19 +295,19 @@ class SeatMap extends LitElement {
   _seatColors(state) {
     if (state === 'taken') {
       return {
-        fill: 'var(--lumo-error-color-10pct, #fbe9e9)',
-        stroke: 'var(--lumo-error-color-50pct, #ef9a9a)',
+        fill: 'var(--app-surface, #181b24)',
+        stroke: 'var(--app-border, rgba(255,255,255,0.08))',
       };
     }
     if (state === 'selected') {
       return {
-        fill: 'var(--lumo-warning-color-10pct, #fff4e0)',
-        stroke: 'var(--lumo-warning-color-50pct, #f0c36d)',
+        fill: 'url(#sm-sel)',
+        stroke: 'transparent',
       };
     }
     return {
-      fill: 'var(--lumo-success-color-10pct, #e3f6ec)',
-      stroke: 'var(--lumo-success-color-50pct, #8fd6ab)',
+      fill: 'var(--app-surface-2, #20242f)',
+      stroke: 'var(--app-border, rgba(255,255,255,0.08))',
     };
   }
 
@@ -338,6 +352,12 @@ class SeatMap extends LitElement {
         role="grid"
         aria-label="Seat map"
       >
+        <defs>
+          <linearGradient id="sm-sel" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="var(--app-cyan, #34e1d6)"></stop>
+            <stop offset="1" stop-color="var(--app-magenta, #ff5ca8)"></stop>
+          </linearGradient>
+        </defs>
         ${rows.map((row, r) => {
           const y = PAD + r * ROW_H;
           return svg`
