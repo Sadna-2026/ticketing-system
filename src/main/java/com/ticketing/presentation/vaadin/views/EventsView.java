@@ -37,7 +37,6 @@ import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.details.Details;
 import com.vaadin.flow.component.formlayout.FormLayout;
-import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
@@ -79,8 +78,7 @@ public class EventsView extends VerticalLayout {
     private final Span sessionStatus = new Span();
     private final Span activeOrderStatus = new Span();
     private final Span resultsStatus = new Span("Search for events to see results.");
-    private final Grid<EventSummaryDTO> resultsGrid = new Grid<>(EventSummaryDTO.class, false);
-    private final Button viewMap = new Button("View selected map");
+    private final Div eventCards = new Div();
     private final Span mapStatus = new Span("Select an event from the results to load its map.");
     private final Span reservationStatus = new Span("Add tickets to your active order from the map below.");
     private final VerticalLayout mapDisplay = new VerticalLayout();
@@ -114,8 +112,7 @@ public class EventsView extends VerticalLayout {
                 searchSection(),
                 new H3("Search results"),
                 resultsStatus,
-                resultsGrid,
-                viewMap,
+                eventCards,
                 new H3("Event map and ticket selection"),
                 mapStatus,
                 reservationStatus,
@@ -153,23 +150,51 @@ public class EventsView extends VerticalLayout {
         List<CompanySummaryDTO> companies = presenter.searchCompanies("");
         companyName.setItems(companies == null ? List.of() : companies);
 
-        viewMap.setEnabled(false);
-        viewMap.addClickListener(event -> loadSelectedEventMap());
     }
 
     private void configureResultsGrid() {
-        resultsGrid.setEmptyStateText("No events match your search yet — adjust the filters and search again.");
-        resultsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
-        resultsGrid.addColumn(event -> formatCategory(event.category())).setHeader("Category").setAutoWidth(true);
-        resultsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts")
-                .setAutoWidth(true);
-        resultsGrid.addColumn(event -> event.status().name()).setHeader("Status").setAutoWidth(true);
-        resultsGrid.setMinHeight("240px");
+        eventCards.addClassName("app-event-grid");
+    }
 
-        resultsGrid.asSingleSelect().addValueChangeListener(event -> {
-            selectedEvent = event.getValue();
-            viewMap.setEnabled(selectedEvent != null);
+    /** Renders the search results as event cards (replaces the stock Grid). */
+    private void renderEventCards(List<EventSummaryDTO> events) {
+        eventCards.removeAll();
+        if (events == null || events.isEmpty()) {
+            return;
+        }
+        for (EventSummaryDTO event : events) {
+            eventCards.add(eventCard(event));
+        }
+    }
+
+    private Div eventCard(EventSummaryDTO event) {
+        Div card = new Div();
+        card.addClassName("app-event-card");
+
+        Span cat = new Span(formatCategory(event.category()));
+        cat.addClassName("app-event-cat");
+
+        H3 title = new H3(event.name());
+
+        Span when = new Span(formatInstant(event.schedule().getStartTime()));
+        when.addClassName("app-event-meta");
+
+        String statusName = event.status().name();
+        Span status = new Span(statusName);
+        status.addClassNames("app-badge",
+                "PUBLISHED".equals(statusName) ? "app-badge--success" : "app-badge--neutral");
+
+        Button view = new Button("View seats", e -> {
+            selectedEvent = event;
+            loadSelectedEventMap();
         });
+        view.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        Div foot = new Div(status, view);
+        foot.addClassName("app-event-foot");
+
+        card.add(cat, title, when, foot);
+        return card;
     }
 
     private void configureMapDisplay() {
@@ -220,17 +245,16 @@ public class EventsView extends VerticalLayout {
         currentEventMap = null;
         zoneSeatMaps.clear();
         stopMapPolling();
-        viewMap.setEnabled(false);
         resetMapDisplay();
 
         if (!result.success()) {
-            resultsGrid.setItems(List.of());
+            renderEventCards(List.of());
             resultsStatus.setText(result.message());
             UiMessages.error(result.message());
             return;
         }
 
-        resultsGrid.setItems(result.events());
+        renderEventCards(result.events());
         resultsStatus.setText(result.message());
         if (result.empty()) {
             UiMessages.info(result.message());
@@ -248,12 +272,11 @@ public class EventsView extends VerticalLayout {
         maxPrice.clear();
         fromDate.clear();
         toDate.clear();
-        resultsGrid.setItems(List.of());
+        renderEventCards(List.of());
         selectedEvent = null;
         currentEventMap = null;
         zoneSeatMaps.clear();
         stopMapPolling();
-        viewMap.setEnabled(false);
         resultsStatus.setText("Search for events to see results.");
         resetMapDisplay();
         UiMessages.info("Filters cleared.");
@@ -572,7 +595,10 @@ public class EventsView extends VerticalLayout {
             stagingHint.setText("Start a guest or member session to select seats.");
         }
 
-        VerticalLayout box = new VerticalLayout(stagingHint, map, addSelected);
+        Div stage = new Div(new Span("STAGE"));
+        stage.addClassName("app-stage");
+
+        VerticalLayout box = new VerticalLayout(stagingHint, stage, map, addSelected);
         box.setPadding(false);
         box.setSpacing(true);
         return box;

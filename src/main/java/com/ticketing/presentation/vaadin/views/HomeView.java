@@ -61,8 +61,7 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver {
         Div grid = new Div();
         grid.addClassName("app-quickgrid");
 
-        grid.add(actionCard(VaadinIcon.SEARCH, "Browse events",
-                "Search shows and pick your seats.", EventsView.class));
+        // (Browsing events is the hero's primary CTA above, so it isn't repeated here.)
         grid.add(actionCard(VaadinIcon.CART, "Your orders",
                 "Review your cart, check out, and see purchase history.", OrdersView.class));
         grid.add(actionCard(VaadinIcon.BELL, "Notifications",

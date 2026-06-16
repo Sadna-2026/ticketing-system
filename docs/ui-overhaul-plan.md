@@ -157,8 +157,14 @@ Each phase is its own stacked PR (small, reviewable). Functionality unchanged th
 - ✅ **3b Events + seat selection (core)** — **lit seat map**: `seat-map.js` restyled to the EQ
   signature (available = quiet chip, selected = cyan→magenta gradient + glow + dark ✓, taken =
   dimmed); primary cyan CTAs (Search events, Add GA tickets, Add selected seats). Verified seat
-  toggle + 0 contrast violations. ⏳ remaining polish: `PolicyBadgesPanel` brand pass, venue
-  layout-preview colors → tokens, optional section cards.
+  toggle + 0 contrast violations.
+- ✅ **3b rebuild (round 2)** — addressed "feels like a recolour": Events results are now a real
+  **card grid** (category chip, Sora title, tabular date, status badge, primary "View seats")
+  replacing the stock Grid; a glowing **STAGE bar** sits above the seat map; **all inputs** got a
+  clearly-bounded surface+border (the default faint overlay was near-invisible on dark). Also fixed
+  the auth tab→header spacing and removed the duplicate "Browse events" on Home.
+  ⏳ remaining: `PolicyBadgesPanel` brand pass, venue layout-preview colors → tokens; Orders cart
+  panel + Company/Admin could get the same card/panel treatment.
 - ✅ **3c Orders** — Checkout is now primary cyan; tables/inputs inherit the theme (uppercase Sora
   headers, hover). ⏳ later polish: status badges in history grid, currency formatting.
 - ✅ **3d Company** — primary on the create CTAs (Open company, Create event); destructive actions

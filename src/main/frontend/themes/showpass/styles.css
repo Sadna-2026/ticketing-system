@@ -386,3 +386,101 @@ vaadin-app-layout::part(navbar) {
   }
 }
 
+/* ============================================================
+   Auth card — breathing room under the tab strip (Phase 3a fix)
+   ============================================================ */
+.app-auth-card vaadin-tabs {
+  margin-bottom: var(--lumo-space-m);
+}
+
+/* ============================================================
+   Events — results as cards + stage bar (Phase 3b rebuild)
+   ============================================================ */
+.app-event-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--lumo-space-m);
+}
+.app-event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--lumo-space-l);
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-l);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.app-event-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--app-cyan) 40%, var(--app-border));
+  box-shadow: var(--app-shadow);
+}
+.app-event-card h3 {
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-l);
+  line-height: 1.2;
+  margin: 0;
+}
+.app-event-cat {
+  align-self: flex-start;
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-cyan-text);
+  background-color: var(--app-cyan-soft);
+  border: 1px solid color-mix(in srgb, var(--app-cyan) 30%, transparent);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+.app-event-meta {
+  color: var(--app-muted);
+  font-size: var(--lumo-font-size-s);
+  font-variant-numeric: tabular-nums;
+}
+.app-event-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lumo-space-s);
+  padding-top: var(--lumo-space-s);
+}
+
+/* Inputs read as clearly-bounded fields in both themes (the default faint
+   overlay is nearly invisible on the near-black canvas). */
+vaadin-text-field::part(input-field),
+vaadin-email-field::part(input-field),
+vaadin-password-field::part(input-field),
+vaadin-number-field::part(input-field),
+vaadin-integer-field::part(input-field),
+vaadin-big-decimal-field::part(input-field),
+vaadin-combo-box::part(input-field),
+vaadin-date-picker::part(input-field),
+vaadin-date-time-picker::part(input-field),
+vaadin-text-area::part(input-field) {
+  background-color: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-m);
+}
+
+/* The lit stage bar above the seat map — the EQ signature's anchor. */
+.app-stage {
+  width: min(560px, 100%);
+  height: 40px;
+  margin: var(--lumo-space-s) 0 var(--lumo-space-m);
+  display: grid;
+  place-items: center;
+  border-radius: var(--lumo-border-radius-m);
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 700;
+  font-size: var(--lumo-font-size-xs);
+  letter-spacing: 0.34em;
+  color: #08110f;
+  background: linear-gradient(90deg, var(--app-cyan), var(--app-magenta));
+  box-shadow: 0 0 28px -6px color-mix(in srgb, var(--app-cyan) 55%, transparent);
+}
+
