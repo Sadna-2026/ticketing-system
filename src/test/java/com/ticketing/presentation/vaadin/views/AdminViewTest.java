@@ -30,10 +30,14 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsMetricsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsRateDTO;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SystemAnalyticsResult;
 import com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -71,19 +75,20 @@ class AdminViewTest {
         assertTrue(hasText(view, "Application services still enforce system-admin authorization for every action and their responses are shown here."));
         Tabs tabs = findTabs(view);
         assertNotNull(tabs);
-        assertEquals(List.of("Members", "Companies", "Purchase history", "Suspensions"), tabLabels(tabs));
+        assertEquals(List.of("Members", "Companies", "Purchase history", "Suspensions", "Analytics"), tabLabels(tabs));
         assertTrue(hasButton(view, "Remove member"));
         assertTrue(hasButton(view, "Close company"));
         assertTrue(hasButton(view, "Load global purchase history"));
         assertTrue(hasButton(view, "Suspend member"));
         assertTrue(hasButton(view, "Cancel suspension"));
         assertTrue(hasButton(view, "Load suspensions"));
+        assertTrue(hasButton(view, "Load system analytics"));
         assertNotNull(findComboBox(view, "Target member"));
         assertNotNull(findCompanyComboBox(view, "Company to close"));
         assertNotNull(findComboBox(view, "Buyer member"));
         assertNotNull(findComboBox(view, "Suspension target member"));
         assertNotNull(findTextField(view, "Company name"));
-        assertEquals(2, findGrids(view).size());
+        assertEquals(3, findGrids(view).size());
     }
 
     @Test
@@ -111,7 +116,8 @@ class AdminViewTest {
         assertFalse(hasVisibleButton(view, "Close company"));
         assertFalse(hasVisibleButton(view, "Load global purchase history"));
         assertFalse(hasVisibleButton(view, "Suspend member"));
-        assertFalse(hasVisibleButton(view, "Check policy backend support"));
+        assertFalse(hasVisibleButton(view, "Load suspensions"));
+        assertFalse(hasVisibleButton(view, "Load system analytics"));
         assertTrue(hasText(view, "Log in with system admin permissions to use admin actions."));
     }
 
@@ -393,6 +399,52 @@ class AdminViewTest {
         assertFalse(findComboBox(view, "Buyer member").isRequiredIndicatorVisible());
     }
 
+    @Test
+    void GivenAnalyticsLoaded_WhenLoadSystemAnalyticsClicked_ThenGridShowsMetrics() {
+        AdminPresenter presenter = mockPresenter();
+        SystemAnalyticsDTO analytics = sampleAnalytics();
+        when(presenter.loadSystemAnalytics())
+                .thenReturn(SystemAnalyticsResult.success("Loaded system analytics.", analytics));
+        AdminView view = new AdminView(presenter);
+        selectTab(view, "Analytics");
+
+        clickButton(view, "Load system analytics");
+
+        verify(presenter).loadSystemAnalytics();
+        assertTrue(hasText(view, "Active visitors: 2"));
+        assertTrue(hasText(view,
+                "Loaded system analytics. Live window: last 5 minute(s). Historical window: last 1 hour(s)."));
+        Grid<?> grid = findGridById(view, "admin-analytics-grid");
+        assertEquals(5, grid.getListDataView().getItemCount());
+    }
+
+    @Test
+    void GivenAnalyticsLoadFails_WhenLoadSystemAnalyticsClicked_ThenSpecificFailureReasonIsDisplayed() {
+        AdminPresenter presenter = mockPresenter();
+        when(presenter.loadSystemAnalytics())
+                .thenReturn(SystemAnalyticsResult.failure("System admin permission required"));
+        AdminView view = new AdminView(presenter);
+        selectTab(view, "Analytics");
+
+        clickButton(view, "Load system analytics");
+
+        verify(presenter).loadSystemAnalytics();
+        assertTrue(hasText(view, "System admin permission required"));
+        assertEquals(0, findGridById(view, "admin-analytics-grid").getListDataView().getItemCount());
+    }
+
+    private static SystemAnalyticsDTO sampleAnalytics() {
+        AnalyticsRateDTO rate = new AnalyticsRateDTO(4, 0.8);
+        AnalyticsMetricsDTO metrics = new AnalyticsMetricsDTO(rate, rate, rate, rate, rate);
+        return new SystemAnalyticsDTO(
+                Instant.parse("2026-06-01T12:00:00Z"),
+                2,
+                "last 5 minute(s)",
+                "last 1 hour(s)",
+                metrics,
+                metrics);
+    }
+
     private AdminPresenter mockPresenter() {
         AdminPresenter presenter = mock(AdminPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (root)");
@@ -582,6 +634,17 @@ class AdminViewTest {
                 .orElse(null);
     }
 
+    private static void selectTab(Component root, String label) {
+        Tabs tabs = findTabs(root);
+        assertNotNull(tabs);
+        tabs.getChildren()
+                .filter(Tab.class::isInstance)
+                .map(Tab.class::cast)
+                .filter(tab -> label.equals(tab.getLabel()))
+                .findFirst()
+                .ifPresent(tabs::setSelectedTab);
+    }
+
     private static List<String> tabLabels(Tabs tabs) {
         return tabs.getChildren()
                 .filter(Tab.class::isInstance)
@@ -601,7 +664,7 @@ class AdminViewTest {
         AdminView view = new AdminView(mockPresenter());
 
         List<Grid<?>> grids = findGrids(view);
-        assertEquals(2, grids.size());
+        assertEquals(3, grids.size());
         for (Grid<?> grid : grids) {
             assertTrue(grid.getEmptyStateText() != null && !grid.getEmptyStateText().isBlank(),
                     "every data grid should show an empty-state message");

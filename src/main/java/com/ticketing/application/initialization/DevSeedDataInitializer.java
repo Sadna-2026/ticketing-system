@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.SystemAnalyticsCollector;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -70,6 +71,10 @@ public class DevSeedDataInitializer {
     public static final UUID SECOND_OWNER_ID = UUID.fromString("00000000-0000-0000-0000-000000000007");
     public static final UUID SUSPENDED_MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000008");
     public static final UUID REVOKED_MANAGER_ID = UUID.fromString("00000000-0000-0000-0000-000000000009");
+    public static final UUID SECOND_ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+    public static final UUID BUYER1_ID = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+    public static final UUID BUYER2_ID = UUID.fromString("00000000-0000-0000-0000-00000000000c");
+    public static final UUID BUYER3_ID = UUID.fromString("00000000-0000-0000-0000-00000000000d");
     public static final String SUSPENDED_MEMBER_REASON = "Manual QA — policy violation";
     /** Keeps the seeded member suspended through the next calendar year. */
     public static final Duration SUSPENDED_MEMBER_DURATION = Duration.ofDays(365);
@@ -112,13 +117,24 @@ public class DevSeedDataInitializer {
     public static final UUID CONDITIONAL_DISCOUNT_EVENT_ID = UUID.fromString("bbbb5555-5555-5555-5555-555555555555");
     public static final UUID CONDITIONAL_DISCOUNT_GA_ZONE_ID = UUID.fromString("bbbb5555-0000-0000-0000-000000000001");
 
+    /** Simulated concurrent browsers during a dev-seed box-office rush. */
+    public static final int SEEDED_ANALYTICS_VISITOR_ENTERS = 12;
+    /** Tabs closed / visitors leaving during the rush. */
+    public static final int SEEDED_ANALYTICS_VISITOR_EXITS = 5;
+    public static final int SEEDED_ANALYTICS_REGISTRATIONS = 3;
+    public static final int SEEDED_ANALYTICS_RESERVATIONS = 15;
+    public static final int SEEDED_ANALYTICS_PURCHASES = 10;
+    public static final int SEEDED_ANALYTICS_ACTIVE_VISITORS =
+            SEEDED_ANALYTICS_VISITOR_ENTERS - SEEDED_ANALYTICS_VISITOR_EXITS;
+
     private final IMemberRepository memberRepository;
     private final IAdminRepository adminRepository;
     private final ICompanyRepository companyRepository;
     private final IEventRepository eventRepository;
     private final IOrderRepository orderRepository;
     private final PasswordEncryptionUtils passwordEncryptionUtils;
-        private final AdminService adminService;
+    private final AdminService adminService;
+    private final SystemAnalyticsCollector analyticsCollector;
 
     public DevSeedDataInitializer(
             IMemberRepository memberRepository,
@@ -126,9 +142,23 @@ public class DevSeedDataInitializer {
             ICompanyRepository companyRepository,
             IEventRepository eventRepository,
             IOrderRepository orderRepository,
-            PasswordEncryptionUtils passwordEncryptionUtils,    
-            AdminService adminService
-    ) {
+            PasswordEncryptionUtils passwordEncryptionUtils,
+            AdminService adminService) {
+        this(memberRepository, adminRepository, companyRepository, eventRepository, orderRepository,
+                passwordEncryptionUtils, adminService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DevSeedDataInitializer(
+            IMemberRepository memberRepository,
+            IAdminRepository adminRepository,
+            ICompanyRepository companyRepository,
+            IEventRepository eventRepository,
+            IOrderRepository orderRepository,
+            PasswordEncryptionUtils passwordEncryptionUtils,
+            AdminService adminService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            SystemAnalyticsCollector analyticsCollector) {
         this.memberRepository = memberRepository;
         this.adminRepository = adminRepository;
         this.companyRepository = companyRepository;
@@ -136,7 +166,7 @@ public class DevSeedDataInitializer {
         this.orderRepository = orderRepository;
         this.passwordEncryptionUtils = passwordEncryptionUtils;
         this.adminService = adminService;
-
+        this.analyticsCollector = analyticsCollector;
     }
 
     public void runSeed() {
@@ -144,8 +174,38 @@ public class DevSeedDataInitializer {
         seedCompanies();
         seedEvents();
         seedCompletedPurchases();
-        log.info("Dev seed data ready: users admin/member/owner/manager/teen/inventory-manager/owner2/suspended/revoked-manager, companies '{}', '{}', '{}' and '{}'",
+        seedAnalyticsWarmup();
+        log.info("Dev seed data ready: users admin/admin2/member/buyer1-3/owner/manager/teen/inventory-manager/owner2/suspended/revoked-manager, companies '{}', '{}', '{}' and '{}'",
                 COMPANY_NAME, SECOND_COMPANY_NAME, SUSPENDED_COMPANY_NAME, ADMIN_CLOSE_COMPANY_NAME);
+    }
+
+    private void seedAnalyticsWarmup() {
+        if (analyticsCollector == null) {
+            return;
+        }
+        for (int i = 0; i < SEEDED_ANALYTICS_VISITOR_ENTERS; i++) {
+            analyticsCollector.recordVisitorEnter();
+        }
+        for (int i = 0; i < SEEDED_ANALYTICS_VISITOR_EXITS; i++) {
+            analyticsCollector.recordVisitorExit();
+        }
+        for (int i = 0; i < SEEDED_ANALYTICS_REGISTRATIONS; i++) {
+            analyticsCollector.recordRegistration();
+        }
+        analyticsCollector.recordReservation(5);
+        analyticsCollector.recordReservation(5);
+        analyticsCollector.recordReservation(5);
+        analyticsCollector.recordPurchase(4);
+        analyticsCollector.recordPurchase(3);
+        analyticsCollector.recordPurchase(3);
+        log.info(
+                "Dev analytics warmup: box-office rush — enters={}, exits={}, registrations={}, reservations={}, purchases={}, activeVisitors={}",
+                SEEDED_ANALYTICS_VISITOR_ENTERS,
+                SEEDED_ANALYTICS_VISITOR_EXITS,
+                SEEDED_ANALYTICS_REGISTRATIONS,
+                SEEDED_ANALYTICS_RESERVATIONS,
+                SEEDED_ANALYTICS_PURCHASES,
+                SEEDED_ANALYTICS_ACTIVE_VISITORS);
     }
 
     private void seedMembersAndAdmin() {
@@ -167,10 +227,19 @@ public class DevSeedDataInitializer {
                 "050-000-0008", LocalDate.of(1993, 3, 15));
         saveMemberIfMissing(REVOKED_MANAGER_ID, "revoked-manager", "revoked-manager@ticketing.local", "revoked123",
                 "050-000-0009", LocalDate.of(1991, 9, 9));
+        saveMemberIfMissing(SECOND_ADMIN_ID, "admin2", "admin2@ticketing.local", "admin2123",
+                "050-000-0010", LocalDate.of(1986, 6, 6));
+        saveMemberIfMissing(BUYER1_ID, "buyer1", "buyer1@ticketing.local", "buyer1123",
+                "050-000-0011", LocalDate.of(1994, 4, 4));
+        saveMemberIfMissing(BUYER2_ID, "buyer2", "buyer2@ticketing.local", "buyer2123",
+                "050-000-0012", LocalDate.of(1996, 8, 8));
+        saveMemberIfMissing(BUYER3_ID, "buyer3", "buyer3@ticketing.local", "buyer3123",
+                "050-000-0013", LocalDate.of(1998, 12, 12));
         ensureSuspendedMemberSeed();
         ensureManualQaAppointments();
 
         adminService.registerAdmin(ADMIN_ID, "admin", "admin@ticketing.local", "admin123");
+        adminService.registerAdmin(SECOND_ADMIN_ID, "admin2", "admin2@ticketing.local", "admin2123");
     }
 
     private void ensureSuspendedMemberSeed() {
