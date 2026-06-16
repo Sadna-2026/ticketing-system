@@ -9,6 +9,13 @@ functionality**. New features should adopt this design system as they land.
 - **Scope:** Theme everywhere **+ targeted UX fixes** to the worst structural offenders (no flow/behavior changes)
 - **Approved mockup:** `/tmp/ui-mockups/waveform.html` (refined v2 — waveform restrained to hero + seat map)
 
+> **STATUS: overhaul complete across all surfaces.** Theme foundation, shell, auth, home,
+> events (cards + EQ seat map with fit/zoom/contained-scroll + per-category tags), orders, company,
+> admin, notifications, profile are all on the brand system (cards, currency, badges, primary CTAs)
+> in both dark + light. Tested via `/ui-test` (39 checks across the surfaces): contrast (axe) 0 in both
+> themes, no console errors, no mobile overflow, focus rings visible. Functionality unchanged throughout.
+> One light-mode badge-contrast bug found in testing and fixed (success/danger text tokens).
+
 ---
 
 ## 1. Where we're starting (audit summary)
