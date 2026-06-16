@@ -272,7 +272,30 @@ vaadin-app-layout::part(navbar) {
 }
 .app-hero {
   width: 100%;
+  position: relative;
+  overflow: hidden;
   padding: var(--lumo-space-xl) 0 var(--lumo-space-m);
+}
+.app-hero-inner {
+  position: relative;
+  z-index: 1;
+}
+.app-hero-wave {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 62%;
+  z-index: 0;
+  opacity: 0.22;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+.app-hero-wave svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .app-hero-eyebrow {
   display: inline-block;
@@ -400,6 +423,22 @@ vaadin-app-layout::part(navbar) {
   .app-wordmark:hover .app-brandmark rect:nth-child(4) {
     animation-delay: 0.1s;
   }
+
+  /* Home hero waveform — bars gently "play". */
+  @keyframes app-wave {
+    0%,
+    100% {
+      transform: scaleY(0.5);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+  .app-hero-wave rect {
+    transform-box: fill-box;
+    transform-origin: center bottom;
+    animation: app-wave 1.6s ease-in-out infinite;
+  }
 }
 
 /* ============================================================
@@ -521,5 +560,50 @@ vaadin-text-area::part(input-field) {
 .app-events vaadin-details,
 .app-events vaadin-details::part(content) {
   min-width: 0;
+}
+
+/* Live order-summary panel on the Events page (mirrors the active order). */
+.app-cart {
+  max-width: 420px;
+  box-shadow: var(--app-shadow);
+}
+.app-cart-heading {
+  display: block;
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 600;
+  font-size: var(--lumo-font-size-l);
+  margin-bottom: var(--lumo-space-xs);
+}
+.app-cart-empty {
+  color: var(--app-muted);
+  font-size: var(--lumo-font-size-s);
+}
+.app-cart-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--lumo-space-m);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--app-border);
+}
+.app-cart-price {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.app-cart-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: var(--lumo-space-s);
+  padding-top: var(--lumo-space-s);
+  border-top: 1px solid var(--app-border);
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 700;
+  font-size: var(--lumo-font-size-l);
+}
+.app-cart-checkout {
+  margin-top: var(--lumo-space-m);
+  width: 100%;
+  justify-content: center;
 }
 

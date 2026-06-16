@@ -3,6 +3,7 @@ package com.ticketing.presentation.vaadin.views;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.Html;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
@@ -53,8 +54,40 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver {
         browse.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
         browse.addClickListener(e -> browse.getUI().ifPresent(ui -> ui.navigate(EventsView.class)));
 
-        hero.add(eyebrow, title, sub, browse);
+        Div inner = new Div(eyebrow, title, sub, browse);
+        inner.addClassName("app-hero-inner");
+
+        hero.add(heroWave(), inner);
         return hero;
+    }
+
+    /** Decorative animated waveform behind the hero — the brand's signature opener.
+     *  CSS-animated (scaleY pulse), gated on prefers-reduced-motion in the theme. */
+    private Html heroWave() {
+        int n = 48;
+        int w = 1200;
+        int h = 120;
+        double step = (double) w / n;
+        double barW = step * 0.5;
+        StringBuilder sb = new StringBuilder();
+        sb.append("<span class='app-hero-wave' aria-hidden='true'>");
+        sb.append("<svg viewBox='0 0 ").append(w).append(' ').append(h)
+                .append("' preserveAspectRatio='none' width='100%' height='100%'>");
+        sb.append("<defs><linearGradient id='hw' x1='0' x2='1' y1='0' y2='0'>")
+                .append("<stop offset='0' stop-color='var(--app-cyan)'/>")
+                .append("<stop offset='1' stop-color='var(--app-magenta)'/></linearGradient></defs>");
+        for (int i = 0; i < n; i++) {
+            double frac = (double) i / n;
+            double base = 0.30 + 0.70 * Math.abs(Math.sin(frac * Math.PI * 3));
+            double bh = base * h;
+            double x = i * step;
+            double y = h - bh;
+            sb.append(String.format(java.util.Locale.US,
+                    "<rect x='%.2f' y='%.2f' width='%.2f' height='%.2f' rx='%.2f' fill='url(#hw)' style='animation-delay:%.2fs'/>",
+                    x, y, barW, bh, barW / 2, i * 0.045));
+        }
+        sb.append("</svg></span>");
+        return new Html(sb.toString());
     }
 
     private Div quickActions() {

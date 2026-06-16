@@ -16,6 +16,7 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
@@ -26,6 +27,7 @@ import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
@@ -77,6 +79,7 @@ public class EventsView extends VerticalLayout {
     private final DatePicker toDate = new DatePicker("To date");
     private final Span sessionStatus = new Span();
     private final Span activeOrderStatus = new Span();
+    private final Div cartPanel = new Div();
     private final Span resultsStatus = new Span("Search for events to see results.");
     private final Div eventCards = new Div();
     private final Span mapStatus = new Span("Select an event from the results to load its map.");
@@ -115,6 +118,7 @@ public class EventsView extends VerticalLayout {
                 resultsStatus,
                 eventCards,
                 new H3("Event map and ticket selection"),
+                cartPanel,
                 mapStatus,
                 reservationStatus,
                 mapDisplay);
@@ -634,12 +638,14 @@ public class EventsView extends VerticalLayout {
         OrderResult result = ordersPresenter.loadCurrentOrder();
         if (!result.success()) {
             activeOrderStatus.setText(result.message());
+            renderCart(null);
             return;
         }
         ActiveOrderDto order = result.order();
         if (order == null) {
             activeOrderStatus
                     .setText("No active order yet. Adding tickets here will start one for the selected event.");
+            renderCart(null);
             return;
         }
         int ticketCount = order.getItems().stream().mapToInt(item -> item.getQuantity()).sum();
@@ -649,6 +655,59 @@ public class EventsView extends VerticalLayout {
         activeOrderStatus.setText("Active order for " + eventLabel
                 + " | " + ticketCount + " ticket(s) | total " + formatPrice(order.getTotalPrice())
                 + " — manage on Orders page");
+        renderCart(order);
+    }
+
+    /** Live order-summary panel mirroring the active order, so buyers see their
+     *  cart fill up as they pick seats. Checkout still happens on the Orders page. */
+    private void renderCart(ActiveOrderDto order) {
+        cartPanel.removeAll();
+        cartPanel.addClassNames("app-card", "app-cart");
+
+        Span heading = new Span("Your order");
+        heading.addClassName("app-cart-heading");
+        cartPanel.add(heading);
+
+        if (order == null || order.getItems() == null || order.getItems().isEmpty()) {
+            Span empty = new Span("No tickets yet — pick seats or add tickets from the map below.");
+            empty.addClassName("app-cart-empty");
+            cartPanel.add(empty);
+            return;
+        }
+
+        OrderLabels labels = ordersPresenter.labelsFor(order);
+        for (OrderItemDto item : order.getItems()) {
+            Div line = new Div();
+            line.addClassName("app-cart-line");
+            Span label = new Span(cartItemLabel(item, labels));
+            Span price = new Span(formatPrice(item.getTotalPrice()));
+            price.addClassName("app-cart-price");
+            line.add(label, price);
+            cartPanel.add(line);
+        }
+
+        Div total = new Div();
+        total.addClassName("app-cart-total");
+        Span totalPrice = new Span(formatPrice(order.getTotalPrice()));
+        totalPrice.addClassName("app-cart-price");
+        total.add(new Span("Total"), totalPrice);
+        cartPanel.add(total);
+
+        Button checkout = new Button("Go to checkout",
+                e -> getUI().ifPresent(ui -> ui.navigate(OrdersView.class)));
+        checkout.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        checkout.addClassName("app-cart-checkout");
+        cartPanel.add(checkout);
+    }
+
+    private String cartItemLabel(OrderItemDto item, OrderLabels labels) {
+        String zone = item.getZoneId() == null ? ""
+                : labels.zoneNames().getOrDefault(item.getZoneId(), "");
+        if (item.isAssignedSeat() && item.getSeatId() != null) {
+            String seat = labels.seatLabels().getOrDefault(item.getSeatId(), item.getSeatId().toString());
+            return (zone.isBlank() ? "" : zone + " · ") + "Seat " + seat;
+        }
+        return (zone.isBlank() ? "General admission" : zone) + " · ×" + item.getQuantity();
     }
 
     private String formatCategory(EventCategory category) {
