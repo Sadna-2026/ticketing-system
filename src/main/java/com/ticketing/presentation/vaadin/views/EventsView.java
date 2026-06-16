@@ -173,6 +173,9 @@ public class EventsView extends VerticalLayout {
 
         Span cat = new Span(formatCategory(event.category()));
         cat.addClassName("app-event-cat");
+        if (event.category() != null) {
+            cat.addClassName("app-event-cat--" + event.category().name().toLowerCase());
+        }
 
         H3 title = new H3(event.name());
 
@@ -528,11 +531,12 @@ public class EventsView extends VerticalLayout {
 
     private static String colorFor(LayoutCellType type) {
         return switch (type) {
-            case SEAT -> "#1976d2";
-            case GENERAL_ADMISSION -> "#2e7d32";
-            case BLOCKED -> "#616161";
-            case STAGE -> "#6a1b9a";
-            case OBJECT -> "#ef6c00";
+            case SEAT -> "var(--app-cyan)";
+            case GENERAL_ADMISSION -> "var(--app-success)";
+            case BLOCKED -> "var(--app-muted)";
+            // The configured stage reads as the lit cyan->magenta stage (the signature).
+            case STAGE -> "linear-gradient(90deg, var(--app-cyan), var(--app-magenta))";
+            case OBJECT -> "var(--app-magenta)";
         };
     }
 
@@ -595,10 +599,7 @@ public class EventsView extends VerticalLayout {
             stagingHint.setText("Start a guest or member session to select seats.");
         }
 
-        Div stage = new Div(new Span("STAGE"));
-        stage.addClassName("app-stage");
-
-        VerticalLayout box = new VerticalLayout(stagingHint, stage, map, addSelected);
+        VerticalLayout box = new VerticalLayout(stagingHint, map, addSelected);
         box.setPadding(false);
         box.setSpacing(true);
         return box;

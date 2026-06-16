@@ -24,6 +24,12 @@ html {
   --app-cyan-soft: rgba(15, 181, 172, .12);
   --app-magenta-soft: rgba(214, 52, 126, .12);
   --app-shadow: 0 6px 16px -12px rgba(19, 23, 34, .22);
+  /* Per-category tag colours (light — darker for AA on the pale canvas) */
+  --cat-concert: #0B7268;
+  --cat-festival: #B02E68;
+  --cat-play: #8A5A00;
+  --cat-conference: #5B45B0;
+  --cat-sports: #1F7A47;
   --app-grad: linear-gradient(90deg, var(--app-cyan), var(--app-magenta));
 }
 
@@ -72,6 +78,12 @@ html[theme~="dark"] {
   --app-cyan-soft: rgba(52, 225, 214, .14);
   --app-magenta-soft: rgba(255, 92, 168, .14);
   --app-shadow: 0 6px 18px -10px rgba(0, 0, 0, .6);
+  /* Per-category tag colours (dark — bright on the near-black canvas) */
+  --cat-concert: #34E1D6;
+  --cat-festival: #FF5CA8;
+  --cat-play: #F5A524;
+  --cat-conference: #A78BFA;
+  --cat-sports: #46C277;
 }
 
 /* The page sits on --app-base; component surfaces use --lumo-base-color
@@ -430,11 +442,39 @@ vaadin-app-layout::part(navbar) {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--app-cyan-text);
-  background-color: var(--app-cyan-soft);
-  border: 1px solid color-mix(in srgb, var(--app-cyan) 30%, transparent);
   padding: 3px 8px;
   border-radius: 3px;
+  /* Default (OTHER / unknown) */
+  color: var(--app-muted);
+  background-color: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+}
+/* A distinct hue per event type. Background/border are a tint of the same
+   hue via color-mix, so each tag stays cohesive with the theme. */
+.app-event-cat--concert {
+  color: var(--cat-concert);
+  background-color: color-mix(in srgb, var(--cat-concert) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-concert) 32%, transparent);
+}
+.app-event-cat--festival {
+  color: var(--cat-festival);
+  background-color: color-mix(in srgb, var(--cat-festival) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-festival) 32%, transparent);
+}
+.app-event-cat--play {
+  color: var(--cat-play);
+  background-color: color-mix(in srgb, var(--cat-play) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-play) 32%, transparent);
+}
+.app-event-cat--conference {
+  color: var(--cat-conference);
+  background-color: color-mix(in srgb, var(--cat-conference) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-conference) 32%, transparent);
+}
+.app-event-cat--sports {
+  color: var(--cat-sports);
+  background-color: color-mix(in srgb, var(--cat-sports) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-sports) 32%, transparent);
 }
 .app-event-meta {
   color: var(--app-muted);
@@ -467,20 +507,7 @@ vaadin-text-area::part(input-field) {
   border-radius: var(--lumo-border-radius-m);
 }
 
-/* The lit stage bar above the seat map — the EQ signature's anchor. */
-.app-stage {
-  width: min(560px, 100%);
-  height: 40px;
-  margin: var(--lumo-space-s) 0 var(--lumo-space-m);
-  display: grid;
-  place-items: center;
-  border-radius: var(--lumo-border-radius-m);
-  font-family: "Sora", var(--lumo-font-family);
-  font-weight: 700;
-  font-size: var(--lumo-font-size-xs);
-  letter-spacing: 0.34em;
-  color: #08110f;
-  background: linear-gradient(90deg, var(--app-cyan), var(--app-magenta));
-  box-shadow: 0 0 28px -6px color-mix(in srgb, var(--app-cyan) 55%, transparent);
-}
+/* The hall-layout STAGE cell uses the lit cyan→magenta gradient (see
+   EventsView.colorFor) so the *configured* stage reads as the signature —
+   there is no fabricated/standalone stage bar. */
 

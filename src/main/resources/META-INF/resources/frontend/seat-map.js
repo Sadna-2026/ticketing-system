@@ -80,7 +80,7 @@ class SeatMap extends LitElement {
         pointer-events: none;
       }
       text.selected-mark {
-        font-size: 13px;
+        font-size: 16px;
         font-weight: 700;
         fill: #08110f;
         pointer-events: none;
@@ -95,7 +95,7 @@ class SeatMap extends LitElement {
         fill: var(--app-text, #eaeef5);
       }
       text.seat-label {
-        font-size: 9px;
+        font-size: 11px;
         fill: var(--app-muted, #99a0ae);
         pointer-events: none;
         user-select: none;
@@ -329,11 +329,11 @@ class SeatMap extends LitElement {
       return html`<div>No seats to display.</div>`;
     }
 
-    const SEAT = 24;
-    const GAP = 6;
+    const SEAT = 36;
+    const GAP = 10;
     const ROW_H = SEAT + GAP;
-    const LABEL_W = 56;
-    const PAD = 8;
+    const LABEL_W = 64;
+    const PAD = 10;
     const maxSeats = rows.reduce((m, r) => Math.max(m, r.cells.length), 0);
     const width = LABEL_W + maxSeats * (SEAT + GAP) + PAD;
     const height = rows.length * ROW_H + PAD * 2;
@@ -388,7 +388,7 @@ class SeatMap extends LitElement {
                       y="${y}"
                       width="${SEAT}"
                       height="${SEAT}"
-                      rx="5"
+                      rx="8"
                       fill="${colors.fill}"
                       stroke="${colors.stroke}"
                       stroke-width="1"
