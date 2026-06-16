@@ -684,7 +684,8 @@ class CompanyPresenterTest {
                 "Spring Concert",
                 EventCategory.CONCERT,
                 new EventSchedule(start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS)),
-                EventStatus.PUBLISHED
+                EventStatus.PUBLISHED,
+                com.ticketing.domain.event.SaleMethod.REGULAR
         );
     }
 

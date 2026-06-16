@@ -1098,7 +1098,8 @@ class CompanyViewTest {
                 "Spring Concert",
                 EventCategory.CONCERT,
                 new EventSchedule(start, start.plusSeconds(7200), start.minusSeconds(3600)),
-                EventStatus.PUBLISHED
+                EventStatus.PUBLISHED,
+                com.ticketing.domain.event.SaleMethod.REGULAR
         );
     }
 
@@ -1285,7 +1286,8 @@ class CompanyViewTest {
                 name,
                 EventCategory.CONCERT,
                 new EventSchedule(start, start.plusSeconds(7200), start.minusSeconds(3600)),
-                EventStatus.DRAFT
+                EventStatus.DRAFT,
+                com.ticketing.domain.event.SaleMethod.REGULAR
         );
     }
 

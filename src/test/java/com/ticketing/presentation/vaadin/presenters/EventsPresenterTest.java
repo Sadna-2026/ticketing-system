@@ -2,10 +2,12 @@ package com.ticketing.presentation.vaadin.presenters;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -28,12 +31,18 @@ import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.LotteryRegistrationRequest;
+import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.application.dto.LotteryStatusDTO;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.ZoneType;
+import com.ticketing.presentation.vaadin.presenters.EventsPresenter.LotteryRegistrationResult;
+import com.ticketing.presentation.vaadin.presenters.EventsPresenter.LotteryStatusResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
@@ -181,6 +190,174 @@ class EventsPresenterTest {
         assertTrue(presenter.searchCompanies("x").isEmpty());
     }
 
+    // ── Lottery registration ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("UI-19: Member session calls EventService.registerForLottery with correct event, zone, and quantity")
+    void GivenMemberSession_WhenRegisteringForLottery_ThenServiceIsCalledWithCorrectRequest() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        UUID entryId = UUID.randomUUID();
+        Instant now = Instant.now();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.registerForLottery(eq("member-token"), any(LotteryRegistrationRequest.class)))
+                .thenReturn(LotteryRegistrationResponse.success(entryId, now));
+
+        LotteryRegistrationResult result = presenter.registerForLottery(eventId, zoneId, 2);
+
+        ArgumentCaptor<LotteryRegistrationRequest> captor = ArgumentCaptor.forClass(LotteryRegistrationRequest.class);
+        verify(eventService).registerForLottery(eq("member-token"), captor.capture());
+        assertTrue(result.success());
+        assertEquals(eventId, captor.getValue().eventId());
+        assertEquals(zoneId, captor.getValue().zoneId());
+        assertEquals(2, captor.getValue().quantity());
+        assertEquals(entryId, result.lotteryEntryId());
+        assertEquals(now, result.registeredAt());
+    }
+
+    @Test
+    @DisplayName("UI-19: No session is rejected with a clear message")
+    void GivenNoSession_WhenRegisteringForLottery_ThenRejectedWithMessage() {
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
+
+        assertFalse(result.success());
+        assertNotNull(result.message());
+        assertFalse(result.message().isBlank());
+    }
+
+    @Test
+    @DisplayName("UI-19: Guest session is rejected with members-only message")
+    void GivenGuestSession_WhenRegisteringForLottery_ThenRejectedWithMembersOnlyMessage() {
+        SessionContext.setSessionToken("guest-token");
+        // no memberId set → guest
+
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
+
+        assertFalse(result.success());
+        assertTrue(result.message().toLowerCase().contains("member"));
+    }
+
+    @Test
+    @DisplayName("UI-19: Duplicate registration reason is preserved from the service response")
+    void GivenMemberAlreadyRegistered_WhenRegisteringForLottery_ThenDuplicateReasonIsReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.registerForLottery(eq("member-token"), any(LotteryRegistrationRequest.class)))
+                .thenReturn(LotteryRegistrationResponse.failure("Member is already registered for this lottery."));
+
+        LotteryRegistrationResult result = presenter.registerForLottery(eventId, zoneId, 1);
+
+        assertFalse(result.success());
+        assertEquals("Member is already registered for this lottery.", result.message());
+    }
+
+    @Test
+    @DisplayName("UI-19: Closed window reason is preserved from the service response")
+    void GivenClosedLotteryWindow_WhenRegisteringForLottery_ThenClosedWindowReasonIsReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.registerForLottery(eq("member-token"), any(LotteryRegistrationRequest.class)))
+                .thenReturn(LotteryRegistrationResponse.failure("Lottery registration window is closed."));
+
+        LotteryRegistrationResult result = presenter.registerForLottery(eventId, zoneId, 1);
+
+        assertFalse(result.success());
+        assertEquals("Lottery registration window is closed.", result.message());
+    }
+
+    @Test
+    @DisplayName("UI-19: Invalid zone reason is preserved from the service response")
+    void GivenInvalidZone_WhenRegisteringForLottery_ThenInvalidZoneReasonIsReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.registerForLottery(eq("member-token"), any(LotteryRegistrationRequest.class)))
+                .thenThrow(new IllegalArgumentException("Zone not found: " + zoneId));
+
+        LotteryRegistrationResult result = presenter.registerForLottery(eventId, zoneId, 1);
+
+        assertFalse(result.success());
+        assertTrue(result.message().contains("Zone not found"));
+    }
+
+    @Test
+    @DisplayName("UI-19: Unexpected exception produces a safe generic message")
+    void GivenUnexpectedException_WhenRegisteringForLottery_ThenSafeMessageIsReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.registerForLottery(any(), any()))
+                .thenThrow(new RuntimeException("internal db error"));
+
+        LotteryRegistrationResult result = presenter.registerForLottery(eventId, zoneId, 1);
+
+        assertFalse(result.success());
+        assertEquals("Could not register for the lottery. Please try again.", result.message());
+        assertNull(result.lotteryEntryId());
+    }
+
+    @Test
+    @DisplayName("UI-19: Successful registration returns entry ID and timestamp")
+    void GivenSuccessfulRegistration_WhenRegisteringForLottery_ThenEntryIdAndTimestampAreReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        UUID entryId = UUID.randomUUID();
+        Instant registeredAt = Instant.now();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.registerForLottery(eq("member-token"), any(LotteryRegistrationRequest.class)))
+                .thenReturn(LotteryRegistrationResponse.success(entryId, registeredAt));
+
+        LotteryRegistrationResult result = presenter.registerForLottery(eventId, zoneId, 1);
+
+        assertTrue(result.success());
+        assertEquals(entryId, result.lotteryEntryId());
+        assertEquals(registeredAt, result.registeredAt());
+    }
+
+    @Test
+    @DisplayName("UI-19: getLotteryStatus returns registered state for enrolled member")
+    void GivenRegisteredMember_WhenGettingLotteryStatus_ThenRegisteredStateIsReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        UUID entryId = UUID.randomUUID();
+        Instant registeredAt = Instant.now();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.getLotteryStatus("member-token", eventId))
+                .thenReturn(Optional.of(LotteryStatusDTO.registered(entryId, eventId, zoneId, 2, registeredAt)));
+
+        LotteryStatusResult result = presenter.getLotteryStatus(eventId);
+
+        assertTrue(result.registered());
+        assertEquals(entryId, result.entryId());
+        assertEquals(zoneId, result.zoneId());
+        assertEquals(2, result.quantity());
+        assertEquals(registeredAt, result.registeredAt());
+    }
+
+    @Test
+    @DisplayName("UI-19: getLotteryStatus returns not-registered for non-enrolled member")
+    void GivenNonEnrolledMember_WhenGettingLotteryStatus_ThenNotRegisteredIsReturned() {
+        UUID eventId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        when(eventService.getLotteryStatus("member-token", eventId))
+                .thenReturn(Optional.of(LotteryStatusDTO.notRegistered(eventId)));
+
+        LotteryStatusResult result = presenter.getLotteryStatus(eventId);
+
+        assertFalse(result.registered());
+        assertNull(result.entryId());
+    }
+
     private static EventSummaryDTO eventSummary(String name) {
         Instant start = Instant.now().plus(30, ChronoUnit.DAYS);
         return new EventSummaryDTO(
@@ -188,7 +365,8 @@ class EventsPresenterTest {
                 name,
                 EventCategory.CONCERT,
                 new EventSchedule(start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS)),
-                EventStatus.PUBLISHED
+                EventStatus.PUBLISHED,
+                com.ticketing.domain.event.SaleMethod.REGULAR
         );
     }
 

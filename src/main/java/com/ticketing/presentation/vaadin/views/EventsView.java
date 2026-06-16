@@ -18,16 +18,20 @@ import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.LayoutCellType;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.components.PolicyBadgesPanel;
 import com.ticketing.presentation.vaadin.components.SeatMapComponent;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
+import com.ticketing.presentation.vaadin.presenters.EventsPresenter.LotteryRegistrationResult;
+import com.ticketing.presentation.vaadin.presenters.EventsPresenter.LotteryStatusResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -163,6 +167,8 @@ public class EventsView extends VerticalLayout {
         resultsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts")
                 .setAutoWidth(true);
         resultsGrid.addColumn(event -> event.status().name()).setHeader("Status").setAutoWidth(true);
+        resultsGrid.addColumn(event -> event.saleMethod() == SaleMethod.LOTTERY ? "LOTTERY" : "").setHeader("Sale type")
+                .setAutoWidth(true);
         resultsGrid.setMinHeight("240px");
 
         resultsGrid.asSingleSelect().addValueChangeListener(event -> {
@@ -413,6 +419,8 @@ public class EventsView extends VerticalLayout {
     }
 
     private void renderEventMap(EventMapDTO eventMap) {
+        boolean isLottery = eventMap.saleMethod() == SaleMethod.LOTTERY;
+
         mapDisplay.add(
                 new H4(eventMap.eventName()),
                 new Span("Company: " + eventMap.companyName()),
@@ -424,6 +432,10 @@ public class EventsView extends VerticalLayout {
 
         if (!eventMap.purchaseRestrictions().isEmpty() || !eventMap.visibleDiscounts().isEmpty()) {
             mapDisplay.add(new PolicyBadgesPanel(eventMap.purchaseRestrictions(), eventMap.visibleDiscounts()));
+        }
+
+        if (isLottery) {
+            mapDisplay.add(renderLotteryPanel(eventMap));
         }
 
         if (eventMap.venueMap().isEmpty()) {
@@ -445,13 +457,126 @@ public class EventsView extends VerticalLayout {
         VerticalLayout zones = new VerticalLayout(new H4("Inventory zones"));
         zones.setPadding(false);
         for (EventMapDTO.ZoneInfo zone : eventMap.zones()) {
-            zones.add(zoneDetails(zone));
+            zones.add(zoneDetails(zone, !isLottery));
         }
         mapDisplay.add(zones);
 
         if (eventMap.layout() != null && !eventMap.layout().cells().isEmpty()) {
             mapDisplay.add(renderLayoutGrid(eventMap.layout()));
         }
+    }
+
+    private Component renderLotteryPanel(EventMapDTO eventMap) {
+        VerticalLayout panel = new VerticalLayout();
+        panel.setPadding(false);
+        panel.setSpacing(true);
+
+        Span badge = new Span("LOTTERY EVENT");
+        badge.getStyle()
+                .set("background", "#e65100")
+                .set("color", "white")
+                .set("padding", "2px 8px")
+                .set("border-radius", "4px")
+                .set("font-weight", "bold")
+                .set("font-size", "0.85em");
+        panel.add(badge);
+        panel.add(new Paragraph("Tickets for this event are allocated through a purchase-right lottery. "
+                + "Register during the registration window to enter the draw."));
+
+        if (eventMap.lotteryRegistrationOpen() != null) {
+            panel.add(new Span("Registration opens: " + formatInstant(eventMap.lotteryRegistrationOpen())));
+        }
+        if (eventMap.lotteryRegistrationClose() != null) {
+            panel.add(new Span("Registration closes: " + formatInstant(eventMap.lotteryRegistrationClose())));
+        }
+
+        if (eventMap.lotteryWindowOpen()) {
+            Span openBadge = new Span("Registration is currently open");
+            openBadge.getStyle().set("color", "green").set("font-weight", "bold");
+            panel.add(openBadge);
+        } else {
+            panel.add(new Span("Registration window is closed"));
+        }
+
+        SessionContext.UiState uiState = ordersPresenter.currentSessionState();
+
+        if (uiState.noSession() || uiState.guest()) {
+            Span membersOnly = new Span("Members only");
+            membersOnly.getStyle().set("font-weight", "bold");
+            panel.add(membersOnly,
+                    new Paragraph("Log in as a member to register for this lottery."));
+            return panel;
+        }
+
+        LotteryStatusResult statusResult = presenter.getLotteryStatus(eventMap.eventId());
+
+        if (statusResult.registered()) {
+            Span registeredBadge = new Span("You are registered for this lottery");
+            registeredBadge.getStyle().set("color", "green").set("font-weight", "bold");
+            panel.add(registeredBadge);
+            if (statusResult.registeredAt() != null) {
+                panel.add(new Span("Registered at: " + formatInstant(statusResult.registeredAt())));
+            }
+            if (statusResult.zoneId() != null) {
+                String zoneName = eventMap.zones().stream()
+                        .filter(z -> z.id().equals(statusResult.zoneId()))
+                        .map(EventMapDTO.ZoneInfo::name)
+                        .findFirst()
+                        .orElse(statusResult.zoneId().toString());
+                panel.add(new Span("Zone: " + zoneName + "  |  Quantity: " + statusResult.quantity()));
+            }
+            return panel;
+        }
+
+        if (!eventMap.lotteryWindowOpen()) {
+            panel.add(new Paragraph("The registration window is closed. You cannot register at this time."));
+            return panel;
+        }
+
+        panel.add(new H4("Register for the lottery"));
+
+        ComboBox<EventMapDTO.ZoneInfo> zoneSelect = new ComboBox<>("Select zone");
+        zoneSelect.setItems(eventMap.zones());
+        zoneSelect.setItemLabelGenerator(z -> z.name() + " — " + formatPrice(z.pricePerTicket()) + "/ticket");
+        zoneSelect.setRequiredIndicatorVisible(true);
+
+        IntegerField quantityField = new IntegerField("Quantity");
+        quantityField.setMin(1);
+        quantityField.setValue(1);
+        quantityField.setRequiredIndicatorVisible(true);
+
+        Span lotteryStatusSpan = new Span();
+        lotteryStatusSpan.getStyle().set("white-space", "pre-line");
+
+        Button enterLottery = new Button("Enter lottery");
+        enterLottery.addClickListener(event -> {
+            EventMapDTO.ZoneInfo selectedZone = zoneSelect.getValue();
+            if (selectedZone == null) {
+                lotteryStatusSpan.setText("Please select a zone.");
+                UiMessages.error("Please select a zone.");
+                return;
+            }
+            Integer qty = quantityField.getValue();
+            if (qty == null || qty <= 0) {
+                lotteryStatusSpan.setText("Please enter a positive quantity.");
+                UiMessages.error("Please enter a positive quantity.");
+                return;
+            }
+            LotteryRegistrationResult result = presenter.registerForLottery(
+                    currentEventMap.eventId(), selectedZone.id(), qty);
+            lotteryStatusSpan.setText(result.message());
+            reservationStatus.setText(result.message());
+            if (result.success()) {
+                UiMessages.success(result.message());
+                enterLottery.setEnabled(false);
+                loadSelectedEventMap(false);
+            } else {
+                UiMessages.error(result.message());
+            }
+        });
+
+        panel.add(new HorizontalLayout(zoneSelect, quantityField), enterLottery, lotteryStatusSpan);
+        return panel;
     }
 
     private Component renderLayoutGrid(EventMapDTO.LayoutInfo layout) {
@@ -511,7 +636,7 @@ public class EventsView extends VerticalLayout {
         };
     }
 
-    private Details zoneDetails(EventMapDTO.ZoneInfo zone) {
+    private Details zoneDetails(EventMapDTO.ZoneInfo zone, boolean showPurchaseControls) {
         VerticalLayout content = new VerticalLayout();
         content.setPadding(false);
         content.setSpacing(false);
@@ -519,21 +644,32 @@ public class EventsView extends VerticalLayout {
                 new Span("Type: " + zone.type().name()),
                 new Span("Price: " + formatPrice(zone.pricePerTicket())));
 
-        if (zone.type() == ZoneType.GENERAL_ADMISSION) {
-            IntegerField quantity = new IntegerField("Quantity");
-            quantity.setMin(1);
-            quantity.setValue(1);
-            Button addGA = new Button("Add GA tickets", event -> addGATickets(zone.id(), quantity.getValue()));
-            boolean canReserve = !ordersPresenter.currentSessionState().noSession();
-            addGA.setEnabled(canReserve);
-            content.add(
-                    new Span("Capacity: " + zone.maxCapacity()),
-                    new Span("Available: " + zone.availableCount()),
-                    new Span("Sold: " + zone.soldCount()),
-                    new HorizontalLayout(quantity, addGA));
+        if (showPurchaseControls) {
+            if (zone.type() == ZoneType.GENERAL_ADMISSION) {
+                IntegerField quantity = new IntegerField("Quantity");
+                quantity.setMin(1);
+                quantity.setValue(1);
+                Button addGA = new Button("Add GA tickets", event -> addGATickets(zone.id(), quantity.getValue()));
+                boolean canReserve = !ordersPresenter.currentSessionState().noSession();
+                addGA.setEnabled(canReserve);
+                content.add(
+                        new Span("Capacity: " + zone.maxCapacity()),
+                        new Span("Available: " + zone.availableCount()),
+                        new Span("Sold: " + zone.soldCount()),
+                        new HorizontalLayout(quantity, addGA));
+            } else {
+                content.add(new Span("Seats: " + zone.seats().size()));
+                content.add(seatMap(zone));
+            }
         } else {
-            content.add(new Span("Seats: " + zone.seats().size()));
-            content.add(seatMap(zone));
+            if (zone.type() == ZoneType.GENERAL_ADMISSION) {
+                content.add(
+                        new Span("Capacity: " + zone.maxCapacity()),
+                        new Span("Available: " + zone.availableCount()),
+                        new Span("Sold: " + zone.soldCount()));
+            } else {
+                content.add(new Span("Seats: " + zone.seats().size()));
+            }
         }
 
         Details details = new Details(zone.name(), content);

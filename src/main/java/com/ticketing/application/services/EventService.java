@@ -28,6 +28,7 @@ import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.application.dto.LotteryStatusDTO;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AndPolicy;
@@ -38,6 +39,7 @@ import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LayoutCell;
+import com.ticketing.domain.event.LotteryWindow;
 import com.ticketing.domain.event.MaxCompositeDiscount;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.Seat;
@@ -682,6 +684,8 @@ public class EventService {
             zoneDtos.add(toZoneInfo(zone));
         }
 
+        LotteryWindow lw = event.getLotteryWindow();
+        Instant mapNow = systemClock.now();
         return Optional.of(new EventMapDTO(
                 event.getId(),
                 event.getName(),
@@ -692,7 +696,28 @@ public class EventService {
                 toLayoutInfo(event.getVenueLayout()),
                 event.getDescription(),
                 BuyerPolicyCatalog.purchaseRestrictions(event),
-                BuyerPolicyCatalog.visibleDiscounts(event)));
+                BuyerPolicyCatalog.visibleDiscounts(event),
+                event.getSaleMethod(),
+                lw != null ? lw.registrationOpen() : null,
+                lw != null ? lw.registrationClose() : null,
+                lw != null && lw.isOpen(mapNow)));
+    }
+
+    public Optional<LotteryStatusDTO> getLotteryStatus(String token, UUID eventId) {
+        if (token == null || token.isBlank() || eventId == null) {
+            return Optional.empty();
+        }
+        if (!sessionTokenService.isValid(token)) {
+            return Optional.empty();
+        }
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        if (memberId == null) {
+            return Optional.of(LotteryStatusDTO.notRegistered(eventId));
+        }
+        return Optional.of(
+                lotteryRepository.findByEventAndMember(eventId, memberId)
+                        .map(e -> LotteryStatusDTO.registered(e.id(), eventId, e.zoneId(), e.quantity(), e.registeredAt()))
+                        .orElseGet(() -> LotteryStatusDTO.notRegistered(eventId)));
     }
 
     // ── Visual hall layout (FIX-V2-25) ──────────────────────────────

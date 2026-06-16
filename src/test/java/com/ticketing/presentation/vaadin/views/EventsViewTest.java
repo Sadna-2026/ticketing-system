@@ -31,12 +31,16 @@ import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventPolicyBadgeDTO;
 import com.ticketing.application.dto.EventPolicyBadgeDTO.Kind;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.LotteryStatusDTO;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.components.SeatMapComponent;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
+import com.ticketing.presentation.vaadin.presenters.EventsPresenter.LotteryRegistrationResult;
+import com.ticketing.presentation.vaadin.presenters.EventsPresenter.LotteryStatusResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
@@ -457,6 +461,249 @@ class EventsViewTest {
         assertTrue(hasText(view, "Not enough tickets available."));
     }
 
+    // ── Lottery view tests ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("UI-19: Lottery badge is visible in results grid for lottery events")
+    void GivenLotteryEvent_WhenSearchResultsDisplayed_ThenLotteryBadgeIsVisibleInGrid() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO lotteryEvent = lotteryEventSummary("Lottery Concert");
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(lotteryEvent)));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+
+        Grid<EventSummaryDTO> grid = findGrid(view);
+        List<EventSummaryDTO> rows = grid.getDataProvider().fetch(new Query<>()).toList();
+        assertEquals(SaleMethod.LOTTERY, rows.get(0).saleMethod());
+    }
+
+    @Test
+    @DisplayName("UI-19: Lottery panel is visible for lottery events; normal purchase controls are hidden")
+    void GivenLotteryEventMap_WhenViewMapClicked_ThenLotteryPanelIsShownAndNormalControlsAreHidden() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockMemberOrdersPresenter();
+        EventSummaryDTO event = lotteryEventSummary("Lottery Concert");
+        EventMapDTO lotteryMap = lotteryEventMap(event.id(), true);
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", lotteryMap));
+        when(presenter.getLotteryStatus(event.id())).thenReturn(LotteryStatusResult.notRegistered());
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        assertTrue(hasText(view, "LOTTERY EVENT"));
+        assertTrue(hasButton(view, "Enter lottery"));
+        assertFalse(hasButton(view, "Add GA tickets"));
+    }
+
+    @Test
+    @DisplayName("UI-19: Guest sees members-only message instead of registration form")
+    void GivenGuestSession_WhenLotteryEventMapDisplayed_ThenMembersOnlyMessageIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter(); // guest session
+        EventSummaryDTO event = lotteryEventSummary("Lottery Concert");
+        EventMapDTO lotteryMap = lotteryEventMap(event.id(), true);
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", lotteryMap));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        assertTrue(hasText(view, "Members only"));
+        assertFalse(hasButton(view, "Enter lottery"));
+    }
+
+    @Test
+    @DisplayName("UI-19: Already-registered member sees registered status; Enter lottery button is absent")
+    void GivenAlreadyRegisteredMember_WhenLotteryEventMapDisplayed_ThenRegisteredStatusIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockMemberOrdersPresenter();
+        EventSummaryDTO event = lotteryEventSummary("Lottery Concert");
+        EventMapDTO lotteryMap = lotteryEventMap(event.id(), true);
+        UUID zoneId = lotteryMap.zones().get(0).id();
+        UUID entryId = UUID.randomUUID();
+        LotteryStatusResult alreadyRegistered = LotteryStatusResult.registered(
+                LotteryStatusDTO.registered(entryId, event.id(), zoneId, 2, Instant.now()));
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", lotteryMap));
+        when(presenter.getLotteryStatus(event.id())).thenReturn(alreadyRegistered);
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        assertTrue(hasText(view, "You are registered for this lottery"));
+        assertFalse(hasButton(view, "Enter lottery"));
+    }
+
+    @Test
+    @DisplayName("UI-19: Successful registration shows confirmation and disables the Enter lottery button")
+    void GivenMemberWithOpenWindow_WhenEnterLotteryClicked_ThenSuccessConfirmationIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockMemberOrdersPresenter();
+        EventSummaryDTO event = lotteryEventSummary("Lottery Concert");
+        EventMapDTO lotteryMap = lotteryEventMap(event.id(), true);
+        UUID zoneId = lotteryMap.zones().get(0).id();
+        UUID entryId = UUID.randomUUID();
+        Instant registeredAt = Instant.now();
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(event.id()))
+                .thenReturn(MapResult.success("Event map loaded.", lotteryMap))
+                .thenReturn(MapResult.success("Event map loaded.", lotteryMap));
+        when(presenter.getLotteryStatus(event.id()))
+                .thenReturn(LotteryStatusResult.notRegistered())
+                .thenReturn(LotteryStatusResult.registered(
+                        LotteryStatusDTO.registered(entryId, event.id(), zoneId, 1, registeredAt)));
+        when(presenter.registerForLottery(eq(event.id()), eq(zoneId), eq(1)))
+                .thenReturn(LotteryRegistrationResult.success("Lottery registration successful.", entryId, registeredAt));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        // Set zone and submit
+        findLotteryZoneComboBox(view).setValue(lotteryMap.zones().get(0));
+        clickButton(view, "Enter lottery");
+
+        verify(presenter).registerForLottery(event.id(), zoneId, 1);
+    }
+
+    @Test
+    @DisplayName("UI-19: Specific failure reason is shown when registration fails")
+    void GivenRegistrationFails_WhenEnterLotteryClicked_ThenSpecificFailureReasonIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockMemberOrdersPresenter();
+        EventSummaryDTO event = lotteryEventSummary("Lottery Concert");
+        EventMapDTO lotteryMap = lotteryEventMap(event.id(), true);
+        UUID zoneId = lotteryMap.zones().get(0).id();
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", lotteryMap));
+        when(presenter.getLotteryStatus(event.id())).thenReturn(LotteryStatusResult.notRegistered());
+        when(presenter.registerForLottery(eq(event.id()), eq(zoneId), eq(1)))
+                .thenReturn(LotteryRegistrationResult.failure("Member is already registered for this lottery."));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        findLotteryZoneComboBox(view).setValue(lotteryMap.zones().get(0));
+        clickButton(view, "Enter lottery");
+
+        assertTrue(hasText(view, "Member is already registered for this lottery."));
+    }
+
+    @Test
+    @DisplayName("UI-19: Lottery events hide regular purchase controls; regular events retain them")
+    void GivenRegularEvent_WhenMapLoaded_ThenNormalPurchaseControlsAreShownAndNoLotteryControls() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO event = eventSummary("Regular Concert");
+        EventMapDTO regularMap = sampleEventMap(event.id());
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", regularMap));
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        assertTrue(hasButton(view, "Add GA tickets"));
+        assertFalse(hasButton(view, "Enter lottery"));
+        assertFalse(hasText(view, "LOTTERY EVENT"));
+    }
+
+    @Test
+    @DisplayName("UI-19: Registration window closed message shown when window is not open")
+    void GivenClosedLotteryWindow_WhenLotteryEventMapDisplayed_ThenClosedWindowMessageIsShown() {
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockMemberOrdersPresenter();
+        EventSummaryDTO event = lotteryEventSummary("Lottery Concert");
+        EventMapDTO lotteryMap = lotteryEventMap(event.id(), false); // window closed
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(event)));
+        when(presenter.loadEventMap(eq(event.id()))).thenReturn(MapResult.success("Event map loaded.", lotteryMap));
+        when(presenter.getLotteryStatus(event.id())).thenReturn(LotteryStatusResult.notRegistered());
+        EventsView view = new EventsView(presenter, ordersPresenter);
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(event);
+        clickButton(view, "View selected map");
+
+        assertTrue(hasText(view, "Registration window is closed"));
+        assertFalse(hasButton(view, "Enter lottery"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private ComboBox<EventMapDTO.ZoneInfo> findLotteryZoneComboBox(Component root) {
+        return (ComboBox<EventMapDTO.ZoneInfo>) componentsOf(root).stream()
+                .filter(ComboBox.class::isInstance)
+                .map(ComboBox.class::cast)
+                .filter(combo -> "Select zone".equals(combo.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Lottery zone ComboBox not found"));
+    }
+
+    private OrdersPresenter mockMemberOrdersPresenter() {
+        OrdersPresenter ordersPresenter = mock(OrdersPresenter.class);
+        when(ordersPresenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
+        when(ordersPresenter.currentSessionState()).thenReturn(
+                new SessionContext.UiState(true, false, true, false, "alice", "MEMBER"));
+        when(ordersPresenter.loadCurrentOrder()).thenReturn(OrderResult.success("No active order found.", null, null));
+        return ordersPresenter;
+    }
+
+    private static EventSummaryDTO lotteryEventSummary(String name) {
+        Instant start = Instant.now().plus(30, ChronoUnit.DAYS);
+        return new EventSummaryDTO(
+                UUID.randomUUID(),
+                name,
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS)),
+                EventStatus.PUBLISHED,
+                SaleMethod.LOTTERY
+        );
+    }
+
+    private static EventMapDTO lotteryEventMap(UUID eventId, boolean windowOpen) {
+        UUID zoneId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Instant open = windowOpen ? now.minus(1, ChronoUnit.DAYS) : now.minus(5, ChronoUnit.DAYS);
+        Instant close = windowOpen ? now.plus(5, ChronoUnit.DAYS) : now.minus(1, ChronoUnit.DAYS);
+        return new EventMapDTO(
+                eventId,
+                "Lottery Concert",
+                "Acme",
+                EventStatus.PUBLISHED,
+                Map.of("Floor", zoneId),
+                List.of(new EventMapDTO.ZoneInfo(
+                        zoneId,
+                        "Floor",
+                        ZoneType.GENERAL_ADMISSION,
+                        new BigDecimal("80.00"),
+                        200,
+                        200,
+                        0,
+                        List.of()
+                )),
+                null,
+                "A lottery-based event.",
+                List.of(),
+                List.of(),
+                SaleMethod.LOTTERY,
+                open,
+                close,
+                windowOpen
+        );
+    }
+
     @SuppressWarnings("unchecked")
     private ComboBox<CompanySummaryDTO> findCompanyComboBox(Component root) {
         return (ComboBox<CompanySummaryDTO>) componentsOf(root).stream()
@@ -655,7 +902,8 @@ class EventsViewTest {
                 name,
                 EventCategory.CONCERT,
                 new EventSchedule(start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS)),
-                EventStatus.PUBLISHED
+                EventStatus.PUBLISHED,
+                com.ticketing.domain.event.SaleMethod.REGULAR
         );
     }
 
