@@ -174,9 +174,13 @@ Each phase is its own stacked PR (small, reviewable). Functionality unchanged th
 NOTE: with the theme + component patterns in place, most per-surface work was CTA emphasis only;
 deeper restructures (Company side-nav, Admin KPI dashboard) are deferred as noted above.
 
-**Phase 4 — Motion & polish** *(tasteful, non-disruptive only)*
-- Route/page-load transition, card hover lift, seat-selection glow, staggered grid reveal,
-  skeleton loaders. 150–300ms, transform/opacity only, **respect `prefers-reduced-motion`**.
+**Phase 4 — Motion & polish** *(tasteful, non-disruptive only)* — ✅ core done
+- ✅ Soft entrance rise (opacity + 8px) on the auth card / home hero / quick-action cards (staggered);
+  `backwards` fill so card hover-lifts still work. Card + button hover transitions already inline.
+- ✅ Signature flourish: the navbar wordmark "plays" its EQ bars **on hover only** (never while you
+  work). Seat-selection glow is part of the seat-map signature (3b).
+- ✅ Everything gated on `@media (prefers-reduced-motion: no-preference)` — motion-sensitive users get
+  a fully static UI.
 
 ---
 

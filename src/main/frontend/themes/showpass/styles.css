@@ -320,3 +320,69 @@ vaadin-app-layout::part(navbar) {
   margin: 0;
 }
 
+/* ============================================================
+   Motion (Phase 4) — tasteful + non-disruptive. Everything here
+   is gated on prefers-reduced-motion: no-preference, so motion-
+   sensitive users get a completely static UI. (Card/button hover
+   lifts are defined inline above as transitions, also subtle.)
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  /* Soft entrance for the entry screens. `backwards` fill so the
+     hover-lift transform on cards still works after it settles. */
+  @keyframes app-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .app-auth-card,
+  .app-hero {
+    animation: app-rise 0.3s ease-out backwards;
+  }
+  .app-action-card {
+    animation: app-rise 0.32s ease-out backwards;
+  }
+  .app-action-card:nth-child(2) {
+    animation-delay: 0.05s;
+  }
+  .app-action-card:nth-child(3) {
+    animation-delay: 0.1s;
+  }
+  .app-action-card:nth-child(4) {
+    animation-delay: 0.15s;
+  }
+  .app-action-card:nth-child(5) {
+    animation-delay: 0.2s;
+  }
+
+  /* The wordmark "plays" its equalizer on hover — the single playful
+     flourish, and only while pointed at, so it never distracts. */
+  @keyframes app-eq {
+    0%,
+    100% {
+      transform: scaleY(0.6);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+  .app-wordmark:hover .app-brandmark rect {
+    transform-box: fill-box;
+    transform-origin: center bottom;
+    animation: app-eq 1s ease-in-out infinite;
+  }
+  .app-wordmark:hover .app-brandmark rect:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .app-wordmark:hover .app-brandmark rect:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .app-wordmark:hover .app-brandmark rect:nth-child(4) {
+    animation-delay: 0.1s;
+  }
+}
+
