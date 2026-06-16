@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.exception.OptimisticLockException;
 
 import jakarta.persistence.EntityManager;
@@ -83,6 +84,14 @@ public class JpaEventRepository implements IEventRepository {
     private Event detach(Event event) {
         // Touch the LAZY collections before detaching so they remain traversable.
         event.getZones().forEach(z -> z.getSeats().size());
+        // The venue layout is an @Embeddable whose cells are a separate LAZY
+        // @ElementCollection; initialise it too, otherwise hasSellableCell()/getCells()
+        // throws a LazyInitializationException on the detached aggregate (e.g. the
+        // venue-designer "Validate" action via EventService.validateEventLayout).
+        VenueLayout layout = event.getVenueLayout();
+        if (layout != null) {
+            layout.getCells().size();
+        }
         entityManager.detach(event);
         return event;
     }
