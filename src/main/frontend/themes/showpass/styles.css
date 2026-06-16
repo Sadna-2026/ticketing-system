@@ -21,6 +21,8 @@ html {
   --app-border: #E2E8F2;
   --app-success: #1F9D57;
   --app-danger: #D63B49;
+  --app-success-text: #157A42; /* darker green for AA as text on the pale canvas */
+  --app-danger-text: #C42A38;
   --app-cyan-soft: rgba(15, 181, 172, .12);
   --app-magenta-soft: rgba(214, 52, 126, .12);
   --app-shadow: 0 6px 16px -12px rgba(19, 23, 34, .22);
@@ -75,6 +77,8 @@ html[theme~="dark"] {
   --app-border: rgba(255, 255, 255, .08);
   --app-success: #46C277;
   --app-danger: #FF6B7A;
+  --app-success-text: #46C277; /* bright is fine as text on the dark base */
+  --app-danger-text: #FF6B7A;
   --app-cyan-soft: rgba(52, 225, 214, .14);
   --app-magenta-soft: rgba(255, 92, 168, .14);
   --app-shadow: 0 6px 18px -10px rgba(0, 0, 0, .6);
@@ -222,7 +226,7 @@ vaadin-app-layout::part(navbar) {
   flex: none;
 }
 .app-badge--success {
-  color: var(--app-success);
+  color: var(--app-success-text);
   background-color: color-mix(in srgb, var(--app-success) 14%, transparent);
 }
 .app-badge--pending {
@@ -230,7 +234,7 @@ vaadin-app-layout::part(navbar) {
   background-color: var(--app-cyan-soft);
 }
 .app-badge--danger {
-  color: var(--app-danger);
+  color: var(--app-danger-text);
   background-color: color-mix(in srgb, var(--app-danger) 14%, transparent);
 }
 .app-badge--neutral {
