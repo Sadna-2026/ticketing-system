@@ -21,6 +21,7 @@ import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
@@ -200,6 +201,20 @@ public class CompanyPresenter {
             return ActionResult.success("Role appointment offer sent.");
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, PERSONNEL_FAILURE_MESSAGE));
+        }
+    }
+
+    public List<MemberSummaryDTO> listAppointableMembers() {
+        String token = memberToken();
+        if (token == null) {
+            return List.of();
+        }
+        UUID memberId = SessionContext.getMemberId();
+        try {
+            return memberService.searchAllMembersExcept(memberId);
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to load appointable members", ex);
+            return List.of();
         }
     }
 
@@ -610,13 +625,18 @@ public class CompanyPresenter {
         }
     }
 
-    // ── Visual hall designer (FIX-V2-25) ────────────────────────────
-
-    /** Creates a DRAFT event from zones the visual designer derived from painted cells. */
-    public EventActionResult createDesignedEvent(
-            String companyName, String name, String description, EventCategory category,
-            Instant startTime, Instant endTime, Instant doorsOpenTime, Integer lockMinutes,
-            List<CreateEventRequest.ZoneSpec> zones, Map<String, String> sectionToZoneName) {
+    public EventActionResult createEventWithZones(
+            String companyName,
+            String name,
+            String description,
+            EventCategory category,
+            Instant startTime,
+            Instant endTime,
+            Instant doorsOpenTime,
+            Integer lockMinutes,
+            List<CreateEventRequest.ZoneSpec> zones,
+            Map<String, String> sectionToZoneName
+    ) {
         String token = memberToken();
         if (token == null) {
             return EventActionResult.failure(MEMBER_SESSION_REQUIRED);
@@ -628,7 +648,7 @@ public class CompanyPresenter {
             return EventActionResult.failure("Lock minutes must be positive.");
         }
         if (zones == null || zones.isEmpty()) {
-            return EventActionResult.failure("Design at least one seat or general-admission area.");
+            return EventActionResult.failure("At least one zone is required.");
         }
         String normalizedCompanyName = blankToNull(companyName);
         if (normalizedCompanyName == null) {
@@ -640,12 +660,17 @@ public class CompanyPresenter {
         }
         try {
             CreateEventRequest request = new CreateEventRequest(
-                    normalizedCompanyName, normalizedEventName, blankToNull(description), category,
+                    normalizedCompanyName,
+                    normalizedEventName,
+                    blankToNull(description),
+                    category,
                     new EventSchedule(startTime, endTime, doorsOpenTime),
                     new LockTimerDuration(Duration.ofMinutes(lockMinutes)),
-                    zones, sectionToZoneName);
+                    zones,
+                    sectionToZoneName
+            );
             UUID eventId = eventService.createEvent(token, request);
-            return EventActionResult.created("Event created as draft.", eventId);
+            return EventActionResult.created("Event created with " + zones.size() + " zone(s).", eventId);
         } catch (RuntimeException ex) {
             return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
         }
@@ -763,6 +788,21 @@ public class CompanyPresenter {
 
         try {
             return eventService.getEventMap(eventId)
+                    .map(eventMap -> EventMapResult.success("Event map loaded.", eventMap))
+                    .orElseGet(() -> EventMapResult.failure("Event map not found."));
+        } catch (RuntimeException ex) {
+            logger.warn(INVENTORY_FAILURE_MESSAGE, ex);
+            return EventMapResult.failure(INVENTORY_FAILURE_MESSAGE);
+        }
+    }
+
+    public EventMapResult loadEventMapForManagement(UUID eventId) {
+        if (eventId == null) {
+            return EventMapResult.failure("Event ID is required.");
+        }
+
+        try {
+            return eventService.getEventMapForManagement(eventId)
                     .map(eventMap -> EventMapResult.success("Event map loaded.", eventMap))
                     .orElseGet(() -> EventMapResult.failure("Event map not found."));
         } catch (RuntimeException ex) {
@@ -1167,6 +1207,8 @@ public class CompanyPresenter {
             return "Max quantity: at most " + p.getMaxTickets() + " tickets";
         if (policy instanceof com.ticketing.domain.event.MinQuantityPolicy p)
             return "Min quantity: at least " + p.getMinTickets() + " tickets";
+        if (policy instanceof com.ticketing.domain.event.NoOrphanSeatPolicy)
+            return "No orphan seat: prevents leaving a single isolated seat in a row";
         if (policy instanceof com.ticketing.domain.event.AndPolicy p) {
             StringBuilder sb = new StringBuilder("AND(");
             for (int i = 0; i < p.getPolicies().size(); i++) {

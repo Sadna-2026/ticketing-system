@@ -14,7 +14,6 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -44,14 +43,13 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
-import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
-import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PersonnelAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
+import com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
@@ -93,13 +91,11 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Define and manage purchase rules and discount policies at company or event level."));
         assertTrue(hasButton(view, "Open company"));
         assertTrue(hasButton(view, "Load company info"));
-        assertTrue(hasButton(view, "Offer role appointment"));
-        assertTrue(hasButton(view, "Accept role offer"));
-        assertTrue(hasButton(view, "Reject role offer"));
-        assertTrue(hasButton(view, "Revoke personnel"));
+        assertTrue(hasButton(view, "Relinquish ownership"));
+        assertTrue(hasButton(view, "Load organization chart"));
         assertTrue(hasButton(view, "Change manager permissions"));
         assertTrue(hasButton(view, "Relinquish ownership"));
-        assertTrue(hasButton(view, "Create company event"));
+        assertTrue(hasButton(view, "Create event"));
         assertTrue(hasButton(view, "Edit event details"));
         assertTrue(hasButton(view, "Publish event"));
         assertTrue(hasButton(view, "Cancel event"));
@@ -134,7 +130,7 @@ class CompanyViewTest {
         assertFalse(hasVisibleButton(view, "Open company"));
         assertFalse(hasVisibleButton(view, "Offer role appointment"));
         assertFalse(hasVisibleButton(view, "Relinquish ownership"));
-        assertFalse(hasVisibleButton(view, "Create company event"));
+        assertFalse(hasVisibleButton(view, "Create event"));
         assertFalse(hasVisibleButton(view, "Add seat"));
         assertFalse(hasVisibleButton(view, "Suspend company"));
         assertFalse(hasVisibleButton(view, "Load company purchase history"));
@@ -145,11 +141,36 @@ class CompanyViewTest {
     void GivenMemberSession_WhenRendered_ThenFounderSetupTabAndOpenCompanyAreReachable() {
         CompanyView view = new CompanyView(mockPresenter());
 
-        selectTab(view, "Founder setup");
+        selectTab(view, "Founder");
 
         assertTrue(hasVisibleButton(view, "Open company"));
         assertNotNull(findTextField(view, "New company name"));
         assertNotNull(findTextArea(view, "New company description"));
+    }
+
+    @Test
+    void GivenMemberSession_WhenRendered_ThenDenseActionsAreGroupedIntoTaskAreaTabs() {
+        CompanyView view = new CompanyView(mockPresenter());
+
+        assertEquals(
+                List.of("Company lookup", "Founder", "Personnel", "Events", "Inventory", "Policies", "Reports"),
+                tabLabels(view));
+        assertFalse(tabExists(view, "Lifecycle"), "Lifecycle is folded into the Founder tab");
+    }
+
+    @Test
+    void GivenFounderTab_WhenSelected_ThenItGroupsCompanySetupAndLifecycleActions() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Founder");
+        findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
+
+        assertTrue(hasVisibleButton(view, "Open company"));
+        assertTrue(hasVisibleButton(view, "Suspend company"));
+        assertTrue(hasVisibleButton(view, "Reopen company"));
     }
 
     @Test
@@ -163,7 +184,7 @@ class CompanyViewTest {
                 .thenReturn(List.of(company("Acme"), company("My New Co")));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Founder setup");
+        selectTab(view, "Founder");
         findTextField(view, "New company name").setValue("My New Co");
         findTextArea(view, "New company description").setValue("A brand-new production company.");
 
@@ -185,7 +206,7 @@ class CompanyViewTest {
                 .thenReturn(ActionResult.failure("A production company with this name already exists."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Founder setup");
+        selectTab(view, "Founder");
         findTextField(view, "New company name").setValue("Demo Productions");
         findTextArea(view, "New company description").setValue("duplicate attempt");
 
@@ -248,31 +269,23 @@ class CompanyViewTest {
         UUID offerId = UUID.randomUUID();
         when(presenter.offerRoleAppointment(eq("Acme"), eq(targetId), eq(StaffAppointment.StaffRole.MANAGER), any()))
                 .thenReturn(ActionResult.success("Role appointment offer sent."));
-        when(presenter.respondToRoleOffer(offerId, true)).thenReturn(ActionResult.success("Role offer accepted."));
-        when(presenter.respondToRoleOffer(offerId, false)).thenReturn(ActionResult.success("Role offer rejected."));
         when(presenter.revokePersonnel("Acme", targetId)).thenReturn(ActionResult.success("Personnel revoked."));
         when(presenter.changeManagerPermissions(eq("Acme"), eq(targetId), any()))
                 .thenReturn(ActionResult.success("Manager permissions updated."));
         when(presenter.loadOrganizationChart("Acme"))
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
-        when(presenter.listPendingRoleOffers()).thenReturn(List.of(
-                new PendingRoleOfferOption(offerId, "Acme", StaffAppointment.StaffRole.MANAGER)));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
-        findPendingRoleOfferCombo(view).setValue(new PendingRoleOfferOption(offerId, "Acme", StaffAppointment.StaffRole.MANAGER));
+        selectOfferTargetMember(view, "manager", targetId);
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS));
 
         clickButton(view, "Offer role appointment");
-        clickButton(view, "Accept role offer");
-        clickButton(view, "Reject role offer");
         clickButton(view, "Change manager permissions");
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER,
                 Set.of(ManagerPermission.VIEW_REPORTS));
-        verify(presenter).respondToRoleOffer(offerId, true);
-        verify(presenter).respondToRoleOffer(offerId, false);
         verify(presenter).revokePersonnel("Acme", targetId);
         verify(presenter).changeManagerPermissions("Acme", targetId, Set.of(ManagerPermission.VIEW_REPORTS));
         assertTrue(hasText(view, "Personnel revoked."));
@@ -309,8 +322,6 @@ class CompanyViewTest {
         assertFalse(isEffectivelyVisible(findTargetMemberCombo(view)));
         assertFalse(isEffectivelyVisible(findComboByLabel(view, "Role")));
         assertFalse(isEffectivelyVisible(findCheckboxGroup(view)));
-        assertTrue(hasVisibleButton(view, "Accept role offer"));
-        assertTrue(hasVisibleButton(view, "Reject role offer"));
         assertTrue(hasText(view, "Only a company owner can manage personnel for Acme."));
     }
 
@@ -456,7 +467,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view, "Personnel revoked."));
@@ -479,7 +490,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view,
@@ -493,26 +504,24 @@ class CompanyViewTest {
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         EventSummaryDTO created = event("Show", eventId);
-        when(presenter.createEvent(eq("Acme"), eq("Show"), eq("desc"), eq(EventCategory.CONCERT),
-                any(), any(), any(), eq(15), eq("Floor"), eq(new BigDecimal("50.00")), eq(100), eq("Main Hall")))
-                .thenReturn(EventActionResult.created("Event created.", eventId));
         when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(created));
         when(presenter.publishEvent(eventId)).thenReturn(ActionResult.success("Event published."));
         when(presenter.cancelEvent(eventId)).thenReturn(ActionResult.success("Event cancelled."));
-        when(presenter.loadEventMap(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
+        when(presenter.loadEventMapForManagement(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
         when(presenter.addSeat(eventId, zoneId, "A", "1")).thenReturn(ActionResult.success("Seat added."));
         when(presenter.removeSeat(eventId, zoneId, seatId)).thenReturn(ActionResult.success("Seat removed."));
         when(presenter.increaseGACapacity(eventId, zoneId, 5)).thenReturn(ActionResult.success("GA capacity increased."));
         when(presenter.decreaseGACapacity(eventId, zoneId, 5)).thenReturn(ActionResult.success("GA capacity decreased."));
         when(presenter.setZonePrice(eventId, zoneId, new BigDecimal("75.00"))).thenReturn(ActionResult.success("Zone price updated."));
         CompanyView view = new CompanyView(presenter);
-        fillCreateEventForm(view);
 
-        clickButton(view, "Create company event");
-        // Creating an event auto-selects it in both the management and inventory pickers,
-        // and selecting the inventory event loads its zones into the zone picker.
-        assertEquals(eventId, findEventCombo(view, "Event to manage").getValue().id());
-        assertEquals(eventId, findEventCombo(view, "Inventory event").getValue().id());
+        // Select company and pre-existing event in the management picker.
+        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
+        findEventCombo(view, "Event to manage").setValue(created);
+
+        // Set up inventory section: select company and event to load zones.
+        findCompanyCombo(view, "Inventory company name").setValue(company("Acme"));
+        findEventCombo(view, "Inventory event").setValue(created);
 
         // Inventory actions are selection-driven: pick the zone (and seat) instead of typing UUIDs.
         ComboBox<EventMapDTO.ZoneInfo> zoneCombo = findZoneCombo(view);
@@ -525,17 +534,17 @@ class CompanyViewTest {
         findBigDecimalField(view, "Zone price update").setValue(new BigDecimal("75.00"));
 
         clickButton(view, "Publish event");
-        clickButton(view, "Cancel event");
+        clickDestructive(view, "Cancel event");
         clickButton(view, "Add seat");
-        clickButton(view, "Remove seat");
+        clickDestructive(view, "Remove seat");
         clickButton(view, "Increase GA capacity");
-        clickButton(view, "Decrease GA capacity");
+        clickDestructive(view, "Decrease GA capacity");
         clickButton(view, "Set zone price");
 
         verify(presenter).publishEvent(eventId);
         verify(presenter).cancelEvent(eventId);
         // Selecting the inventory event triggers the zone load.
-        verify(presenter).loadEventMap(eventId);
+        verify(presenter).loadEventMapForManagement(eventId);
         verify(presenter).addSeat(eventId, zoneId, "A", "1");
         verify(presenter).removeSeat(eventId, zoneId, seatId);
         verify(presenter).increaseGACapacity(eventId, zoneId, 5);
@@ -551,7 +560,7 @@ class CompanyViewTest {
         UUID zoneId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
-        when(presenter.loadEventMap(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
+        when(presenter.loadEventMapForManagement(eventId)).thenReturn(EventMapResult.success("Event map loaded.", eventMap(eventId, zoneId, seatId)));
         CompanyView view = new CompanyView(presenter);
 
         // Before any selection every inventory action is disabled.
@@ -592,7 +601,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
         findCompanyCombo(view, "Reporting company name").setValue(company("Acme"));
 
-        clickButton(view, "Suspend company");
+        clickDestructive(view, "Suspend company");
         clickButton(view, "Reopen company");
         clickButton(view, "Load company purchase history");
         clickButton(view, "Load sales report");
@@ -610,7 +619,7 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
 
         assertTrue(hasVisibleButton(view, "Suspend company"));
@@ -646,11 +655,11 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
         lifecyclePicker.setValue(company("Acme"));
 
-        clickButton(view, "Suspend company");
+        clickDestructive(view, "Suspend company");
 
         assertEquals(List.of("Acme"), companyNames(lifecyclePicker));
         assertEquals("Acme", lifecyclePicker.getValue().name());
@@ -679,7 +688,7 @@ class CompanyViewTest {
         ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
         lifecyclePicker.setValue(company("Acme"));
 
-        clickButton(view, "Suspend company");
+        clickDestructive(view, "Suspend company");
 
         assertEquals(List.of("Acme"), companyNames(findCompanyCombo(view, "Company info name")));
         assertEquals(List.of("Acme"), companyNames(findCompanyCombo(view, "Personnel company name")));
@@ -698,7 +707,7 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Suspended Co."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Suspended Co"));
 
         clickButton(view, "Reopen company");
@@ -714,7 +723,7 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.denied("Only the founder can perform this lifecycle action"));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
 
         assertFalse(hasVisibleButton(view, "Suspend company"));
@@ -777,7 +786,6 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Manager permissions for Acme: VIEW_REPORTS."));
 
         selectTab(view, "Events");
-        assertFalse(hasVisibleButton(view, "Create company event"));
         assertFalse(hasVisibleButton(view, "Publish event"));
         assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE permission for Acme."));
 
@@ -789,7 +797,7 @@ class CompanyViewTest {
         assertFalse(hasVisibleButton(view, "Set purchase policy"));
         assertFalse(hasVisibleButton(view, "Set discount policy"));
 
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         assertFalse(hasVisibleButton(view, "Suspend company"));
         assertFalse(hasVisibleButton(view, "Close company"));
         assertEquals(company("Acme"), findCompanyCombo(view, "Selected company").getValue());
@@ -809,9 +817,8 @@ class CompanyViewTest {
 
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
         selectTab(view, "Events");
-        assertTrue(hasVisibleButton(view, "Create company event"));
+        assertTrue(hasVisibleButton(view, "Create event"));
         assertTrue(hasVisibleButton(view, "Publish event"));
-        assertTrue(hasVisibleButton(view, "Design hall layout (visual)"));
 
         selectTab(view, "Inventory");
         assertTrue(hasVisibleButton(view, "Add seat"));
@@ -848,36 +855,25 @@ class CompanyViewTest {
 
         assertTrue(findTextField(view, "New company name").isRequiredIndicatorVisible());
         assertTrue(findCompanyCombo(view, "Personnel company name").isRequiredIndicatorVisible());
-        assertTrue(findTargetMemberCombo(view).isRequiredIndicatorVisible());
-        assertTrue(findComboByLabel(view, "Role").isRequiredIndicatorVisible());
         assertTrue(findCompanyCombo(view, "Event company name").isRequiredIndicatorVisible());
-        assertTrue(findTextField(view, "Event name").isRequiredIndicatorVisible());
-        assertTrue(findComboByLabel(view, "Event category").isRequiredIndicatorVisible());
-        assertTrue(findDateTimePicker(view, "Start time").isRequiredIndicatorVisible());
-        assertTrue(findDateTimePicker(view, "End time").isRequiredIndicatorVisible());
-        assertTrue(findIntegerField(view, "Lock minutes").isRequiredIndicatorVisible());
-        assertTrue(findTextField(view, "Zone name").isRequiredIndicatorVisible());
-        assertTrue(findBigDecimalField(view, "Zone price").isRequiredIndicatorVisible());
-        assertTrue(findIntegerField(view, "GA capacity").isRequiredIndicatorVisible());
-        assertTrue(findTextField(view, "Venue section").isRequiredIndicatorVisible());
 
+        assertFalse(findTargetMemberCombo(view).isRequiredIndicatorVisible());
         assertFalse(findTextArea(view, "New company description").isRequiredIndicatorVisible());
-        assertFalse(findTextArea(view, "Event description").isRequiredIndicatorVisible());
-        assertFalse(findDateTimePicker(view, "Doors open time").isRequiredIndicatorVisible());
-        assertFalse(findPendingRoleOfferCombo(view).isRequiredIndicatorVisible());
+        assertFalse(findTextArea(view, "New event description").isRequiredIndicatorVisible());
+        assertFalse(findDateTimePicker(view, "New doors open time").isRequiredIndicatorVisible());
     }
 
     @Test
     void GivenRequiredField_WhenValueIsClearedToBlank_ThenItShowsInlineError() {
         CompanyView view = new CompanyView(mockPresenter());
-        TextField eventName = findTextField(view, "Event name");
+        TextField companyName = findTextField(view, "New company name");
 
-        eventName.setValue("Summer Concert");
-        assertFalse(eventName.isInvalid());
+        companyName.setValue("Acme Productions");
+        assertFalse(companyName.isInvalid());
 
-        eventName.setValue("");
-        assertTrue(eventName.isInvalid());
-        assertEquals("Event name is required.", eventName.getErrorMessage());
+        companyName.setValue("");
+        assertTrue(companyName.isInvalid());
+        assertEquals("Company name is required.", companyName.getErrorMessage());
     }
 
     @Test
@@ -922,7 +918,7 @@ class CompanyViewTest {
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
+        selectOfferTargetMember(view, "manager", targetId);
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS, ManagerPermission.PERSONNEL_MGMT));
 
         clickButton(view, "Offer role appointment");
@@ -942,7 +938,7 @@ class CompanyViewTest {
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of(personnel("manager", targetId))));
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
-        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
+        selectOfferTargetMember(view, "manager", targetId);
 
         clickButton(view, "Offer role appointment");
 
@@ -961,7 +957,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view, "Personnel revoked."));
@@ -979,7 +975,7 @@ class CompanyViewTest {
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
         selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
 
-        clickButton(view, "Revoke personnel");
+        clickDestructive(view, "Revoke personnel");
 
         verify(presenter).revokePersonnel("Acme", targetId);
         assertTrue(hasText(view, "Revoker does not have permission to revoke this member. Only the appointer can revoke their appointees."));
@@ -992,7 +988,7 @@ class CompanyViewTest {
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
 
-        clickButton(view, "Relinquish ownership");
+        clickDestructive(view, "Relinquish ownership");
 
         verify(presenter).relinquishOwnership("Acme");
         assertTrue(hasText(view, "Ownership relinquished for Acme."));
@@ -1006,7 +1002,7 @@ class CompanyViewTest {
         CompanyView view = new CompanyView(presenter);
         findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
 
-        clickButton(view, "Relinquish ownership");
+        clickDestructive(view, "Relinquish ownership");
 
         verify(presenter).relinquishOwnership("Acme");
         assertTrue(hasText(view, "Only non-founder owners may relinquish ownership."));
@@ -1070,24 +1066,6 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Insufficient permissions: POLICY_MODIFICATION required"));
     }
 
-    @Test
-    void GivenPendingRoleOffers_WhenListedInPersonnelTab_ThenDropdownShowsCompanyAndRole() {
-        CompanyPresenter presenter = mockPresenter();
-        UUID offerId = UUID.randomUUID();
-        when(presenter.listPendingRoleOffers()).thenReturn(List.of(
-                new PendingRoleOfferOption(offerId, "Northwind Events", StaffAppointment.StaffRole.MANAGER)));
-
-        CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Personnel");
-
-        ComboBox<PendingRoleOfferOption> offerPicker = findPendingRoleOfferCombo(view);
-        List<String> labels = offerPicker.getDataProvider()
-                .fetch(new Query<>())
-                .map(PendingRoleOfferOption::label)
-                .toList();
-        assertEquals(List.of("Northwind Events — MANAGER"), labels);
-    }
-
     private CompanyPresenter mockPresenter() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionLabel()).thenReturn("Current session: Member (alice)");
@@ -1107,22 +1085,11 @@ class CompanyViewTest {
         when(presenter.loadOrganizationChart(any()))
                 .thenReturn(OrgChartResult.success("Organization chart loaded.", List.of()));
         when(presenter.listPendingRoleOffers()).thenReturn(List.of());
+        when(presenter.loadEventMapForManagement(any()))
+                .thenReturn(EventMapResult.failure("Event map not found."));
         return presenter;
     }
 
-    private void fillCreateEventForm(CompanyView view) {
-        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
-        findTextField(view, "Event name").setValue("Show");
-        findTextArea(view, "Event description").setValue("desc");
-        findDateTimePicker(view, "Start time").setValue(LocalDateTime.of(2026, 6, 1, 19, 0));
-        findDateTimePicker(view, "End time").setValue(LocalDateTime.of(2026, 6, 1, 21, 0));
-        findDateTimePicker(view, "Doors open time").setValue(LocalDateTime.of(2026, 6, 1, 18, 0));
-        findIntegerField(view, "Lock minutes").setValue(15);
-        findTextField(view, "Zone name").setValue("Floor");
-        findBigDecimalField(view, "Zone price").setValue(new BigDecimal("50.00"));
-        findIntegerField(view, "GA capacity").setValue(100);
-        findTextField(view, "Venue section").setValue("Main Hall");
-    }
 
     private static EventSummaryDTO eventSummary() {
         Instant start = Instant.parse("2026-06-01T19:00:00Z");
@@ -1188,6 +1155,15 @@ class CompanyViewTest {
                 .toList();
     }
 
+    private static void selectOfferTargetMember(CompanyView view, String username, UUID memberId) {
+        Object option = findOfferTargetMemberCombo(view).getDataProvider()
+                .fetch(new Query<>())
+                .filter(item -> username.equals(((com.ticketing.application.dto.MemberSummaryDTO) item).username()))
+                .findFirst()
+                .orElse(new com.ticketing.application.dto.MemberSummaryDTO(memberId, username)); // default fallback for tests
+        findOfferTargetMemberCombo(view).setValue(option);
+    }
+
     private static void selectTargetMember(
             CompanyView view,
             String username,
@@ -1218,6 +1194,28 @@ class CompanyViewTest {
                 .anyMatch(CompanyViewTest::isEffectivelyVisible);
     }
 
+    @Test
+    void GivenCancelEventDialog_WhenCancelClicked_ThenPresenterIsNotCalled() {
+        CompanyPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
+        CompanyView view = new CompanyView(presenter);
+        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
+        findEventCombo(view, "Event to manage").setValue(event("Show", eventId));
+
+        clickButton(view, "Cancel event");
+        assertTrue(ConfirmDialogTestSupport.isOpen());
+        assertTrue(ConfirmDialogTestSupport.openDialogText().contains("Show"));
+        ConfirmDialogTestSupport.cancel();
+
+        verify(presenter, never()).cancelEvent(any());
+    }
+
+    private static void clickDestructive(Component root, String text) {
+        clickButton(root, text);
+        ConfirmDialogTestSupport.confirm();
+    }
+
     private static void clickButton(Component root, String text) {
         Button button = components(root).stream()
                 .filter(Button.class::isInstance)
@@ -1236,11 +1234,6 @@ class CompanyViewTest {
     @SuppressWarnings("unchecked")
     private static ComboBox<EventSummaryDTO> findEventCombo(Component root, String label) {
         return (ComboBox<EventSummaryDTO>) findComboByLabel(root, label);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static ComboBox<PendingRoleOfferOption> findPendingRoleOfferCombo(Component root) {
-        return (ComboBox<PendingRoleOfferOption>) findComboByLabel(root, "Role offer");
     }
 
     @SuppressWarnings("unchecked")
@@ -1263,8 +1256,13 @@ class CompanyViewTest {
     }
 
     @SuppressWarnings("unchecked")
+    private static ComboBox<Object> findOfferTargetMemberCombo(Component root) {
+        return (ComboBox<Object>) findComboByLabel(root, "Member to appoint");
+    }
+
+    @SuppressWarnings("unchecked")
     private static ComboBox<Object> findTargetMemberCombo(Component root) {
-        return (ComboBox<Object>) findComboByLabel(root, "Target member");
+        return (ComboBox<Object>) findComboByLabel(root, "Existing personnel");
     }
 
     private static ComboBox<?> findComboByLabel(Component root, String label) {
@@ -1362,6 +1360,18 @@ class CompanyViewTest {
                         .filter(tab -> label.equals(tab.getLabel()))
                         .findFirst()
                         .orElseThrow());
+    }
+
+    private static List<String> tabLabels(Component root) {
+        return components(root).stream()
+                .filter(Tab.class::isInstance)
+                .map(Tab.class::cast)
+                .map(Tab::getLabel)
+                .toList();
+    }
+
+    private static boolean tabExists(Component root, String label) {
+        return tabLabels(root).contains(label);
     }
 
     private static Grid<EventSummaryDTO> findEventGrid(Component root) {

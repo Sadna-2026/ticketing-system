@@ -27,7 +27,6 @@ import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.CouponDiscount;
 import com.ticketing.domain.event.DateRangeCondition;
-import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.IDiscountCondition;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
@@ -53,6 +52,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartRes
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PolicyViewResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
+import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
@@ -88,9 +88,8 @@ public class CompanyView extends VerticalLayout {
 
     private enum CompanyMode {
         LOOKUP("Company lookup", false),
-        FOUNDER("Founder setup", true),
+        FOUNDER("Founder", true),
         PERSONNEL("Personnel", true),
-        LIFECYCLE("Lifecycle", true),
         EVENTS("Events", true),
         INVENTORY("Inventory", true),
         POLICIES("Policies", true),
@@ -128,10 +127,10 @@ public class CompanyView extends VerticalLayout {
     private final ComboBox<EventSummaryDTO> lookupEventPicker = new ComboBox<>("Published event");
 
     private final ComboBox<CompanySummaryDTO> personnelCompanyName = new ComboBox<>("Personnel company name");
-    private final ComboBox<PersonnelTarget> targetMember = new ComboBox<>("Target member");
+    private final ComboBox<com.ticketing.application.dto.MemberSummaryDTO> offerTargetMember = new ComboBox<>("Member to appoint");
+    private final ComboBox<PersonnelTarget> targetMember = new ComboBox<>("Existing personnel");
     private final ComboBox<StaffAppointment.StaffRole> role = new ComboBox<>("Role");
     private final CheckboxGroup<ManagerPermission> permissions = new CheckboxGroup<>("Manager permissions");
-    private final ComboBox<CompanyPresenter.PendingRoleOfferOption> pendingRoleOffer = new ComboBox<>("Role offer");
     private final Span personnelStatus = new Span("Manage owner and manager appointments.");
     private final Span personnelAccessHint = new Span("Select a company to show owner-only permission controls.");
     private final VerticalLayout orgChartDisplay = new VerticalLayout();
@@ -145,17 +144,7 @@ public class CompanyView extends VerticalLayout {
     private Button relinquishOwnershipButton;
 
     private final ComboBox<CompanySummaryDTO> eventCompanyName = new ComboBox<>("Event company name");
-    private final TextField eventName = new TextField("Event name");
-    private final TextArea eventDescription = new TextArea("Event description");
-    private final ComboBox<EventCategory> eventCategory = new ComboBox<>("Event category");
-    private final DateTimePicker startTime = new DateTimePicker("Start time");
-    private final DateTimePicker endTime = new DateTimePicker("End time");
-    private final DateTimePicker doorsOpenTime = new DateTimePicker("Doors open time");
-    private final IntegerField lockMinutes = new IntegerField("Lock minutes");
-    private final TextField zoneName = new TextField("Zone name");
-    private final BigDecimalField zonePrice = new BigDecimalField("Zone price");
-    private final IntegerField gaCapacity = new IntegerField("GA capacity");
-    private final TextField sectionName = new TextField("Venue section");
+
     private final ComboBox<EventSummaryDTO> eventId = new ComboBox<>("Event to manage");
     private final TextField newEventName = new TextField("New event name");
     private final TextArea newEventDescription = new TextArea("New event description");
@@ -164,13 +153,11 @@ public class CompanyView extends VerticalLayout {
     private final DateTimePicker newEndTime = new DateTimePicker("New end time");
     private final DateTimePicker newDoorsOpenTime = new DateTimePicker("New doors open time");
     private final Span eventStatus = new Span("Create, edit, or cancel company events.");
-    private Button createEventButton;
     private Button editEventButton;
     private Button publishEventButton;
     private Button cancelEventButton;
     private Button designHallButton;
     private FormLayout eventSelectionForm;
-    private FormLayout eventCreateForm;
     private FormLayout eventEditForm;
     private HorizontalLayout eventActions;
     private VerticalLayout eventControls;
@@ -254,6 +241,7 @@ public class CompanyView extends VerticalLayout {
         modeContent.setSpacing(true);
         modeContent.setWidthFull();
         modeTabs.setWidthFull();
+        modeTabs.getElement().setAttribute("aria-label", "Company sections");
         selectedCompanyName.setWidth("min(100%, 28rem)");
 
         add(
@@ -268,6 +256,7 @@ public class CompanyView extends VerticalLayout {
         );
         selectMode(CompanyMode.LOOKUP);
         refreshSessionStatus();
+        addAttachListener(event -> refreshSessionStatus());
     }
 
     private void initModePanels() {
@@ -275,11 +264,14 @@ public class CompanyView extends VerticalLayout {
         lookupPanel.setPadding(false);
         lookupPanel.setSpacing(true);
 
+        VerticalLayout founderPanel = new VerticalLayout(openCompanySection(), lifecycleSection());
+        founderPanel.setPadding(false);
+        founderPanel.setSpacing(true);
+
         Map<CompanyMode, VerticalLayout> panels = Map.of(
                 CompanyMode.LOOKUP, lookupPanel,
-                CompanyMode.FOUNDER, openCompanySection(),
+                CompanyMode.FOUNDER, founderPanel,
                 CompanyMode.PERSONNEL, personnelSection(),
-                CompanyMode.LIFECYCLE, lifecycleSection(),
                 CompanyMode.EVENTS, eventManagementSection(),
                 CompanyMode.INVENTORY, inventorySection(),
                 CompanyMode.POLICIES, policySection(),
@@ -338,20 +330,10 @@ public class CompanyView extends VerticalLayout {
         role.setItemLabelGenerator(StaffAppointment.StaffRole::name);
         role.setValue(StaffAppointment.StaffRole.MANAGER);
         permissions.setItems(ManagerPermission.values());
+        offerTargetMember.setItemLabelGenerator(com.ticketing.application.dto.MemberSummaryDTO::username);
         targetMember.setItemLabelGenerator(PersonnelTarget::label);
         targetMember.setPlaceholder("Select personnel after choosing a company");
-        pendingRoleOffer.setItemLabelGenerator(CompanyPresenter.PendingRoleOfferOption::label);
-        pendingRoleOffer.setPlaceholder("No pending role offers");
-        pendingRoleOffer.setClearButtonVisible(true);
 
-        eventCategory.setItems(EventCategory.values());
-        eventCategory.setItemLabelGenerator(EventCategory::name);
-        eventCategory.setValue(EventCategory.CONCERT);
-
-        lockMinutes.setMin(1);
-        lockMinutes.setValue(15);
-        gaCapacity.setMin(1);
-        gaCapacity.setValue(100);
         capacityDelta.setMin(1);
         capacityDelta.setValue(1);
 
@@ -362,19 +344,8 @@ public class CompanyView extends VerticalLayout {
         markRequired(openCompanyName, "Company name is required.");
 
         markRequired(personnelCompanyName, "Select a company.");
-        markRequired(targetMember, "Target member is required.");
-        markRequired(role, "Select a role.");
 
         markRequired(eventCompanyName, "Select a company.");
-        markRequired(eventName, "Event name is required.");
-        markRequired(eventCategory, "Select a category.");
-        markRequired(startTime, "Start time is required.");
-        markRequired(endTime, "End time is required.");
-        markRequired(lockMinutes, "Lock minutes is required.");
-        markRequired(zoneName, "Zone name is required.");
-        markRequired(zonePrice, "Zone price is required.");
-        markRequired(gaCapacity, "GA capacity is required.");
-        markRequired(sectionName, "Venue section is required.");
     }
 
     private void configurePickers() {
@@ -402,13 +373,11 @@ public class CompanyView extends VerticalLayout {
 
         selectedCompanyName.addValueChangeListener(e -> applySelectedCompany(e.getValue()));
 
-        // Hidden section pickers mirror the shared company selection and keep existing handlers simple.
         inventoryZonePicker.setItemLabelGenerator(zone -> zone.name() + " — " + zone.type());
         inventoryZonePicker.setPlaceholder("Select an event to list zones");
         seatPicker.setItemLabelGenerator(seat -> "Row " + seat.row() + " · Seat " + seat.seatNumber());
         seatPicker.setPlaceholder("Select a zone to list seats");
 
-        // Event pickers cascade from the company selected in their section.
         personnelCompanyName.addValueChangeListener(e -> refreshPersonnelContext());
         eventCompanyName.addValueChangeListener(e -> {
             reloadCompanyEvents(eventId, e.getValue());
@@ -424,8 +393,6 @@ public class CompanyView extends VerticalLayout {
             reloadCompanyEvents(policyEventId, e.getValue());
             refreshPolicyAccess();
         });
-        // Inventory zone/seat pickers replace typed UUIDs: selecting the event lists its zones,
-        // selecting a zone lists its seats, and actions stay disabled until a valid selection exists.
         inventoryEventId.addValueChangeListener(e -> loadInventoryZones(e.getValue()));
         inventoryZonePicker.addValueChangeListener(e -> {
             EventMapDTO.ZoneInfo zone = e.getValue();
@@ -445,7 +412,7 @@ public class CompanyView extends VerticalLayout {
             refreshInventoryActionState();
             return;
         }
-        EventMapResult result = presenter.loadEventMap(event.id());
+        EventMapResult result = presenter.loadEventMapForManagement(event.id());
         if (!result.success()) {
             inventoryZonePicker.setItems(List.of());
             inventoryStatus.setText(result.message());
@@ -487,11 +454,32 @@ public class CompanyView extends VerticalLayout {
         return seat == null ? null : seat.id();
     }
 
+    private String selectedSeatLabel() {
+        EventMapDTO.SeatInfo seat = seatPicker.getValue();
+        if (seat == null) {
+            return null;
+        }
+        return "row " + seat.row() + ", seat " + seat.seatNumber();
+    }
+
+    private String selectedZoneLabel() {
+        EventMapDTO.ZoneInfo zone = inventoryZonePicker.getValue();
+        return zone == null ? null : zone.name();
+    }
+
+    private String policyTargetLabel() {
+        EventSummaryDTO event = policyEventId.getValue();
+        if (event != null) {
+            return event.name();
+        }
+        CompanySummaryDTO company = policyCompanyName.getValue();
+        return company == null ? null : company.name();
+    }
+
     private void reloadCompanyEvents(ComboBox<EventSummaryDTO> picker, CompanySummaryDTO company) {
         picker.clear();
         List<EventSummaryDTO> events = company == null ? List.of() : orEmpty(presenter.listCompanyEvents(company.name()));
         picker.setItems(events);
-        // The policy picker keeps its "optional / company-level" hint; the others reflect cascade state.
         if (picker != policyEventId) {
             picker.setPlaceholder(company == null
                     ? "Select a company first"
@@ -544,6 +532,13 @@ public class CompanyView extends VerticalLayout {
         if (company == null) {
             companyInfoStatus.setText("Select a company to view public details.");
             companyEventsGrid.setItems(List.of());
+            reloadCompanyEvents(eventId, null);
+            reloadCompanyEvents(inventoryEventId, null);
+            reloadCompanyEvents(policyEventId, null);
+        } else {
+            reloadCompanyEvents(eventId, company);
+            reloadCompanyEvents(inventoryEventId, company);
+            reloadCompanyEvents(policyEventId, company);
         }
     }
 
@@ -634,35 +629,53 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout personnelSection() {
-        offerRoleButton = new Button("Offer role appointment", event -> handlePersonnelResult(presenter.offerRoleAppointment(
+        offerRoleButton = new Button("Offer role appointment", event -> {
+            if (offerTargetMember.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select a member to appoint.");
+                return;
+            }
+            if (role.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select a role.");
+                return;
+            }
+            handlePersonnelResult(presenter.offerRoleAppointment(
                 companyNameOf(personnelCompanyName),
-                selectedTargetMemberId(),
+                selectedOfferTargetMemberId(),
                 role.getValue(),
                 permissions.getSelectedItems()
-        )));
-        Button acceptOffer = new Button("Accept role offer", event -> {
-            handlePersonnelResult(presenter.respondToRoleOffer(selectedPendingRoleOfferId(), true));
-            refreshPendingRoleOffers();
-        });
-        Button rejectOffer = new Button("Reject role offer", event -> {
-            handlePersonnelResult(presenter.respondToRoleOffer(selectedPendingRoleOfferId(), false));
-            refreshPendingRoleOffers();
+            ));
         });
         revokePersonnelButton = new Button("Revoke personnel", event -> {
-            ActionResult result = presenter.revokePersonnel(companyNameOf(personnelCompanyName), selectedTargetMemberId());
-            handlePersonnelResult(result);
-            if (result.success()) {
-                refreshPersonnelContext();
+            if (targetMember.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select an existing personnel to revoke.");
+                return;
             }
+            PersonnelTarget target = targetMember.getValue();
+            DestructiveActionDialogs.confirmRevokePersonnel(target.username(), () -> {
+                CompanyPresenter.ActionResult result = presenter.revokePersonnel(
+                        companyNameOf(personnelCompanyName), target.memberId());
+                handlePersonnelResult(result);
+                if (result.success()) {
+                    refreshPersonnelContext();
+                }
+            });
         });
-        changeManagerPermissionsButton = new Button("Change manager permissions", event -> handlePersonnelResult(
-                presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), selectedTargetMemberId(),
-                        permissions.getSelectedItems())));
-        relinquishOwnershipButton = new Button("Relinquish ownership", event -> handlePersonnelResult(
-                presenter.relinquishOwnership(companyNameOf(personnelCompanyName))));
+        changeManagerPermissionsButton = new Button("Change manager permissions", event -> {
+            if (targetMember.isEmpty()) {
+                com.vaadin.flow.component.notification.Notification.show("Please select an existing personnel to modify.");
+                return;
+            }
+            handlePersonnelResult(presenter.changeManagerPermissions(companyNameOf(personnelCompanyName), selectedTargetMemberId(),
+                        permissions.getSelectedItems()));
+        });
+        relinquishOwnershipButton = new Button("Relinquish ownership", event -> {
+            String companyName = companyNameOf(personnelCompanyName);
+            DestructiveActionDialogs.confirmRelinquishOwnership(companyName, () ->
+                    handlePersonnelResult(presenter.relinquishOwnership(companyName)));
+        });
         loadOrganizationChartButton = new Button("Load organization chart", event -> loadOrganizationChart());
 
-        ownerPersonnelForm = new FormLayout(targetMember, role, permissions);
+        ownerPersonnelForm = new FormLayout(offerTargetMember, targetMember, role, permissions);
         ownerPersonnelForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
         ownerPersonnelActions = new HorizontalLayout(offerRoleButton, revokePersonnelButton,
                 changeManagerPermissionsButton, relinquishOwnershipButton, loadOrganizationChartButton);
@@ -676,26 +689,15 @@ public class CompanyView extends VerticalLayout {
         ownerPersonnelControls.setPadding(false);
         ownerPersonnelControls.setSpacing(true);
 
-        HorizontalLayout memberOfferActions = new HorizontalLayout(acceptOffer, rejectOffer);
-        memberOfferActions.setAlignItems(Alignment.BASELINE);
-        VerticalLayout memberOfferControls = new VerticalLayout(
-                new H4("Respond to role offers"),
-                pendingRoleOffer,
-                memberOfferActions
-        );
-        memberOfferControls.setPadding(false);
-        memberOfferControls.setSpacing(true);
         personnelCompanyName.setVisible(false);
         refreshPersonnelAccess();
-        refreshPendingRoleOffers();
 
         VerticalLayout section = new VerticalLayout(
                 new H3("Personnel and roles"),
-                new Paragraph("Owners appoint managers and other owners. Members can accept or reject role offers."),
+                new Paragraph("Owners appoint managers and other owners."),
                 personnelCompanyName,
                 ownerPersonnelControls,
                 personnelAccessHint,
-                memberOfferControls,
                 personnelStatus,
                 orgChartDisplay
         );
@@ -704,39 +706,26 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout eventManagementSection() {
-        createEventButton = new Button("Create company event", event -> createEvent());
         editEventButton = new Button("Edit event details", event -> editEvent());
         publishEventButton = new Button("Publish event", event -> handleEventAction(presenter.publishEvent(selectedEventId(eventId))));
-        cancelEventButton = new Button("Cancel event", event -> handleEventAction(presenter.cancelEvent(selectedEventId(eventId))));
-        designHallButton = new Button("Design hall layout (visual)", event -> openVenueDesigner());
+        cancelEventButton = new Button("Cancel event", event -> {
+            EventSummaryDTO selected = eventId.getValue();
+            DestructiveActionDialogs.confirmCancelEvent(selected == null ? null : selected.name(), () ->
+                    handleEventAction(presenter.cancelEvent(selectedEventId(eventId))));
+        });
+        designHallButton = new Button("Create event", event -> openVenueDesigner());
 
         eventSelectionForm = new FormLayout(eventCompanyName, eventId);
         eventSelectionForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
 
-        eventCreateForm = new FormLayout(
-                eventName,
-                eventDescription,
-                eventCategory,
-                startTime,
-                endTime,
-                doorsOpenTime,
-                lockMinutes,
-                zoneName,
-                zonePrice,
-                gaCapacity,
-                sectionName
-        );
-        eventCreateForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
-
         eventEditForm = new FormLayout(newEventName, newEventDescription, newArtist, newStartTime, newEndTime, newDoorsOpenTime);
         eventEditForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
-        eventActions = new HorizontalLayout(createEventButton, editEventButton, publishEventButton, cancelEventButton, designHallButton);
+        eventActions = new HorizontalLayout(designHallButton, editEventButton, publishEventButton, cancelEventButton);
         eventActions.setAlignItems(Alignment.BASELINE);
         eventControls = new VerticalLayout(
                 new H4("Event controls"),
                 eventSelectionForm,
-                eventCreateForm,
                 eventEditForm,
                 eventActions
         );
@@ -760,21 +749,24 @@ public class CompanyView extends VerticalLayout {
                 seatRow.getValue(),
                 seatNumber.getValue()
         )));
-        removeSeatButton = new Button("Remove seat", event -> handleInventoryResult(presenter.removeSeat(
-                selectedEventId(inventoryEventId),
-                selectedZoneId(),
-                selectedSeatId()
-        )));
+        removeSeatButton = new Button("Remove seat", event ->
+                DestructiveActionDialogs.confirmRemoveSeat(selectedSeatLabel(), () -> handleInventoryResult(presenter.removeSeat(
+                        selectedEventId(inventoryEventId),
+                        selectedZoneId(),
+                        selectedSeatId()
+                ))));
         increaseCapacityButton = new Button("Increase GA capacity", event -> handleInventoryResult(presenter.increaseGACapacity(
                 selectedEventId(inventoryEventId),
                 selectedZoneId(),
                 capacityDelta.getValue()
         )));
-        decreaseCapacityButton = new Button("Decrease GA capacity", event -> handleInventoryResult(presenter.decreaseGACapacity(
-                selectedEventId(inventoryEventId),
-                selectedZoneId(),
-                capacityDelta.getValue()
-        )));
+        decreaseCapacityButton = new Button("Decrease GA capacity", event ->
+                DestructiveActionDialogs.confirmDecreaseGaCapacity(selectedZoneLabel(), () ->
+                        handleInventoryResult(presenter.decreaseGACapacity(
+                                selectedEventId(inventoryEventId),
+                                selectedZoneId(),
+                                capacityDelta.getValue()
+                        ))));
         setZonePriceButton = new Button("Set zone price", event -> handleInventoryResult(presenter.setZonePrice(
                 selectedEventId(inventoryEventId),
                 selectedZoneId(),
@@ -812,7 +804,11 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout lifecycleSection() {
-        suspendCompanyButton = new Button("Suspend company", event -> handleLifecycleResult(presenter.suspendCompany(companyNameOf(lifecycleCompanyName))));
+        suspendCompanyButton = new Button("Suspend company", event -> {
+            String companyName = companyNameOf(lifecycleCompanyName);
+            DestructiveActionDialogs.confirmSuspendCompany(companyName, () ->
+                    handleLifecycleResult(presenter.suspendCompany(companyName)));
+        });
         reopenCompanyButton = new Button("Reopen company", event -> handleLifecycleResult(presenter.reopenCompany(companyNameOf(lifecycleCompanyName))));
         lifecycleActions = new HorizontalLayout(suspendCompanyButton, reopenCompanyButton);
         lifecycleActions.setAlignItems(Alignment.BASELINE);
@@ -953,16 +949,18 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void removePurchasePolicy() {
-        UUID eventId = selectedEventId(policyEventId);
-        ActionResult result;
-        if (eventId != null) {
-            result = presenter.removeEventPurchasePolicy(eventId);
-        } else {
-            result = presenter.removeCompanyPurchasePolicy(companyNameOf(policyCompanyName));
-        }
-        policyStatus.setText(result.message());
-        currentPolicyDisplay.setText("");
-        notify(result);
+        DestructiveActionDialogs.confirmRemovePurchasePolicy(policyTargetLabel(), () -> {
+            UUID eventId = selectedEventId(policyEventId);
+            ActionResult result;
+            if (eventId != null) {
+                result = presenter.removeEventPurchasePolicy(eventId);
+            } else {
+                result = presenter.removeCompanyPurchasePolicy(companyNameOf(policyCompanyName));
+            }
+            policyStatus.setText(result.message());
+            currentPolicyDisplay.setText("");
+            notify(result);
+        });
     }
 
     private void loadDiscountPolicy() {
@@ -998,16 +996,18 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void removeDiscountPolicy() {
-        UUID eventId = selectedEventId(policyEventId);
-        ActionResult result;
-        if (eventId != null) {
-            result = presenter.removeEventDiscountPolicy(eventId);
-        } else {
-            result = presenter.removeCompanyDiscountPolicy(companyNameOf(policyCompanyName));
-        }
-        policyStatus.setText(result.message());
-        currentPolicyDisplay.setText("");
-        notify(result);
+        DestructiveActionDialogs.confirmRemoveDiscountPolicy(policyTargetLabel(), () -> {
+            UUID eventId = selectedEventId(policyEventId);
+            ActionResult result;
+            if (eventId != null) {
+                result = presenter.removeEventDiscountPolicy(eventId);
+            } else {
+                result = presenter.removeCompanyDiscountPolicy(companyNameOf(policyCompanyName));
+            }
+            policyStatus.setText(result.message());
+            currentPolicyDisplay.setText("");
+            notify(result);
+        });
     }
 
     private IPurchasePolicy buildPurchasePolicy() {
@@ -1265,6 +1265,8 @@ public class CompanyView extends VerticalLayout {
     private void refreshPersonnelContext() {
         CompanyPresenter.PersonnelAccessResult access = refreshPersonnelAccess();
         if (access.canManagePersonnel()) {
+            offerTargetMember.setEnabled(true);
+            offerTargetMember.setItems(presenter.listAppointableMembers());
             targetMember.setEnabled(true);
             reloadPersonnelTargets();
         } else {
@@ -1285,7 +1287,8 @@ public class CompanyView extends VerticalLayout {
 
     private void setPersonnelTargetItems(List<OrgNodeDTO> roots) {
         List<PersonnelTarget> targets = new ArrayList<>();
-        collectPersonnelTargets(roots, targets);
+        String currentUsername = presenter.currentSessionState().username();
+        collectPersonnelTargets(roots, targets, currentUsername);
         targetMember.clear();
         targetMember.setItems(targets);
         targetMember.setEnabled(true);
@@ -1302,15 +1305,15 @@ public class CompanyView extends VerticalLayout {
         targetMember.setPlaceholder(placeholder);
     }
 
-    private void collectPersonnelTargets(List<OrgNodeDTO> nodes, List<PersonnelTarget> targets) {
+    private void collectPersonnelTargets(List<OrgNodeDTO> nodes, List<PersonnelTarget> targets, String currentUsername) {
         if (nodes == null) {
             return;
         }
         for (OrgNodeDTO node : nodes) {
-            if (!node.revoked()) {
+            if (!node.revoked() && (currentUsername == null || !currentUsername.equals(node.username()))) {
                 targets.add(new PersonnelTarget(node.memberId(), node.username(), node.role()));
             }
-            collectPersonnelTargets(node.subordinates(), targets);
+            collectPersonnelTargets(node.subordinates(), targets, currentUsername);
         }
     }
 
@@ -1352,28 +1355,8 @@ public class CompanyView extends VerticalLayout {
         return result;
     }
 
-    private void refreshPendingRoleOffers() {
-        CompanyPresenter.PendingRoleOfferOption selected = pendingRoleOffer.getValue();
-        List<CompanyPresenter.PendingRoleOfferOption> offers = orEmpty(presenter.listPendingRoleOffers());
-        pendingRoleOffer.setItems(offers);
-        pendingRoleOffer.setPlaceholder(offers.isEmpty()
-                ? "No pending role offers"
-                : "Select a pending role offer");
-        if (selected != null) {
-            offers.stream()
-                    .filter(offer -> offer.offerId().equals(selected.offerId()))
-                    .findFirst()
-                    .ifPresentOrElse(pendingRoleOffer::setValue, pendingRoleOffer::clear);
-        }
-    }
-
-    private UUID selectedPendingRoleOfferId() {
-        CompanyPresenter.PendingRoleOfferOption selected = pendingRoleOffer.getValue();
-        return selected == null ? null : selected.offerId();
-    }
-
     private void refreshEventAccess() {
-        if (createEventButton == null) {
+        if (editEventButton == null) {
             return;
         }
         CompanyAccessResult access = companyAccessFor(eventCompanyName, "Select a company to show event controls.");
@@ -1381,14 +1364,12 @@ public class CompanyView extends VerticalLayout {
         boolean mapDefinition = access.canDefineMaps();
         eventControls.setVisible(eventLifecycle || mapDefinition);
         eventSelectionForm.setVisible(eventLifecycle);
-        eventCreateForm.setVisible(eventLifecycle);
         eventEditForm.setVisible(eventLifecycle);
         eventActions.setVisible(eventLifecycle || mapDefinition);
-        createEventButton.setVisible(eventLifecycle);
+        designHallButton.setVisible(eventLifecycle || mapDefinition);
         editEventButton.setVisible(eventLifecycle);
         publishEventButton.setVisible(eventLifecycle);
         cancelEventButton.setVisible(eventLifecycle);
-        designHallButton.setVisible(mapDefinition);
         eventStatus.setText(access.companyName() == null || eventLifecycle || mapDefinition
                 ? access.message()
                 : missingPermissionsMessage(access, ManagerPermission.EVENT_LIFECYCLE));
@@ -1470,6 +1451,11 @@ public class CompanyView extends VerticalLayout {
         return selected == null ? null : selected.memberId();
     }
 
+    private UUID selectedOfferTargetMemberId() {
+        com.ticketing.application.dto.MemberSummaryDTO selected = offerTargetMember.getValue();
+        return selected == null ? null : selected.id();
+    }
+
     private void refreshLifecycleAccess() {
         if (suspendCompanyButton == null || reopenCompanyButton == null) {
             return;
@@ -1494,38 +1480,19 @@ public class CompanyView extends VerticalLayout {
         reopenCompanyButton.setVisible(visible);
     }
 
-    private void createEvent() {
-        CompanySummaryDTO company = eventCompanyName.getValue();
-        EventActionResult result = presenter.createEvent(
-                companyNameOf(eventCompanyName),
-                eventName.getValue(),
-                eventDescription.getValue(),
-                eventCategory.getValue(),
-                instant(startTime),
-                instant(endTime),
-                instant(doorsOpenTime),
-                lockMinutes.getValue(),
-                zoneName.getValue(),
-                zonePrice.getValue(),
-                gaCapacity.getValue(),
-                sectionName.getValue()
-        );
-        handleEventAction(result);
-        if (result.success() && result.eventId() != null && company != null) {
-            // Refresh the management pickers so the new event is selectable straight away.
-            selectEventInPicker(eventId, company.name(), result.eventId());
-            inventoryCompanyName.setValue(company);
-            selectEventInPicker(inventoryEventId, company.name(), result.eventId());
-        }
-    }
-
     private void openVenueDesigner() {
         String company = companyNameOf(eventCompanyName);
         if (company == null) {
             UiMessages.error("Select a company first.");
             return;
         }
-        new VenueDesignerDialog(presenter, company).open();
+        VenueDesignerDialog dialog = new VenueDesignerDialog(presenter, company);
+        dialog.addOpenedChangeListener(e -> {
+            if (!e.isOpened()) {
+                reloadCompanyEvents(eventId, eventCompanyName.getValue());
+            }
+        });
+        dialog.open();
     }
 
     private void selectEventInPicker(ComboBox<EventSummaryDTO> picker, String companyName, UUID eventId) {
@@ -1612,10 +1579,18 @@ public class CompanyView extends VerticalLayout {
 
     private void handleEventAction(ActionResult result) {
         eventStatus.setText(result.message());
+        if (result.success()) {
+            lookupEventPicker.setItems(orEmpty(presenter.searchBrowsableEvents()));
+        }
         notify(result);
     }
 
     private void handleEventAction(EventActionResult result) {
+        if (result == null) {
+            eventStatus.setText("No response from event action.");
+            UiMessages.error("No response from event action.");
+            return;
+        }
         if (result.eventDetails() != null) {
             EventDetailsDTO details = result.eventDetails();
             eventStatus.setText(result.message() + " " + details.name() + " | " + details.status());
@@ -1812,7 +1787,6 @@ public class CompanyView extends VerticalLayout {
     private void refreshSessionStatus() {
         sessionStatus.setText(presenter.currentSessionLabel());
         populatePickerItems();
-        refreshPendingRoleOffers();
         boolean member = presenter.currentSessionState().loggedInMember();
         memberOnlyCompanyHint.setVisible(!member);
         for (CompanyMode mode : CompanyMode.values()) {
@@ -1838,6 +1812,7 @@ public class CompanyView extends VerticalLayout {
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
     }
+
 
     private record PersonnelTarget(UUID memberId, String username, StaffAppointment.StaffRole role) {
         private String label() {

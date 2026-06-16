@@ -19,6 +19,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderComplia
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.grid.Grid;
@@ -186,8 +187,13 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void removeSelectedItem() {
-        UUID itemId = selectedOrderItem == null ? null : selectedOrderItem.getId();
-        handleMutationResult(presenter.removeItem(itemId));
+        if (selectedOrderItem == null) {
+            return;
+        }
+        DestructiveActionDialogs.confirmRemoveOrderItem(selectedOrderItemLabel(), () -> {
+            UUID itemId = selectedOrderItem.getId();
+            handleMutationResult(presenter.removeItem(itemId));
+        });
     }
 
     private void updateSelectedGAQuantity() {
@@ -197,7 +203,8 @@ public class OrdersView extends VerticalLayout {
     }
 
     private void clearCart() {
-        handleMutationResult(presenter.cancelOrder());
+        String eventName = currentOrder == null ? null : formatEventLabel(currentOrder);
+        DestructiveActionDialogs.confirmClearCart(eventName, () -> handleMutationResult(presenter.cancelOrder()));
     }
 
     private void checkout() {
@@ -394,6 +401,18 @@ public class OrdersView extends VerticalLayout {
             return "";
         }
         return currentLabels.seatLabels().getOrDefault(seatId, seatId.toString());
+    }
+
+    private String selectedOrderItemLabel() {
+        if (selectedOrderItem == null) {
+            return null;
+        }
+        String zone = formatZone(selectedOrderItem);
+        String seat = formatSeat(selectedOrderItem);
+        if (seat != null && !seat.isBlank()) {
+            return zone + ", seat " + seat;
+        }
+        return zone;
     }
 
     private String formatInstant(Instant instant) {

@@ -34,6 +34,7 @@ import com.ticketing.presentation.vaadin.presenters.AdminPresenter;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
@@ -123,7 +124,7 @@ class AdminViewTest {
         AdminView view = new AdminView(presenter);
         findComboBox(view, "Target member").setValue(member);
 
-        clickButton(view, "Remove member");
+        clickDestructive(view, "Remove member");
 
         verify(presenter).removeMember(member.id());
         assertTrue(hasText(view, "Member removed."));
@@ -138,7 +139,7 @@ class AdminViewTest {
         AdminView view = new AdminView(presenter);
         findCompanyComboBox(view, "Company to close").setValue(company);
 
-        clickButton(view, "Close company");
+        clickDestructive(view, "Close company");
 
         verify(presenter).closeCompany("Acme");
         assertTrue(hasText(view, "Company closed."));
@@ -153,7 +154,7 @@ class AdminViewTest {
         AdminView view = new AdminView(presenter);
         findCompanyComboBox(view, "Company to close").setValue(company);
 
-        clickButton(view, "Close company");
+        clickDestructive(view, "Close company");
 
         verify(presenter).closeCompany("Acme");
         assertTrue(hasText(view, "System admin permission required"));
@@ -184,7 +185,7 @@ class AdminViewTest {
         ComboBox<MemberSummaryDTO> picker = findComboBox(view, "Target member");
         picker.setValue(member);
 
-        clickButton(view, "Remove member");
+        clickDestructive(view, "Remove member");
 
         assertNull(picker.getValue());
         // Picker is reloaded after removal: once during construction, once after the successful remove.
@@ -201,7 +202,7 @@ class AdminViewTest {
         AdminView view = new AdminView(presenter);
         findComboBox(view, "Target member").setValue(member);
 
-        clickButton(view, "Remove member");
+        clickDestructive(view, "Remove member");
 
         verify(presenter).removeMember(member.id());
         assertTrue(hasText(view, "Cannot remove the sole owner of a company."));
@@ -315,7 +316,7 @@ class AdminViewTest {
         findIntegerField(view, "Duration days").setValue(7);
         findCheckbox(view, "Active suspensions only").setValue(true);
 
-        clickButton(view, "Suspend member");
+        clickDestructive(view, "Suspend member");
         clickButton(view, "Load suspensions");
         assertTrue(hasText(view, "Loaded 1 suspension(s)."));
         assertEquals(List.of(suspension), findSuspensionsGrid(view).getDataProvider().fetch(new Query<>()).toList());
@@ -325,7 +326,7 @@ class AdminViewTest {
         assertFalse(cancel.isEnabled());
         findSuspensionsGrid(view).asSingleSelect().setValue(suspension);
         assertTrue(cancel.isEnabled());
-        clickButton(view, "Cancel suspension");
+        clickDestructive(view, "Cancel suspension");
 
         verify(presenter).suspendUser(target.id(), 7, false, "Spam");
         verify(presenter).cancelSuspension(target.id(), suspensionIdValue);
@@ -444,6 +445,47 @@ class AdminViewTest {
                 .map(Button.class::cast)
                 .filter(button -> text.equals(button.getText()))
                 .anyMatch(AdminViewTest::isEffectivelyVisible);
+    }
+
+    @Test
+    void GivenRemoveMemberDialog_WhenCancelClicked_ThenPresenterIsNotCalled() {
+        AdminPresenter presenter = mockPresenter();
+        MemberSummaryDTO member = new MemberSummaryDTO(UUID.randomUUID(), "alice");
+        when(presenter.searchMembers("")).thenReturn(List.of(member));
+        AdminView view = new AdminView(presenter);
+        findComboBox(view, "Target member").setValue(member);
+
+        clickButton(view, "Remove member");
+        assertTrue(ConfirmDialogTestSupport.isOpen());
+        assertTrue(ConfirmDialogTestSupport.openDialogText().contains("alice"));
+        ConfirmDialogTestSupport.cancel();
+
+        verify(presenter).currentSessionLabel();
+        verify(presenter).currentSessionState();
+        verify(presenter).searchMembers("");
+        verify(presenter).searchCompanies("");
+        verifyNoMoreInteractions(presenter);
+    }
+
+    @Test
+    void GivenCloseCompanyDialog_WhenConfirmClicked_ThenPresenterRunsAndStatusShowsResult() {
+        AdminPresenter presenter = mockPresenter();
+        CompanySummaryDTO company = new CompanySummaryDTO("Acme");
+        when(presenter.searchCompanies("")).thenReturn(List.of(company));
+        when(presenter.closeCompany("Acme")).thenReturn(ActionResult.success("Company closed."));
+        AdminView view = new AdminView(presenter);
+        findCompanyComboBox(view, "Company to close").setValue(company);
+
+        clickButton(view, "Close company");
+        ConfirmDialogTestSupport.confirm();
+
+        verify(presenter).closeCompany("Acme");
+        assertTrue(hasText(view, "Company closed."));
+    }
+
+    private static void clickDestructive(Component root, String text) {
+        clickButton(root, text);
+        ConfirmDialogTestSupport.confirm();
     }
 
     private static void clickButton(Component root, String text) {

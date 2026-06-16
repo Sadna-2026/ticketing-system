@@ -142,7 +142,7 @@ public class GlobalRaceConditionTest {
     }
 
     @Test
-    public void GivenConcurrentOffers_WhenOfferSameRole_ThenConsistentState() throws InterruptedException {
+    public void GivenConcurrentOffers_WhenOfferSameRole_ThenOnlyOneSucceeds() throws InterruptedException {
         int threads = 50;
         String companyName = "OfferCorp";
         UUID ownerId = UUID.randomUUID();
@@ -177,7 +177,7 @@ public class GlobalRaceConditionTest {
         executor.shutdown();
 
         Member targetAfter = memberRepo.findById(targetId).orElseThrow();
-        assertEquals(threads, targetAfter.getPendingOffers().size());
+        assertEquals(1, targetAfter.getPendingOffers().size());
     }
 
     @Test

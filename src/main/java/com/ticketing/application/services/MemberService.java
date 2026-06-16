@@ -408,6 +408,14 @@ public class MemberService {
                 .collect(Collectors.toList());
     }
 
+    public List<com.ticketing.application.dto.MemberSummaryDTO> searchAllMembersExcept(UUID excludeId) {
+        return memberRepository.findAll().stream()
+                .filter(m -> excludeId == null || !m.getId().equals(excludeId))
+                .map(m -> new com.ticketing.application.dto.MemberSummaryDTO(m.getId(), m.getUsername()))
+                .sorted(Comparator.comparing(com.ticketing.application.dto.MemberSummaryDTO::username))
+                .toList();
+    }
+
     // Returns pending role offers addressed to the authenticated member.
     public List<PendingRoleOffer> listPendingRoleOffers(String token) {
         UUID memberId = validateTokenForStaffAccess(token);
