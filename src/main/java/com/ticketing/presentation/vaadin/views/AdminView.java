@@ -200,6 +200,7 @@ public class AdminView extends VerticalLayout {
 
     private void configureAdminTabs() {
         adminTabs.removeAll();
+        adminTabs.getElement().setAttribute("aria-label", "Admin sections");
         modeByTab.clear();
         for (AdminMode mode : AdminMode.values()) {
             Tab tab = new Tab(mode.label);
