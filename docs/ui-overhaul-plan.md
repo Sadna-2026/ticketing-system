@@ -151,8 +151,9 @@ Each phase is its own stacked PR (small, reviewable). Functionality unchanged th
   per-surface in Phase 3. (Mobile drawer/hamburger + user-menu chip also Phase 3/later.)
 
 **Phase 3 — Per-surface (one PR each)**
-- **3a Auth + Home** — auth 3 stacked forms → **centered card with tab switcher** (login/register/
-  guest/admin), prominent guest path; Home → spotlight hero + quick-action cards.
+- ✅ **3a Auth + Home** — auth wrapped in a **centered card** ("Welcome" + the tab switcher), primary
+  cyan CTAs on all four actions; Home → hero (eyebrow + Sora headline + "Browse events" CTA) +
+  responsive quick-action card grid. Presentation only; verified 0 contrast violations both themes.
 - **3b Events + seat selection** — event cards grid; **lit seat map** (restyle `SeatMapComponent` +
   `seat-map.js` for both themes); filter bar; `PolicyBadgesPanel` restyle; cart summary panel.
 - **3c Orders** — active order/cart panel, checkout polish, history table w/ status badges,
