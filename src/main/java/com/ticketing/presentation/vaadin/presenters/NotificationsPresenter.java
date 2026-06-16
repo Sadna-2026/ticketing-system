@@ -7,9 +7,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.MemberService;
 import com.ticketing.application.services.NotificationQueryService;
 import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.infrastructure.notification.WebSocketNotificationService;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -24,13 +28,19 @@ public class NotificationsPresenter {
 
     private final NotificationQueryService notificationQueryService;
     private final WebSocketNotificationService realtimeNotificationService;
+    private final MemberService memberService;
+    private final CompanyService companyService;
 
     public NotificationsPresenter(
             NotificationQueryService notificationQueryService,
-            WebSocketNotificationService realtimeNotificationService
+            WebSocketNotificationService realtimeNotificationService,
+            MemberService memberService,
+            CompanyService companyService
     ) {
         this.notificationQueryService = notificationQueryService;
         this.realtimeNotificationService = realtimeNotificationService;
+        this.memberService = memberService;
+        this.companyService = companyService;
     }
 
     public NotificationResult loadPendingNotifications() {
@@ -40,7 +50,10 @@ public class NotificationsPresenter {
         }
 
         try {
-            List<String> notifications = notificationQueryService.getPendingNotifications(memberId);
+            List<String> allNotifications = notificationQueryService.getPendingNotifications(memberId);
+            List<String> notifications = allNotifications.stream()
+                    .filter(msg -> !msg.startsWith("You have a new role offer"))
+                    .toList();
             if (notifications.isEmpty()) {
                 return NotificationResult.success("No pending notifications.", notifications);
             }
@@ -92,6 +105,41 @@ public class NotificationsPresenter {
     public String currentMemberId() {
         UUID memberId = SessionContext.getMemberId();
         return memberId == null ? null : memberId.toString();
+    }
+
+    public List<PendingRoleOfferOption> listPendingRoleOffers() {
+        String token = SessionContext.getSessionToken();
+        if (token == null) {
+            return List.of();
+        }
+        try {
+            return memberService.listPendingRoleOffers(token).stream()
+                    .map(offer -> new PendingRoleOfferOption(
+                            offer.getOfferId(),
+                            offer.getCompanyName(),
+                            offer.getRole()))
+                    .toList();
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to load pending role offers", ex);
+            return List.of();
+        }
+    }
+
+    public ActionResult respondToRoleOffer(UUID offerId, boolean accepted) {
+        String token = SessionContext.getSessionToken();
+        if (token == null) {
+            return ActionResult.failure(LOGIN_REQUIRED_MESSAGE);
+        }
+        if (offerId == null) {
+            return ActionResult.failure("Offer ID is required.");
+        }
+        try {
+            companyService.respondToRoleAppointment(token, offerId, accepted);
+            return ActionResult.success(accepted ? "Role offer accepted." : "Role offer rejected.");
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to respond to role offer", ex);
+            return ActionResult.failure("Could not respond to role offer. Please try again.");
+        }
     }
 
     public record NotificationResult(boolean success, String message, List<String> notifications) {

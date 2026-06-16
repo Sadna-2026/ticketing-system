@@ -1136,6 +1136,8 @@ public class OrderServiceTest {
         assertTrue(orderRepo.findCompletedById(purchaseId).isPresent());
     }
 
+    // ── Suspension checks ──────────────────────────────────────
+
     @Test
     void GivenSuspendedMember_WhenCreateOrder_ThenRejectsWithSuspendedMessage() {
         UUID memberId = UUID.randomUUID();

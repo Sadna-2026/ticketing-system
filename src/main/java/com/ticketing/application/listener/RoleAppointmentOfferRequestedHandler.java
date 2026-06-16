@@ -55,6 +55,16 @@ public class RoleAppointmentOfferRequestedHandler implements IEventListener {
             if (target.hasStaffAppointment(reqEvent.getCompanyName(), StaffAppointment.StaffRole.OWNER)) {
                 throw new IllegalArgumentException("Target is already an owner of this company");
             }
+            
+            if (target.hasStaffAppointment(reqEvent.getCompanyName(), reqEvent.getRole())) {
+                throw new IllegalArgumentException("Target already holds this role in this company");
+            }
+
+            boolean hasPending = target.getActivePendingOffers().stream()
+                .anyMatch(o -> o.getCompanyName().equals(reqEvent.getCompanyName()));
+            if (hasPending) {
+                throw new IllegalArgumentException("Target already has a pending offer for this company");
+            }
 
             // Create and add the offer to the target member
             PendingRoleOffer offer = new PendingRoleOffer(
