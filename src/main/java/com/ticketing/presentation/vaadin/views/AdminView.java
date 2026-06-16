@@ -24,6 +24,7 @@ import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHisto
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.QueueListResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.QueueSummary;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -428,6 +429,7 @@ public class AdminView extends VerticalLayout {
 
     private void configureAdminTabs() {
         adminTabs.removeAll();
+        adminTabs.getElement().setAttribute("aria-label", "Admin sections");
         modeByTab.clear();
         for (AdminMode mode : AdminMode.values()) {
             Tab tab = new Tab(mode.label);
@@ -536,12 +538,14 @@ public class AdminView extends VerticalLayout {
         if (target == null) {
             return;
         }
-        ActionResult result = presenter.removeMember(target.id());
-        handleMemberResult(result);
-        if (result.success()) {
-            removeMemberPicker.clear();
-            loadMemberPickerItems();
-        }
+        DestructiveActionDialogs.confirmRemoveMember(target.username(), () -> {
+            ActionResult result = presenter.removeMember(target.id());
+            handleMemberResult(result);
+            if (result.success()) {
+                removeMemberPicker.clear();
+                loadMemberPickerItems();
+            }
+        });
     }
 
     private void closeCompany() {
@@ -549,13 +553,15 @@ public class AdminView extends VerticalLayout {
         if (company == null) {
             return;
         }
-        ActionResult result = presenter.closeCompany(company.name());
-        companyStatus.setText(result.message());
-        notify(result);
-        if (result.success()) {
-            closeCompanyPicker.clear();
-            loadCompanyPickerItems();
-        }
+        DestructiveActionDialogs.confirmCloseCompany(company.name(), () -> {
+            ActionResult result = presenter.closeCompany(company.name());
+            companyStatus.setText(result.message());
+            notify(result);
+            if (result.success()) {
+                closeCompanyPicker.clear();
+                loadCompanyPickerItems();
+            }
+        });
     }
 
     private void suspendMember() {
@@ -563,12 +569,12 @@ public class AdminView extends VerticalLayout {
         if (target == null) {
             return;
         }
-        handleSuspensionAction(presenter.suspendUser(
+        DestructiveActionDialogs.confirmSuspendMember(target.username(), () -> handleSuspensionAction(presenter.suspendUser(
                 target.id(),
                 suspensionDurationDays.getValue(),
                 permanentSuspension.getValue(),
                 suspensionReason.getValue()
-        ));
+        )));
     }
 
     private void cancelSuspension() {
@@ -577,11 +583,13 @@ public class AdminView extends VerticalLayout {
             UiMessages.error("Select a suspension to cancel.");
             return;
         }
-        ActionResult result = presenter.cancelSuspension(selectedSuspension.memberId(), selectedSuspension.suspensionId());
-        handleSuspensionAction(result);
-        if (result.success()) {
-            suspensionsGrid.asSingleSelect().clear();
-        }
+        DestructiveActionDialogs.confirmCancelSuspension(selectedSuspension.memberUsername(), () -> {
+            ActionResult result = presenter.cancelSuspension(selectedSuspension.memberId(), selectedSuspension.suspensionId());
+            handleSuspensionAction(result);
+            if (result.success()) {
+                suspensionsGrid.asSingleSelect().clear();
+            }
+        });
     }
 
     private void loadPurchaseHistory() {

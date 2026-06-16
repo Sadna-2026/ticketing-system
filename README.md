@@ -202,22 +202,53 @@ So `login(rina, pw)` makes `rina_token` usable by `open-production-company(rina_
 | `login` | `username, password` | `MemberService.login` (mints a guest token first) → binds `username_token` |
 | `open-production-company` | `token, name[, description]` | `CompanyService.openProductionCompany` |
 | `appoint-manager` (`offer-manager-role`) | `token, companyName, targetUsername[, permission...]` | `CompanyService.offerRoleAppointment` (MANAGER role; target resolved by username; optional `ManagerPermission` names) |
+| `appoint-owner` (`offer-owner-role`) | `token, companyName, targetUsername` | `CompanyService.offerRoleAppointment` (OWNER role) |
+| `accept-role-offer` (`respond-role-offer`) | `token, companyName, ROLE` | `CompanyService.respondToRoleAppointment` (accepts the pending offer matching company + role) |
+| `create-event` | `token, company, eventName, description, CATEGORY, standingZone, standingCap, standingPrice, seatingZone, seatRows, seatCols, seatingPrice` | `EventService.createEvent` (GA standing zone + assigned seating grid) |
+| `set-event-seating-layout` | `token, company, eventName, seatingZone, gridRows, gridCols` | `EventService.setEventLayout` (10×10 seat grid for the assigned zone) |
+| `set-company-coupon-discount` | `token, company, percent, code[, expiryDays]` | `CompanyService.setCompanyDiscountPolicy` (`CouponDiscount`) |
+| `logout` | `token` | `MemberService.logout` |
 
 ### Enabling it
 
-Execution is **off by default**. Set `ticketing.initial-state.file` to a readable path and the
-`InitialStateRunner` (an `ApplicationRunner`) will load, parse and execute it on startup:
+Choose **one** data bootstrap via `ticketing.bootstrap.dataset`:
+
+| Value | Effect |
+| --- | --- |
+| `dev-seed` | In-code QA dataset (`DevSeedDataInitializer`) — default when `ticketing.seed.enabled=true` |
+| `initial-state-file` | Replay an external script via `InitialStateExecutor` |
+| `none` | Empty application data (platform init only) |
+
+**Staff demo scenario (#415)** — empty DB + file bootstrap:
 
 ```
-TICKETING_INITIAL_STATE_FILE=/path/to/initial-state.txt
+--ticketing.bootstrap.dataset=initial-state-file
+--ticketing.seed.enabled=false
+--ticketing.initial-state.file=classpath:initial-state/staff-demo-v3.txt
 ```
 
-or in `application.yml` / on the command line:
+For a filesystem path, set `ticketing.initial-state.file` to a readable path. Classpath resources
+use the `classpath:` prefix. When `bootstrap.dataset` is unset, legacy rules apply:
+`seed.enabled=true` selects dev seed; otherwise a configured `initial-state.file` selects file bootstrap.
 
-```
---ticketing.initial-state.file=/path/to/initial-state.txt
-```
+`DataBootstrapRunner` initializes the platform, then loads, parses and executes the file
+(all-or-nothing).
 
-When the property is unset (the default) the runner is a no-op: normal startup, the existing
-tests and `DevSeedDataInitializer` are unaffected.
-    
+See [docs/v3-initial-state.md](docs/v3-initial-state.md) for the staff demo scenario, format
+details, and meeting setup instructions.
+
+## Testing
+
+The test suite runs under a **dedicated, isolated configuration** (V3-25) so it never touches the
+real external systems or a real / working database. The `test` Spring profile
+(`src/test/resources/application-test.yml`) pins the datasource to a throwaway in-memory H2
+(`ticketing-test`) and leaves the external base-url blank (so the stub gateways are used and the
+startup handshake is skipped).
+
+The profile is activated for **every** test run by the Surefire plugin (`pom.xml`), so
+`mvn test` / `mvn verify` — and therefore CI — use it automatically; no per-test annotation is
+needed. As defence-in-depth, Surefire also pins `spring.datasource.url` and
+`ticketing.external.base-url` as JVM **system properties**, which outrank OS environment variables
+(`DB_URL` / `TICKETING_EXTERNAL_BASE_URL`), so isolation holds even when those are exported locally.
+A test that legitimately needs a different datasource (e.g. the DB connection-recovery test) overrides
+`spring.datasource.url` via `@DynamicPropertySource`, which outranks both.

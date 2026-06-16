@@ -708,6 +708,123 @@ class CompanyPresenterTest {
         );
     }
 
+    // ── UI-22: Hall configuration & event map ────────────────────
+
+    @Test
+    @DisplayName("UI-22: Multi-zone event creation sends all zones and section mappings to service")
+    void GivenMultipleZones_WhenCreatingEventWithZones_ThenAllZonesAndSectionsAreSentToService() {
+        memberSession();
+        UUID eventId = UUID.randomUUID();
+        Instant start = Instant.parse("2026-06-01T19:00:00Z");
+        Instant end = start.plus(2, ChronoUnit.HOURS);
+        Instant doors = start.minus(1, ChronoUnit.HOURS);
+        when(eventService.createEvent(eq("member-token"), any(CreateEventRequest.class))).thenReturn(eventId);
+
+        List<CreateEventRequest.ZoneSpec> zones = List.of(
+                new CreateEventRequest.GAZoneSpec("GA Floor", new BigDecimal("50.00"), 200),
+                new CreateEventRequest.AssignedZoneSpec("VIP Box", new BigDecimal("150.00"),
+                        List.of(new CreateEventRequest.SeatSpec("A", "1"),
+                                new CreateEventRequest.SeatSpec("A", "2"),
+                                new CreateEventRequest.SeatSpec("B", "1")))
+        );
+        Map<String, String> sections = Map.of("Main Floor", "GA Floor", "VIP Section", "VIP Box");
+
+        EventActionResult result = presenter.createEventWithZones(
+                "Acme", "Grand Concert", "desc", EventCategory.CONCERT,
+                start, end, doors, 15, zones, sections);
+
+        assertTrue(result.success());
+        assertEquals(eventId, result.eventId());
+        assertTrue(result.message().contains("2 zone(s)"));
+
+        ArgumentCaptor<CreateEventRequest> captor = ArgumentCaptor.forClass(CreateEventRequest.class);
+        verify(eventService).createEvent(eq("member-token"), captor.capture());
+        CreateEventRequest req = captor.getValue();
+        assertEquals(2, req.zones().size());
+        assertEquals("GA Floor", req.zones().get(0).name());
+        assertEquals(new BigDecimal("150.00"), req.zones().get(1).pricePerTicket());
+        assertEquals("GA Floor", req.sectionToZoneName().get("Main Floor"));
+        assertEquals("VIP Box", req.sectionToZoneName().get("VIP Section"));
+    }
+
+    @Test
+    @DisplayName("UI-22: Multi-zone creation requires member session")
+    void GivenNoMemberSession_WhenCreatingEventWithZones_ThenRejectsWithSessionMessage() {
+        SessionContext.setSessionToken("guest-token");
+
+        EventActionResult result = presenter.createEventWithZones(
+                "Acme", "Show", null, EventCategory.CONCERT,
+                Instant.now(), Instant.now().plus(2, ChronoUnit.HOURS), Instant.now(),
+                15, List.of(new CreateEventRequest.GAZoneSpec("GA", BigDecimal.TEN, 100)),
+                Map.of("Main", "GA"));
+
+        assertFalse(result.success());
+        assertEquals("Log in as a member before using company owner or manager actions.", result.message());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    @DisplayName("UI-22: Multi-zone creation validates at least one zone")
+    void GivenEmptyZones_WhenCreatingEventWithZones_ThenRejectsBeforeServiceCall() {
+        memberSession();
+
+        EventActionResult result = presenter.createEventWithZones(
+                "Acme", "Show", null, EventCategory.CONCERT,
+                Instant.now(), Instant.now().plus(2, ChronoUnit.HOURS), Instant.now(),
+                15, List.of(), Map.of("Main", "GA"));
+
+        assertFalse(result.success());
+        assertEquals("At least one zone is required.", result.message());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    @DisplayName("UI-22: Load event map returns zone details with prices for hall configuration")
+    void GivenPublishedEventWithMultipleZones_WhenLoadingEventMap_ThenAllZonesWithPricesAreReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID gaZoneId = UUID.randomUUID();
+        UUID assignedZoneId = UUID.randomUUID();
+        EventMapDTO map = new EventMapDTO(
+                eventId, "Grand Concert", "Acme", EventStatus.PUBLISHED,
+                Map.of("Main Floor", gaZoneId, "VIP Section", assignedZoneId),
+                List.of(
+                        new EventMapDTO.ZoneInfo(gaZoneId, "GA Floor", ZoneType.GENERAL_ADMISSION,
+                                new BigDecimal("50.00"), 200, 180, 20, List.of()),
+                        new EventMapDTO.ZoneInfo(assignedZoneId, "VIP Box", ZoneType.ASSIGNED_SEATING,
+                                new BigDecimal("150.00"), null, null, null,
+                                List.of(new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "1", true),
+                                        new EventMapDTO.SeatInfo(UUID.randomUUID(), "A", "2", false)))
+                )
+        );
+        when(eventService.getEventMap(eventId)).thenReturn(Optional.of(map));
+
+        EventMapResult result = presenter.loadEventMap(eventId);
+
+        assertTrue(result.success());
+        assertEquals(2, result.eventMap().zones().size());
+        assertEquals(new BigDecimal("50.00"), result.eventMap().zones().get(0).pricePerTicket());
+        assertEquals(new BigDecimal("150.00"), result.eventMap().zones().get(1).pricePerTicket());
+        assertEquals(ZoneType.GENERAL_ADMISSION, result.eventMap().zones().get(0).type());
+        assertEquals(ZoneType.ASSIGNED_SEATING, result.eventMap().zones().get(1).type());
+    }
+
+    @Test
+    @DisplayName("UI-22: Set different prices per zone through presenter")
+    void GivenMultipleZones_WhenSettingDifferentPrices_ThenEachZonePriceIsUpdatedIndependently() {
+        memberSession();
+        UUID eventId = UUID.randomUUID();
+        UUID zone1 = UUID.randomUUID();
+        UUID zone2 = UUID.randomUUID();
+
+        ActionResult price1 = presenter.setZonePrice(eventId, zone1, new BigDecimal("75.00"));
+        ActionResult price2 = presenter.setZonePrice(eventId, zone2, new BigDecimal("200.00"));
+
+        assertTrue(price1.success());
+        assertTrue(price2.success());
+        verify(eventService).setZonePrice("member-token", eventId, zone1, new BigDecimal("75.00"));
+        verify(eventService).setZonePrice("member-token", eventId, zone2, new BigDecimal("200.00"));
+    }
+
     private static PurchaseRecordDTO purchase(UUID memberId) {
         return new PurchaseRecordDTO(
                 UUID.randomUUID(),

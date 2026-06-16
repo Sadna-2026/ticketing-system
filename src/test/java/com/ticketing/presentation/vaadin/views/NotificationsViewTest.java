@@ -16,7 +16,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.notification.NotificationListener;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
@@ -33,9 +36,16 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 @ExtendWith(VaadinSessionExtension.class)
 class NotificationsViewTest {
 
+    /** Creates a presenter mock that stubs listPendingRoleOffers() to return an empty list by default. */
+    private NotificationsPresenter mockPresenter() {
+        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        when(presenter.listPendingRoleOffers()).thenReturn(List.of());
+        return presenter;
+    }
+
     @Test
     void GivenNotificationsView_WhenRendered_ThenNotificationActionsAreAvailable() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
 
         NotificationsView view = new NotificationsView(presenter);
 
@@ -46,7 +56,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenPendingNotifications_WhenRefreshClicked_ThenMessagesAreDisplayed() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         when(presenter.loadPendingNotifications())
                 .thenReturn(NotificationResult.success("Loaded 2 notification(s).", List.of("Offer accepted.", "Owner changed.")));
         NotificationsView view = new NotificationsView(presenter);
@@ -60,7 +70,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenNoPendingNotifications_WhenRefreshClicked_ThenEmptyStateIsDisplayed() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         when(presenter.loadPendingNotifications())
                 .thenReturn(NotificationResult.success("No pending notifications.", List.of()));
         NotificationsView view = new NotificationsView(presenter);
@@ -73,7 +83,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenClearSucceeds_WhenClearClicked_ThenVisibleNotificationsAreRemoved() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         when(presenter.clearPendingNotifications())
                 .thenReturn(NotificationResult.success("Notifications cleared.", List.of()));
         NotificationsView view = new NotificationsView(presenter);
@@ -87,7 +97,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenRealtimeNotification_WhenReceived_ThenMessageIsShownInPanel() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         NotificationsView view = new NotificationsView(presenter);
 
         view.receiveRealtimeNotification("Your role appointment was approved.");
@@ -98,7 +108,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenViewAttached_WhenRealtimeRegistrationSucceeds_ThenPendingNotificationsAreNotReloadedOverFlush() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         when(presenter.registerRealtimeListener(any()))
                 .thenReturn(RegistrationResult.success("member-1", "listener-1"));
         NotificationsView view = new NotificationsView(presenter);
@@ -112,7 +122,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenRegisteredView_WhenServicePushesNotification_ThenListenerUpdatesTheUi() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         AtomicReference<NotificationListener> captured = new AtomicReference<>();
         when(presenter.registerRealtimeListener(any())).thenAnswer(invocation -> {
             captured.set(invocation.getArgument(0));
@@ -130,7 +140,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenRegisteredView_WhenDetached_ThenOnlyOwnRealtimeRegistrationIsRemoved() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         when(presenter.registerRealtimeListener(any()))
                 .thenReturn(RegistrationResult.success("member-1", "listener-1"));
         NotificationsView view = new NotificationsView(presenter);
@@ -143,7 +153,7 @@ class NotificationsViewTest {
 
     @Test
     void GivenLoadFailure_WhenRefreshClicked_ThenSpecificFailureReasonIsShown() {
-        NotificationsPresenter presenter = mock(NotificationsPresenter.class);
+        NotificationsPresenter presenter = mockPresenter();
         when(presenter.loadPendingNotifications())
                 .thenReturn(NotificationResult.failure("Log in as a member to view notifications."));
         NotificationsView view = new NotificationsView(presenter);
@@ -157,7 +167,7 @@ class NotificationsViewTest {
     @Test
     void GivenGuestSession_WhenEnteringNotifications_ThenForwardedToHome() {
         setSynchronousCurrentUi();
-        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        NotificationsView view = new NotificationsView(mockPresenter());
         BeforeEnterEvent event = mock(BeforeEnterEvent.class);
 
         view.beforeEnter(event);
@@ -169,12 +179,65 @@ class NotificationsViewTest {
     void GivenMemberSession_WhenEnteringNotifications_ThenNavigationIsAllowed() {
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(UUID.randomUUID());
-        NotificationsView view = new NotificationsView(mock(NotificationsPresenter.class));
+        NotificationsView view = new NotificationsView(mockPresenter());
         BeforeEnterEvent event = mock(BeforeEnterEvent.class);
 
         view.beforeEnter(event);
 
         verify(event, never()).forwardTo(HomeView.class);
+    }
+
+    @Test
+    void GivenPendingRoleOffers_WhenPageLoads_ThenOfferCardsAreShown() {
+        UUID offerId = UUID.randomUUID();
+        NotificationsPresenter presenter = mockPresenter();
+        when(presenter.listPendingRoleOffers()).thenReturn(List.of(
+                new PendingRoleOfferOption(offerId, "Acme", StaffAppointment.StaffRole.MANAGER)));
+
+        NotificationsView view = new NotificationsView(presenter);
+
+        assertTrue(hasText(view, "Acme — MANAGER"));
+        assertTrue(hasText(view, "1 pending offer(s)."));
+        assertTrue(hasButton(view, "Accept"));
+        assertTrue(hasButton(view, "Reject"));
+    }
+
+    @Test
+    void GivenPendingRoleOffer_WhenAcceptClicked_ThenPresenterRespondCalledWithTrue() {
+        UUID offerId = UUID.randomUUID();
+        NotificationsPresenter presenter = mockPresenter();
+        when(presenter.listPendingRoleOffers()).thenReturn(List.of(
+                new PendingRoleOfferOption(offerId, "Acme", StaffAppointment.StaffRole.MANAGER)));
+        when(presenter.respondToRoleOffer(offerId, true)).thenReturn(ActionResult.success("Role offer accepted."));
+
+        NotificationsView view = new NotificationsView(presenter);
+        clickButton(view, "Accept");
+
+        verify(presenter).respondToRoleOffer(offerId, true);
+    }
+
+    @Test
+    void GivenPendingRoleOffer_WhenRejectClicked_ThenPresenterRespondCalledWithFalse() {
+        UUID offerId = UUID.randomUUID();
+        NotificationsPresenter presenter = mockPresenter();
+        when(presenter.listPendingRoleOffers()).thenReturn(List.of(
+                new PendingRoleOfferOption(offerId, "Acme", StaffAppointment.StaffRole.MANAGER)));
+        when(presenter.respondToRoleOffer(offerId, false)).thenReturn(ActionResult.success("Role offer rejected."));
+
+        NotificationsView view = new NotificationsView(presenter);
+        clickButton(view, "Reject");
+        com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport.confirm();
+
+        verify(presenter).respondToRoleOffer(offerId, false);
+    }
+
+    @Test
+    void GivenNoPendingRoleOffers_WhenPageLoads_ThenEmptyStateIsShown() {
+        NotificationsPresenter presenter = mockPresenter();
+
+        NotificationsView view = new NotificationsView(presenter);
+
+        assertTrue(hasText(view, "No pending role offers."));
     }
 
     /** Makes a {@link SynchronousUi} current so the {@code beforeEnter} guard's inline popup can run. */

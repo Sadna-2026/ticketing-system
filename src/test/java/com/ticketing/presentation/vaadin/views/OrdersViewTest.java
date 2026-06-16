@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +34,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderComplia
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
@@ -176,7 +178,7 @@ class OrdersViewTest {
         OrdersView view = new OrdersView(presenter);
 
         assertTrue(hasVisibleButton(view, "Clear cart"));
-        clickButton(view, "Clear cart");
+        clickDestructive(view, "Clear cart");
 
         assertTrue(hasText(view, "Cart cleared."));
         assertTrue(hasText(view, "No active order. Add tickets from the Events page."));
@@ -415,7 +417,7 @@ class OrdersViewTest {
         assertTrue(hasText(view, "GA quantity exceeds remaining availability."));
 
         findOrderItemsGrid(view).asSingleSelect().setValue(item);
-        clickButton(view, "Remove selected item");
+        clickDestructive(view, "Remove selected item");
 
         assertTrue(hasText(view, "Order item could not be removed."));
         verify(presenter).updateGAQuantity(zoneId, 4);
@@ -446,7 +448,7 @@ class OrdersViewTest {
         clickButton(view, "Update selected GA quantity");
         assertTrue(hasText(view, "GA quantity updated."));
         findOrderItemsGrid(view).asSingleSelect().setValue(updatedOrder.getItems().get(0));
-        clickButton(view, "Remove selected item");
+        clickDestructive(view, "Remove selected item");
 
         assertTrue(hasText(view, "Order item removed."));
         assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 0 | total 0"));
@@ -494,7 +496,7 @@ class OrdersViewTest {
 
         // Removing the GA item succeeds, leaving only the assigned seat.
         findOrderItemsGrid(view).asSingleSelect().setValue(afterUpdate.getItems().get(0));
-        clickButton(view, "Remove selected item");
+        clickDestructive(view, "Remove selected item");
         assertTrue(hasText(view, "Order item removed."));
         assertEquals(List.of(seat), findOrderItemsGrid(view).getDataProvider().fetch(new Query<>()).toList());
 
@@ -516,6 +518,27 @@ class OrdersViewTest {
     private boolean hasVisibleButton(Component root, String text) {
         Button button = findButton(root, text);
         return button != null && isEffectivelyVisible(button);
+    }
+
+    @Test
+    void GivenClearCartDialog_WhenCancelClicked_ThenPresenterIsNotCalled() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of());
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        OrdersView view = new OrdersView(presenter);
+
+        clickButton(view, "Clear cart");
+        assertTrue(ConfirmDialogTestSupport.isOpen());
+        ConfirmDialogTestSupport.cancel();
+
+        verify(presenter, never()).cancelOrder();
+    }
+
+    private void clickDestructive(Component root, String text) {
+        clickButton(root, text);
+        ConfirmDialogTestSupport.confirm();
     }
 
     private void clickButton(Component root, String text) {

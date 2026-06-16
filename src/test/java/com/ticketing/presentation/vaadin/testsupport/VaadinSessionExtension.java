@@ -53,6 +53,8 @@ public final class VaadinSessionExtension implements BeforeEachCallback, AfterEa
 
     @Override
     public void beforeEach(ExtensionContext context) {
+        ConfirmDialogTestSupport.install();
+
         VaadinSession session = mock(VaadinSession.class);
         Map<String, Object> attributes = new HashMap<>();
 
@@ -74,6 +76,7 @@ public final class VaadinSessionExtension implements BeforeEachCallback, AfterEa
 
     @Override
     public void afterEach(ExtensionContext context) {
+        ConfirmDialogTestSupport.reset();
         CurrentInstance.clearAll();
     }
 }
