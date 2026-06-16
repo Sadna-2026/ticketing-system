@@ -98,6 +98,10 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     private EventMapDTO currentEventMap;
     private Registration mapPollRegistration;
     Dialog activeTicketDialog; // for testing
+    private Dialog mainTicketDialog;
+    private VerticalLayout ticketDialogContent;
+    private Span ticketDialogOrderStatus;
+    private Span ticketDialogResStatus;
 
     // Interactive-map selection state (assigned seats staged before checkout).
     private final Set<UUID> selectedSeatIds = new LinkedHashSet<>();
@@ -290,11 +294,11 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     private void loadSelectedEventMap() {
-        if (selectedEvent == null) {
+        UUID eventId = currentEventId();
+        if (eventId == null) {
             UiMessages.error("Select an event from the results first.");
             return;
         }
-        UUID eventId = selectedEvent.id();
 
         if (!eventId.equals(directlyAdmittedEventId)) {
             releaseQueueSlot();
@@ -310,13 +314,21 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         MapResult result = presenter.loadEventMap(eventId);
         currentEventMap = result.success() ? result.eventMap() : null;
         resultsStatus.setText(result.message());
+        if (ticketDialogResStatus != null && mainTicketDialog != null && mainTicketDialog.isOpened()) {
+            ticketDialogResStatus.setText(result.message());
+        }
         if (!result.success()) {
             UiMessages.error(result.message());
             return;
         }
 
-        openTicketDialog(eventId, result.eventMap());
-        startMapPolling();
+        if (mainTicketDialog != null && mainTicketDialog.isOpened()) {
+            renderTicketDialogContent(ticketDialogContent, eventId, result.eventMap(), ticketDialogOrderStatus, ticketDialogResStatus);
+            refreshDialogOrderStatus(ticketDialogOrderStatus);
+        } else {
+            openTicketDialog(eventId, result.eventMap());
+            startMapPolling();
+        }
     }
 
     private void addGATickets(UUID zoneId, Integer quantity) {
@@ -333,6 +345,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     private void handleReservationResult(OrderMutationResult result) {
         resultsStatus.setText(result.message());
+        if (ticketDialogResStatus != null && mainTicketDialog != null && mainTicketDialog.isOpened()) {
+            ticketDialogResStatus.setText(result.message());
+        }
         if (!result.success()) {
             UiMessages.error(result.message());
         } else {
@@ -344,52 +359,61 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         directlyAdmittedEventId = eventId;
         MapResult result = presenter.loadEventMap(eventId);
         resultsStatus.setText(result.message());
+        if (ticketDialogResStatus != null && mainTicketDialog != null && mainTicketDialog.isOpened()) {
+            ticketDialogResStatus.setText(result.message());
+        }
         if (!result.success()) {
             UiMessages.error(result.message());
             return;
         }
-        openTicketDialog(eventId, result.eventMap());
+        if (mainTicketDialog != null && mainTicketDialog.isOpened()) {
+            renderTicketDialogContent(ticketDialogContent, eventId, result.eventMap(), ticketDialogOrderStatus, ticketDialogResStatus);
+            refreshDialogOrderStatus(ticketDialogOrderStatus);
+        } else {
+            openTicketDialog(eventId, result.eventMap());
+        }
     }
 
     // ── Ticket-selection dialog (opened after queue admission) ──────
 
     private void openTicketDialog(UUID eventId, EventMapDTO eventMap) {
-        Dialog dialog = new Dialog();
-        activeTicketDialog = dialog;
-        dialog.setHeaderTitle(eventMap.eventName() + " — Ticket Selection");
-        dialog.setWidth("min(900px, 90vw)");
-        dialog.setMaxHeight("85vh");
-        dialog.setCloseOnEsc(true);
-        dialog.setCloseOnOutsideClick(false);
-        dialog.setDraggable(true);
-        dialog.setResizable(true);
+        mainTicketDialog = new Dialog();
+        activeTicketDialog = mainTicketDialog;
+        mainTicketDialog.setHeaderTitle(eventMap.eventName() + " — Ticket Selection");
+        mainTicketDialog.setWidth("min(900px, 90vw)");
+        mainTicketDialog.setMaxHeight("85vh");
+        mainTicketDialog.setCloseOnEsc(true);
+        mainTicketDialog.setCloseOnOutsideClick(false);
+        mainTicketDialog.setDraggable(true);
+        mainTicketDialog.setResizable(true);
 
-        VerticalLayout content = new VerticalLayout();
-        content.setPadding(true);
-        content.setSpacing(true);
-        content.getStyle().set("overflow-y", "auto");
+        ticketDialogContent = new VerticalLayout();
+        ticketDialogContent.setPadding(true);
+        ticketDialogContent.setSpacing(true);
+        ticketDialogContent.getStyle().set("overflow-y", "auto");
 
-        Span orderStatus = new Span();
-        Span resStatus = new Span("Select tickets below to add to your order.");
-        resStatus.getStyle().set("white-space", "pre-line");
-        refreshDialogOrderStatus(orderStatus);
+        ticketDialogOrderStatus = new Span();
+        ticketDialogResStatus = new Span("Select tickets below to add to your order.");
+        ticketDialogResStatus.getStyle().set("white-space", "pre-line");
+        refreshDialogOrderStatus(ticketDialogOrderStatus);
 
-        renderTicketDialogContent(content, eventId, eventMap, orderStatus, resStatus);
+        renderTicketDialogContent(ticketDialogContent, eventId, eventMap, ticketDialogOrderStatus, ticketDialogResStatus);
 
-        dialog.add(content);
+        mainTicketDialog.add(ticketDialogContent);
 
-        Button closeButton = new Button("Close", e -> dialog.close());
-        dialog.getFooter().add(closeButton);
+        Button closeButton = new Button("Close", e -> mainTicketDialog.close());
+        mainTicketDialog.getFooter().add(closeButton);
 
-        dialog.addOpenedChangeListener(e -> {
+        mainTicketDialog.addOpenedChangeListener(e -> {
             if (!e.isOpened()) {
                 releaseQueueSlot();
                 refreshActiveOrderStatus();
                 stopMapPolling();
+                mainTicketDialog = null;
             }
         });
 
-        dialog.open();
+        mainTicketDialog.open();
     }
 
     private void startMapPolling() {

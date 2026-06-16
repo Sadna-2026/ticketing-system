@@ -82,7 +82,12 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
 
         add(entryForm, waitingRoom);
         showEntryForm();
-        addAttachListener(e -> refreshEntrySessionStatus());
+        addAttachListener(e -> {
+            refreshEntrySessionStatus();
+            if (inWaitingRoom) {
+                startPolling();
+            }
+        });
     }
 
     // ── Vaadin lifecycle ────────────────────────────────────────────
@@ -300,7 +305,9 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
             entryDetails.setText("Status: " + entry.getStatus() + "  |  Joined: " + joined
                     + "  |  Entry ID: " + entry.getId());
         }
-        waitingStatus.setText("This page checks for updates every 10 seconds. Do not close or navigate away.");
+        if (waitingStatus.getText() == null || waitingStatus.getText().isEmpty()) {
+            waitingStatus.setText("This page checks for updates every 10 seconds. Do not close or navigate away.");
+        }
         refreshButton.setVisible(true);
     }
 
