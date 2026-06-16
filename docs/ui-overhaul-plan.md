@@ -159,12 +159,20 @@ Each phase is its own stacked PR (small, reviewable). Functionality unchanged th
   dimmed); primary cyan CTAs (Search events, Add GA tickets, Add selected seats). Verified seat
   toggle + 0 contrast violations. ⏳ remaining polish: `PolicyBadgesPanel` brand pass, venue
   layout-preview colors → tokens, optional section cards.
-- **3c Orders** — active order/cart panel, checkout polish, history table w/ status badges,
-  currency + tabular price formatting.
-- **3d Company** — 8-tab row → **side-nav**; group controls into cards; restyle `VenueDesignerDialog`
-  + org chart.
-- **3e Admin** — **KPI summary cards** dashboard; status badges (suspended/revoked); table polish.
-- **3f Notifications + Profile** — card layouts, empty/loading states.
+- ✅ **3c Orders** — Checkout is now primary cyan; tables/inputs inherit the theme (uppercase Sora
+  headers, hover). ⏳ later polish: status badges in history grid, currency formatting.
+- ✅ **3d Company** — primary on the create CTAs (Open company, Create event); destructive actions
+  keep their `DestructiveActionDialogs` confirmation (already danger-styled). **Deferred:** the
+  8-tab → side-nav restructure — develop's UX-5 already consolidated the tabs into labeled task
+  areas, so the density problem is largely addressed; revisit only if still needed.
+- ✅ **3e Admin** — destructive triggers (Remove member, Close company, Suspend) now danger-styled;
+  tables inherit theme. **Deferred:** KPI summary-card dashboard (net-new UI needing count data —
+  out of "no behavior change" scope; track as a follow-up feature).
+- ✅ **3f Profile + Notifications** — Save is primary; Notifications already used primary/error on
+  Accept/Reject and its cards inherit the brand tokens.
+
+NOTE: with the theme + component patterns in place, most per-surface work was CTA emphasis only;
+deeper restructures (Company side-nav, Admin KPI dashboard) are deferred as noted above.
 
 **Phase 4 — Motion & polish** *(tasteful, non-disruptive only)*
 - Route/page-load transition, card hover lift, seat-selection glow, staggered grid reveal,

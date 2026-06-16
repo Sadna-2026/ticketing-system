@@ -22,6 +22,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
@@ -163,6 +164,7 @@ public class OrdersView extends VerticalLayout {
 
     private VerticalLayout checkoutSection() {
         checkoutButton = new Button("Checkout", event -> checkout());
+        checkoutButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         HorizontalLayout form = new HorizontalLayout(couponCode, checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 

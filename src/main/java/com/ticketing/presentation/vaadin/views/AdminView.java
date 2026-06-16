@@ -25,6 +25,7 @@ import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionLis
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -222,6 +223,7 @@ public class AdminView extends VerticalLayout {
 
     private VerticalLayout memberSection() {
         Button removeMember = new Button("Remove member", event -> removeMember());
+        removeMember.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
         FormLayout form = new FormLayout(removeMemberPicker);
         VerticalLayout section = new VerticalLayout(
@@ -237,6 +239,7 @@ public class AdminView extends VerticalLayout {
 
     private VerticalLayout companySection() {
         Button closeCompany = new Button("Close company", event -> closeCompany());
+        closeCompany.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
         FormLayout form = new FormLayout(closeCompanyPicker);
         VerticalLayout section = new VerticalLayout(
@@ -270,6 +273,7 @@ public class AdminView extends VerticalLayout {
 
     private VerticalLayout suspensionSection() {
         Button suspend = new Button("Suspend member", event -> suspendMember());
+        suspend.addThemeVariants(ButtonVariant.LUMO_ERROR);
         cancelSuspensionButton = new Button("Cancel suspension", event -> cancelSuspension());
         cancelSuspensionButton.setEnabled(false);
         Button load = new Button("Load suspensions", event -> loadSuspensions());
