@@ -156,8 +156,8 @@ public class AdminView extends VerticalLayout {
         suspensionsGrid.setEmptyStateText("No suspensions — all members are in good standing.");
         suspensionsGrid.addColumn(suspension -> suspension.suspensionId().toString()).setHeader("Suspension ID").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::memberUsername).setHeader("Member").setAutoWidth(true);
-        suspensionsGrid.addColumn(SuspensionDTO::active).setHeader("Active").setAutoWidth(true);
-        suspensionsGrid.addColumn(SuspensionDTO::permanent).setHeader("Permanent").setAutoWidth(true);
+        suspensionsGrid.addColumn(s -> s.active() ? "Active" : "Ended").setHeader("Active").setAutoWidth(true);
+        suspensionsGrid.addColumn(s -> s.permanent() ? "Permanent" : "Temporary").setHeader("Permanent").setAutoWidth(true);
         suspensionsGrid.addColumn(suspension -> formatDuration(suspension.duration())).setHeader("Duration").setAutoWidth(true);
         suspensionsGrid.addColumn(suspension -> formatInstant(suspension.startTime())).setHeader("Started").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::reason).setHeader("Reason").setAutoWidth(true);
@@ -233,6 +233,8 @@ public class AdminView extends VerticalLayout {
                 memberStatus
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         memberControls = section;
         return section;
     }
@@ -250,6 +252,8 @@ public class AdminView extends VerticalLayout {
                 companyStatus
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         companyControls = section;
         return section;
     }
@@ -267,6 +271,8 @@ public class AdminView extends VerticalLayout {
                 purchaseHistoryGrid
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         purchaseHistoryControls = section;
         return section;
     }
@@ -297,6 +303,8 @@ public class AdminView extends VerticalLayout {
                 suspensionsGrid
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         suspensionControls = section;
         return section;
     }
@@ -456,7 +464,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     private String formatDuration(Duration duration) {

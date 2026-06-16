@@ -1,6 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -159,6 +160,8 @@ public class OrdersView extends VerticalLayout {
                 itemActions
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         return section;
     }
 
@@ -170,6 +173,8 @@ public class OrdersView extends VerticalLayout {
 
         VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, policyComplianceStatus, checkoutStatus);
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         return section;
     }
 
@@ -177,6 +182,8 @@ public class OrdersView extends VerticalLayout {
         Button loadHistory = new Button("Load purchase history", event -> loadPurchaseHistory());
         VerticalLayout section = new VerticalLayout(new H3("Purchase history"), loadHistory, historyStatus, historyGrid);
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         return section;
     }
 
@@ -422,7 +429,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private String formatCheckoutQuote(CheckoutQuoteResult quote) {

@@ -660,6 +660,6 @@ public class EventsView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 }

@@ -307,6 +307,8 @@ public class CompanyView extends VerticalLayout {
             VerticalLayout panel = panelByTab.get(tabByMode.get(mode));
             if (panel != null) {
                 panel.setVisible(false);
+                panel.setWidthFull();
+                panel.addClassName("app-card");
                 modeContent.add(panel);
             }
         }
@@ -1809,7 +1811,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     private static String nullToEmpty(String value) {

@@ -73,6 +73,8 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
         
         VerticalLayout layout = new VerticalLayout(new H3("Edit Identifying Details"), form, saveButton);
         layout.setPadding(false);
+        layout.setMaxWidth("560px");
+        layout.addClassName("app-card");
 
         add(layout);
     }
