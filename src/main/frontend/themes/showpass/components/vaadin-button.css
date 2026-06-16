@@ -32,7 +32,7 @@
 :host([theme~="tertiary-inline"]) {
   background-color: transparent;
   border-color: transparent;
-  color: var(--app-cyan);
+  color: var(--app-cyan-text);
 }
 :host([theme~="tertiary"]:hover),
 :host([theme~="tertiary-inline"]:hover) {

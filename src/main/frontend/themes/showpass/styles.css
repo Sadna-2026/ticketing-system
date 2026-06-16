@@ -13,7 +13,8 @@ html {
   --app-base: #F6F8FC;
   --app-surface: #FFFFFF;
   --app-surface-2: #EEF2F8;
-  --app-cyan: #0FB5AC;          /* primary signal */
+  --app-cyan: #0FB5AC;          /* primary signal — use as FILL (button bg, indicator) */
+  --app-cyan-text: #0B7268;     /* accent as TEXT on light surfaces (~5.5:1 on --app-base, AA) */
   --app-magenta: #D6347E;       /* secondary signal */
   --app-text: #131722;
   --app-muted: #5B6472;
@@ -36,7 +37,7 @@ html[theme~="dark"] {
   --lumo-body-text-color: var(--app-text);
   --lumo-secondary-text-color: var(--app-muted);
   --lumo-primary-color: var(--app-cyan);
-  --lumo-primary-text-color: var(--app-cyan);
+  --lumo-primary-text-color: var(--app-cyan-text);
   --lumo-primary-color-50pct: color-mix(in srgb, var(--app-cyan) 50%, transparent);
   --lumo-primary-color-10pct: var(--app-cyan-soft);
   --lumo-error-color: var(--app-danger);
@@ -61,6 +62,7 @@ html[theme~="dark"] {
   --app-surface: #181B24;
   --app-surface-2: #20242F;
   --app-cyan: #34E1D6;
+  --app-cyan-text: #34E1D6;     /* bright cyan is fine as text on the dark base */
   --app-magenta: #FF5CA8;
   --app-text: #EAEEF5;
   --app-muted: #99A0AE;
@@ -157,7 +159,12 @@ vaadin-app-layout::part(navbar) {
   color: var(--app-muted);
 }
 .app-theme-toggle:hover {
-  color: var(--app-cyan);
+  color: var(--app-cyan-text);
+}
+/* Keep the focus ring on-brand (cyan) rather than the default grey. */
+.app-theme-toggle:focus-visible {
+  outline: 2px solid var(--app-cyan);
+  outline-offset: 2px;
 }
 
 /* ============================================================
@@ -207,7 +214,7 @@ vaadin-app-layout::part(navbar) {
   background-color: color-mix(in srgb, var(--app-success) 14%, transparent);
 }
 .app-badge--pending {
-  color: var(--app-cyan);
+  color: var(--app-cyan-text);
   background-color: var(--app-cyan-soft);
 }
 .app-badge--danger {
