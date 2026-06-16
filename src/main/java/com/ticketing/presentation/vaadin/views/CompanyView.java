@@ -88,9 +88,8 @@ public class CompanyView extends VerticalLayout {
 
     private enum CompanyMode {
         LOOKUP("Company lookup", false),
-        FOUNDER("Founder setup", true),
+        FOUNDER("Founder", true),
         PERSONNEL("Personnel", true),
-        LIFECYCLE("Lifecycle", true),
         EVENTS("Events", true),
         INVENTORY("Inventory", true),
         POLICIES("Policies", true),
@@ -242,6 +241,7 @@ public class CompanyView extends VerticalLayout {
         modeContent.setSpacing(true);
         modeContent.setWidthFull();
         modeTabs.setWidthFull();
+        modeTabs.getElement().setAttribute("aria-label", "Company sections");
         selectedCompanyName.setWidth("min(100%, 28rem)");
 
         add(
@@ -264,11 +264,14 @@ public class CompanyView extends VerticalLayout {
         lookupPanel.setPadding(false);
         lookupPanel.setSpacing(true);
 
+        VerticalLayout founderPanel = new VerticalLayout(openCompanySection(), lifecycleSection());
+        founderPanel.setPadding(false);
+        founderPanel.setSpacing(true);
+
         Map<CompanyMode, VerticalLayout> panels = Map.of(
                 CompanyMode.LOOKUP, lookupPanel,
-                CompanyMode.FOUNDER, openCompanySection(),
+                CompanyMode.FOUNDER, founderPanel,
                 CompanyMode.PERSONNEL, personnelSection(),
-                CompanyMode.LIFECYCLE, lifecycleSection(),
                 CompanyMode.EVENTS, eventManagementSection(),
                 CompanyMode.INVENTORY, inventorySection(),
                 CompanyMode.POLICIES, policySection(),

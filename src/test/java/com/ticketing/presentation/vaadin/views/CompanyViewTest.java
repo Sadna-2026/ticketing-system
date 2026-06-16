@@ -141,11 +141,36 @@ class CompanyViewTest {
     void GivenMemberSession_WhenRendered_ThenFounderSetupTabAndOpenCompanyAreReachable() {
         CompanyView view = new CompanyView(mockPresenter());
 
-        selectTab(view, "Founder setup");
+        selectTab(view, "Founder");
 
         assertTrue(hasVisibleButton(view, "Open company"));
         assertNotNull(findTextField(view, "New company name"));
         assertNotNull(findTextArea(view, "New company description"));
+    }
+
+    @Test
+    void GivenMemberSession_WhenRendered_ThenDenseActionsAreGroupedIntoTaskAreaTabs() {
+        CompanyView view = new CompanyView(mockPresenter());
+
+        assertEquals(
+                List.of("Company lookup", "Founder", "Personnel", "Events", "Inventory", "Policies", "Reports"),
+                tabLabels(view));
+        assertFalse(tabExists(view, "Lifecycle"), "Lifecycle is folded into the Founder tab");
+    }
+
+    @Test
+    void GivenFounderTab_WhenSelected_ThenItGroupsCompanySetupAndLifecycleActions() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Founder");
+        findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
+
+        assertTrue(hasVisibleButton(view, "Open company"));
+        assertTrue(hasVisibleButton(view, "Suspend company"));
+        assertTrue(hasVisibleButton(view, "Reopen company"));
     }
 
     @Test
@@ -159,7 +184,7 @@ class CompanyViewTest {
                 .thenReturn(List.of(company("Acme"), company("My New Co")));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Founder setup");
+        selectTab(view, "Founder");
         findTextField(view, "New company name").setValue("My New Co");
         findTextArea(view, "New company description").setValue("A brand-new production company.");
 
@@ -181,7 +206,7 @@ class CompanyViewTest {
                 .thenReturn(ActionResult.failure("A production company with this name already exists."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Founder setup");
+        selectTab(view, "Founder");
         findTextField(view, "New company name").setValue("Demo Productions");
         findTextArea(view, "New company description").setValue("duplicate attempt");
 
@@ -594,7 +619,7 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
 
         assertTrue(hasVisibleButton(view, "Suspend company"));
@@ -630,7 +655,7 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Acme."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         ComboBox<CompanySummaryDTO> lifecyclePicker = findCompanyCombo(view, "Lifecycle company name");
         lifecyclePicker.setValue(company("Acme"));
 
@@ -682,7 +707,7 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.allowed("Founder lifecycle controls available for Suspended Co."));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Suspended Co"));
 
         clickButton(view, "Reopen company");
@@ -698,7 +723,7 @@ class CompanyViewTest {
                 .thenReturn(LifecycleAccessResult.denied("Only the founder can perform this lifecycle action"));
 
         CompanyView view = new CompanyView(presenter);
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         findCompanyCombo(view, "Lifecycle company name").setValue(company("Acme"));
 
         assertFalse(hasVisibleButton(view, "Suspend company"));
@@ -772,7 +797,7 @@ class CompanyViewTest {
         assertFalse(hasVisibleButton(view, "Set purchase policy"));
         assertFalse(hasVisibleButton(view, "Set discount policy"));
 
-        selectTab(view, "Lifecycle");
+        selectTab(view, "Founder");
         assertFalse(hasVisibleButton(view, "Suspend company"));
         assertFalse(hasVisibleButton(view, "Close company"));
         assertEquals(company("Acme"), findCompanyCombo(view, "Selected company").getValue());
@@ -1335,6 +1360,18 @@ class CompanyViewTest {
                         .filter(tab -> label.equals(tab.getLabel()))
                         .findFirst()
                         .orElseThrow());
+    }
+
+    private static List<String> tabLabels(Component root) {
+        return components(root).stream()
+                .filter(Tab.class::isInstance)
+                .map(Tab.class::cast)
+                .map(Tab::getLabel)
+                .toList();
+    }
+
+    private static boolean tabExists(Component root, String label) {
+        return tabLabels(root).contains(label);
     }
 
     private static Grid<EventSummaryDTO> findEventGrid(Component root) {
