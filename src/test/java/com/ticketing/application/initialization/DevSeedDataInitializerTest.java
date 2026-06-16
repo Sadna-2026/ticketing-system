@@ -30,6 +30,7 @@ import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
+import com.ticketing.infrastructure.InMemoryQueueRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 class DevSeedDataInitializerTest {
@@ -103,6 +104,7 @@ class DevSeedDataInitializerTest {
         InMemoryMemberRepository memberRepository = new InMemoryMemberRepository();
         InMemoryCompanyRepository companyRepository = new InMemoryCompanyRepository();
         InMemoryOrderRepository orderRepository = new InMemoryOrderRepository();
+        InMemoryQueueRepository queueRepository = new InMemoryQueueRepository();
         PasswordEncryptionUtils passwords = new PasswordEncryptionUtils();
         AdminService adminService = new AdminService(
                 memberRepository, companyRepository, mock(ISessionTokenService.class),
@@ -114,6 +116,7 @@ class DevSeedDataInitializerTest {
                 companyRepository,
                 eventRepository,
                 orderRepository,
+                queueRepository,
                 passwords,
                 adminService,
                 analyticsCollector);

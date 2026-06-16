@@ -552,6 +552,11 @@ public class OrderService {
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue != null) {
             queue.userLeft();
+            if (queue.getWaitingCount() > 0 && !queue.shouldQueue()) {
+                List<QueueEntry> admitted = queue.admitNextBatch();
+                log.info("Auto-admitted {} users from queue for eventId={} after user left",
+                        admitted.size(), eventId);
+            }
             saveQueue(queue);
         }
     }
@@ -574,10 +579,26 @@ public class OrderService {
         log.info("Queue flushed: eventId={}", eventId);
     }
 
+    @Transactional
+    public void deleteQueue(String token, UUID eventId) {
+        validateToken(token);
+        VirtualQueue queue = findQueueByEvent(eventId);
+        queueRepository.delete(queue.getId());
+        log.info("Queue deleted: queueId={}, eventId={}", queue.getId(), eventId);
+    }
+
     public List<VirtualQueueDto> getAllActiveQueues(String token) {
         validateToken(token);
         log.info("Getting all active queues");
         return queueRepository.findAllActive().stream()
+                .map(VirtualQueue::toVirtualQueueDto)
+                .collect(Collectors.toList());
+    }
+
+    public List<VirtualQueueDto> getAllQueues(String token) {
+        validateToken(token);
+        log.info("Getting all event queues");
+        return queueRepository.findAll().stream()
                 .map(VirtualQueue::toVirtualQueueDto)
                 .collect(Collectors.toList());
     }

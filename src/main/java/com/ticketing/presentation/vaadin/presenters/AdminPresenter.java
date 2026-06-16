@@ -15,8 +15,11 @@ import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.dto.SystemAnalyticsDTO;
+import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.EventService;
+import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
@@ -41,12 +44,20 @@ public class AdminPresenter {
             .ofPattern("dd/MM/yyyy HH:mm:ss")
             .withZone(ZoneId.systemDefault());
 
+    private static final String ADMIN_QUEUE_FAILURE_MESSAGE =
+            "Could not complete queue action. Please try again.";
+
     private final AdminService adminService;
     private final CompanyService companyService;
+    private final OrderService orderService;
+    private final EventService eventService;
 
-    public AdminPresenter(AdminService adminService, CompanyService companyService) {
+    public AdminPresenter(AdminService adminService, CompanyService companyService,
+            OrderService orderService, EventService eventService) {
         this.adminService = adminService;
         this.companyService = companyService;
+        this.orderService = orderService;
+        this.eventService = eventService;
     }
 
     public ActionResult removeMember(UUID targetMemberId) {
@@ -187,6 +198,77 @@ public class AdminPresenter {
             return List.of();
         }
     }
+    // ── Queue management ─────────────────────────────────────────────
+
+    private static final int DORMANT_THRESHOLD = 10_000;
+
+    public QueueListResult loadAllQueues() {
+        String token = adminToken();
+        if (token == null) {
+            return QueueListResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        try {
+            List<VirtualQueueDto> queues = orderService.getAllQueues(token);
+            List<QueueSummary> summaries = queues.stream()
+                    .map(q -> {
+                        String name = resolveEventName(q.getEventId());
+                        String status = q.getThreshold() >= DORMANT_THRESHOLD ? "Dormant" : "Configured";
+                        return new QueueSummary(q.getEventId(), name,
+                                q.getWaitingCount(), q.getFlowRate(),
+                                q.getThreshold(), q.getCurrentActiveUsers(), status);
+                    })
+                    .toList();
+            String message = summaries.isEmpty()
+                    ? "No event queues." : "Loaded " + summaries.size() + " event queue(s).";
+            return QueueListResult.success(message, summaries);
+        } catch (RuntimeException ex) {
+            return QueueListResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult updateQueueConfig(UUID eventId, int newThreshold, int newFlowRate) {
+        String token = adminToken();
+        if (token == null) {
+            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            orderService.updateQueueConfig(token, eventId, newThreshold, newFlowRate);
+            return ActionResult.success("Queue updated — threshold: " + newThreshold + ", flow rate: " + newFlowRate + ".");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult flushEventQueue(UUID eventId) {
+        String token = adminToken();
+        if (token == null) {
+            return ActionResult.failure(ADMIN_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            orderService.flushQueue(token, eventId);
+            return ActionResult.success("Queue cleared.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, ADMIN_QUEUE_FAILURE_MESSAGE));
+        }
+    }
+
+    private String resolveEventName(UUID eventId) {
+        try {
+            return eventService.getEventMap(eventId)
+                    .map(m -> m.eventName())
+                    .orElse(eventId.toString());
+        } catch (RuntimeException ex) {
+            return eventId.toString();
+        }
+    }
+
+    // ── Analytics ────────────────────────────────────────────────────
 
     public SystemAnalyticsResult loadSystemAnalytics() {
         String token = adminToken();
@@ -203,6 +285,8 @@ public class AdminPresenter {
             return SystemAnalyticsResult.failure(userMessage(ex, ADMIN_ANALYTICS_FAILURE_MESSAGE));
         }
     }
+
+    // ── Session ──────────────────────────────────────────────────────
 
     public String currentSessionLabel() {
         return SessionContext.currentSessionLabel();
@@ -294,6 +378,23 @@ public class AdminPresenter {
 
         public static SuspensionListResult failure(String message) {
             return new SuspensionListResult(false, message, List.of());
+        }
+    }
+
+    public record QueueSummary(UUID eventId, String eventName, int waitingCount,
+            int flowRate, int threshold, int activeUsers, String status) {}
+
+    public record QueueListResult(boolean success, String message, List<QueueSummary> queues) {
+        public QueueListResult {
+            queues = queues == null ? List.of() : List.copyOf(queues);
+        }
+
+        public static QueueListResult success(String message, List<QueueSummary> queues) {
+            return new QueueListResult(true, message, queues);
+        }
+
+        public static QueueListResult failure(String message) {
+            return new QueueListResult(false, message, List.of());
         }
     }
 

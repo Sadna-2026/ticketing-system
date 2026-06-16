@@ -204,6 +204,12 @@ public class EventService {
         saveEvent(event);
         log.info("Event created: eventId={}, companyName={}, status=DRAFT",
                 event.getId(), company.getName());
+
+        if (orderService != null) {
+            orderService.createQueue(token, event.getId());
+            log.info("Default virtual queue created for event: eventId={}", event.getId());
+        }
+
         return event.getId();
     }
 
@@ -266,7 +272,7 @@ public class EventService {
             event.addZone(zone);
         }
 
-        // 2) Section → zone venue map.
+        // 2) Section Γזע zone venue map.
         event.setVenueMap(buildVenueMap(request.sectionToZoneName(), zoneIdsByName));
 
         // 3) Visual layout, linked cell-by-cell to the inventory built above.
@@ -301,6 +307,7 @@ public class EventService {
     private static String seatKey(String row, String seatNumber) {
         return row + " " + seatNumber;
     }
+
 
     @Transactional
     public void cancelEvent(String token, UUID eventId) {

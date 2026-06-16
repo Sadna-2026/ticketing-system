@@ -14,6 +14,7 @@ import com.ticketing.presentation.vaadin.views.HomeView;
 import com.ticketing.presentation.vaadin.views.MemberView;
 import com.ticketing.presentation.vaadin.views.NotificationsView;
 import com.ticketing.presentation.vaadin.views.OrdersView;
+import com.ticketing.presentation.vaadin.views.QueueView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
@@ -90,6 +91,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
         items.add(new NavigationItem("Auth", AuthView.class));
         items.add(new NavigationItem("Events", EventsView.class));
         items.add(new NavigationItem("Orders", OrdersView.class));
+        items.add(new NavigationItem("Queue", QueueView.class));
         if (session.loggedInMember()) {
             items.add(new NavigationItem("Profile", MemberView.class));
             items.add(new NavigationItem("Company", CompanyView.class));
@@ -116,7 +118,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
         // We check the session role instead of session.systemAdmin() to allow an admin 
         // to log in via the regular "Member" tab to buy tickets without being trapped in the Admin UI.
         if ("Admin".equals(session.role())) {
-            if (target == HomeView.class || target == EventsView.class || target == OrdersView.class || target == MemberView.class || target == CompanyView.class) {
+            if (target == HomeView.class || target == EventsView.class || target == OrdersView.class || target == MemberView.class || target == CompanyView.class || target == QueueView.class) {
                 event.forwardTo(AdminView.class);
                 event.getUI().access(() -> 
                         com.ticketing.presentation.vaadin.util.UiMessages.error("Admin context active. Switch to a member account for buyer actions."));
