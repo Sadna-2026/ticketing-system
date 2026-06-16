@@ -515,11 +515,9 @@ public class CompanyView extends VerticalLayout {
         if (company == null) {
             companyInfoStatus.setText("Select a company to view public details.");
             companyEventsGrid.setItems(List.of());
-            reloadCompanyEvents(eventId, null);
             reloadCompanyEvents(inventoryEventId, null);
             reloadCompanyEvents(policyEventId, null);
         } else {
-            reloadCompanyEvents(eventId, company);
             reloadCompanyEvents(inventoryEventId, company);
             reloadCompanyEvents(policyEventId, company);
         }

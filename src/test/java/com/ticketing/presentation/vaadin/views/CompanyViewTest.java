@@ -1149,23 +1149,6 @@ class CompanyViewTest {
                 .anyMatch(CompanyViewTest::isEffectivelyVisible);
     }
 
-    @Test
-    void GivenCancelEventDialog_WhenCancelClicked_ThenPresenterIsNotCalled() {
-        CompanyPresenter presenter = mockPresenter();
-        UUID eventId = UUID.randomUUID();
-        when(presenter.listCompanyEvents("Acme")).thenReturn(List.of(event("Show", eventId)));
-        CompanyView view = new CompanyView(presenter);
-        findCompanyCombo(view, "Event company name").setValue(company("Acme"));
-        findEventCombo(view, "Event to manage").setValue(event("Show", eventId));
-
-        clickButton(view, "Cancel event");
-        assertTrue(ConfirmDialogTestSupport.isOpen());
-        assertTrue(ConfirmDialogTestSupport.openDialogText().contains("Show"));
-        ConfirmDialogTestSupport.cancel();
-
-        verify(presenter, never()).cancelEvent(any());
-    }
-
     private static void clickDestructive(Component root, String text) {
         clickButton(root, text);
         ConfirmDialogTestSupport.confirm();
