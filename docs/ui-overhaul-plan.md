@@ -15,6 +15,8 @@ functionality**. New features should adopt this design system as they land.
 > in both dark + light. Tested via `/ui-test` (39 checks across the surfaces): contrast (axe) 0 in both
 > themes, no console errors, no mobile overflow, focus rings visible. Functionality unchanged throughout.
 > One light-mode badge-contrast bug found in testing and fixed (success/danger text tokens).
+> Mockup-parity pass added the **animated hero waveform** (Home) and a **live "Your order" cart panel**
+> on Events (mirrors the active order; checkout stays on /orders). Both verified, 0 contrast violations.
 
 ---
 
