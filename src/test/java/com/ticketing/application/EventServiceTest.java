@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.CancelEventResponse;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
@@ -1077,12 +1078,16 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenAlreadyCancelledEvent_WhenCancelEvent_ThenThrowIllegalStateException() {
+        public void GivenAlreadyCancelledEvent_WhenCancelEvent_ThenIdempotentAndStaysCancelled() {
             addStaff(StaffAppointment.StaffRole.OWNER, Set.of());
             eventService.cancelEvent(TOKEN, eventId);
 
-            assertThrows(IllegalStateException.class,
-                    () -> eventService.cancelEvent(TOKEN, eventId));
+            // Repeating the request must not fail or re-process; the event stays cancelled.
+            CancelEventResponse second = eventService.cancelEvent(TOKEN, eventId);
+
+            assertTrue(second.success());
+            assertEquals(EventStatus.CANCELLED,
+                    eventRepo.findById(eventId).orElseThrow().getStatus());
         }
 
         @Test

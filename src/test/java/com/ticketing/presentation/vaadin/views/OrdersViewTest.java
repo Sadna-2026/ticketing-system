@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -40,6 +41,7 @@ import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasText;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
@@ -281,10 +283,10 @@ class OrdersViewTest {
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
         when(presenter.quoteCheckout("")).thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
-        when(presenter.checkout("")).thenReturn(CheckoutResult.success("Checkout complete.", purchaseId, null));
+        when(presenter.checkout(eq(""), any())).thenReturn(CheckoutResult.success("Checkout complete.", purchaseId, null));
         OrdersView view = new OrdersView(presenter);
 
-        clickButton(view, "Checkout");
+        payViaDialog(view);
 
         assertTrue(containsText(view, "Checkout complete. Purchase ID: " + purchaseId));
         assertFalse(containsText(view, "Charged:"));
@@ -300,13 +302,13 @@ class OrdersViewTest {
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
         when(presenter.quoteCheckout("SAVE20"))
                 .thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("40.00")));
-        when(presenter.checkout("SAVE20"))
+        when(presenter.checkout(eq("SAVE20"), any()))
                 .thenReturn(CheckoutResult.success("Checkout complete.", purchaseId, new BigDecimal("40.00")));
         OrdersView view = new OrdersView(presenter);
         assertTrue(findButton(view, "Checkout").isEnabled());
         findTextField(view, "Coupon code").setValue("SAVE20");
 
-        clickButton(view, "Checkout");
+        payViaDialog(view);
 
         assertTrue(containsText(view, "Checkout complete."));
         assertTrue(containsText(view, "Charged: $40.00"));
@@ -315,7 +317,24 @@ class OrdersViewTest {
         assertTrue(hasText(view, "No active order. Add tickets from the Events page."));
         assertFalse(findButton(view, "Checkout").isEnabled());
         assertEquals("", findTextField(view, "Coupon code").getValue());
-        verify(presenter).checkout("SAVE20");
+        verify(presenter).checkout(eq("SAVE20"), any());
+    }
+
+    @Test
+    void GivenBlankCardFields_WhenPayClicked_ThenValidationErrorAndCheckoutNotCalled() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
+        when(presenter.quoteCheckout("")).thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
+        OrdersView view = new OrdersView(presenter);
+
+        Dialog dialog = view.buildCheckoutDialog();
+        clickButton(dialog, "Pay"); // card fields left blank
+
+        assertTrue(containsText(dialog, "All card fields are required."));
+        verify(presenter, never()).checkout(any(), any());
     }
 
     @Test
@@ -385,13 +404,13 @@ class OrdersViewTest {
         ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
         when(presenter.loadCurrentOrder()).thenReturn(OrderResult.success("Active order loaded.", orderId, order));
         when(presenter.quoteCheckout("")).thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
-        when(presenter.checkout("")).thenReturn(CheckoutResult.failure(policyMessage));
+        when(presenter.checkout(eq(""), any())).thenReturn(CheckoutResult.failure(policyMessage));
         OrdersView view = new OrdersView(presenter);
 
-        clickButton(view, "Checkout");
+        payViaDialog(view);
 
         assertTrue(hasText(view, policyMessage));
-        verify(presenter).checkout("");
+        verify(presenter).checkout(eq(""), any());
     }
 
     @Test
@@ -545,6 +564,18 @@ class OrdersViewTest {
         Button button = findButton(root, text);
         assertNotNull(button, "button not found: " + text);
         button.click();
+    }
+
+    /** Opens the checkout payment dialog, fills the card fields, and clicks Pay. */
+    private void payViaDialog(OrdersView view) {
+        Dialog dialog = view.buildCheckoutDialog();
+        findTextField(dialog, "Card number").setValue("4111111111111111");
+        findTextField(dialog, "Expiry month").setValue("12");
+        findTextField(dialog, "Expiry year").setValue("2030");
+        findTextField(dialog, "Card holder").setValue("Test Buyer");
+        findTextField(dialog, "CVV").setValue("123");
+        findTextField(dialog, "ID").setValue("123456789");
+        clickButton(dialog, "Pay");
     }
 
     private Button findButton(Component root, String text) {

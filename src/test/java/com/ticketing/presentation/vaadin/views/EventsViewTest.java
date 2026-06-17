@@ -143,6 +143,32 @@ class EventsViewTest {
     }
 
     @Test
+    void GivenViewedOneEvent_WhenSelectingAndViewingAnother_ThenSecondEventMapLoads() {
+        // Regression: after viewing (and being admitted to) one event, selecting a different
+        // event must load THAT event's map — not stay pinned to the first (which breaks badly
+        // once the first event is cancelled and its map can no longer load).
+        EventsPresenter presenter = mock(EventsPresenter.class);
+        OrdersPresenter ordersPresenter = mockOrdersPresenter();
+        EventSummaryDTO first = eventSummary("First Event");
+        EventSummaryDTO second = eventSummary("Second Event");
+        whenSearch(presenter).thenReturn(SearchResult.success("Found 2 event(s).", List.of(first, second)));
+        when(presenter.loadEventMap(eq(first.id())))
+                .thenReturn(MapResult.success("Event map loaded.", sampleEventMap(first.id())));
+        when(presenter.loadEventMap(eq(second.id())))
+                .thenReturn(MapResult.success("Event map loaded.", sampleEventMap(second.id())));
+        EventsView view = new EventsView(presenter, ordersPresenter, mockQueuePresenter());
+
+        clickButton(view, "Search events");
+        findGrid(view).asSingleSelect().setValue(first);
+        clickButton(view, "Select tickets");
+
+        findGrid(view).asSingleSelect().setValue(second);
+        clickButton(view, "Select tickets");
+
+        verify(presenter).loadEventMap(second.id());
+    }
+
+    @Test
     void GivenLoadedMap_WhenAddingGaAndAssignedTickets_ThenOrdersPresenterIsCalled() {
         EventsPresenter presenter = mock(EventsPresenter.class);
         OrdersPresenter ordersPresenter = mockOrdersPresenter();
