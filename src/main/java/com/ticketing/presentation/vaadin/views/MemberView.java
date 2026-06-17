@@ -10,6 +10,7 @@ import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.H2;
@@ -61,6 +62,7 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
 
     private void buildForm() {
         Button saveButton = new Button("Save", event -> saveProfile());
+        saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         // Inline validation for the mandatory identity fields (UX-7); phone and date of
         // birth stay optional, consistent with registration.
@@ -71,6 +73,8 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
         
         VerticalLayout layout = new VerticalLayout(new H3("Edit Identifying Details"), form, saveButton);
         layout.setPadding(false);
+        layout.setMaxWidth("560px");
+        layout.addClassName("app-card");
 
         add(layout);
     }

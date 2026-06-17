@@ -1,6 +1,7 @@
 package com.ticketing.application.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,7 +26,9 @@ public record EventMapDTO(
         LayoutInfo layout,
         String description,
         List<EventPolicyBadgeDTO> purchaseRestrictions,
-        List<EventPolicyBadgeDTO> visibleDiscounts
+        List<EventPolicyBadgeDTO> visibleDiscounts,
+        // Non-null only for LOTTERY events.
+        LotteryInfo lotteryInfo
 ) {
     public EventMapDTO {
         venueMap = venueMap == null ? Map.of() : Map.copyOf(venueMap);
@@ -35,17 +38,33 @@ public record EventMapDTO(
         visibleDiscounts = visibleDiscounts == null ? List.of() : List.copyOf(visibleDiscounts);
     }
 
+    public boolean isLottery() {
+        return lotteryInfo != null;
+    }
+
     /** Backwards-compatible constructor for callers that don't carry a layout. */
     public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
                        Map<String, UUID> venueMap, List<ZoneInfo> zones) {
-        this(eventId, eventName, companyName, status, venueMap, zones, null, "", List.of(), List.of());
+        this(eventId, eventName, companyName, status, venueMap, zones, null, "", List.of(), List.of(), null);
     }
 
     /** Backwards-compatible constructor for callers that don't carry policy metadata. */
     public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
                        Map<String, UUID> venueMap, List<ZoneInfo> zones, LayoutInfo layout) {
-        this(eventId, eventName, companyName, status, venueMap, zones, layout, "", List.of(), List.of());
+        this(eventId, eventName, companyName, status, venueMap, zones, layout, "", List.of(), List.of(), null);
     }
+
+    /** Backwards-compatible constructor for callers that don't carry lottery info. */
+    public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
+                       Map<String, UUID> venueMap, List<ZoneInfo> zones, LayoutInfo layout,
+                       String description, List<EventPolicyBadgeDTO> purchaseRestrictions,
+                       List<EventPolicyBadgeDTO> visibleDiscounts) {
+        this(eventId, eventName, companyName, status, venueMap, zones, layout, description,
+                purchaseRestrictions, visibleDiscounts, null);
+    }
+
+    /** Lottery registration window metadata, non-null only for LOTTERY events. */
+    public record LotteryInfo(Instant registrationOpen, Instant registrationClose, boolean registrationIsOpen) {}
 
     public record ZoneInfo(
             UUID id,

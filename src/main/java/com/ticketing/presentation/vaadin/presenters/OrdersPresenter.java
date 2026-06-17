@@ -345,7 +345,9 @@ public class OrdersPresenter {
                             order.getStatus(),
                             order.getItems(),
                             order.getTotalPrice(),
-                            map.eventName()))
+                            map.eventName(),
+                            order.isLotteryWin(),
+                            order.getPurchaseWindowDeadline()))
                     .orElse(order);
         } catch (RuntimeException ex) {
             logger.warn("Could not resolve event name for active order {}", order.getId(), ex);

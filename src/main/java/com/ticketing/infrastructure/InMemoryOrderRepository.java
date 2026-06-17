@@ -74,6 +74,16 @@ public class InMemoryOrderRepository implements IOrderRepository {
     }
 
     @Override
+    public java.util.Optional<ActiveOrder> findActiveLotteryWinByMemberIdAndEventId(UUID memberId, UUID eventId) {
+        if (memberId == null || eventId == null) return java.util.Optional.empty();
+        return activeOrders.values().stream()
+                .filter(o -> o.isActive() && o.isLotteryWin()
+                        && memberId.equals(o.getMemberId())
+                        && eventId.equals(o.getEventId()))
+                .findFirst();
+    }
+
+    @Override
     public void save(CompletedPurchase purchase) {
         if (purchase == null) throw new IllegalArgumentException("purchase cannot be null");
         completedPurchases.put(purchase.purchaseId(), purchase);

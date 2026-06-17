@@ -146,6 +146,7 @@ public class Event{
 
     public SaleMethod getSaleMethod() { return saleMethod; }
     public LotteryWindow getLotteryWindow() { return lotteryWindow; }
+    public void setLotteryWindow(LotteryWindow lotteryWindow) { this.lotteryWindow = lotteryWindow; }
 
     public boolean isLottery() { return saleMethod == SaleMethod.LOTTERY; }
 

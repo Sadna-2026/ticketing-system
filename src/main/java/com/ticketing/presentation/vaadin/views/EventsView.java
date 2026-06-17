@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -16,12 +17,15 @@ import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.LayoutCellType;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.MainLayout;
 import com.ticketing.presentation.vaadin.components.PolicyBadgesPanel;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter;
+import com.ticketing.presentation.vaadin.presenters.EventsPresenter.LotteryRegistrationResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.MapResult;
 import com.ticketing.presentation.vaadin.presenters.EventsPresenter.SearchResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter;
@@ -29,6 +33,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutatio
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.presenters.QueuePresenter;
 import com.ticketing.presentation.vaadin.presenters.QueuePresenter.QueueResult;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -120,6 +125,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         setSpacing(true);
         setMaxWidth("1100px");
         getStyle().set("margin", "0 auto");
+        addClassName("app-events");
 
         configureFields();
         configureResultsGrid();
@@ -190,10 +196,13 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     private void configureResultsGrid() {
         resultsGrid.setEmptyStateText("No events match your search yet — adjust the filters and search again.");
         resultsGrid.addColumn(EventSummaryDTO::name).setHeader("Event").setAutoWidth(true);
+        resultsGrid.addColumn(event -> event.companyName() != null ? event.companyName() : "").setHeader("Company").setAutoWidth(true);
         resultsGrid.addColumn(event -> formatCategory(event.category())).setHeader("Category").setAutoWidth(true);
         resultsGrid.addColumn(event -> formatInstant(event.schedule().getStartTime())).setHeader("Starts")
                 .setAutoWidth(true);
         resultsGrid.addColumn(event -> event.status().name()).setHeader("Status").setAutoWidth(true);
+        resultsGrid.addColumn(event -> event.saleMethod() == SaleMethod.LOTTERY ? "LOTTERY" : "")
+                .setHeader("Type").setAutoWidth(true);
         resultsGrid.setMinHeight("240px");
 
         resultsGrid.asSingleSelect().addValueChangeListener(event -> {
@@ -204,6 +213,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     private VerticalLayout searchSection() {
         Button search = new Button("Search events", event -> searchEvents());
+        search.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY);
         Button clear = new Button("Clear filters", event -> clearFilters());
 
         FormLayout form = new FormLayout(
@@ -443,6 +453,37 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         if (!eventMap.purchaseRestrictions().isEmpty() || !eventMap.visibleDiscounts().isEmpty()) {
             content.add(new PolicyBadgesPanel(eventMap.purchaseRestrictions(), eventMap.visibleDiscounts()));
         }
+
+        if (eventMap.isLottery()) {
+            OrderResult winOrderResult = ordersPresenter.loadCurrentOrder();
+            boolean isWinner = winOrderResult.success()
+                    && winOrderResult.order() != null
+                    && winOrderResult.order().isLotteryWin()
+                    && eventId.equals(winOrderResult.order().getEventId());
+            if (isWinner) {
+                content.add(orderStatus, resStatus);
+                ActiveOrderDto wo = winOrderResult.order();
+                String wDeadline = wo.getPurchaseWindowDeadline() == null ? ""
+                        : " Deadline: " + DATE_TIME_FORMATTER.format(wo.getPurchaseWindowDeadline()) + ".";
+                Span winnerBanner = new Span("You won the lottery!" + wDeadline + " Select your tickets below.");
+                winnerBanner.getStyle().set("color", "var(--lumo-primary-text-color)").set("font-weight", "bold");
+                content.add(winnerBanner);
+                if (eventMap.zones().isEmpty()) {
+                    content.add(new Paragraph("No zones available for this event."));
+                } else if (eventMap.layout() == null || eventMap.layout().cells().isEmpty()) {
+                    // No seating map — fall back to simple GA picker
+                    content.add(renderWinnerGAPicker(eventId, eventMap, resStatus));
+                } else {
+                    // Full interactive map: handles both GA (popup) and assigned seating (toggle+add)
+                    content.add(renderInteractiveMap(eventMap));
+                }
+            } else {
+                content.add(resStatus);
+                content.add(renderLotteryPanel(eventId, eventMap, resStatus));
+            }
+            return;
+        }
+
         content.add(orderStatus, resStatus);
 
         if (eventMap.zones().isEmpty()) {
@@ -454,6 +495,139 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             return;
         }
         content.add(renderInteractiveMap(eventMap));
+    }
+
+    private Component renderLotteryPanel(UUID eventId, EventMapDTO eventMap, Span resStatus) {
+        VerticalLayout panel = new VerticalLayout();
+        panel.setPadding(false);
+        panel.setSpacing(true);
+
+        EventMapDTO.LotteryInfo lotteryInfo = eventMap.lotteryInfo();
+        panel.add(new Paragraph("Tickets for this event are allocated through a lottery."));
+        panel.add(new Span("Registration opens: " + formatInstant(lotteryInfo.registrationOpen())));
+        panel.add(new Span("Registration closes: " + formatInstant(lotteryInfo.registrationClose())));
+        boolean windowOpen = lotteryInfo.registrationIsOpen();
+        Span windowStatus = new Span("Registration: " + (windowOpen ? "OPEN" : "CLOSED"));
+        panel.add(windowStatus);
+
+        SessionContext.UiState state = SessionContext.currentUiState();
+        if (state.noSession() || state.guest()) {
+            panel.add(new Span("Members only — log in as a member to register for the lottery."));
+            return panel;
+        }
+
+        Optional<LotteryRegistrationResponse> existing = presenter.getLotteryStatus(eventId);
+        if (existing.isPresent()) {
+            panel.add(new Span("You are registered for this lottery."));
+            panel.add(new Span("Registered at: " + formatInstant(existing.get().registeredAt())));
+            return panel;
+        }
+
+        if (!windowOpen) {
+            panel.add(new Span("The lottery registration window is closed."));
+            return panel;
+        }
+
+        if (eventMap.zones().isEmpty()) {
+            panel.add(new Span("No zones available for lottery registration."));
+            return panel;
+        }
+
+        panel.add(new H4("Register for the lottery"));
+
+        ComboBox<EventMapDTO.ZoneInfo> zoneSelect = new ComboBox<>("Select zone");
+        zoneSelect.setItems(eventMap.zones());
+        zoneSelect.setItemLabelGenerator(z -> z.name() + " — " + formatPrice(z.pricePerTicket()));
+        zoneSelect.setRequired(true);
+
+        IntegerField quantityField = new IntegerField("Quantity");
+        quantityField.setMin(1);
+        quantityField.setValue(1);
+
+        Button enterButton = new Button("Enter lottery");
+        enterButton.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY);
+
+        Span confirmationSpan = new Span();
+
+        enterButton.addClickListener(e -> {
+            EventMapDTO.ZoneInfo selectedZone = zoneSelect.getValue();
+            if (selectedZone == null) {
+                resStatus.setText("Please select a zone.");
+                UiMessages.error("Please select a zone.");
+                return;
+            }
+            Integer qty = quantityField.getValue();
+            LotteryRegistrationResult result = presenter.registerForLottery(eventId, selectedZone.id(), qty);
+            resStatus.setText(result.message());
+            if (result.success()) {
+                UiMessages.success(result.message());
+                enterButton.setEnabled(false);
+                enterButton.setText("Registered");
+                zoneSelect.setEnabled(false);
+                quantityField.setEnabled(false);
+                confirmationSpan.setText("You are registered for this lottery. Registered at: "
+                        + formatInstant(result.registeredAt()));
+            } else {
+                UiMessages.error(result.message());
+            }
+        });
+
+        panel.add(zoneSelect, quantityField, enterButton, confirmationSpan);
+        return panel;
+    }
+
+    private Component renderWinnerGAPicker(UUID eventId, EventMapDTO eventMap, Span resStatus) {
+        VerticalLayout panel = new VerticalLayout();
+        panel.setPadding(false);
+        panel.setSpacing(true);
+
+        List<EventMapDTO.ZoneInfo> gaZones = eventMap.zones().stream()
+                .filter(z -> z.type() == ZoneType.GENERAL_ADMISSION
+                        && z.availableCount() != null && z.availableCount() > 0)
+                .toList();
+
+        if (gaZones.isEmpty()) {
+            panel.add(new Span("No GA zones with available tickets."));
+            return panel;
+        }
+
+        ComboBox<EventMapDTO.ZoneInfo> zoneSelect = new ComboBox<>("Select zone");
+        zoneSelect.setItems(gaZones);
+        zoneSelect.setItemLabelGenerator(z -> z.name() + " — " + formatPrice(z.pricePerTicket())
+                + " (" + z.availableCount() + " available)");
+        zoneSelect.setRequired(true);
+
+        IntegerField quantityField = new IntegerField("Quantity");
+        quantityField.setMin(1);
+        quantityField.setValue(1);
+
+        Button addButton = new Button("Add tickets to my order");
+        addButton.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY);
+        addButton.addClickListener(e -> {
+            EventMapDTO.ZoneInfo selectedZone = zoneSelect.getValue();
+            if (selectedZone == null) {
+                resStatus.setText("Please select a zone.");
+                UiMessages.error("Please select a zone.");
+                return;
+            }
+            Integer qty = quantityField.getValue();
+            if (qty == null || qty <= 0) {
+                resStatus.setText("Please enter a valid quantity.");
+                UiMessages.error("Please enter a valid quantity.");
+                return;
+            }
+            OrderMutationResult result = ordersPresenter.addGATickets(eventId, selectedZone.id(), qty);
+            resStatus.setText(result.message());
+            if (result.success()) {
+                UiMessages.success(result.message());
+                refreshDialogOrderStatus(ticketDialogOrderStatus);
+            } else {
+                UiMessages.error(result.message());
+            }
+        });
+
+        panel.add(zoneSelect, quantityField, addButton);
+        return panel;
     }
 
     private void refreshDialogOrderStatus(Span target) {
@@ -717,11 +891,12 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     private static String colorFor(LayoutCellType type) {
         return switch (type) {
-            case SEAT -> "#1976d2";
-            case GENERAL_ADMISSION -> "#2e7d32";
-            case BLOCKED -> "#616161";
-            case STAGE -> "#6a1b9a";
-            case OBJECT -> "#ef6c00";
+            case SEAT -> "var(--app-cyan)";
+            case GENERAL_ADMISSION -> "var(--app-success)";
+            case BLOCKED -> "var(--app-muted)";
+            // The configured stage reads as the lit cyan->magenta stage (the signature).
+            case STAGE -> "linear-gradient(90deg, var(--app-cyan), var(--app-magenta))";
+            case OBJECT -> "var(--app-magenta)";
         };
     }
 

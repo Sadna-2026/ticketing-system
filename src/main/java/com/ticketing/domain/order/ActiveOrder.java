@@ -39,6 +39,11 @@ public class ActiveOrder{
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private OrderStatus status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origin")
+    private OrderOrigin origin;
+    @Column(name = "purchase_window_deadline")
+    private Instant purchaseWindowDeadline;
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "order_id")
     private List<OrderItem> items;
@@ -83,8 +88,17 @@ public class ActiveOrder{
         this.eventId = eventId;
         this.createdAt = createdAt;
         this.status = OrderStatus.ACTIVE;
+        this.origin = OrderOrigin.REGULAR;
         this.items = new ArrayList<>();
         this.version = 0;
+    }
+
+    /** Creates a lottery-win order with a purchase window deadline. */
+    public ActiveOrder(UUID id, UUID sessionId, UUID memberId, UUID eventId, Instant createdAt,
+                       Instant purchaseWindowDeadline) {
+        this(id, sessionId, memberId, eventId, createdAt);
+        this.origin = OrderOrigin.LOTTERY_WIN;
+        this.purchaseWindowDeadline = purchaseWindowDeadline;
     }
 
     public void updateSessionId(UUID newSessionId) {
@@ -104,6 +118,12 @@ public class ActiveOrder{
     public OrderStatus getStatus() { return status; }
     public UUID getEventId() { return eventId; }
     public UUID getMemberId() { return memberId; }
+    public OrderOrigin getOrigin() { return origin; }
+    public Instant getPurchaseWindowDeadline() { return purchaseWindowDeadline; }
+    public boolean isLotteryWin() { return origin == OrderOrigin.LOTTERY_WIN; }
+    public boolean isPurchaseWindowExpired(Instant now) {
+        return isLotteryWin() && purchaseWindowDeadline != null && now.isAfter(purchaseWindowDeadline);
+    }
 
     public boolean isExpiredAt(Instant now, Duration lockDuration) {
         return now.isAfter(createdAt.plus(lockDuration));

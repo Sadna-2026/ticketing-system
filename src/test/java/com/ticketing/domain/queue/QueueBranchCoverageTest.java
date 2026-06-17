@@ -72,6 +72,48 @@ class QueueBranchCoverageTest {
     }
 
     @Test
+    void GivenVirtualQueue_WhenSessionsLeave_ThenEntriesClearAndSlotsRelease() {
+        UUID eventId = UUID.randomUUID();
+        VirtualQueue queue = new VirtualQueue(UUID.randomUUID(), eventId, new QueueConfig(1, 5));
+        Instant base = Instant.parse("2026-01-01T00:00:00Z");
+
+        // A WAITING session that leaves is cleared and frees no active slot.
+        UUID waitingSession = UUID.randomUUID();
+        queue.enqueue(waitingSession, base);
+        assertEquals(1, queue.getWaitingCount());
+        queue.leave(waitingSession);
+        assertEquals(0, queue.getWaitingCount(), "waiting entry should be cleared on leave");
+        assertEquals(0, queue.getCurrentActiveUsers(), "leaving while waiting frees no active slot");
+
+        // An ADMITTED session that leaves frees its slot and no longer counts as admitted.
+        UUID admittedSession = UUID.randomUUID();
+        queue.enqueue(admittedSession, base.plusSeconds(1));
+        queue.admitNextBatch();
+        assertEquals(1, queue.getCurrentActiveUsers());
+        queue.leave(admittedSession);
+        assertEquals(0, queue.getCurrentActiveUsers(), "leaving while admitted frees the active slot");
+        assertTrue(queue.getEntries().stream()
+                        .noneMatch(e -> admittedSession.equals(e.getSessionId())
+                                && e.getStatus() == QueueEntryStatus.ADMITTED),
+                "admitted entry must not persist after leaving (no re-entry bypass)");
+
+        // Leaving again for an already-left session is an idempotent no-op.
+        queue.userEnteredDirectly(); // active = 1
+        queue.leave(admittedSession);
+        assertEquals(1, queue.getCurrentActiveUsers(),
+                "leaving an already-left session must not release another slot");
+
+        // A direct-entry user (never enqueued) releases its slot on leave.
+        queue.leave(UUID.randomUUID());
+        assertEquals(0, queue.getCurrentActiveUsers(), "direct-entry slot released on leave");
+
+        // Null session id is a safe no-op.
+        queue.userEnteredDirectly();
+        queue.leave(null);
+        assertEquals(1, queue.getCurrentActiveUsers());
+    }
+
+    @Test
     void GivenVirtualQueue_WhenConstructingInvalidInputs_ThenValidationRejectsThem() {
         UUID id = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();

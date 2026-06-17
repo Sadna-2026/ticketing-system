@@ -117,6 +117,10 @@ class StaffInitialStateScenarioTest {
                                 .findFirst()
                                 .orElseThrow();
 
+                CouponDiscount eventDiscount = (CouponDiscount) event.getEventDiscountPolicy();
+                assertEquals("sale123", eventDiscount.getCouponCode());
+                assertEquals(new BigDecimal("20"), eventDiscount.getPercentOff());
+
                 InventoryZone standing = event.getZones().stream()
                                 .filter(z -> "Standing".equals(z.getName())).findFirst().orElseThrow();
                 InventoryZone seating = event.getZones().stream()

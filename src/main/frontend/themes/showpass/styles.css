@@ -1,0 +1,612 @@
+/* ============================================================
+   Showpass theme — "Waveform / Soundstage"
+   Dark-first, with an optional light mode (html[theme~="dark"]
+   is the default via @Theme(variant = Lumo.DARK); removing the
+   "dark" theme attribute switches to light).
+   Signature (cyan -> magenta waveform / EQ) lives on specific
+   surfaces only; geometry is crisp/engineered, not soft-blob.
+   See docs/ui-overhaul-plan.md.
+   ============================================================ */
+
+html {
+  /* ---- Brand tokens: LIGHT mode defaults ---- */
+  --app-base: #F6F8FC;
+  --app-surface: #FFFFFF;
+  --app-surface-2: #EEF2F8;
+  --app-cyan: #0FB5AC;          /* primary signal — use as FILL (button bg, indicator) */
+  --app-cyan-text: #0B7268;     /* accent as TEXT on light surfaces (~5.5:1 on --app-base, AA) */
+  --app-magenta: #D6347E;       /* secondary signal */
+  --app-text: #131722;
+  --app-muted: #5B6472;
+  --app-border: #E2E8F2;
+  --app-success: #1F9D57;
+  --app-danger: #D63B49;
+  --app-success-text: #157A42; /* darker green for AA as text on the pale canvas */
+  --app-danger-text: #C42A38;
+  --app-cyan-soft: rgba(15, 181, 172, .12);
+  --app-magenta-soft: rgba(214, 52, 126, .12);
+  --app-shadow: 0 6px 16px -12px rgba(19, 23, 34, .22);
+  /* Per-category tag colours (light — darker for AA on the pale canvas) */
+  --cat-concert: #0B7268;
+  --cat-festival: #B02E68;
+  --cat-play: #8A5A00;
+  --cat-conference: #5B45B0;
+  --cat-sports: #1F7A47;
+  --app-grad: linear-gradient(90deg, var(--app-cyan), var(--app-magenta));
+}
+
+/* ---- Map Lumo design tokens onto the brand ----
+   Selector list includes html[theme~="dark"] so these win over Lumo's own
+   dark-variant rules (same specificity, loaded later). Values reference
+   --app-* so they still follow the active mode. ---- */
+html,
+html[theme~="dark"] {
+  --lumo-base-color: var(--app-surface);
+  --lumo-body-text-color: var(--app-text);
+  --lumo-secondary-text-color: var(--app-muted);
+  --lumo-primary-color: var(--app-cyan);
+  --lumo-primary-text-color: var(--app-cyan-text);
+  --lumo-primary-color-50pct: color-mix(in srgb, var(--app-cyan) 50%, transparent);
+  --lumo-primary-color-10pct: var(--app-cyan-soft);
+  --lumo-error-color: var(--app-danger);
+  --lumo-error-text-color: var(--app-danger);
+  --lumo-error-color-10pct: color-mix(in srgb, var(--app-danger) 12%, transparent);
+  --lumo-success-color: var(--app-success);
+  --lumo-success-text-color: var(--app-success);
+  --lumo-success-color-10pct: color-mix(in srgb, var(--app-success) 12%, transparent);
+
+  /* ---- Crisp, engineered geometry (no soft-blob radii) ---- */
+  --lumo-border-radius-s: 3px;
+  --lumo-border-radius-m: 5px;
+  --lumo-border-radius-l: 8px;
+
+  /* ---- Typography: Inter for body/data, Sora for display ---- */
+  --lumo-font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ---- Brand tokens: DARK mode (default) ---- */
+html[theme~="dark"] {
+  --app-base: #101218;
+  --app-surface: #181B24;
+  --app-surface-2: #20242F;
+  --app-cyan: #34E1D6;
+  --app-cyan-text: #34E1D6;     /* bright cyan is fine as text on the dark base */
+  --app-magenta: #FF5CA8;
+  --app-text: #EAEEF5;
+  --app-muted: #99A0AE;
+  --app-border: rgba(255, 255, 255, .08);
+  --app-success: #46C277;
+  --app-danger: #FF6B7A;
+  --app-success-text: #46C277; /* bright is fine as text on the dark base */
+  --app-danger-text: #FF6B7A;
+  --app-cyan-soft: rgba(52, 225, 214, .14);
+  --app-magenta-soft: rgba(255, 92, 168, .14);
+  --app-shadow: 0 6px 18px -10px rgba(0, 0, 0, .6);
+  /* Per-category tag colours (dark — bright on the near-black canvas) */
+  --cat-concert: #34E1D6;
+  --cat-festival: #FF5CA8;
+  --cat-play: #F5A524;
+  --cat-conference: #A78BFA;
+  --cat-sports: #46C277;
+}
+
+/* The page sits on --app-base; component surfaces use --lumo-base-color
+   (= --app-surface) so cards/dialogs read one step lighter than the page. */
+html,
+body {
+  background-color: var(--app-base);
+}
+body {
+  color: var(--app-text);
+}
+
+/* Display face for headings + the brand wordmark. */
+h1, h2, h3, h4, h5, h6,
+.app-wordmark {
+  font-family: "Sora", var(--lumo-font-family);
+  letter-spacing: -0.01em;
+}
+
+/* Prices, dates, seat numbers, IDs — keep columns from shifting. */
+.app-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   FIX-V2-15 (folded in from required-fields.css):
+   render the required-field indicator as a red asterisk
+   (uses --lumo-error-text-color, now the brand danger color).
+   ============================================================ */
+vaadin-text-field[required]::part(required-indicator)::after,
+vaadin-password-field[required]::part(required-indicator)::after,
+vaadin-email-field[required]::part(required-indicator)::after,
+vaadin-text-area[required]::part(required-indicator)::after,
+vaadin-combo-box[required]::part(required-indicator)::after,
+vaadin-date-picker[required]::part(required-indicator)::after,
+vaadin-time-picker[required]::part(required-indicator)::after,
+vaadin-date-time-picker[required]::part(required-indicator)::after,
+vaadin-integer-field[required]::part(required-indicator)::after,
+vaadin-big-decimal-field[required]::part(required-indicator)::after,
+vaadin-number-field[required]::part(required-indicator)::after {
+  content: "*";
+  color: var(--lumo-error-text-color, #e53935);
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+/* ============================================================
+   App shell (navbar) — Phase 2
+   ============================================================ */
+vaadin-app-layout::part(navbar) {
+  background-color: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.app-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
+  margin: 0 var(--lumo-space-m) 0 var(--lumo-space-s);
+  white-space: nowrap;
+}
+.app-brandmark {
+  flex: none;
+}
+.app-brandmark rect {
+  fill: var(--app-cyan);
+}
+.app-brandmark rect:nth-child(n + 3) {
+  fill: var(--app-magenta);
+}
+
+.app-nav {
+  margin-left: var(--lumo-space-s);
+}
+
+/* Push the theme toggle to the far end of the navbar. */
+.app-theme-toggle {
+  margin-inline-start: auto;
+  margin-inline-end: var(--lumo-space-s);
+  color: var(--app-muted);
+}
+.app-theme-toggle:hover {
+  color: var(--app-cyan-text);
+}
+/* Keep the focus ring on-brand (cyan) rather than the default grey. */
+.app-theme-toggle:focus-visible {
+  outline: 2px solid var(--app-cyan);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Reusable patterns (consumed per-surface in Phase 3)
+   ============================================================ */
+
+/* Grouped surface card — replaces bare stacked VerticalLayouts. */
+.app-card {
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-l);
+  padding: var(--lumo-space-l);
+}
+
+/* Section heading in the display face. */
+.app-section-title {
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--app-text);
+}
+
+/* Status badges — squared tags with an LED dot (Confirmed / Pending /
+   Refunded, Active / Revoked, etc.). Pair color with the text label so
+   meaning never relies on color alone. */
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.app-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex: none;
+}
+.app-badge--success {
+  color: var(--app-success-text);
+  background-color: color-mix(in srgb, var(--app-success) 14%, transparent);
+}
+.app-badge--pending {
+  color: var(--app-cyan-text);
+  background-color: var(--app-cyan-soft);
+}
+.app-badge--danger {
+  color: var(--app-danger-text);
+  background-color: color-mix(in srgb, var(--app-danger) 14%, transparent);
+}
+.app-badge--neutral {
+  color: var(--app-muted);
+  background-color: var(--app-surface-2);
+}
+
+/* ============================================================
+   Auth — centered card (Phase 3a)
+   ============================================================ */
+.app-auth {
+  padding-top: var(--lumo-space-xl);
+}
+.app-auth-card {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-l);
+  padding: var(--lumo-space-l) var(--lumo-space-l) var(--lumo-space-m);
+  box-shadow: var(--app-shadow);
+}
+.app-auth-title {
+  margin-top: 0;
+}
+
+/* ============================================================
+   Home — hero + quick-action cards (Phase 3a)
+   ============================================================ */
+.app-home {
+  max-width: 1100px;
+  margin: 0 auto;
+  gap: var(--lumo-space-xl);
+}
+.app-hero {
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  padding: var(--lumo-space-xl) 0 var(--lumo-space-m);
+}
+.app-hero-inner {
+  position: relative;
+  z-index: 1;
+}
+.app-hero-wave {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 62%;
+  z-index: 0;
+  opacity: 0.22;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+.app-hero-wave svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.app-hero-eyebrow {
+  display: inline-block;
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--app-cyan-text);
+}
+.app-hero-title {
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0.35em 0 0.25em;
+}
+.app-hero-sub {
+  color: var(--app-muted);
+  font-size: var(--lumo-font-size-l);
+  max-width: 48ch;
+  margin: 0 0 var(--lumo-space-l);
+}
+.app-quickgrid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--lumo-space-m);
+}
+.app-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--lumo-space-l);
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-l);
+  text-decoration: none;
+  color: var(--app-text);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.app-action-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--app-cyan) 40%, var(--app-border));
+  box-shadow: var(--app-shadow);
+}
+.app-action-icon {
+  color: var(--app-cyan-text);
+  width: 26px;
+  height: 26px;
+  margin-bottom: var(--lumo-space-xs);
+}
+.app-action-card h3 {
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-l);
+  margin: 0;
+}
+.app-action-card p {
+  color: var(--app-muted);
+  font-size: var(--lumo-font-size-s);
+  margin: 0;
+}
+
+/* ============================================================
+   Motion (Phase 4) — tasteful + non-disruptive. Everything here
+   is gated on prefers-reduced-motion: no-preference, so motion-
+   sensitive users get a completely static UI. (Card/button hover
+   lifts are defined inline above as transitions, also subtle.)
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  /* Soft entrance for the entry screens. `backwards` fill so the
+     hover-lift transform on cards still works after it settles. */
+  @keyframes app-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .app-auth-card,
+  .app-hero {
+    animation: app-rise 0.3s ease-out backwards;
+  }
+  .app-action-card {
+    animation: app-rise 0.32s ease-out backwards;
+  }
+  .app-action-card:nth-child(2) {
+    animation-delay: 0.05s;
+  }
+  .app-action-card:nth-child(3) {
+    animation-delay: 0.1s;
+  }
+  .app-action-card:nth-child(4) {
+    animation-delay: 0.15s;
+  }
+  .app-action-card:nth-child(5) {
+    animation-delay: 0.2s;
+  }
+
+  /* The wordmark "plays" its equalizer on hover — the single playful
+     flourish, and only while pointed at, so it never distracts. */
+  @keyframes app-eq {
+    0%,
+    100% {
+      transform: scaleY(0.6);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+  .app-wordmark:hover .app-brandmark rect {
+    transform-box: fill-box;
+    transform-origin: center bottom;
+    animation: app-eq 1s ease-in-out infinite;
+  }
+  .app-wordmark:hover .app-brandmark rect:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .app-wordmark:hover .app-brandmark rect:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .app-wordmark:hover .app-brandmark rect:nth-child(4) {
+    animation-delay: 0.1s;
+  }
+
+  /* Home hero waveform — bars gently "play". */
+  @keyframes app-wave {
+    0%,
+    100% {
+      transform: scaleY(var(--lo, 0.5));
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+  .app-hero-wave rect {
+    transform-box: fill-box;
+    transform-origin: center bottom;
+    animation-name: app-wave;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    /* duration + delay set per-bar inline for a natural, non-uniform shimmer */
+  }
+}
+
+/* ============================================================
+   Auth card — breathing room under the tab strip (Phase 3a fix)
+   ============================================================ */
+.app-auth-card vaadin-tabs {
+  margin-bottom: var(--lumo-space-m);
+}
+
+/* ============================================================
+   Events — results as cards + stage bar (Phase 3b rebuild)
+   ============================================================ */
+.app-event-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--lumo-space-m);
+}
+.app-event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--lumo-space-l);
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-l);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.app-event-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--app-cyan) 40%, var(--app-border));
+  box-shadow: var(--app-shadow);
+}
+.app-event-card h3 {
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-l);
+  line-height: 1.2;
+  margin: 0;
+}
+.app-event-cat {
+  align-self: flex-start;
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+  /* Default (OTHER / unknown) */
+  color: var(--app-muted);
+  background-color: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+}
+/* A distinct hue per event type. Background/border are a tint of the same
+   hue via color-mix, so each tag stays cohesive with the theme. */
+.app-event-cat--concert {
+  color: var(--cat-concert);
+  background-color: color-mix(in srgb, var(--cat-concert) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-concert) 32%, transparent);
+}
+.app-event-cat--festival {
+  color: var(--cat-festival);
+  background-color: color-mix(in srgb, var(--cat-festival) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-festival) 32%, transparent);
+}
+.app-event-cat--play {
+  color: var(--cat-play);
+  background-color: color-mix(in srgb, var(--cat-play) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-play) 32%, transparent);
+}
+.app-event-cat--conference {
+  color: var(--cat-conference);
+  background-color: color-mix(in srgb, var(--cat-conference) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-conference) 32%, transparent);
+}
+.app-event-cat--sports {
+  color: var(--cat-sports);
+  background-color: color-mix(in srgb, var(--cat-sports) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cat-sports) 32%, transparent);
+}
+.app-event-meta {
+  color: var(--app-muted);
+  font-size: var(--lumo-font-size-s);
+  font-variant-numeric: tabular-nums;
+}
+.app-event-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lumo-space-s);
+  padding-top: var(--lumo-space-s);
+}
+
+/* Inputs read as clearly-bounded fields in both themes (the default faint
+   overlay is nearly invisible on the near-black canvas). */
+vaadin-text-field::part(input-field),
+vaadin-email-field::part(input-field),
+vaadin-password-field::part(input-field),
+vaadin-number-field::part(input-field),
+vaadin-integer-field::part(input-field),
+vaadin-big-decimal-field::part(input-field),
+vaadin-combo-box::part(input-field),
+vaadin-date-picker::part(input-field),
+vaadin-date-time-picker::part(input-field),
+vaadin-text-area::part(input-field) {
+  background-color: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-m);
+}
+
+/* The hall-layout STAGE cell uses the lit cyan→magenta gradient (see
+   EventsView.colorFor) so the *configured* stage reads as the signature —
+   there is no fabricated/standalone stage bar. */
+
+/* Wide content (the seat map) must not stretch the page: let the flex layout
+   shrink past its content so the seat map's own viewport scrolls instead. */
+.app-events vaadin-vertical-layout,
+.app-events vaadin-details,
+.app-events vaadin-details::part(content) {
+  min-width: 0;
+}
+
+/* Live order-summary panel on the Events page (mirrors the active order). */
+.app-cart {
+  max-width: 420px;
+  box-shadow: var(--app-shadow);
+}
+.app-cart-heading {
+  display: block;
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 600;
+  font-size: var(--lumo-font-size-l);
+  margin-bottom: var(--lumo-space-xs);
+}
+.app-cart-empty {
+  color: var(--app-muted);
+  font-size: var(--lumo-font-size-s);
+}
+.app-cart-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--lumo-space-m);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--app-border);
+}
+.app-cart-price {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.app-cart-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: var(--lumo-space-s);
+  padding-top: var(--lumo-space-s);
+  border-top: 1px solid var(--app-border);
+  font-family: "Sora", var(--lumo-font-family);
+  font-weight: 700;
+  font-size: var(--lumo-font-size-l);
+}
+.app-cart-checkout {
+  margin-top: var(--lumo-space-m);
+  width: 100%;
+  justify-content: center;
+}
+

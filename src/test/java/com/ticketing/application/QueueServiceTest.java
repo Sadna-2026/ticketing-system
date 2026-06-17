@@ -162,6 +162,31 @@ class QueueServiceTest {
     }
 
     @Test
+    void GivenAdmittedUser_WhenLeavesWithSession_ThenSlotAndAdmittedEntryAreReleased() {
+        orderService.createQueue(adminToken, eventId, 1, 5);
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+
+        orderService.tryEnterOrQueue(eventId, sessionA); // direct entry, holds the only slot
+        orderService.tryEnterOrQueue(eventId, sessionB); // queued (WAITING)
+
+        // A leaves -> frees the slot -> B is auto-admitted.
+        orderService.userLeft(eventId, sessionA);
+        VirtualQueueDto afterA = orderService.getQueueForEvent(eventId);
+        assertEquals(1, afterA.getCurrentActiveUsers());
+        assertTrue(afterA.getEntries().stream()
+                .anyMatch(e -> sessionB.equals(e.getSessionId()) && "ADMITTED".equals(e.getStatus())));
+
+        // B leaves -> its admitted slot AND entry are released (no permanent-admit bypass).
+        orderService.userLeft(eventId, sessionB);
+        VirtualQueueDto afterB = orderService.getQueueForEvent(eventId);
+        assertEquals(0, afterB.getCurrentActiveUsers(), "admitted slot released when the user leaves");
+        assertTrue(afterB.getEntries().stream()
+                        .noneMatch(e -> sessionB.equals(e.getSessionId()) && "ADMITTED".equals(e.getStatus())),
+                "previously-admitted session must not remain ADMITTED after leaving");
+    }
+
+    @Test
     void GivenQueue_WhenUpdateConfig_ThenConfigUpdated() {
         orderService.createQueue(adminToken, eventId, 10, 5);
         orderService.updateQueueConfig(adminToken, eventId, 20, 10);

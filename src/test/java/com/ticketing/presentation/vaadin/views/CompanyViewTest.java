@@ -595,7 +595,7 @@ class CompanyViewTest {
 
         assertTrue(hasText(view, "Company reopened."));
         assertTrue(hasText(view, "Total purchases: 1"));
-        assertTrue(hasText(view, "Total revenue: 80.00"));
+        assertTrue(hasText(view, "Total revenue: $80.00"));
         assertEquals(List.of(purchase), findPurchasesGrid(view).getDataProvider().fetch(new Query<>()).toList());
     }
 
@@ -885,7 +885,7 @@ class CompanyViewTest {
         verify(presenter).loadSalesReport("Acme");
         assertTrue(hasText(view, "Sales report loaded."));
         assertTrue(hasText(view, "Total purchases: 1"));
-        assertTrue(hasText(view, "Total revenue: 80.00"));
+        assertTrue(hasText(view, "Total revenue: $80.00"));
     }
 
     @Test

@@ -36,6 +36,7 @@ import com.ticketing.domain.event.MinQuantityCondition;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.member.ManagerPermission;
@@ -45,6 +46,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.CompanyInfoResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.DrawLotteryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PolicyViewResult;
@@ -53,6 +55,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReport
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
@@ -142,6 +145,12 @@ public class CompanyView extends VerticalLayout {
     private Button relinquishOwnershipButton;
 
     private final ComboBox<CompanySummaryDTO> eventCompanyName = new ComboBox<>("Event company name");
+    private final ComboBox<CompanySummaryDTO> lotteryCompanyName = new ComboBox<>("Lottery company name");
+    private final ComboBox<EventSummaryDTO> lotteryEventPicker = new ComboBox<>("Lottery event");
+    private final IntegerField lotteryWinnersCount = new IntegerField("Maximum ticket capacity");
+    private final Span lotteryStatus = new Span("Select a lottery event to draw winners.");
+    private Button lotteryDrawButton;
+    private VerticalLayout lotteryControls;
 
     private final Span eventStatus = new Span();
     private Button editEventButton;
@@ -295,6 +304,8 @@ public class CompanyView extends VerticalLayout {
             VerticalLayout panel = panelByTab.get(tabByMode.get(mode));
             if (panel != null) {
                 panel.setVisible(false);
+                panel.setWidthFull();
+                panel.addClassName("app-card");
                 modeContent.add(panel);
             }
         }
@@ -340,7 +351,7 @@ public class CompanyView extends VerticalLayout {
     private void configurePickers() {
         for (ComboBox<CompanySummaryDTO> picker : List.of(
                 selectedCompanyName, infoCompanyName, personnelCompanyName, eventCompanyName,
-                inventoryCompanyName, lifecycleCompanyName, reportingCompanyName, policyCompanyName)) {
+                lotteryCompanyName, inventoryCompanyName, lifecycleCompanyName, reportingCompanyName, policyCompanyName)) {
             picker.setItemLabelGenerator(CompanySummaryDTO::name);
             picker.setPlaceholder("Search by company name");
         }
@@ -365,8 +376,16 @@ public class CompanyView extends VerticalLayout {
         seatPicker.setItemLabelGenerator(seat -> "Row " + seat.row() + " · Seat " + seat.seatNumber());
         seatPicker.setPlaceholder("Select a zone to list seats");
 
+        lotteryEventPicker.setItemLabelGenerator(EventSummaryDTO::name);
+        lotteryEventPicker.setPlaceholder("Select a company first");
+        lotteryWinnersCount.setMin(1);
+        lotteryWinnersCount.setValue(1);
+        lotteryWinnersCount.setHelperText("Total tickets to allocate across winners (ticket-based, not winner count).");
+
         personnelCompanyName.addValueChangeListener(e -> refreshPersonnelContext());
         eventCompanyName.addValueChangeListener(e -> refreshEventAccess());
+        lotteryCompanyName.addValueChangeListener(e -> reloadLotteryEvents(e.getValue()));
+        lotteryEventPicker.addValueChangeListener(e -> refreshLotteryAccess());
         inventoryCompanyName.addValueChangeListener(e -> {
             reloadCompanyEvents(inventoryEventId, e.getValue());
             refreshInventoryAccess();
@@ -471,6 +490,20 @@ public class CompanyView extends VerticalLayout {
         }
     }
 
+    private void reloadLotteryEvents(CompanySummaryDTO company) {
+        lotteryEventPicker.clear();
+        List<EventSummaryDTO> events = company == null ? List.of()
+                : orEmpty(presenter.listCompanyEvents(company.name()))
+                        .stream()
+                        .filter(e -> e.saleMethod() == SaleMethod.LOTTERY)
+                        .toList();
+        lotteryEventPicker.setItems(events);
+        lotteryEventPicker.setPlaceholder(company == null
+                ? "Select a company first"
+                : events.isEmpty() ? "No lottery events for this company" : "Select a lottery event");
+        refreshLotteryAccess();
+    }
+
     private void populatePickerItems() {
         List<CompanySummaryDTO> lookupCompanies = orEmpty(presenter.searchLookupCompanies(""));
         List<CompanySummaryDTO> activeCompanies = orEmpty(presenter.searchCompanies(""));
@@ -518,14 +551,16 @@ public class CompanyView extends VerticalLayout {
             companyEventsGrid.setItems(List.of());
             reloadCompanyEvents(inventoryEventId, null);
             reloadCompanyEvents(policyEventId, null);
+            reloadLotteryEvents(null);
         } else {
             reloadCompanyEvents(inventoryEventId, company);
             reloadCompanyEvents(policyEventId, company);
+            reloadLotteryEvents(company);
         }
     }
 
     private List<ComboBox<CompanySummaryDTO>> sectionCompanyPickers() {
-        return List.of(infoCompanyName, personnelCompanyName, eventCompanyName,
+        return List.of(infoCompanyName, personnelCompanyName, eventCompanyName, lotteryCompanyName,
                 inventoryCompanyName, lifecycleCompanyName, reportingCompanyName, policyCompanyName);
     }
 
@@ -598,6 +633,7 @@ public class CompanyView extends VerticalLayout {
 
     private VerticalLayout openCompanySection() {
         Button openCompany = new Button("Open company", event -> openCompany());
+        openCompany.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         FormLayout form = new FormLayout(openCompanyName, openCompanyDescription);
         VerticalLayout section = new VerticalLayout(
@@ -691,6 +727,7 @@ public class CompanyView extends VerticalLayout {
         editEventButton = new Button("Edit event", event -> openEditEventDialog());
         designHallButton = new Button("Create event", event -> openVenueDesigner());
         editVenueLayoutButton = new Button("Edit venue layout", event -> openEditVenueLayout());
+        designHallButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         eventSelectionForm = new FormLayout(eventCompanyName);
         eventSelectionForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
@@ -701,7 +738,40 @@ public class CompanyView extends VerticalLayout {
         eventControls.setPadding(false);
         refreshEventAccess();
 
-        VerticalLayout section = new VerticalLayout(eventControls, eventStatus);
+        VerticalLayout section = new VerticalLayout(eventControls, eventStatus, lotteryManagementSection());
+        section.setPadding(false);
+        return section;
+    }
+
+    private VerticalLayout lotteryManagementSection() {
+        lotteryDrawButton = new Button("Draw lottery", e -> {
+            EventSummaryDTO event = lotteryEventPicker.getValue();
+            UUID eventId = event == null ? null : event.id();
+            int capacity = lotteryWinnersCount.getValue() == null ? 0 : lotteryWinnersCount.getValue();
+            DrawLotteryResult result = presenter.drawLottery(eventId, capacity);
+            if (result.success()) {
+                lotteryStatus.setText(result.message()
+                        + " Winner IDs: " + result.winnerMemberIds().stream()
+                                .map(UUID::toString).toList());
+                UiMessages.success(result.message());
+            } else {
+                lotteryStatus.setText(result.message());
+                UiMessages.error(result.message());
+            }
+        });
+
+        FormLayout lotteryForm = new FormLayout(lotteryCompanyName, lotteryEventPicker, lotteryWinnersCount);
+        lotteryForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
+
+        lotteryControls = new VerticalLayout(lotteryForm, lotteryDrawButton, lotteryStatus);
+        lotteryControls.setPadding(false);
+        refreshLotteryAccess();
+
+        VerticalLayout section = new VerticalLayout(
+                new H3("Lottery management"),
+                new Paragraph("Draw winners for a lottery event. The system creates orders for selected winners."),
+                lotteryControls
+        );
         section.setPadding(false);
         return section;
     }
@@ -1326,17 +1396,35 @@ public class CompanyView extends VerticalLayout {
         CompanyAccessResult access = companyAccessFor(eventCompanyName, "Select a company to show event controls.");
         boolean eventLifecycle = access.canManageEvents();
         boolean mapDefinition = access.canDefineMaps();
-        eventControls.setVisible(eventLifecycle || mapDefinition);
-        eventSelectionForm.setVisible(eventLifecycle || mapDefinition);
-        eventActions.setVisible(eventLifecycle || mapDefinition);
-        designHallButton.setVisible(eventLifecycle);
-        editEventButton.setVisible(eventLifecycle);
-        editVenueLayoutButton.setVisible(mapDefinition);
+        eventControls.setVisible(true);
+        eventSelectionForm.setVisible(true);
+        eventActions.setVisible(true);
+        designHallButton.setVisible(true);
+        designHallButton.setEnabled(eventLifecycle);
+        editEventButton.setVisible(true);
+        editEventButton.setEnabled(eventLifecycle);
+        editVenueLayoutButton.setVisible(true);
+        editVenueLayoutButton.setEnabled(mapDefinition);
         boolean denied = access.companyName() != null && !eventLifecycle && !mapDefinition;
         eventStatus.setText(denied
                 ? missingPermissionsMessage(access, ManagerPermission.EVENT_LIFECYCLE, ManagerPermission.MAP_DEFINITION)
                 : "");
         eventStatus.setVisible(denied);
+    }
+
+    private void refreshLotteryAccess() {
+        if (lotteryDrawButton == null) {
+            return;
+        }
+        CompanyAccessResult access = companyAccessFor(lotteryCompanyName, "Select a company to show lottery controls.");
+        boolean canManage = access.canManageEvents();
+        lotteryControls.setVisible(canManage);
+        lotteryDrawButton.setEnabled(lotteryEventPicker.getValue() != null);
+        if (access.companyName() != null && !canManage) {
+            lotteryStatus.setText(missingPermissionsMessage(access, ManagerPermission.EVENT_LIFECYCLE));
+        } else if (lotteryEventPicker.getValue() == null && canManage) {
+            lotteryStatus.setText("Select a lottery event to draw winners.");
+        }
     }
 
     private void refreshInventoryAccess() {
@@ -1726,7 +1814,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     private static String nullToEmpty(String value) {
