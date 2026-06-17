@@ -193,6 +193,15 @@ class StaffInitialStateScenarioTest {
                                                 mock(IPurchasePolicy.class)));
                 assertTrue(denied.getMessage().contains("POLICY_MODIFICATION")
                                 || denied.getMessage().contains("permissions"));
+
+                // Verify u4 (Unauthorized member) has direct application-service access rejected
+                Member u4 = memberRepository.findByUsername("u4").orElseThrow();
+                String u4Token = sessionTokenService.generateMemberToken(UUID.randomUUID(), u4.getId(), Set.of());
+                
+                SecurityException u4Denied = assertThrows(SecurityException.class,
+                                () -> eventService.redefineVenue(u4Token, request));
+                System.out.println("u4Denied message: " + u4Denied.getMessage());
+                assertNotNull(u4Denied.getMessage());
         }
 
         @Test

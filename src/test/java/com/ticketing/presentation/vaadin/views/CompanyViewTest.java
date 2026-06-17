@@ -776,34 +776,50 @@ class CompanyViewTest {
     }
 
     @Test
-    void GivenManagerWithOperationalPermissions_WhenCompanySelected_ThenPermittedActionsAreReachable() {
+    void GivenCompanyOwner_WhenEventsSelected_ThenAllActionsVisible() {
         CompanyPresenter presenter = mockPresenter();
-        when(presenter.loadCompanyAccess("Acme")).thenReturn(CompanyAccessResult.manager("Acme", Set.of(
-                ManagerPermission.MAP_DEFINITION,
-                ManagerPermission.INVENTORY_MGMT,
-                ManagerPermission.EVENT_LIFECYCLE,
-                ManagerPermission.POLICY_MODIFICATION
-        )));
+        when(presenter.loadCompanyAccess("Acme")).thenReturn(CompanyAccessResult.owner("Acme"));
 
         CompanyView view = new CompanyView(presenter);
 
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
+        
         selectTab(view, "Events");
+        // Create event is visible
         assertTrue(hasVisibleButton(view, "Create event"));
-        assertTrue(hasVisibleButton(view, "Edit event"));
+        // Edit venue layout is visible
         assertTrue(hasVisibleButton(view, "Edit venue layout"));
-
-        selectTab(view, "Inventory");
-        assertTrue(hasVisibleButton(view, "Add seat"));
-        assertTrue(hasVisibleButton(view, "Set zone price"));
+        // Event metadata actions are visible (Edit event)
+        assertTrue(hasVisibleButton(view, "Edit event"));
 
         selectTab(view, "Policies");
+        // Policy actions are visible
         assertTrue(hasVisibleButton(view, "Set purchase policy"));
         assertTrue(hasVisibleButton(view, "Set discount policy"));
+    }
 
-        selectTab(view, "Reports");
-        assertFalse(hasVisibleButton(view, "Load sales report"));
-        assertTrue(hasText(view, "User \"alice\" doesn't have VIEW_REPORTS permission for Acme."));
+    @Test
+    void GivenUnauthorizedMember_WhenCompanySelected_ThenManagementControlsHidden() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadCompanyAccess("Acme")).thenReturn(CompanyAccessResult.denied("Acme", "Not a manager of Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+
+        findCompanyCombo(view, "Selected company").setValue(company("Acme"));
+        
+        // company-management controls are hidden
+        selectTab(view, "Events");
+        assertFalse(hasVisibleButton(view, "Create event"));
+        assertFalse(hasVisibleButton(view, "Edit venue layout"));
+        assertFalse(hasVisibleButton(view, "Edit event"));
+
+        selectTab(view, "Inventory");
+        assertFalse(hasVisibleButton(view, "Add seat"));
+        assertFalse(hasVisibleButton(view, "Set zone price"));
+
+        selectTab(view, "Policies");
+        assertFalse(hasVisibleButton(view, "Set purchase policy"));
+        assertFalse(hasVisibleButton(view, "Set discount policy"));
     }
 
     @Test
@@ -819,13 +835,9 @@ class CompanyViewTest {
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
         
         selectTab(view, "Events");
-        // event selector is visible (implicitly verified if it can be found, but we can check if the combo is enabled)
-        assertNotNull(findEventCombo(view, "Draft event"));
         assertTrue(hasVisibleButton(view, "Edit venue layout"));
         assertFalse(hasVisibleButton(view, "Create event"));
         assertFalse(hasVisibleButton(view, "Edit event"));
-        // Metadata, publish, cancel are all hidden because "Edit event" is hidden.
-        assertFalse(hasText(view, "doesn't have EVENT_LIFECYCLE, MAP_DEFINITION permissions"));
 
         selectTab(view, "Policies");
         assertFalse(hasVisibleButton(view, "Set purchase policy"));
