@@ -1,0 +1,62 @@
+/* Showpass button hierarchy (injected into vaadin-button shadow DOM).
+   Base = neutral/secondary; theme="primary" = cyan; theme="error" = danger;
+   theme="tertiary"/"icon" = quiet. Crisp radius, no soft-blob look. */
+
+:host {
+  background-color: var(--app-surface-2);
+  color: var(--app-text);
+  border: 1px solid var(--app-border);
+  border-radius: var(--lumo-border-radius-m);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease, filter 0.15s ease;
+}
+:host(:hover) {
+  border-color: color-mix(in srgb, var(--app-cyan) 50%, var(--app-border));
+}
+
+/* Primary call-to-action: filled cyan with dark on-color text. */
+:host([theme~="primary"]) {
+  background-color: var(--app-cyan);
+  color: #08110f;
+  border-color: transparent;
+  font-weight: 600;
+}
+:host([theme~="primary"]:hover) {
+  filter: brightness(1.07);
+}
+
+/* Quiet/ghost actions. */
+:host([theme~="tertiary"]),
+:host([theme~="tertiary-inline"]) {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--app-cyan-text);
+}
+:host([theme~="tertiary"]:hover),
+:host([theme~="tertiary-inline"]:hover) {
+  background-color: var(--app-cyan-soft);
+}
+
+/* Icon-only buttons (e.g. navbar controls) stay borderless. */
+:host([theme~="icon"]) {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+/* Destructive actions. */
+:host([theme~="error"]) {
+  background-color: transparent;
+  color: var(--app-danger);
+  border-color: color-mix(in srgb, var(--app-danger) 45%, var(--app-border));
+}
+:host([theme~="error"][theme~="primary"]) {
+  background-color: var(--app-danger);
+  color: #fff;
+  border-color: transparent;
+}
+
+:host([disabled]) {
+  opacity: 0.5;
+}

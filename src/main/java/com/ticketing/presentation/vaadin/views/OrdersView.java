@@ -1,6 +1,7 @@
 package com.ticketing.presentation.vaadin.views;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -22,6 +23,7 @@ import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
@@ -170,16 +172,21 @@ public class OrdersView extends VerticalLayout {
                 itemActions
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         return section;
     }
 
     private VerticalLayout checkoutSection() {
         checkoutButton = new Button("Checkout", event -> checkout());
+        checkoutButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         HorizontalLayout form = new HorizontalLayout(couponCode, checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 
         VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, policyComplianceStatus, checkoutStatus);
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         return section;
     }
 
@@ -187,6 +194,8 @@ public class OrdersView extends VerticalLayout {
         Button loadHistory = new Button("Load purchase history", event -> loadPurchaseHistory());
         VerticalLayout section = new VerticalLayout(new H3("Purchase history"), loadHistory, historyStatus, historyGrid);
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         return section;
     }
 
@@ -448,7 +457,7 @@ public class OrdersView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private String formatCheckoutQuote(CheckoutQuoteResult quote) {

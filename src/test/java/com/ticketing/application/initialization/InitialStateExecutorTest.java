@@ -133,7 +133,7 @@ class InitialStateExecutorTest {
         Member u3 = memberRepository.findByUsername("u3").orElseThrow();
         StaffAppointment u3Appt = u3.getStaffAppointment("p1");
         assertTrue(u3Appt.isManager());
-        assertEquals(Set.of(com.ticketing.domain.member.ManagerPermission.MAP_DEFINITION), u3Appt.getPermissions());
+        assertEquals(Set.of(com.ticketing.domain.member.ManagerPermission.EVENT_LIFECYCLE), u3Appt.getPermissions());
 
         Event event = eventRepository.findByCompanyName("p1").stream()
                 .filter(e -> "e1".equals(e.getName()))

@@ -125,6 +125,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         setSpacing(true);
         setMaxWidth("1100px");
         getStyle().set("margin", "0 auto");
+        addClassName("app-events");
 
         configureFields();
         configureResultsGrid();
@@ -212,6 +213,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     private VerticalLayout searchSection() {
         Button search = new Button("Search events", event -> searchEvents());
+        search.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY);
         Button clear = new Button("Clear filters", event -> clearFilters());
 
         FormLayout form = new FormLayout(
@@ -889,11 +891,12 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     private static String colorFor(LayoutCellType type) {
         return switch (type) {
-            case SEAT -> "#1976d2";
-            case GENERAL_ADMISSION -> "#2e7d32";
-            case BLOCKED -> "#616161";
-            case STAGE -> "#6a1b9a";
-            case OBJECT -> "#ef6c00";
+            case SEAT -> "var(--app-cyan)";
+            case GENERAL_ADMISSION -> "var(--app-success)";
+            case BLOCKED -> "var(--app-muted)";
+            // The configured stage reads as the lit cyan->magenta stage (the signature).
+            case STAGE -> "linear-gradient(90deg, var(--app-cyan), var(--app-magenta))";
+            case OBJECT -> "var(--app-magenta)";
         };
     }
 

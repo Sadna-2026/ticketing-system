@@ -55,6 +55,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReport
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
@@ -302,6 +303,8 @@ public class CompanyView extends VerticalLayout {
             VerticalLayout panel = panelByTab.get(tabByMode.get(mode));
             if (panel != null) {
                 panel.setVisible(false);
+                panel.setWidthFull();
+                panel.addClassName("app-card");
                 modeContent.add(panel);
             }
         }
@@ -629,6 +632,7 @@ public class CompanyView extends VerticalLayout {
 
     private VerticalLayout openCompanySection() {
         Button openCompany = new Button("Open company", event -> openCompany());
+        openCompany.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         FormLayout form = new FormLayout(openCompanyName, openCompanyDescription);
         VerticalLayout section = new VerticalLayout(
@@ -721,6 +725,7 @@ public class CompanyView extends VerticalLayout {
     private VerticalLayout eventManagementSection() {
         editEventButton = new Button("Edit event", event -> openEditEventDialog());
         designHallButton = new Button("Create event", event -> openVenueDesigner());
+        designHallButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         eventSelectionForm = new FormLayout(eventCompanyName);
         eventSelectionForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
@@ -1794,7 +1799,7 @@ public class CompanyView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     private static String nullToEmpty(String value) {

@@ -10,8 +10,10 @@ import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter.AuthResult;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Paragraph;
@@ -54,16 +56,16 @@ public class AuthView extends VerticalLayout {
 
         setPadding(true);
         setSpacing(true);
+        addClassName("app-auth");
 
         buildTabs();
 
-        add(
-                new H2("Authentication"),
-                sessionStatus,
-                tabs,
-                tabContent,
-                logoutActions
-        );
+        H2 heading = new H2("Welcome");
+        heading.addClassName("app-auth-title");
+
+        Div card = new Div(heading, sessionStatus, tabs, tabContent, logoutActions);
+        card.addClassName("app-auth-card");
+        add(card);
         refreshSessionStatus();
     }
 
@@ -112,6 +114,7 @@ public class AuthView extends VerticalLayout {
                 getUI().ifPresent(ui -> ui.navigate(HomeView.class));
             }
         });
+        login.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         FormLayout form = new FormLayout(username, password);
         VerticalLayout layout = new VerticalLayout(new H3("Log in"), form, login);
@@ -147,6 +150,7 @@ public class AuthView extends VerticalLayout {
                 getUI().ifPresent(ui -> ui.navigate(HomeView.class));
             }
         });
+        register.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         FormLayout form = new FormLayout(username, email, password, phoneNumber, dateOfBirth);
         VerticalLayout layout = new VerticalLayout(new H3("Register"), form, register);
@@ -166,6 +170,7 @@ public class AuthView extends VerticalLayout {
                 getUI().ifPresent(ui -> ui.navigate(HomeView.class));
             }
         });
+        startGuestSession.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         VerticalLayout layout = new VerticalLayout(
                 new H3("Continue as guest"),
@@ -194,6 +199,7 @@ public class AuthView extends VerticalLayout {
                 getUI().ifPresent(ui -> ui.navigate(AdminView.class));
             }
         });
+        login.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         VerticalLayout layout = new VerticalLayout(
                 new H3("Admin login"),

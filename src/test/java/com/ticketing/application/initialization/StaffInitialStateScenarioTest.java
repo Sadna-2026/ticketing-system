@@ -106,7 +106,7 @@ class StaffInitialStateScenarioTest {
         Member u3 = memberRepository.findByUsername("u3").orElseThrow();
         StaffAppointment u3Appt = u3.getStaffAppointment("p1");
         assertTrue(u3Appt.isManager());
-        assertEquals(Set.of(ManagerPermission.MAP_DEFINITION), u3Appt.getPermissions());
+        assertEquals(Set.of(ManagerPermission.EVENT_LIFECYCLE), u3Appt.getPermissions());
 
         Event event = eventRepository.findByCompanyName("p1").stream()
                 .filter(e -> "e1".equals(e.getName()))
@@ -122,6 +122,12 @@ class StaffInitialStateScenarioTest {
         assertEquals(100, seating.getSeats().size());
         assertEquals(new BigDecimal("100"), seating.getPricePerTicket());
 
+        // e1 must inherit the company coupon (set before the event was created),
+        // otherwise sale123 would not apply at checkout (acceptance check A-6).
+        CouponDiscount eventDiscount = (CouponDiscount) event.getEventDiscountPolicy();
+        assertEquals("sale123", eventDiscount.getCouponCode());
+        assertEquals(new BigDecimal("20"), eventDiscount.getPercentOff());
+
         VenueLayout layout = event.getVenueLayout();
         assertNotNull(layout);
         assertEquals(10, layout.getRows());
@@ -130,12 +136,12 @@ class StaffInitialStateScenarioTest {
     }
 
     @Test
-    @DisplayName("u3 can edit venue layout but not manage policies")
+    @DisplayName("u3 can manage event lifecycle but not policies")
     void givenStaffScenario_whenU3ChecksPermissions_thenLayoutAllowedPolicyDenied() {
         runStaffScenario();
 
         Member u3 = memberRepository.findByUsername("u3").orElseThrow();
-        assertTrue(u3.getStaffAppointment("p1").hasPermission(ManagerPermission.MAP_DEFINITION));
+        assertTrue(u3.getStaffAppointment("p1").hasPermission(ManagerPermission.EVENT_LIFECYCLE));
         assertFalse(u3.getStaffAppointment("p1").hasPermission(ManagerPermission.POLICY_MODIFICATION));
 
         SecurityException denied = assertThrows(SecurityException.class,
