@@ -180,12 +180,10 @@ public class VirtualQueue {
      * held by any ADMITTED entries so the counter resets correctly.
      */
     public void flush() {
-        int admittedCount = (int) entries.stream()
-                .filter(e -> e.getStatus() == QueueEntryStatus.ADMITTED)
-                .peek(QueueEntry::leave)
-                .count();
-        currentActiveUsers = Math.max(0, currentActiveUsers - admittedCount);
-        entries.stream().filter(QueueEntry::isWaiting).forEach(QueueEntry::leave);
+        entries.stream()
+                .filter(e -> e.getStatus() == QueueEntryStatus.ADMITTED || e.getStatus() == QueueEntryStatus.WAITING)
+                .forEach(QueueEntry::leave);
+        currentActiveUsers = 0;
     }
 
     public void deactivate() { this.active = false; }
