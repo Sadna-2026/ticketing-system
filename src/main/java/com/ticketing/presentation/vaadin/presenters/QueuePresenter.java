@@ -140,9 +140,12 @@ public class QueuePresenter {
         }
         try {
             VirtualQueueDto queue = orderService.getQueueForEvent(eventId);
+            // Use the most recent non-LEFT entry for this session.
+            // findFirst() would return the oldest entry, which may be a stale LEFT entry
+            // from a prior queue visit — causing the UI to show "Status: LEFT" forever.
             QueueEntryDto myEntry = queue.getEntries().stream()
-                    .filter(e -> sessionId.equals(e.getSessionId()))
-                    .findFirst()
+                    .filter(e -> sessionId.equals(e.getSessionId()) && !"LEFT".equals(e.getStatus()))
+                    .reduce((first, second) -> second)
                     .orElse(null);
             if (myEntry == null) {
                 return QueueStatusResult.notInQueue("You are not in the queue for this event.");
