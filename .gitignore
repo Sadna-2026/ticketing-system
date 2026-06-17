@@ -20,3 +20,4 @@ requirements/
 node_modules
 .vscode/
 run-cloud.ps1
+DEMO-CLOUD-SQL.md
