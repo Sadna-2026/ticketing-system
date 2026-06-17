@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.RedefineVenueRequest;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.CompanySummaryDTO;
@@ -734,6 +735,28 @@ public class CompanyPresenter {
                     create ? "Event created with " + zones.size() + " zone(s)." : "Event updated.", id);
         } catch (RuntimeException ex) {
             return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult redefineVenue(
+            UUID eventId, int rows, int cols,
+            List<CreateEventRequest.ZoneSpec> zones,
+            Map<String, String> sectionToZoneName,
+            List<DefineVenueRequest.CellSpec> cells) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            RedefineVenueRequest request = new RedefineVenueRequest(
+                    eventId, rows, cols, zones, sectionToZoneName, cells);
+            eventService.redefineVenue(token, request);
+            return ActionResult.success("Venue layout and zones updated.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
         }
     }
 

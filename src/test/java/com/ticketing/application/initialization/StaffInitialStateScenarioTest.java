@@ -32,7 +32,6 @@ import com.ticketing.domain.event.CouponDiscount;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.InventoryZone;
-import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -159,14 +158,27 @@ class StaffInitialStateScenarioTest {
                                 eventRepository, companyRepository, memberRepository,
                                 new InMemoryOrderRepository(), sessionTokenService, null, systemClock, null);
 
-                // Edit the layout: replace a cell with a stage cell
-                List<LayoutCell> newCells = new ArrayList<>(e1.getVenueLayout().getCells());
-                newCells.removeIf(c -> c.getRow() == 9 && c.getCol() == 9);
-                newCells.add(LayoutCell.stage(9, 9, "New Stage"));
-                VenueLayout newLayout = new VenueLayout(10, 10, newCells);
+                // Edit the layout: redefine venue with 10x10 and a new stage cell
+                List<com.ticketing.application.CreateEventRequest.ZoneSpec> zones = List.of(
+                        new com.ticketing.application.CreateEventRequest.GAZoneSpec("TestZone", new java.math.BigDecimal("100"), 100)
+                );
+                java.util.Map<String, String> sectionToZone = java.util.Map.of("TestSection", "TestZone");
+                List<com.ticketing.application.DefineVenueRequest.CellSpec> cells = new ArrayList<>();
+                for (int r = 0; r < 10; r++) {
+                    for (int c = 0; c < 10; c++) {
+                        if (r == 9 && c == 9) {
+                            cells.add(new com.ticketing.application.DefineVenueRequest.CellSpec(r, c, com.ticketing.domain.event.LayoutCellType.STAGE, "New Stage", null, null, null));
+                        } else {
+                            cells.add(new com.ticketing.application.DefineVenueRequest.CellSpec(r, c, com.ticketing.domain.event.LayoutCellType.GENERAL_ADMISSION, null, "TestZone", null, null));
+                        }
+                    }
+                }
+                com.ticketing.application.RedefineVenueRequest request = new com.ticketing.application.RedefineVenueRequest(
+                        e1.getId(), 10, 10, zones, sectionToZone, cells
+                );
 
                 // This should succeed because u3 has MAP_DEFINITION
-                eventService.setEventLayout(u3Token, e1.getId(), newLayout);
+                eventService.redefineVenue(u3Token, request);
 
                 // Verify layout was saved
                 Event updatedEvent = eventRepository.findById(e1.getId()).orElseThrow();
