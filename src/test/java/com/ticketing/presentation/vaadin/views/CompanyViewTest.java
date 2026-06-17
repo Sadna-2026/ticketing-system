@@ -758,8 +758,8 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Manager permissions for Acme: VIEW_REPORTS."));
 
         selectTab(view, "Events");
-        assertFalse(hasVisibleButton(view, "Edit event"));
-        assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE permission for Acme."));
+        assertFalse(hasEnabledButton(view, "Edit event"));
+        assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE, MAP_DEFINITION permissions for Acme."));
 
         selectTab(view, "Inventory");
         assertFalse(hasVisibleButton(view, "Add seat"));
@@ -776,33 +776,72 @@ class CompanyViewTest {
     }
 
     @Test
-    void GivenManagerWithOperationalPermissions_WhenCompanySelected_ThenPermittedActionsAreReachable() {
+    void GivenCompanyOwner_WhenEventsSelected_ThenAllActionsVisible() {
         CompanyPresenter presenter = mockPresenter();
-        when(presenter.loadCompanyAccess("Acme")).thenReturn(CompanyAccessResult.manager("Acme", Set.of(
-                ManagerPermission.MAP_DEFINITION,
-                ManagerPermission.INVENTORY_MGMT,
-                ManagerPermission.EVENT_LIFECYCLE,
-                ManagerPermission.POLICY_MODIFICATION
-        )));
+        when(presenter.loadCompanyAccess("Acme")).thenReturn(CompanyAccessResult.owner("Acme"));
 
         CompanyView view = new CompanyView(presenter);
 
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
+        
         selectTab(view, "Events");
+        // Create event is visible
         assertTrue(hasVisibleButton(view, "Create event"));
+        // Edit venue layout is visible
+        assertTrue(hasVisibleButton(view, "Edit venue layout"));
+        // Event metadata actions are visible (Edit event)
         assertTrue(hasVisibleButton(view, "Edit event"));
 
-        selectTab(view, "Inventory");
-        assertTrue(hasVisibleButton(view, "Add seat"));
-        assertTrue(hasVisibleButton(view, "Set zone price"));
-
         selectTab(view, "Policies");
+        // Policy actions are visible
         assertTrue(hasVisibleButton(view, "Set purchase policy"));
         assertTrue(hasVisibleButton(view, "Set discount policy"));
+    }
 
-        selectTab(view, "Reports");
-        assertFalse(hasVisibleButton(view, "Load sales report"));
-        assertTrue(hasText(view, "User \"alice\" doesn't have VIEW_REPORTS permission for Acme."));
+    @Test
+    void GivenUnauthorizedMember_WhenCompanySelected_ThenManagementControlsHidden() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadCompanyAccess("Acme")).thenReturn(CompanyAccessResult.denied("Acme", "Not a manager of Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+
+        findCompanyCombo(view, "Selected company").setValue(company("Acme"));
+        
+        // company-management controls are hidden
+        selectTab(view, "Events");
+        assertFalse(hasEnabledButton(view, "Create event"));
+        assertFalse(hasEnabledButton(view, "Edit venue layout"));
+        assertFalse(hasEnabledButton(view, "Edit event"));
+
+        selectTab(view, "Inventory");
+        assertFalse(hasVisibleButton(view, "Add seat"));
+        assertFalse(hasVisibleButton(view, "Set zone price"));
+
+        selectTab(view, "Policies");
+        assertFalse(hasVisibleButton(view, "Set purchase policy"));
+        assertFalse(hasVisibleButton(view, "Set discount policy"));
+    }
+
+    @Test
+    void GivenManagerWithMapDefinitionOnly_WhenCompanySelected_ThenEditVenueLayoutIsReachable() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadCompanyAccess("Acme"))
+                .thenReturn(CompanyAccessResult.manager("Acme", Set.of(ManagerPermission.MAP_DEFINITION)));
+        when(presenter.loadLifecycleAccess("Acme"))
+                .thenReturn(LifecycleAccessResult.denied("Only the founder can perform this lifecycle action."));
+
+        CompanyView view = new CompanyView(presenter);
+
+        findCompanyCombo(view, "Selected company").setValue(company("Acme"));
+        
+        selectTab(view, "Events");
+        assertTrue(hasEnabledButton(view, "Edit venue layout"));
+        assertFalse(hasEnabledButton(view, "Create event"));
+        assertFalse(hasEnabledButton(view, "Edit event"));
+
+        selectTab(view, "Policies");
+        assertFalse(hasVisibleButton(view, "Set purchase policy"));
+        assertFalse(hasVisibleButton(view, "Set discount policy"));
     }
 
 
@@ -1147,6 +1186,14 @@ class CompanyViewTest {
                 .map(Button.class::cast)
                 .filter(button -> text.equals(button.getText()))
                 .anyMatch(CompanyViewTest::isEffectivelyVisible);
+    }
+
+    private static boolean hasEnabledButton(Component root, String text) {
+        return components(root).stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> text.equals(button.getText()))
+                .anyMatch(button -> isEffectivelyVisible(button) && button.isEnabled());
     }
 
     private static void clickDestructive(Component root, String text) {
