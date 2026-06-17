@@ -114,6 +114,43 @@ public class VirtualQueue {
     }
 
     /**
+     * Removes a specific session from the queue and releases any slot it held.
+     * <ul>
+     *   <li>An {@code ADMITTED} entry is marked {@code LEFT} and frees its active slot.</li>
+     *   <li>A {@code WAITING} entry is marked {@code LEFT} (it held no active slot).</li>
+     *   <li>A session with no current entry is treated as a direct-entry user that
+     *       bypassed the queue, so its active slot is released.</li>
+     * </ul>
+     * Idempotent: an entry already {@code LEFT} is ignored, so a slot is never
+     * released twice for the same enqueued/admitted session.
+     */
+    public void leave(UUID sessionId) {
+        if (sessionId == null) {
+            return;
+        }
+        List<QueueEntry> sessionEntries = entries.stream()
+                .filter(e -> sessionId.equals(e.getSessionId()))
+                .collect(Collectors.toList());
+        QueueEntry active = sessionEntries.stream()
+                .filter(e -> e.getStatus() != QueueEntryStatus.LEFT)
+                .reduce((first, second) -> second)
+                .orElse(null);
+        if (active == null) {
+            // No active entry. If the session was never enqueued it is a direct-entry
+            // user releasing the slot it held; if it already has LEFT entries it has
+            // left before, so this is an idempotent no-op (no second slot released).
+            if (sessionEntries.isEmpty() && currentActiveUsers > 0) {
+                currentActiveUsers--;
+            }
+            return;
+        }
+        if (active.getStatus() == QueueEntryStatus.ADMITTED && currentActiveUsers > 0) {
+            currentActiveUsers--;
+        }
+        active.leave();
+    }
+
+    /**
      * Updates the queue configuration (Admin action).
      */
     public void updateConfig(QueueConfig newConfig) {

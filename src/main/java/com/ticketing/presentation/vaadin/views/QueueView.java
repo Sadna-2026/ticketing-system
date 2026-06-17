@@ -123,6 +123,7 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
                     if (Boolean.TRUE.equals(confirmed)) {
                         stopPolling();
                         inWaitingRoom = false;
+                        presenter.notifyLeft(activeEventId);
                         action.proceed();
                     }
                 }));
@@ -136,6 +137,7 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
         Button leave = new Button("Yes, leave", e -> {
             stopPolling();
             inWaitingRoom = false;
+            presenter.notifyLeft(activeEventId);
             confirm.close();
             UI.getCurrent().navigate(EventsView.class);
         });

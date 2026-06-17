@@ -178,7 +178,7 @@ public class QueuePresenter {
             return;
         }
         try {
-            orderService.userLeft(eventId);
+            orderService.userLeft(eventId, SessionContext.getSessionId());
         } catch (RuntimeException ex) {
             logger.warn("userLeft notification failed for event {}", eventId, ex);
         }

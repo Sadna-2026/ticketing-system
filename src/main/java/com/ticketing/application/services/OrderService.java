@@ -583,9 +583,25 @@ public class OrderService {
 
     @Transactional
     public void userLeft(UUID eventId) {
+        userLeft(eventId, null);
+    }
+
+    /**
+     * Releases the given session's place in the event queue. When {@code sessionId}
+     * is provided the session's queue entry is cleared (so a previously-admitted
+     * session no longer bypasses the queue on re-entry); a {@code null} session id
+     * falls back to a plain active-slot decrement for legacy callers. Either way,
+     * any freed slot auto-admits the next waiting batch.
+     */
+    @Transactional
+    public void userLeft(UUID eventId, UUID sessionId) {
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue != null) {
-            queue.userLeft();
+            if (sessionId != null) {
+                queue.leave(sessionId);
+            } else {
+                queue.userLeft();
+            }
             if (queue.getWaitingCount() > 0 && !queue.shouldQueue()) {
                 List<QueueEntry> admitted = queue.admitNextBatch();
                 log.info("Auto-admitted {} users from queue for eventId={} after user left",
