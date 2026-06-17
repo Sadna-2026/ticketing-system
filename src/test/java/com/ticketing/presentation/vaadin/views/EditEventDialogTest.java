@@ -31,6 +31,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
+import com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.Component;
@@ -175,6 +176,8 @@ class EditEventDialogTest {
         try (var ui = mockStatic(UiMessages.class)) {
             EditEventDialog dialog = openWith(presenter, draft());
             clickButton(dialog, "Cancel event");
+            // Cancel now requires confirming the destructive-action dialog first.
+            ConfirmDialogTestSupport.confirm();
 
             verify(presenter).cancelEvent(EVENT_ID);
             ui.verify(() -> UiMessages.success("Event cancelled."));

@@ -26,6 +26,7 @@ import com.ticketing.application.ISystemClock;
 import com.ticketing.application.RedefineVenueRequest;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.CancelEventResponse;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
@@ -334,8 +335,14 @@ public class EventService {
     }
 
 
+    /**
+     * Cancels an event: blocks new purchases, releases active orders, and refunds every completed
+     * purchase exactly once via its original transaction id. Recoverable and idempotent — a partial
+     * payment-service failure leaves the event {@code CANCELLED_WITH_PENDING_REFUNDS} and a later
+     * retry processes only the unfinished refunds without double-refunding the rest.
+     */
     @Transactional
-    public void cancelEvent(String token, UUID eventId) {
+    public CancelEventResponse cancelEvent(String token, UUID eventId) {
         if (eventId == null) {
             log.warn("Event cancellation denied: missing eventId");
             throw new IllegalArgumentException("eventId is required");
@@ -361,16 +368,42 @@ public class EventService {
             throw new SecurityException("Insufficient permissions to cancel events");
         }
 
-        log.info("Cancelling event: eventId={}, companyName={}", eventId, company.getName());
-        event.cancel();
+        if (event.getStatus() == EventStatus.CANCELLED) {
+            log.warn("Duplicate cancellation request for already-cancelled event {}", eventId);
+            return new CancelEventResponse(true, "Event is already cancelled.", eventId,
+                    0, 0, 0, 0, 0, EventStatus.CANCELLED.name());
+        }
+
+        log.info("Cancellation requested: eventId={}, companyName={}", eventId, company.getName());
+        // Block new reservations/purchases immediately by persisting the in-progress state.
+        event.beginCancellation();
         saveEvent(event);
 
-        if (orderService != null) {
-            orderService.refundEventPurchases(eventId);
+        OrderService.EventCancellationOutcome outcome = orderService != null
+                ? orderService.cancelOrdersAndRefund(eventId, event.getName())
+                : OrderService.EventCancellationOutcome.empty();
+
+        boolean fullyRefunded = outcome.refundsPending() == 0 && outcome.refundsFailed() == 0;
+        if (fullyRefunded) {
+            event.completeCancellation();
+        } else {
+            event.markCancelledWithPendingRefunds();
         }
-        if (notificationService != null) {
-            notificationService.notify(memberId.toString(), "Event was cancelled successfully.");
-        }
+        saveEvent(event);
+
+        String status = event.getStatus().name();
+        String message = fullyRefunded
+                ? "Event cancelled successfully. " + outcome.refundsSucceeded() + " purchases were refunded."
+                : "Event cancellation started. " + outcome.refundsSucceeded() + " refunds succeeded and "
+                        + (outcome.refundsPending() + outcome.refundsFailed())
+                        + " are pending because the payment service is unavailable.";
+        log.info("Event cancellation {}: eventId={}, found={}, succeeded={}, pending={}, failed={}",
+                status, eventId, outcome.purchasesFound(), outcome.refundsSucceeded(),
+                outcome.refundsPending(), outcome.refundsFailed());
+
+        return new CancelEventResponse(true, message, eventId,
+                outcome.activeOrdersCancelled(), outcome.purchasesFound(),
+                outcome.refundsSucceeded(), outcome.refundsPending(), outcome.refundsFailed(), status);
     }
 
     @Transactional

@@ -19,6 +19,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapResult;
+import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.RequiredFields;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
@@ -362,11 +363,12 @@ public class EditEventDialog extends Dialog {
         publish.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         publish.setEnabled(status == EventStatus.DRAFT);
 
-        Button cancel = new Button("Cancel event", e -> {
-            ActionResult result = presenter.cancelEvent(eventId);
-            lifecycleStatus.setText(result.message());
-            showResult(result.success(), result.message());
-        });
+        Button cancel = new Button("Cancel event", e ->
+                DestructiveActionDialogs.confirmCancelEvent(eventName.getValue(), () -> {
+                    ActionResult result = presenter.cancelEvent(eventId);
+                    lifecycleStatus.setText(result.message());
+                    showResult(result.success(), result.message());
+                }));
         cancel.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
         HorizontalLayout actions = new HorizontalLayout(publish, cancel);
