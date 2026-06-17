@@ -1,6 +1,7 @@
 package com.ticketing.application.services;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -55,7 +56,6 @@ import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
-import com.ticketing.domain.order.OrderItem;
 
 /**
  * Application service for event lifecycle, inventory, policies and the lottery.
@@ -231,11 +231,12 @@ public class EventService {
             Company company = loadActiveCompany(request.companyName());
             StaffAppointment appointment = loadAppointment(memberId, company.getName());
             authorizeEventCreation(appointment);
+            SaleMethod sm = request.saleMethod() != null ? request.saleMethod() : SaleMethod.REGULAR;
             event = new Event(
                     UUID.randomUUID(), company.getName(), request.name(), request.description(),
                     request.category(), request.schedule(), request.lockTimerDuration(),
                     company.getPurchasePolicy(), company.getDiscountPolicy(),
-                    SaleMethod.REGULAR, null);
+                    sm, request.lotteryWindow());
         } else {
             event = eventRepository.findById(request.eventId())
                     .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
@@ -415,6 +416,14 @@ public class EventService {
                     event.getId(), request.schedule().getStartTime());
             event.setSchedule(request.schedule());
         }
+        if (request.lotteryWindow() != null) {
+            if (!event.isLottery())
+                throw new IllegalStateException("Cannot set lottery window on a non-lottery event");
+            log.info("editEvent: eventId={} lotteryWindow updated to open={} close={}",
+                    event.getId(), request.lotteryWindow().registrationOpen(),
+                    request.lotteryWindow().registrationClose());
+            event.setLotteryWindow(request.lotteryWindow());
+        }
 
         saveEvent(event);
         log.info("Event edited: eventId={}, companyName={}, by={}",
@@ -467,6 +476,21 @@ public class EventService {
         return LotteryRegistrationResponse.success(entry.id(), entry.registeredAt());
     }
 
+    public Optional<LotteryRegistrationResponse> getMemberLotteryEntry(String token, UUID eventId) {
+        if (lotteryRepository == null || eventId == null) return Optional.empty();
+        if (token == null || token.isBlank()) return Optional.empty();
+        try {
+            if (!sessionTokenService.isValid(token)) return Optional.empty();
+            UUID memberId = sessionTokenService.extractMemberId(token);
+            if (memberId == null) return Optional.empty();
+            return lotteryRepository.findByEventAndMember(eventId, memberId)
+                    .map(e -> LotteryRegistrationResponse.success(e.id(), e.registeredAt()));
+        } catch (RuntimeException ex) {
+            log.warn("Could not check lottery status: eventId={}", eventId, ex);
+            return Optional.empty();
+        }
+    }
+
     @Transactional
     public List<ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
         if (eventId == null)
@@ -474,8 +498,31 @@ public class EventService {
         UUID memberId = authenticateMember(token);
         rejectIfSuspended(memberId);
 
-        if (capacity < 0) {
-            throw new IllegalArgumentException("Capacity cannot be negative");
+        if (capacity <= 0)
+            throw new IllegalArgumentException("Capacity must be at least 1");
+
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+
+        if (!event.isLottery())
+            throw new IllegalArgumentException("Event is not a lottery event");
+
+        // Require EVENT_LIFECYCLE permission on the event's company
+        Company company = companyRepository.findByName(event.getCompanyName())
+                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + event.getCompanyName()));
+        StaffAppointment appt = loadAppointment(memberId, company.getName());
+        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE))
+            throw new SecurityException("Insufficient permissions to draw lottery");
+
+        // Registration window must be closed before drawing
+        if (event.getLotteryWindow() != null && event.getLotteryWindow().isOpen(systemClock.now()))
+            throw new IllegalStateException("Registration window is still open. Wait until it closes before drawing winners.");
+
+        // Idempotency: reject if draw was already run for this event
+        boolean alreadyDrawn = !orderRepository.findActiveByEventId(eventId).isEmpty()
+                && orderRepository.findActiveByEventId(eventId).stream().anyMatch(ActiveOrder::isLotteryWin);
+        if (alreadyDrawn) {
+            throw new IllegalStateException("Lottery has already been drawn for this event. The draw cannot be repeated.");
         }
 
         List<LotteryEntry> allEntries = lotteryRepository.findByEventId(eventId);
@@ -485,20 +532,15 @@ public class EventService {
             return new ArrayList<>();
         }
 
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
-
+        // Winners get 48 hours to complete their purchase before the event opens to all
+        Instant purchaseWindowDeadline = systemClock.now().plus(Duration.ofHours(48));
         List<ActiveOrder> createdOrders = new ArrayList<>();
 
         for (LotteryEntry winner : winners) {
             UUID sessionId = UUID.randomUUID();
-            ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, winner.memberId(), eventId, systemClock.now());
-
-            InventoryZone zone = event.findZone(winner.zoneId());
-            zone.lockGA(winner.quantity());
-
-            OrderItem item = OrderItem.forGA(UUID.randomUUID(), winner.zoneId(), winner.quantity(), zone.getPricePerTicket());
-            order.addItem(item);
+            ActiveOrder order = new ActiveOrder(
+                    UUID.randomUUID(), sessionId, winner.memberId(), eventId,
+                    systemClock.now(), purchaseWindowDeadline);
 
             try {
                 orderRepository.save(order);
@@ -508,18 +550,15 @@ public class EventService {
             createdOrders.add(order);
         }
 
-        saveEvent(event);
-
         if (notificationService != null) {
             Set<UUID> winnerMemberIds = new HashSet<>();
             for (ActiveOrder order : createdOrders) {
                 if (order.getMemberId() != null) {
                     winnerMemberIds.add(order.getMemberId());
                     notificationService.notify(order.getMemberId().toString(),
-                            "You have won the lottery! You can now purchase tickets for the event.");
+                            "You have won the lottery! You have 48 hours to choose and purchase your tickets. Go to the Events page to select your tickets.");
                 }
             }
-            // Non-winners (registrants who were not selected) receive a result notification too.
             for (LotteryEntry entry : allEntries) {
                 if (entry.memberId() != null && !winnerMemberIds.contains(entry.memberId())) {
                     notificationService.notify(entry.memberId().toString(),
@@ -530,13 +569,18 @@ public class EventService {
         return createdOrders;
     }
 
-    private List<LotteryEntry> selectLotteryWinners(List<LotteryEntry> entries, int capacity) {
+    // Capacity = tickets. Entries requesting more tickets than remaining capacity are skipped.
+    private List<LotteryEntry> selectLotteryWinners(List<LotteryEntry> entries, int ticketCapacity) {
         List<LotteryEntry> pool = new ArrayList<>(entries);
         List<LotteryEntry> winners = new ArrayList<>();
-        int numWinners = Math.min(pool.size(), capacity);
-        for (int i = 0; i < numWinners; i++) {
+        int remaining = ticketCapacity;
+        while (!pool.isEmpty() && remaining > 0) {
             int index = random.nextInt(pool.size());
-            winners.add(pool.remove(index));
+            LotteryEntry candidate = pool.remove(index);
+            if (candidate.quantity() <= remaining) {
+                winners.add(candidate);
+                remaining -= candidate.quantity();
+            }
         }
         return winners;
     }
@@ -786,6 +830,12 @@ public class EventService {
             zoneDtos.add(toZoneInfo(zone));
         }
 
+        EventMapDTO.LotteryInfo lotteryInfo = null;
+        if (event.isLottery() && event.getLotteryWindow() != null) {
+            com.ticketing.domain.event.LotteryWindow w = event.getLotteryWindow();
+            lotteryInfo = new EventMapDTO.LotteryInfo(w.registrationOpen(), w.registrationClose(), w.isOpen(systemClock.now()));
+        }
+
         return Optional.of(new EventMapDTO(
                 event.getId(),
                 event.getName(),
@@ -796,7 +846,8 @@ public class EventService {
                 toLayoutInfo(event.getVenueLayout()),
                 event.getDescription(),
                 BuyerPolicyCatalog.purchaseRestrictions(event),
-                BuyerPolicyCatalog.visibleDiscounts(event)));
+                BuyerPolicyCatalog.visibleDiscounts(event),
+                lotteryInfo));
     }
 
     // ── Visual hall layout (FIX-V2-25) ──────────────────────────────

@@ -33,7 +33,7 @@ public class OrderTimeDomainService {
     public void expireOrders() {
         Instant now = systemClock.now();
         List<ActiveOrder> activeOrders = orderRepository.findAllActive();
-        log.info("Expiration sweep: checking {} active orders", activeOrders.size());
+        // log.info("Expiration sweep: checking {} active orders", activeOrders.size());
 
         int expiredCount = 0;
         for (ActiveOrder order : activeOrders) {

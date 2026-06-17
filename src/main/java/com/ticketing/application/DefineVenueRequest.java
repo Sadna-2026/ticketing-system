@@ -8,6 +8,8 @@ import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.LotteryWindow;
+import com.ticketing.domain.event.SaleMethod;
 
 /**
  * Defines (or redefines) a DRAFT event's hall from a single painted grid: the zones, their
@@ -29,7 +31,9 @@ public record DefineVenueRequest(
         int cols,
         List<CreateEventRequest.ZoneSpec> zones,
         Map<String, String> sectionToZoneName,
-        List<CellSpec> cells
+        List<CellSpec> cells,
+        SaleMethod saleMethod,
+        LotteryWindow lotteryWindow
 ) {
 
     public DefineVenueRequest {
@@ -39,9 +43,34 @@ public record DefineVenueRequest(
         if (sectionToZoneName == null || sectionToZoneName.isEmpty()) {
             throw new IllegalArgumentException("sectionToZoneName must have at least one entry");
         }
+        if (saleMethod == null) {
+            saleMethod = SaleMethod.REGULAR;
+        }
+        if (saleMethod == SaleMethod.LOTTERY && lotteryWindow == null) {
+            throw new IllegalArgumentException("lotteryWindow is required for LOTTERY sale method");
+        }
         zones = List.copyOf(zones);
         sectionToZoneName = Map.copyOf(sectionToZoneName);
         cells = cells == null ? List.of() : List.copyOf(cells);
+    }
+
+    // Backwards-compat: existing calls without saleMethod/lotteryWindow default to REGULAR
+    public DefineVenueRequest(
+            UUID eventId,
+            String companyName,
+            String name,
+            String description,
+            EventCategory category,
+            EventSchedule schedule,
+            LockTimerDuration lockTimerDuration,
+            int rows,
+            int cols,
+            List<CreateEventRequest.ZoneSpec> zones,
+            Map<String, String> sectionToZoneName,
+            List<CellSpec> cells
+    ) {
+        this(eventId, companyName, name, description, category, schedule, lockTimerDuration,
+                rows, cols, zones, sectionToZoneName, cells, SaleMethod.REGULAR, null);
     }
 
     public boolean isCreate() {

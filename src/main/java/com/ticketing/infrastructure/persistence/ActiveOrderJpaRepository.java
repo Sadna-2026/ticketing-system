@@ -21,4 +21,6 @@ public interface ActiveOrderJpaRepository extends JpaRepository<ActiveOrder, UUI
     List<ActiveOrder> findBySessionId(UUID sessionId);
 
     List<ActiveOrder> findByMemberId(UUID memberId);
+
+    List<ActiveOrder> findByMemberIdAndEventId(UUID memberId, UUID eventId);
 }

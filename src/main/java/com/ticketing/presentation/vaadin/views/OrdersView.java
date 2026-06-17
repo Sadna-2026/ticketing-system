@@ -68,6 +68,9 @@ public class OrdersView extends VerticalLayout {
     private final Grid<PurchaseRecordDTO> historyGrid = new Grid<>(PurchaseRecordDTO.class, false);
     private final VerticalLayout historySection;
 
+    private final Span lotteryWinBanner = new Span();
+    private final Button goToEventsButton = new Button("Go to Events to select tickets");
+
     private ActiveOrderDto currentOrder;
     private OrderItemDto selectedOrderItem;
     private OrderLabels currentLabels = OrderLabels.empty();
@@ -120,6 +123,13 @@ public class OrdersView extends VerticalLayout {
 
         clearCart.setEnabled(false);
         clearCart.addClickListener(event -> clearCart());
+
+        lotteryWinBanner.getStyle().set("color", "var(--lumo-primary-text-color)");
+        lotteryWinBanner.getStyle().set("font-weight", "bold");
+        lotteryWinBanner.setVisible(false);
+
+        goToEventsButton.setVisible(false);
+        goToEventsButton.addClickListener(e -> getUI().ifPresent(ui -> ui.navigate("events")));
     }
 
     private void configureOrderItemsGrid() {
@@ -154,6 +164,8 @@ public class OrdersView extends VerticalLayout {
                 new H3("Active order"),
                 orderActionStatus,
                 orderStatus,
+                lotteryWinBanner,
+                goToEventsButton,
                 orderItemsGrid,
                 itemActions
         );
@@ -347,8 +359,24 @@ public class OrdersView extends VerticalLayout {
         orderItemsGrid.setVisible(!items.isEmpty());
         selectedOrderItem = null;
         orderItemsGrid.deselectAll();
+        boolean isLotteryWin = currentOrder != null && currentOrder.isLotteryWin();
+        if (isLotteryWin) {
+            boolean hasItems = currentOrder.getItems() != null && !currentOrder.getItems().isEmpty();
+            String deadline = currentOrder.getPurchaseWindowDeadline() == null
+                    ? ""
+                    : " Deadline: " + DATE_TIME_FORMATTER.format(currentOrder.getPurchaseWindowDeadline()) + ".";
+            if (!hasItems) {
+                lotteryWinBanner.setText("You won the lottery!" + deadline
+                        + " Go to the Events page to choose your tickets.");
+            } else {
+                lotteryWinBanner.setText("Lottery win order." + deadline
+                        + " You can modify your ticket selection but cannot cancel this order.");
+            }
+        }
+        lotteryWinBanner.setVisible(isLotteryWin);
+        goToEventsButton.setVisible(isLotteryWin);
+        clearCart.setEnabled(currentOrder != null && !isLotteryWin);
         refreshItemActionState();
-        clearCart.setEnabled(currentOrder != null);
 
         refreshCheckoutState();
         if (currentOrder == null) {

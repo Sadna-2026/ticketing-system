@@ -274,6 +274,10 @@ public class OrderService {
         if (order.getStatus() == OrderStatus.COMPLETED) {
             throw new IllegalStateException("Cannot cancel a completed order");
         }
+        if (order.isLotteryWin()) {
+            throw new IllegalStateException(
+                    "Lottery win reservation cannot be cancelled. Select tickets on the Events page and checkout, or wait for the window to expire.");
+        }
 
         Event event = findEvent(order.getEventId());
         releaseAllInventory(event, order);
@@ -305,7 +309,10 @@ public class OrderService {
                 order.getCreatedAt(),
                 order.getStatus().name(),
                 order.getItemsDto(),
-                order.getTotalPrice());
+                order.getTotalPrice(),
+                null,
+                order.isLotteryWin(),
+                order.getPurchaseWindowDeadline());
     }
 
     // ── Checkout ────────────────────────────────────────────────────
@@ -403,11 +410,23 @@ public class OrderService {
         validateOrderOwnership(sessionId, order);
 
         Event event = findEvent(order.getEventId());
+        if (event.isCancelled()) {
+            throw new IllegalStateException(
+                    "This event has been cancelled. Your order cannot be checked out.");
+        }
         validateOrderNotExpired(order, event);
 
         if (order.getItems().isEmpty()) {
             log.warn("Failed to checkout order {}: no items in order", order.getId());
             throw new IllegalStateException("Cannot checkout an empty order");
+        }
+
+        if (order.isLotteryWin() && order.isPurchaseWindowExpired(systemClock.now())) {
+            order.expire();
+            saveOrder(order);
+            releaseAllInventoryForOrder(order.getEventId(), order);
+            throw new IllegalStateException(
+                    "Your lottery purchase window has expired. The tickets have been released.");
         }
 
         BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
@@ -450,6 +469,21 @@ public class OrderService {
 
     @Transactional
     public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
+        // Cancel all active (in-cart) orders and release their locked inventory
+        List<ActiveOrder> activeOrders = orderRepository.findActiveByEventId(eventId);
+        for (ActiveOrder order : activeOrders) {
+            if (order.isActive()) {
+                releaseAllInventoryForOrder(eventId, order);
+                order.cancel();
+                saveOrder(order);
+                if (notificationService != null && order.getMemberId() != null) {
+                    notificationService.notify(order.getMemberId().toString(),
+                            "The event you had tickets reserved for has been cancelled. Your cart has been cleared.");
+                }
+            }
+        }
+
+        // Refund completed purchases
         List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
         for (CompletedPurchase purchase : purchases) {
             refundPayment(purchase.transactionId(), purchase.amount());
@@ -637,10 +671,65 @@ public class OrderService {
         }
         rejectIfCompanyInactive(event);
 
+        if (event.isLottery()) {
+            return findOrCreateLotteryOrder(sessionId, memberId, eventId);
+        }
+
         order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
         saveOrder(order);
         log.info("Order created: orderId={}, sessionId={}, eventId={}", order.getId(), sessionId, eventId);
         return order;
+    }
+
+    private ActiveOrder findOrCreateLotteryOrder(UUID sessionId, UUID memberId, UUID eventId) {
+        if (memberId == null) {
+            throw new IllegalStateException(
+                    "Tickets for this event are allocated by lottery. Log in and check your lottery status.");
+        }
+        // Check if this member won
+        java.util.Optional<ActiveOrder> winOrder =
+                orderRepository.findActiveLotteryWinByMemberIdAndEventId(memberId, eventId);
+        if (winOrder.isPresent()) {
+            ActiveOrder wo = winOrder.get();
+            if (wo.isPurchaseWindowExpired(systemClock.now())) {
+                wo.expire();
+                saveOrder(wo);
+                releaseAllInventoryForOrder(eventId, wo);
+                throw new IllegalStateException(
+                        "Your lottery purchase window has expired. The tickets have been released.");
+            }
+            return wo;
+        }
+        // Not a winner — inspect the draw state for this event
+        List<ActiveOrder> allWinOrders = orderRepository.findActiveByEventId(eventId).stream()
+                .filter(com.ticketing.domain.order.ActiveOrder::isLotteryWin)
+                .toList();
+        if (allWinOrders.isEmpty()) {
+            // Draw has not been run yet — no one may buy
+            throw new IllegalStateException(
+                    "Tickets for this event are allocated by lottery. Register for the lottery instead.");
+        }
+        boolean allExpired = allWinOrders.stream()
+                .allMatch(o -> o.isPurchaseWindowExpired(systemClock.now()));
+        if (!allExpired) {
+            // Winner window still active — only winners may buy
+            throw new IllegalStateException(
+                    "Tickets for this event are allocated by lottery. Register for the lottery instead.");
+        }
+        // All winner windows have expired — event is now open to regular buyers
+        log.info("Lottery winner window closed for eventId={}, allowing regular order", eventId);
+        ActiveOrder order = new ActiveOrder(UUID.randomUUID(), sessionId, memberId, eventId, systemClock.now());
+        saveOrder(order);
+        return order;
+    }
+
+    private void releaseAllInventoryForOrder(UUID eventId, ActiveOrder order) {
+        try {
+            Event event = findEvent(eventId);
+            releaseAllInventory(event, order);
+        } catch (Exception ex) {
+            log.warn("Could not release inventory for expired lottery order {}: {}", order.getId(), ex.getMessage());
+        }
     }
 
     @Transactional

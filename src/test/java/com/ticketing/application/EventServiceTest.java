@@ -1695,13 +1695,19 @@ class EventServiceTest {
     @DisplayName("EventService.drawLottery")
     class DrawLottery {
 
+        private static final String COMPANY_NAME = "Lottery Corp";
+        private static final Instant CLOCK = Instant.parse("2026-07-01T12:00:00Z");
+
         private InMemoryLotteryRepository lotteryRepository;
         private InMemoryEventRepository eventRepository;
         private InMemoryOrderRepository orderRepository;
+        private InMemoryCompanyRepository companyRepository;
+        private InMemoryMemberRepository memberRepository;
         private ISystemClock systemClock;
         private ISessionTokenService sessionTokenService;
         private EventService eventService;
 
+        private UUID organizerId;
         private UUID eventId;
         private UUID zoneId;
 
@@ -1710,35 +1716,43 @@ class EventServiceTest {
             lotteryRepository = new InMemoryLotteryRepository();
             eventRepository = new InMemoryEventRepository();
             orderRepository = new InMemoryOrderRepository();
-            systemClock = () -> Instant.parse("2026-07-01T12:00:00Z");
+            companyRepository = new InMemoryCompanyRepository();
+            memberRepository = new InMemoryMemberRepository();
+            systemClock = () -> CLOCK;
 
+            organizerId = UUID.randomUUID();
             sessionTokenService = mock(ISessionTokenService.class);
             when(sessionTokenService.isValid(ArgumentMatchers.anyString())).thenReturn(true);
-            when(sessionTokenService.extractMemberId(ArgumentMatchers.anyString())).thenReturn(UUID.randomUUID());
+            when(sessionTokenService.extractMemberId(ArgumentMatchers.anyString())).thenReturn(organizerId);
+
+            // Company + owner member required for drawLottery authorization
+            companyRepository.save(new Company(COMPANY_NAME, "desc", organizerId));
+            Member organizer = new Member(organizerId, "organizer", "org@test.com", "pw");
+            organizer.addStaffAppointment(COMPANY_NAME,
+                    new StaffAppointment(COMPANY_NAME, organizerId, StaffAppointment.StaffRole.OWNER,
+                            java.util.Set.of()));
+            memberRepository.save(organizer);
 
             eventId = UUID.randomUUID();
             zoneId = UUID.randomUUID();
 
+            // Registration window closed (close time before CLOCK) so draw is allowed
             Event event = new Event(
-                    eventId, "Lottery Corp", "Big Lottery Show", "desc",
+                    eventId, COMPANY_NAME, "Big Lottery Show", "desc",
                     EventCategory.CONCERT,
-                    new EventSchedule(Instant.now().plusSeconds(100000), Instant.now().plusSeconds(110000), Instant.now().plusSeconds(90000)),
+                    new EventSchedule(CLOCK.plusSeconds(100000), CLOCK.plusSeconds(110000), CLOCK.plusSeconds(90000)),
                     new LockTimerDuration(Duration.ofMinutes(15)),
                     new AlwaysAllowPolicy(), new NoDiscountPolicy(),
-                    SaleMethod.LOTTERY, new LotteryWindow(Instant.now().minusSeconds(10000), Instant.now().plusSeconds(10000)));
+                    SaleMethod.LOTTERY,
+                    new LotteryWindow(CLOCK.minusSeconds(20000), CLOCK.minusSeconds(10000)));
 
             event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 500));
             event.setVenueMap(new VenueMap(Map.of("Section A", zoneId)));
             event.publish();
             eventRepository.save(event);
 
-            eventService = new EventService(eventRepository,
-                    new InMemoryCompanyRepository(),
-                    new InMemoryMemberRepository(),
-                    orderRepository,
-                    sessionTokenService,
-                    lotteryRepository,
-                    systemClock);
+            eventService = new EventService(eventRepository, companyRepository, memberRepository,
+                    orderRepository, sessionTokenService, lotteryRepository, systemClock);
         }
 
         @Test
@@ -1782,7 +1796,8 @@ class EventServiceTest {
             int requestedQuantity = 2;
             lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, zoneId, requestedQuantity, systemClock.now()));
 
-            List<ActiveOrder> winners = eventService.drawLottery("token", eventId, 1);
+            // capacity must be >= requestedQuantity (2) for the entry to fit
+            List<ActiveOrder> winners = eventService.drawLottery("token", eventId, requestedQuantity);
 
             assertEquals(1, winners.size());
             ActiveOrder order = winners.get(0);

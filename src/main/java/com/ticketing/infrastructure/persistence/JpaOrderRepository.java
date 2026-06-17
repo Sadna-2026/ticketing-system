@@ -115,6 +115,18 @@ public class JpaOrderRepository implements IOrderRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ActiveOrder> findActiveLotteryWinByMemberIdAndEventId(UUID memberId, UUID eventId) {
+        if (memberId == null || eventId == null) {
+            return Optional.empty();
+        }
+        return activeOrders.findByMemberIdAndEventId(memberId, eventId).stream()
+                .filter(o -> o.isActive() && o.isLotteryWin())
+                .findFirst()
+                .map(this::detach);
+    }
+
     /**
      * Initialises the LAZY item collection and detaches the order from the persistence
      * context, so callers receive an independent snapshot (matching the in-memory repo,

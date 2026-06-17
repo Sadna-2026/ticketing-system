@@ -19,3 +19,4 @@ rewrite.yml
 requirements/
 node_modules
 .vscode/
+run-cloud.ps1

@@ -91,7 +91,6 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
         items.add(new NavigationItem("Auth", AuthView.class));
         items.add(new NavigationItem("Events", EventsView.class));
         items.add(new NavigationItem("Orders", OrdersView.class));
-        items.add(new NavigationItem("Queue", QueueView.class));
         if (session.loggedInMember()) {
             items.add(new NavigationItem("Profile", MemberView.class));
             items.add(new NavigationItem("Company", CompanyView.class));

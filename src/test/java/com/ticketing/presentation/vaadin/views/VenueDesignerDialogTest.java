@@ -81,7 +81,7 @@ class VenueDesignerDialogTest {
     void GivenSeatingZonePaintedAndStartSet_WhenSaveDraft_ThenShowsSuccessMessage() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.defineVenue(any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                anyInt(), anyInt(), any(), any(), any()))
+                anyInt(), anyInt(), any(), any(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
 
         try (var uiMessagesMock = mockStatic(UiMessages.class)) {
@@ -99,7 +99,7 @@ class VenueDesignerDialogTest {
     void GivenMultipleZones_WhenPaintedAndSaved_ThenAllZonesIncludedInCreateCall() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.defineVenue(any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                anyInt(), anyInt(), any(), any(), any()))
+                anyInt(), anyInt(), any(), any(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
 
         try (var uiMessagesMock = mockStatic(UiMessages.class)) {
@@ -120,7 +120,7 @@ class VenueDesignerDialogTest {
                     argThat(zones -> zones.size() == 2
                             && zones.stream().anyMatch(z -> z instanceof CreateEventRequest.AssignedZoneSpec a && "Orchestra".equals(a.name()))
                             && zones.stream().anyMatch(z -> z instanceof CreateEventRequest.GAZoneSpec g && "Floor".equals(g.name()))),
-                    any(), any());
+                    any(), any(), any(), any());
         }
     }
 
@@ -140,7 +140,7 @@ class VenueDesignerDialogTest {
     void GivenSavedDraft_WhenValidateFailsThenPublishSucceeds_ThenEachOutcomeIsSurfaced() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.defineVenue(any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                anyInt(), anyInt(), any(), any(), any()))
+                anyInt(), anyInt(), any(), any(), any(), any(), any()))
                 .thenReturn(new EventActionResult(true, "Event created.", UUID.randomUUID(), null));
         when(presenter.validateEventLayout(any()))
                 .thenReturn(new ActionResult(false, "Layout invalid: a seat overlaps the stage."));

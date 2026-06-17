@@ -38,6 +38,7 @@ import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.member.Member;
+import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
@@ -97,15 +98,21 @@ public class LotteryNotificationTest {
                 notificationService);
 
         companyRepository.save(new Company(COMPANY_NAME, "desc", organizerId));
+        Member organizer = new Member(organizerId, "organizer", "org@lotterytest.com", "pw");
+        organizer.addStaffAppointment(COMPANY_NAME,
+                new StaffAppointment(COMPANY_NAME, organizerId, StaffAppointment.StaffRole.OWNER,
+                        java.util.Set.of()));
+        memberRepository.save(organizer);
 
         eventId = UUID.randomUUID();
         zoneId = UUID.randomUUID();
+        // Registration window closed (2 days ago) so drawLottery is permitted
         Event event = new Event(eventId, COMPANY_NAME, "Big Lottery Show", "desc",
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new AlwaysAllowPolicy(), new NoDiscountPolicy(),
                 SaleMethod.LOTTERY,
-                new LotteryWindow(NOW.minus(1, ChronoUnit.DAYS), NOW.plus(1, ChronoUnit.DAYS)));
+                new LotteryWindow(NOW.minus(3, ChronoUnit.DAYS), NOW.minus(1, ChronoUnit.DAYS)));
         event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 500));
         event.setVenueMap(new VenueMap(Map.of("Section A", zoneId)));
         event.publish();
