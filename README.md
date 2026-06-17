@@ -1,4 +1,4 @@
-# Ticketing System - Version 1
+# Ticketing System
 
 Domain-Driven Design (DDD) implementation of the Event Management and Ticketing Platform.
 
@@ -10,6 +10,120 @@ Domain-Driven Design (DDD) implementation of the Event Management and Ticketing 
 
 ## Documentation
 - [UI Wireframes](docs/wireframes/README.md) — mid-fidelity B&W layouts for V1 screens.
+- [System initialization use cases](docs/use-cases-initialization.md) — startup phases (V3 I.1).
+- [Initial-state file (staff demo)](docs/v3-initial-state.md) — meeting scenario and setup (V3-15).
+- [Remote database (Cloud SQL)](docs/deploy-cloud-sql.md) — GCP provisioning and H2↔cloud switch (V3-29).
+
+## System initialization (V3)
+
+V3 requirement **I.1** (§2.5): the operator boots the platform from **external configuration** (no
+hard-coded DB, queue, or external endpoints) and may optionally replay an **initial-state file** — a
+separate script that drives legal use cases into a known state. Implementation:
+`DataBootstrapRunner` (platform init + data bootstrap), `PlatformInitializationService`,
+`DevSeedDataInitializer`, `InitialStateParser` / `InitialStateExecutor`.
+
+### How to run
+
+**Prerequisites:** Java 21+, Maven 3.9+.
+
+**Local development (default — in-memory persistence, dev seed, stub externals):**
+
+```bash
+mvn spring-boot:run
+```
+
+Open `http://localhost:8080`. Seeded users include `admin` / `admin123`, `member` / `member123`
+(see [docs/v2-ui-qa.md](docs/v2-ui-qa.md)).
+
+**Staff demo from an initial-state file (empty data, scripted bootstrap):**
+
+```bash
+mvn spring-boot:run \
+  "-Dspring-boot.run.arguments=--ticketing.bootstrap.dataset=initial-state-file --ticketing.seed.enabled=false --ticketing.initial-state.file=classpath:initial-state/staff-demo-v3.txt"
+```
+
+**Remote PostgreSQL (Cloud SQL)** — set env vars (see [H2 ↔ cloud](#h2--cloud-sql-config-only) below),
+then `mvn spring-boot:run`. Full GCP provisioning: [docs/deploy-cloud-sql.md](docs/deploy-cloud-sql.md).
+
+**Startup order (logical):**
+
+1. Optional **external-systems handshake** when `TICKETING_EXTERNAL_BASE_URL` is set (V3-16).
+2. **Platform initialization** — register system admin, mark platform active (`ticketing.startup.initialize-platform`, default `true`).
+3. **Data bootstrap** — exactly one of: dev seed (default), initial-state file replay, or none.
+
+Invalid initialization (e.g. malformed state file) **aborts startup** (V3-24). The test suite uses an
+isolated profile and never touches the remote DB or live externals (V3-25) — see [Testing](#testing).
+
+### Configuration format
+
+Configuration is **externalized** in three layers (no code change to switch environments):
+
+| Layer | Mechanism | Example |
+|-------|-----------|---------|
+| **Defaults** | `src/main/resources/application.yml` | Structure and local-dev defaults |
+| **Environment** | Shell / deployment env vars | `DB_URL`, `TICKETING_QUEUE_THRESHOLD` |
+| **CLI overrides** | Spring Boot program arguments | `--ticketing.bootstrap.dataset=none` |
+
+Spring maps env vars to `application.yml` keys (e.g. `TICKETING_QUEUE_THRESHOLD` →
+`ticketing.queue.threshold`). **Never commit real credentials** — supply secrets via the environment.
+
+**Init-related settings** (V3-13 / I.1):
+
+| Env var | `application.yml` key | Default | Purpose |
+|---------|----------------------|---------|---------|
+| `TICKETING_PERSISTENCE` | `ticketing.persistence` | `memory` | `memory` = in-memory repos; `jpa` = DB-backed repos (required for Cloud SQL) |
+| `TICKETING_QUEUE_THRESHOLD` | `ticketing.queue.threshold` | `100` | Virtual-queue admission threshold (concurrent reservations before queue) |
+| `TICKETING_QUEUE_FLOW_RATE` | `ticketing.queue.flow-rate` | `10` | Users admitted per queue batch |
+| `TICKETING_STARTUP_INITIALIZE_PLATFORM` | `ticketing.startup.initialize-platform` | `true` | Run platform init at boot |
+| `TICKETING_BOOTSTRAP_DATASET` | `ticketing.bootstrap.dataset` | *(unset)* | `dev-seed`, `initial-state-file`, or `none` |
+| `TICKETING_SEED_ENABLED` | `ticketing.seed.enabled` | `true` | Legacy: `true` ⇒ dev seed when dataset unset |
+| `TICKETING_INITIAL_STATE_FILE` | `ticketing.initial-state.file` | *(empty)* | Path to state file (`classpath:...` or filesystem) |
+
+Database and external-system keys are documented in [Database configuration](#database-configuration)
+and [External systems](#external-systems) below.
+
+**Data bootstrap resolution** when `ticketing.bootstrap.dataset` is unset:
+
+- `ticketing.seed.enabled=true` → **dev seed** (in-code QA dataset)
+- else if `ticketing.initial-state.file` is set → **initial-state file**
+- else → **none** (platform init only, empty application data)
+
+Choose **one** dataset explicitly for meetings: `dev-seed` for local QA, `initial-state-file` for the
+staff script, `none` for an empty system.
+
+> **Transient state (V3-9):** virtual purchase **queues** are **not** persisted — they stay in memory
+> even when `ticketing.persistence=jpa`. Only durable aggregates (member, company, event, order, lottery,
+> …) go to the database. See `CONTRIBUTING.md` § Persistence (V3).
+
+### Initial-state file format
+
+A **separate** plain-text script (not the same as `application.yml`) listing legal use-case calls.
+Format name: **initial-state DSL**. Full grammar, operation table, token threading, and staff demo:
+[Initial-state file](#initial-state-file) below and [docs/v3-initial-state.md](docs/v3-initial-state.md).
+
+### H2 ↔ Cloud SQL (config only)
+
+Develop on **H2 in-memory** (defaults). For deployment, point at **remote PostgreSQL** — no rebuild, no
+code change. Set before `mvn spring-boot:run`:
+
+```bash
+export TICKETING_PERSISTENCE=jpa
+export DB_URL="jdbc:postgresql://<host>:5432/ticketing"
+export DB_DRIVER=org.postgresql.Driver
+export DB_USERNAME=ticketing
+export DB_PASSWORD="<secret>"
+export DB_DIALECT=org.hibernate.dialect.PostgreSQLDialect
+export DB_DDL_AUTO=validate          # use update on first boot only, then validate
+export H2_CONSOLE_ENABLED=false
+```
+
+On Windows PowerShell, use `$env:NAME = "value"` instead of `export`.
+
+**Cost note (V3 / course GCP credit):** the spec recommends the cheapest Cloud SQL tier
+(`db-f1-micro`, HDD, no HA/backups) and a **budget with alerts** so the ~$50 credit is not exceeded.
+Typical team setup: **$15 budget**, 50/90/100% alerts; **stop the instance when idle**
+(`activation-policy=NEVER`) to preserve credits. Provisioning steps, authorized networks, and teardown:
+[docs/deploy-cloud-sql.md](docs/deploy-cloud-sql.md).
 
 ## Database configuration
 
@@ -29,6 +143,9 @@ already on the classpath — no rebuild needed).
 | `DB_SHOW_SQL` | `false` | log SQL statements |
 | `H2_CONSOLE_ENABLED` | `true` | H2 web console at `/h2-console` |
 
+`TICKETING_PERSISTENCE` must be `jpa` when using PostgreSQL; default `memory` keeps repositories
+in-process (H2 URL still applies to schema tools but aggregates use in-memory adapters).
+
 ### Switch to PostgreSQL (config only)
 Set these in the environment before starting — no code change, no rebuild:
 
@@ -43,12 +160,12 @@ H2_CONSOLE_ENABLED=false
 ```
 
 > **Never commit real credentials.** Supply remote-DB credentials via the environment /
-> deployment secrets, not via `application.yml`.
+> deployment secrets, not via `application.yml`. See also [H2 ↔ Cloud SQL](#h2--cloud-sql-config-only)
+> and [docs/deploy-cloud-sql.md](docs/deploy-cloud-sql.md).
 
 ## Startup parameters
 
-Runtime startup parameters are externalized to config (V3-13) — not hard-coded. The
-virtual-queue admission settings (used as the default when a queue is created) are:
+Runtime queue defaults (V3-13) — also listed under [Configuration format](#configuration-format):
 
 | Env var | Default | `application.yml` key | Purpose |
 |---------|---------|-----------------------|---------|
@@ -130,12 +247,10 @@ no extra configuration.
 
 ## Initial-state file
 
-The platform can optionally be started from an **initial-state file** (V3-14): a plain-text
-sequence of use-case calls that bring the system into a known state. The file format and its
-parser (`com.ticketing.application.initialization.InitialStateParser`) are independent of
-execution — parsing turns the text into an **ordered** list of
-`InitialStateOperation(name, args)` values; running them against the application layer is a
-separate concern.
+The platform can optionally be started from an **initial-state file** (V3-14 / V3-15): a plain-text
+sequence of use-case calls that bring the system into a known state. See
+[System initialization](#system-initialization-v3) for how to enable it; this section defines the
+**file format** and supported operations.
 
 ### Format
 
