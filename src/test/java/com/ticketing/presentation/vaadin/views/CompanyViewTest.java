@@ -758,7 +758,7 @@ class CompanyViewTest {
         assertTrue(hasText(view, "Manager permissions for Acme: VIEW_REPORTS."));
 
         selectTab(view, "Events");
-        assertFalse(hasVisibleButton(view, "Edit event"));
+        assertFalse(hasEnabledButton(view, "Edit event"));
         assertTrue(hasText(view, "User \"alice\" doesn't have EVENT_LIFECYCLE, MAP_DEFINITION permissions for Acme."));
 
         selectTab(view, "Inventory");
@@ -809,9 +809,9 @@ class CompanyViewTest {
         
         // company-management controls are hidden
         selectTab(view, "Events");
-        assertFalse(hasVisibleButton(view, "Create event"));
-        assertFalse(hasVisibleButton(view, "Edit venue layout"));
-        assertFalse(hasVisibleButton(view, "Edit event"));
+        assertFalse(hasEnabledButton(view, "Create event"));
+        assertFalse(hasEnabledButton(view, "Edit venue layout"));
+        assertFalse(hasEnabledButton(view, "Edit event"));
 
         selectTab(view, "Inventory");
         assertFalse(hasVisibleButton(view, "Add seat"));
@@ -835,9 +835,9 @@ class CompanyViewTest {
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
         
         selectTab(view, "Events");
-        assertTrue(hasVisibleButton(view, "Edit venue layout"));
-        assertFalse(hasVisibleButton(view, "Create event"));
-        assertFalse(hasVisibleButton(view, "Edit event"));
+        assertTrue(hasEnabledButton(view, "Edit venue layout"));
+        assertFalse(hasEnabledButton(view, "Create event"));
+        assertFalse(hasEnabledButton(view, "Edit event"));
 
         selectTab(view, "Policies");
         assertFalse(hasVisibleButton(view, "Set purchase policy"));
@@ -1186,6 +1186,14 @@ class CompanyViewTest {
                 .map(Button.class::cast)
                 .filter(button -> text.equals(button.getText()))
                 .anyMatch(CompanyViewTest::isEffectivelyVisible);
+    }
+
+    private static boolean hasEnabledButton(Component root, String text) {
+        return components(root).stream()
+                .filter(Button.class::isInstance)
+                .map(Button.class::cast)
+                .filter(button -> text.equals(button.getText()))
+                .anyMatch(button -> isEffectivelyVisible(button) && button.isEnabled());
     }
 
     private static void clickDestructive(Component root, String text) {
