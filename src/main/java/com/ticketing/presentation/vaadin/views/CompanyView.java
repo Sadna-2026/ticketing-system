@@ -1459,8 +1459,7 @@ public class CompanyView extends VerticalLayout {
             UiMessages.error("Select a company first.");
             return;
         }
-        // Placeholder until VenueDesignerDialog is updated to support editing
-        UiMessages.info("Edit venue layout will be implemented in Step 3");
+        new EditVenueLayoutDialog(presenter, company).open();
     }
 
     private void openEditEventDialog() {
