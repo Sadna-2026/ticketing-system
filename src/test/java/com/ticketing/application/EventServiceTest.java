@@ -1760,48 +1760,40 @@ class EventServiceTest {
         }
 
         @Test
-        @DisplayName("Winners count = min(registrants, capacity)")
+        @DisplayName("Winners count = min(registrants, total event capacity)")
         void GivenRegistrantsAndCapacity_WhenDraw_ThenWinnerCountIsMinOfBoth() {
-            for (int i = 0; i < 5; i++) {
-                lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, UUID.randomUUID(), zoneId, 1, systemClock.now()));
-            }
+            // Capacity caps winners: 5 registrants, capacity 3 -> 3 winners.
+            UUID cappedEvent = createClosedLotteryEvent(3);
+            registerMembers(cappedEvent, 5);
+            assertEquals(3, eventService.drawLotteryAutomatically(cappedEvent).size());
 
-            List<ActiveOrder> winners3 = eventService.drawLottery("token", eventId, 3);
-            assertEquals(3, winners3.size());
-
-            // Setup again
-            setUp();
-            for (int i = 0; i < 3; i++) {
-                lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, UUID.randomUUID(), zoneId, 1, systemClock.now()));
-            }
-            List<ActiveOrder> winnersAll = eventService.drawLottery("token", eventId, 5);
-            assertEquals(3, winnersAll.size());
+            // Registrants cap winners: 3 registrants, capacity 5 -> 3 winners.
+            UUID roomyEvent = createClosedLotteryEvent(5);
+            registerMembers(roomyEvent, 3);
+            assertEquals(3, eventService.drawLotteryAutomatically(roomyEvent).size());
         }
 
         @Test
         @DisplayName("No duplicate winners")
         void GivenRegistrants_WhenDraw_ThenNoDuplicateWinners() {
-            for (int i = 0; i < 10; i++) {
-                lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, UUID.randomUUID(), zoneId, 1, systemClock.now()));
-            }
+            registerMembers(eventId, 10);
 
-            List<ActiveOrder> winners = eventService.drawLottery("token", eventId, 5);
+            // Setup event capacity (500) exceeds registrants, so all 10 win — each exactly once.
+            List<ActiveOrder> winners = eventService.drawLotteryAutomatically(eventId);
 
-            assertEquals(5, winners.size());
+            assertEquals(10, winners.size());
 
             Set<UUID> uniqueMemberIds = winners.stream().map(ActiveOrder::getMemberId).collect(Collectors.toSet());
-            assertEquals(5, uniqueMemberIds.size());
+            assertEquals(10, uniqueMemberIds.size());
         }
 
         @Test
         @DisplayName("Winners receive reservation/authorization")
         void GivenRegistrants_WhenDraw_ThenWinnersReceiveReservation() {
             UUID memberId = UUID.randomUUID();
-            int requestedQuantity = 2;
-            lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, zoneId, requestedQuantity, systemClock.now()));
+            lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, systemClock.now()));
 
-            // capacity must be >= requestedQuantity (2) for the entry to fit
-            List<ActiveOrder> winners = eventService.drawLottery("token", eventId, requestedQuantity);
+            List<ActiveOrder> winners = eventService.drawLotteryAutomatically(eventId);
 
             assertEquals(1, winners.size());
             ActiveOrder order = winners.get(0);
@@ -1818,6 +1810,31 @@ class EventServiceTest {
             // Inventory is NOT pre-allocated at draw time
             Event event = eventRepository.findById(eventId).get();
             assertEquals(500, event.findZone(zoneId).getAvailableCount(), "inventory must not be locked at draw time");
+        }
+
+        /** Creates a published lottery event with a closed registration window and the given GA capacity. */
+        private UUID createClosedLotteryEvent(int capacity) {
+            UUID id = UUID.randomUUID();
+            UUID zone = UUID.randomUUID();
+            Event event = new Event(
+                    id, COMPANY_NAME, "Capped Lottery", "desc",
+                    EventCategory.CONCERT,
+                    new EventSchedule(CLOCK.plusSeconds(100000), CLOCK.plusSeconds(110000), CLOCK.plusSeconds(90000)),
+                    new LockTimerDuration(Duration.ofMinutes(15)),
+                    new AlwaysAllowPolicy(), new NoDiscountPolicy(),
+                    SaleMethod.LOTTERY,
+                    new LotteryWindow(CLOCK.minusSeconds(20000), CLOCK.minusSeconds(10000)));
+            event.addZone(InventoryZone.createGA(zone, "Floor", new BigDecimal("50.00"), capacity));
+            event.setVenueMap(new VenueMap(Map.of("Section A", zone)));
+            event.publish();
+            eventRepository.save(event);
+            return id;
+        }
+
+        private void registerMembers(UUID forEventId, int count) {
+            for (int i = 0; i < count; i++) {
+                lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), forEventId, UUID.randomUUID(), systemClock.now()));
+            }
         }
     }
 }

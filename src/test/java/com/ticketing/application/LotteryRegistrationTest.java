@@ -113,7 +113,7 @@ public class LotteryRegistrationTest {
     @Test
     @DisplayName("SuccessfulLotteryRegistration — member registers for lottery and entry is persisted")
     void GivenLotteryEventWithOpenWindow_WhenRegisterForLottery_ThenEntryCreated() {
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId, zoneId, 2);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
 
         LotteryRegistrationResponse response = eventService.registerForLottery(VALID_TOKEN, request);
 
@@ -141,7 +141,7 @@ public class LotteryRegistrationTest {
         regularEvent.publish();
         eventRepository.save(regularEvent);
 
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(regularEventId, regularZoneId, 1);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(regularEventId);
 
         LotteryRegistrationResponse response = eventService.registerForLottery(VALID_TOKEN, request);
 
@@ -155,7 +155,7 @@ public class LotteryRegistrationTest {
     @Test
     @DisplayName("DuplicateLotteryRegistration — member already registered, second attempt denied")
     void GivenMemberAlreadyRegistered_WhenRegisterForLottery_ThenDenied() {
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId, zoneId, 2);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
 
         // first registration succeeds
         LotteryRegistrationResponse first = eventService.registerForLottery(VALID_TOKEN, request);
@@ -190,7 +190,7 @@ public class LotteryRegistrationTest {
         closedEvent.publish();
         eventRepository.save(closedEvent);
 
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(closedEventId, closedZoneId, 1);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(closedEventId);
 
         LotteryRegistrationResponse response = eventService.registerForLottery(VALID_TOKEN, request);
 
@@ -207,7 +207,7 @@ public class LotteryRegistrationTest {
                 Duration.ofDays(7), "blocked"));
         memberRepository.save(suspended);
 
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId, zoneId, 2);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
 
         assertThrows(IllegalStateException.class,
                 () -> eventService.registerForLottery(VALID_TOKEN, request));
