@@ -153,9 +153,10 @@ public class QueuePresenter {
             if ("ADMITTED".equals(myEntry.getStatus())) {
                 return QueueStatusResult.admitted("It's your turn! You have been admitted.", myEntry, 0);
             }
-            // Count WAITING entries that joined before this session
+            // Count WAITING AND ADMITTED entries that joined before this session
+            // (both are occupying a slot ahead of us)
             int waitingAhead = (int) queue.getEntries().stream()
-                    .filter(e -> "WAITING".equals(e.getStatus())
+                    .filter(e -> ("WAITING".equals(e.getStatus()) || "ADMITTED".equals(e.getStatus()))
                             && !sessionId.equals(e.getSessionId())
                             && myEntry.getJoinedAt() != null
                             && e.getJoinedAt() != null
