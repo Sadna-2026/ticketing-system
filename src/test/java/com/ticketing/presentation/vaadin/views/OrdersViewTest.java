@@ -82,7 +82,7 @@ class OrdersViewTest {
         OrdersView view = new OrdersView(presenter);
 
         assertTrue(hasText(view, "Active order loaded."));
-        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 0 | total 0"));
+        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 0 | total $0.00"));
     }
 
     @Test
@@ -99,7 +99,7 @@ class OrdersViewTest {
         List<OrderItemDto> rows = grid.getDataProvider().fetch(new Query<>()).toList();
         assertEquals(List.of(item), rows);
         assertTrue(hasText(view, "Active order loaded."));
-        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 3 | total 150.00"));
+        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 3 | total $150.00"));
     }
 
     @Test
@@ -225,7 +225,7 @@ class OrdersViewTest {
 
         findTextField(view, "Coupon code").setValue("SAVE20");
 
-        assertTrue(containsText(view, "Subtotal 100.00 | Amount due: 80.00"));
+        assertTrue(containsText(view, "Subtotal $100.00 | Amount due: $80.00"));
         verify(presenter).quoteCheckout("SAVE20");
     }
 
@@ -240,8 +240,8 @@ class OrdersViewTest {
                 .thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
         OrdersView view = new OrdersView(presenter);
 
-        assertTrue(containsText(view, "Amount due: 50.00"));
-        assertFalse(containsText(view, "Subtotal 50.00 | Amount due:"));
+        assertTrue(containsText(view, "Amount due: $50.00"));
+        assertFalse(containsText(view, "Subtotal $50.00 | Amount due:"));
     }
 
     @Test
@@ -309,7 +309,7 @@ class OrdersViewTest {
         clickButton(view, "Checkout");
 
         assertTrue(containsText(view, "Checkout complete."));
-        assertTrue(containsText(view, "Charged: 40.00"));
+        assertTrue(containsText(view, "Charged: $40.00"));
         assertTrue(containsText(view, "Purchase ID: " + purchaseId));
         assertTrue(findOrderItemsGrid(view).getDataProvider().fetch(new Query<>()).toList().isEmpty());
         assertTrue(hasText(view, "No active order. Add tickets from the Events page."));
@@ -451,7 +451,7 @@ class OrdersViewTest {
         clickDestructive(view, "Remove selected item");
 
         assertTrue(hasText(view, "Order item removed."));
-        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 0 | total 0"));
+        assertTrue(hasText(view, "Order " + orderId + " | event " + eventId + " | status ACTIVE | tickets 0 | total $0.00"));
         verify(presenter).updateGAQuantity(zoneId, 4);
         verify(presenter).removeItem(itemId);
     }

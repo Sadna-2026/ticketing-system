@@ -31,6 +31,7 @@ import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SystemAnalyti
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -183,8 +184,8 @@ public class AdminView extends VerticalLayout {
         suspensionsGrid.setEmptyStateText("No suspensions — all members are in good standing.");
         suspensionsGrid.addColumn(suspension -> suspension.suspensionId().toString()).setHeader("Suspension ID").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::memberUsername).setHeader("Member").setAutoWidth(true);
-        suspensionsGrid.addColumn(SuspensionDTO::active).setHeader("Active").setAutoWidth(true);
-        suspensionsGrid.addColumn(SuspensionDTO::permanent).setHeader("Permanent").setAutoWidth(true);
+        suspensionsGrid.addColumn(s -> s.active() ? "Active" : "Ended").setHeader("Active").setAutoWidth(true);
+        suspensionsGrid.addColumn(s -> s.permanent() ? "Permanent" : "Temporary").setHeader("Permanent").setAutoWidth(true);
         suspensionsGrid.addColumn(suspension -> formatDuration(suspension.duration())).setHeader("Duration").setAutoWidth(true);
         suspensionsGrid.addColumn(suspension -> formatInstant(suspension.startTime())).setHeader("Started").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::reason).setHeader("Reason").setAutoWidth(true);
@@ -420,6 +421,7 @@ public class AdminView extends VerticalLayout {
 
     private VerticalLayout memberSection() {
         Button removeMember = new Button("Remove member", event -> removeMember());
+        removeMember.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
         FormLayout form = new FormLayout(removeMemberPicker);
         VerticalLayout section = new VerticalLayout(
@@ -429,12 +431,15 @@ public class AdminView extends VerticalLayout {
                 memberStatus
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         memberControls = section;
         return section;
     }
 
     private VerticalLayout companySection() {
         Button closeCompany = new Button("Close company", event -> closeCompany());
+        closeCompany.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
         FormLayout form = new FormLayout(closeCompanyPicker);
         VerticalLayout section = new VerticalLayout(
@@ -445,6 +450,8 @@ public class AdminView extends VerticalLayout {
                 companyStatus
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         companyControls = section;
         return section;
     }
@@ -462,12 +469,15 @@ public class AdminView extends VerticalLayout {
                 purchaseHistoryGrid
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         purchaseHistoryControls = section;
         return section;
     }
 
     private VerticalLayout suspensionSection() {
         Button suspend = new Button("Suspend member", event -> suspendMember());
+        suspend.addThemeVariants(ButtonVariant.LUMO_ERROR);
         cancelSuspensionButton = new Button("Cancel suspension", event -> cancelSuspension());
         cancelSuspensionButton.setEnabled(false);
         Button load = new Button("Load suspensions", event -> loadSuspensions());
@@ -491,6 +501,8 @@ public class AdminView extends VerticalLayout {
                 suspensionsGrid
         );
         section.setPadding(false);
+        section.setWidthFull();
+        section.addClassName("app-card");
         suspensionControls = section;
         return section;
     }
@@ -709,7 +721,7 @@ public class AdminView extends VerticalLayout {
     }
 
     private String formatPrice(BigDecimal price) {
-        return price == null ? "N/A" : price.toPlainString();
+        return price == null ? "N/A" : "$" + price.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     private String formatDuration(Duration duration) {

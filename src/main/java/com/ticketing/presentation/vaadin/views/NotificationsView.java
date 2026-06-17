@@ -59,17 +59,24 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
         roleOffersList.setPadding(false);
         roleOffersList.setSpacing(true);
 
+        VerticalLayout offersCard = new VerticalLayout(
+                new H3("Pending role offers"), roleOffersStatus, roleOffersList);
+        offersCard.setPadding(false);
+        offersCard.setWidthFull();
+        offersCard.addClassName("app-card");
+
+        VerticalLayout historyCard = new VerticalLayout(
+                new H3("Notification history"), notificationsStatus, notificationsList, actions());
+        historyCard.setPadding(false);
+        historyCard.setWidthFull();
+        historyCard.addClassName("app-card");
+
         add(
                 new H2("Notifications"),
                 new Paragraph("View pending account notifications and receive new notifications while this page is open."),
                 connectionStatus,
-                new H3("Pending role offers"),
-                roleOffersStatus,
-                roleOffersList,
-                actions(),
-                new H3("Notification history"),
-                notificationsStatus,
-                notificationsList
+                offersCard,
+                historyCard
         );
 
         addAttachListener(event -> {

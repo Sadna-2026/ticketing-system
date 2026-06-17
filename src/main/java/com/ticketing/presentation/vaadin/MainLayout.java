@@ -15,10 +15,15 @@ import com.ticketing.presentation.vaadin.views.MemberView;
 import com.ticketing.presentation.vaadin.views.NotificationsView;
 import com.ticketing.presentation.vaadin.views.OrdersView;
 import com.ticketing.presentation.vaadin.views.QueueView;
+import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.Html;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
-import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.AfterNavigationEvent;
@@ -37,15 +42,46 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
     private final Map<Class<? extends Component>, Tab> tabsByTarget = new HashMap<>();
 
     public MainLayout() {
-        H1 title = new H1("Ticketing System");
-        title.getStyle()
-                .set("font-size", "var(--lumo-font-size-l)")
-                .set("margin", "0 var(--lumo-space-m) 0 0");
+        // Branded wordmark: an EQ-bar mark (cyan -> magenta) + the product name in Sora.
+        Html wordmark = new Html(
+                "<span class='app-wordmark'>"
+                        + "<svg class='app-brandmark' width='22' height='18' viewBox='0 0 22 18' aria-hidden='true'>"
+                        + "<rect x='0' y='6' width='3' height='6' rx='1.5'/>"
+                        + "<rect x='5' y='1' width='3' height='16' rx='1.5'/>"
+                        + "<rect x='10' y='7' width='3' height='4' rx='1.5'/>"
+                        + "<rect x='15' y='3' width='3' height='12' rx='1.5'/>"
+                        + "</svg>"
+                        + "Ticketing System"
+                        + "</span>");
 
         refreshNavigation();
-        navigation.getStyle().set("margin-left", "var(--lumo-space-m)");
+        navigation.addClassName("app-nav");
 
-        addToNavbar(title, navigation);
+        addToNavbar(wordmark, navigation, themeToggle());
+    }
+
+    /** Light/dark toggle: flips the {@code theme} attribute on &lt;html&gt; and persists the choice. */
+    private Button themeToggle() {
+        Button toggle = new Button(new Icon(VaadinIcon.ADJUST));
+        toggle.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ICON);
+        toggle.addClassName("app-theme-toggle");
+        toggle.setAriaLabel("Toggle light or dark theme");
+        toggle.setTooltipText("Toggle light / dark");
+        toggle.addClickListener(e -> toggle.getElement().executeJs(
+                "const el=document.documentElement;"
+                        + "const dark=(el.getAttribute('theme')||'').includes('dark');"
+                        + "if(dark){el.removeAttribute('theme');localStorage.setItem('showpass-theme','light');}"
+                        + "else{el.setAttribute('theme','dark');localStorage.setItem('showpass-theme','dark');}"));
+        return toggle;
+    }
+
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        // Apply the visitor's saved light/dark preference (dark is the default).
+        getElement().executeJs(
+                "const t=localStorage.getItem('showpass-theme');const el=document.documentElement;"
+                        + "if(t==='light'){el.removeAttribute('theme');}else if(t==='dark'){el.setAttribute('theme','dark');}");
     }
 
     public void refreshNavigation() {
