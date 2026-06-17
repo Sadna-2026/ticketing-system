@@ -122,6 +122,12 @@ class StaffInitialStateScenarioTest {
         assertEquals(100, seating.getSeats().size());
         assertEquals(new BigDecimal("100"), seating.getPricePerTicket());
 
+        // e1 must inherit the company coupon (set before the event was created),
+        // otherwise sale123 would not apply at checkout (acceptance check A-6).
+        CouponDiscount eventDiscount = (CouponDiscount) event.getEventDiscountPolicy();
+        assertEquals("sale123", eventDiscount.getCouponCode());
+        assertEquals(new BigDecimal("20"), eventDiscount.getPercentOff());
+
         VenueLayout layout = event.getVenueLayout();
         assertNotNull(layout);
         assertEquals(10, layout.getRows());

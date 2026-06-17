@@ -21,9 +21,12 @@ login(u3, secret3);
 accept-role-offer(u3_token, p1, MANAGER);
 
 login(u2, secret2);
+# Set the company coupon BEFORE creating e1 so the event snapshots the discount
+# at creation time (events copy company.getDiscountPolicy() when created, and a
+# later company-policy change does not propagate to already-created events).
+set-company-coupon-discount(u2_token, p1, 20, sale123);
 create-event(u2_token, p1, e1, Staff scenario event, CONCERT, Standing, 30, 50, Seating, 10, 10, 100);
 set-event-seating-layout(u2_token, p1, e1, Seating, 10, 10);
-set-company-coupon-discount(u2_token, p1, 20, sale123);
 
 logout(u1_token);
 logout(u2_token);
