@@ -646,8 +646,6 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     private void releaseQueueSlotForce() {
-        // Always release queue slot, even if user has items in cart.
-        // Used when user navigates away from Events page entirely (not just closing dialog).
         if (directlyAdmittedEventId != null) {
             queuePresenter.notifyLeft(directlyAdmittedEventId);
             directlyAdmittedEventId = null;
