@@ -3,15 +3,21 @@ package com.ticketing.domain.member;
 import java.time.LocalDate;
 import java.util.Objects;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 
 // value object representing user's contact information
 @Embeddable
 public class ContactInfo {
+    @Column(name = "email")
     private String email;
+    @Column(name = "first_name")
     private String firstName;
+    @Column(name = "last_name")
     private String lastName;
+    @Column(name = "phone_number")
     private String phoneNumber;
+    @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
     // Required by JPA; do not use directly.
