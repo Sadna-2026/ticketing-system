@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventSchedule;
+import com.ticketing.domain.event.LotteryWindow;
 
 /**
  * Edit request for {@link EventService#editEvent}. Any null field means
@@ -15,7 +16,8 @@ public record EditEventRequest(
         String name,
         String description,
         String artist,
-        EventSchedule schedule
+        EventSchedule schedule,
+        LotteryWindow lotteryWindow
 ) {
     public EditEventRequest {
         if (eventId == null) {
@@ -26,7 +28,12 @@ public record EditEventRequest(
         }
     }
 
+    /** Backwards-compat constructor without lotteryWindow. */
+    public EditEventRequest(UUID eventId, String name, String description, String artist, EventSchedule schedule) {
+        this(eventId, name, description, artist, schedule, null);
+    }
+
     public boolean hasAnyChange() {
-        return name != null || description != null || artist != null || schedule != null;
+        return name != null || description != null || artist != null || schedule != null || lotteryWindow != null;
     }
 }

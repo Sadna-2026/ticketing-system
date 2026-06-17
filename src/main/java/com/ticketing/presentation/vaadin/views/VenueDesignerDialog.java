@@ -14,6 +14,8 @@ import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.LayoutCellType;
+import com.ticketing.domain.event.LotteryWindow;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
@@ -92,6 +94,12 @@ public class VenueDesignerDialog extends Dialog {
     private final DateTimePicker doorsOpenTime = new DateTimePicker("Doors open time");
     private final IntegerField lockMinutes = new IntegerField("Lock minutes");
 
+    // Lottery fields
+    private final ComboBox<String> saleMethodCombo = new ComboBox<>("Sale method");
+    private final DateTimePicker lotteryOpenTime = new DateTimePicker("Registration opens");
+    private final DateTimePicker lotteryCloseTime = new DateTimePicker("Registration closes");
+    private final HorizontalLayout lotterySection = new HorizontalLayout(lotteryOpenTime, lotteryCloseTime);
+
     // Grid controls
     private final IntegerField rowsField = new IntegerField("Rows");
     private final IntegerField colsField = new IntegerField("Columns");
@@ -148,6 +156,11 @@ public class VenueDesignerDialog extends Dialog {
         newZoneGaCapacity.setVisible(false);
         newZoneKind.addValueChangeListener(e -> newZoneGaCapacity.setVisible("GA".equals(e.getValue())));
 
+        saleMethodCombo.setItems("Regular", "Lottery");
+        saleMethodCombo.setValue("Regular");
+        lotterySection.setVisible(false);
+        saleMethodCombo.addValueChangeListener(e -> lotterySection.setVisible("Lottery".equals(e.getValue())));
+
         RequiredFields.markRequired(eventName, "Event name is required.");
         RequiredFields.markRequired(startTime, "Start time is required.");
         RequiredFields.markRequired(endTime, "End time is required.");
@@ -167,12 +180,14 @@ public class VenueDesignerDialog extends Dialog {
         rightSidebar.getStyle().set("min-width", "200px").set("flex-shrink", "0");
 
         // Event metadata rows
-        HorizontalLayout metadataRow1 = new HorizontalLayout(eventName, category, lockMinutes);
+        HorizontalLayout metadataRow1 = new HorizontalLayout(eventName, category, lockMinutes, saleMethodCombo);
         metadataRow1.setWidthFull();
         metadataRow1.setAlignItems(FlexComponent.Alignment.BASELINE);
         HorizontalLayout metadataRow2 = new HorizontalLayout(startTime, endTime, doorsOpenTime);
         metadataRow2.setWidthFull();
         metadataRow2.setAlignItems(FlexComponent.Alignment.BASELINE);
+        lotterySection.setWidthFull();
+        lotterySection.setAlignItems(FlexComponent.Alignment.BASELINE);
 
         HorizontalLayout mainLayout = new HorizontalLayout(leftSidebar, centerPanel, rightSidebar);
         mainLayout.setWidthFull();
@@ -181,7 +196,7 @@ public class VenueDesignerDialog extends Dialog {
 
         VerticalLayout content = new VerticalLayout(
                 new Span("1) Event details"),
-                metadataRow1, metadataRow2, description,
+                metadataRow1, metadataRow2, description, lotterySection,
                 new Span("2) Design venue"),
                 mainLayout,
                 status
@@ -206,15 +221,15 @@ public class VenueDesignerDialog extends Dialog {
 
         HorizontalLayout nameAndKind = new HorizontalLayout(newZoneName, newZoneKind);
         nameAndKind.setWidthFull();
+        nameAndKind.expand(newZoneName);
         HorizontalLayout priceAndCap = new HorizontalLayout(newZonePrice, newZoneGaCapacity);
         priceAndCap.setWidthFull();
+        priceAndCap.expand(newZonePrice);
         Button addZoneBtn = new Button("Add zone", e -> addZone());
         addZoneBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SMALL);
 
-        newZoneName.setWidthFull();
-        newZoneKind.setWidth("100px");
-        newZonePrice.setWidthFull();
-        newZoneGaCapacity.setWidthFull();
+        newZoneKind.setWidth("90px");
+        newZoneGaCapacity.setWidth("90px");
 
         zonePaletteList.setPadding(false);
         zonePaletteList.setSpacing(false);
@@ -587,10 +602,28 @@ public class VenueDesignerDialog extends Dialog {
         }
         Instant doors = toInstant(doorsOpenTime.getValue());
 
+        boolean isLottery = "Lottery".equals(saleMethodCombo.getValue());
+        SaleMethod saleMethod = isLottery ? SaleMethod.LOTTERY : SaleMethod.REGULAR;
+        LotteryWindow lotteryWindow = null;
+        if (isLottery) {
+            Instant lotteryOpen = toInstant(lotteryOpenTime.getValue());
+            Instant lotteryClose = toInstant(lotteryCloseTime.getValue());
+            if (lotteryOpen == null || lotteryClose == null) {
+                UiMessages.error("Pick registration open and close times for the lottery.");
+                return;
+            }
+            if (!lotteryOpen.isBefore(lotteryClose)) {
+                UiMessages.error("Registration open time must be before close time.");
+                return;
+            }
+            lotteryWindow = new LotteryWindow(lotteryOpen, lotteryClose);
+        }
+
         EventActionResult result = presenter.defineVenue(
                 null, companyName, eventName.getValue(), description.getValue(), category.getValue(),
                 start, end, doors, lockMinutes.getValue(),
-                cellStates.length, cellStates[0].length, zoneSpecs, sectionToZone, cellSpecs);
+                cellStates.length, cellStates[0].length, zoneSpecs, sectionToZone, cellSpecs,
+                saleMethod, lotteryWindow);
         if (!result.success() || result.eventId() == null) {
             status.setText("Save failed: " + result.message());
             UiMessages.error(result.message());

@@ -16,6 +16,7 @@ import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.LayoutCellType;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
@@ -122,6 +123,11 @@ public class EditEventDialog extends Dialog {
     private final IntegerField newZoneGaCapacity = new IntegerField("GA capacity");
     private int colorIndex;
 
+    // Lottery window
+    private final DateTimePicker lotteryOpenPicker = new DateTimePicker("Registration opens");
+    private final DateTimePicker lotteryClosePicker = new DateTimePicker("Registration closes");
+    private boolean isLotteryEvent;
+
     // Lifecycle
     private final Span lifecycleStatus = new Span();
 
@@ -171,6 +177,7 @@ public class EditEventDialog extends Dialog {
         }
         eventId = summary.id();
         status = summary.status();
+        isLotteryEvent = summary.saleMethod() == SaleMethod.LOTTERY;
         prefillDetails(summary);
         loadEventMap();
         body.removeAll();
@@ -208,6 +215,15 @@ public class EditEventDialog extends Dialog {
                 save, detailsStatus);
         section.setPadding(false);
         section.setSpacing(true);
+
+        if (isLotteryEvent) {
+            HorizontalLayout lotteryRow = new HorizontalLayout(lotteryOpenPicker, lotteryClosePicker);
+            lotteryRow.setWidthFull();
+            Button saveLottery = new Button("Save lottery window", e -> saveLotteryWindow());
+            saveLottery.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+            section.add(new H4("Lottery registration window"), lotteryRow, saveLottery);
+        }
+
         return section;
     }
 
@@ -220,6 +236,19 @@ public class EditEventDialog extends Dialog {
                 toInstant(startTime.getValue()),
                 toInstant(endTime.getValue()),
                 toInstant(doorsOpenTime.getValue()));
+        detailsStatus.setText(result.message());
+        showResult(result.success(), result.message());
+    }
+
+    private void saveLotteryWindow() {
+        Instant open = toInstant(lotteryOpenPicker.getValue());
+        Instant close = toInstant(lotteryClosePicker.getValue());
+        if (open == null || close == null) {
+            UiMessages.error("Both registration open and close times are required.");
+            return;
+        }
+        EventActionResult result = presenter.editEvent(
+                eventId, null, null, null, null, null, null, open, close);
         detailsStatus.setText(result.message());
         showResult(result.success(), result.message());
     }
@@ -671,7 +700,8 @@ public class EditEventDialog extends Dialog {
 
         EventActionResult result = presenter.defineVenue(
                 eventId, companyName, null, null, null, null, null, null, null,
-                cellStates.length, cellStates[0].length, zoneSpecs, sectionToZone, cellSpecs);
+                cellStates.length, cellStates[0].length, zoneSpecs, sectionToZone, cellSpecs,
+                null, null);
         layoutStatus.setText(result.message());
         showResult(result.success(), result.message());
         if (result.success()) {
@@ -761,6 +791,10 @@ public class EditEventDialog extends Dialog {
             colorIndex++;
         }
         savedLayout = map.layout();
+        if (isLotteryEvent && map.lotteryInfo() != null) {
+            lotteryOpenPicker.setValue(toLocal(map.lotteryInfo().registrationOpen()));
+            lotteryClosePicker.setValue(toLocal(map.lotteryInfo().registrationClose()));
+        }
     }
 
     // ── Helpers ──

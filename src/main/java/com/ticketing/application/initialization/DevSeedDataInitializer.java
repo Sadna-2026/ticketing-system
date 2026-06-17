@@ -31,12 +31,14 @@ import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LayoutCell;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.LotteryWindow;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityCondition;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.VenueLayout;
@@ -120,6 +122,23 @@ public class DevSeedDataInitializer {
     public static final UUID SIMPLE_DISCOUNT_GA_ZONE_ID = UUID.fromString("bbbb4444-0000-0000-0000-000000000001");
     public static final UUID CONDITIONAL_DISCOUNT_EVENT_ID = UUID.fromString("bbbb5555-5555-5555-5555-555555555555");
     public static final UUID CONDITIONAL_DISCOUNT_GA_ZONE_ID = UUID.fromString("bbbb5555-0000-0000-0000-000000000001");
+    public static final UUID LOTTERY_EVENT_ID    = UUID.fromString("bbbb6666-6666-6666-6666-666666666666");
+    // GA zones
+    public static final UUID LOTTERY_GA_FLOOR_ZONE_ID   = UUID.fromString("bbbb6666-0000-0000-0000-000000000001");
+    public static final UUID LOTTERY_GA_BALCONY_ZONE_ID = UUID.fromString("bbbb6666-0000-0000-0000-000000000002");
+    // Assigned-seating zones
+    public static final UUID LOTTERY_VIP_ZONE_ID  = UUID.fromString("bbbb6666-0000-0000-0000-000000000003");
+    public static final UUID LOTTERY_ORCH_ZONE_ID = UUID.fromString("bbbb6666-0000-0000-0000-000000000004");
+    // VIP Box seats (2)
+    public static final UUID LOTTERY_VIP_A1_ID = UUID.fromString("bbbb6666-0001-0000-0000-000000000001");
+    public static final UUID LOTTERY_VIP_A2_ID = UUID.fromString("bbbb6666-0001-0000-0000-000000000002");
+    // Orchestra seats (4)
+    public static final UUID LOTTERY_ORCH_A1_ID = UUID.fromString("bbbb6666-0002-0000-0000-000000000001");
+    public static final UUID LOTTERY_ORCH_A2_ID = UUID.fromString("bbbb6666-0002-0000-0000-000000000002");
+    public static final UUID LOTTERY_ORCH_B1_ID = UUID.fromString("bbbb6666-0002-0000-0000-000000000003");
+    public static final UUID LOTTERY_ORCH_B2_ID = UUID.fromString("bbbb6666-0002-0000-0000-000000000004");
+    // Legacy alias kept so any existing test references still compile
+    public static final UUID LOTTERY_GA_ZONE_ID = LOTTERY_GA_FLOOR_ZONE_ID;
 
     /** Simulated concurrent browsers during a dev-seed box-office rush. */
     public static final int SEEDED_ANALYTICS_VISITOR_ENTERS = 12;
@@ -400,7 +419,84 @@ public class DevSeedDataInitializer {
         saveOrPolicyEventIfMissing();
         saveSimpleDiscountEventIfMissing();
         saveConditionalDiscountEventIfMissing();
+        saveLotteryEventIfMissing();
         seedEventQueues();
+    }
+
+    private void saveLotteryEventIfMissing() {
+        if (eventRepository.findById(LOTTERY_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant now = Instant.now();
+        Instant start = now.plus(Duration.ofDays(60));
+        // Registration window: opened yesterday, closes in 6 days — always open on a fresh run.
+        LotteryWindow window = new LotteryWindow(
+                now.minus(Duration.ofDays(1)),
+                now.plus(Duration.ofDays(6)));
+        Event event = new Event(LOTTERY_EVENT_ID, COMPANY_NAME, "Lottery Demo Concert",
+                "UI-19 QA: lottery with GA + assigned seating. Register for the lottery below.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new NoDiscountPolicy(),
+                SaleMethod.LOTTERY,
+                window);
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+
+        // GA zones — two tiers at different prices
+        event.addZone(InventoryZone.createGA(LOTTERY_GA_FLOOR_ZONE_ID, "Floor",
+                new BigDecimal("80.00"), 200));
+        event.addZone(InventoryZone.createGA(LOTTERY_GA_BALCONY_ZONE_ID, "Balcony",
+                new BigDecimal("50.00"), 300));
+
+        // Assigned-seating zones — two tiers at different prices
+        InventoryZone vip = InventoryZone.createAssigned(LOTTERY_VIP_ZONE_ID, "VIP Box", new BigDecimal("200.00"));
+        vip.addSeat(new Seat(LOTTERY_VIP_A1_ID, "A", "1"));
+        vip.addSeat(new Seat(LOTTERY_VIP_A2_ID, "A", "2"));
+        event.addZone(vip);
+
+        InventoryZone orch = InventoryZone.createAssigned(LOTTERY_ORCH_ZONE_ID, "Orchestra", new BigDecimal("120.00"));
+        orch.addSeat(new Seat(LOTTERY_ORCH_A1_ID, "A", "1"));
+        orch.addSeat(new Seat(LOTTERY_ORCH_A2_ID, "A", "2"));
+        orch.addSeat(new Seat(LOTTERY_ORCH_B1_ID, "B", "1"));
+        orch.addSeat(new Seat(LOTTERY_ORCH_B2_ID, "B", "2"));
+        event.addZone(orch);
+
+        event.setVenueMap(new VenueMap(Map.of(
+                "Floor",      LOTTERY_GA_FLOOR_ZONE_ID,
+                "Balcony",    LOTTERY_GA_BALCONY_ZONE_ID,
+                "VIP Box",    LOTTERY_VIP_ZONE_ID,
+                "Orchestra",  LOTTERY_ORCH_ZONE_ID)));
+
+        // Layout (6 rows x 5 cols):
+        //   row 0 — Stage label
+        //   row 1 — VIP Box seats A1, A2
+        //   row 2 — Orchestra seats A1, A2, B1, B2
+        //   row 3 — spacer
+        //   row 4 — Floor GA cells
+        //   row 5 — Balcony GA cells
+        event.setVenueLayout(new VenueLayout(6, 5, List.of(
+                LayoutCell.stage(0, 2, "Stage"),
+                LayoutCell.seat(1, 1, LOTTERY_VIP_ZONE_ID,  LOTTERY_VIP_A1_ID),
+                LayoutCell.seat(1, 3, LOTTERY_VIP_ZONE_ID,  LOTTERY_VIP_A2_ID),
+                LayoutCell.seat(2, 0, LOTTERY_ORCH_ZONE_ID, LOTTERY_ORCH_A1_ID),
+                LayoutCell.seat(2, 1, LOTTERY_ORCH_ZONE_ID, LOTTERY_ORCH_A2_ID),
+                LayoutCell.seat(2, 3, LOTTERY_ORCH_ZONE_ID, LOTTERY_ORCH_B1_ID),
+                LayoutCell.seat(2, 4, LOTTERY_ORCH_ZONE_ID, LOTTERY_ORCH_B2_ID),
+                LayoutCell.ga(4, 0, LOTTERY_GA_FLOOR_ZONE_ID,   "Floor"),
+                LayoutCell.ga(4, 1, LOTTERY_GA_FLOOR_ZONE_ID,   "Floor"),
+                LayoutCell.ga(4, 2, LOTTERY_GA_FLOOR_ZONE_ID,   "Floor"),
+                LayoutCell.ga(4, 3, LOTTERY_GA_FLOOR_ZONE_ID,   "Floor"),
+                LayoutCell.ga(4, 4, LOTTERY_GA_FLOOR_ZONE_ID,   "Floor"),
+                LayoutCell.ga(5, 0, LOTTERY_GA_BALCONY_ZONE_ID, "Balcony"),
+                LayoutCell.ga(5, 1, LOTTERY_GA_BALCONY_ZONE_ID, "Balcony"),
+                LayoutCell.ga(5, 2, LOTTERY_GA_BALCONY_ZONE_ID, "Balcony"))));
+
+        event.publish();
+        eventRepository.save(event);
+        log.info("Seeded lottery demo event '{}' with window open until {}", event.getName(), window.registrationClose());
     }
 
     private void seedEventQueues() {
@@ -409,7 +505,7 @@ public class DevSeedDataInitializer {
                 LARGE_ASSIGNED_EVENT_ID, DESIGNER_DEMO_EVENT_ID, CONFERENCE_EVENT_ID,
                 ADMIN_CLOSE_EVENT_ID, COUPON_CHECKOUT_EVENT_ID, MIXED_LIMITED_EVENT_ID,
                 MIN_QTY_EVENT_ID, AND_POLICY_EVENT_ID, OR_POLICY_EVENT_ID,
-                SIMPLE_DISCOUNT_EVENT_ID, CONDITIONAL_DISCOUNT_EVENT_ID);
+                SIMPLE_DISCOUNT_EVENT_ID, CONDITIONAL_DISCOUNT_EVENT_ID, LOTTERY_EVENT_ID);
         int created = 0;
         for (UUID eventId : seededEventIds) {
             if (createDefaultQueueIfMissing(eventId)) {
