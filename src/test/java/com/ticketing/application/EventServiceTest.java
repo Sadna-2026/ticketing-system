@@ -59,7 +59,6 @@ import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
-import com.ticketing.domain.order.OrderItem;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryLotteryRepository;
@@ -1806,17 +1805,14 @@ class EventServiceTest {
             assertEquals(eventId, order.getEventId());
             assertNotNull(order.getSessionId());
 
-            List<OrderItem> items = order.getItems();
-            assertEquals(1, items.size());
-            OrderItem item = items.get(0);
+            // New flow: draw creates an EMPTY LOTTERY_WIN order; winner picks tickets later
+            assertTrue(order.isLotteryWin(), "order should be marked LOTTERY_WIN");
+            assertTrue(order.getItems().isEmpty(), "order should have no pre-allocated items");
+            assertNotNull(order.getPurchaseWindowDeadline(), "winner must have a purchase deadline");
 
-            assertEquals(zoneId, item.getZoneId());
-            assertEquals(requestedQuantity, item.getQuantity());
-            assertTrue(item.isGA());
-
-            // Verify event inventory was locked
+            // Inventory is NOT pre-allocated at draw time
             Event event = eventRepository.findById(eventId).get();
-            assertEquals(500 - requestedQuantity, event.findZone(zoneId).getAvailableCount());
+            assertEquals(500, event.findZone(zoneId).getAvailableCount(), "inventory must not be locked at draw time");
         }
     }
 }

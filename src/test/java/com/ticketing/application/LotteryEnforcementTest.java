@@ -297,15 +297,15 @@ class LotteryEnforcementTest {
         }
 
         @Test
-        @DisplayName("Inventory is locked exactly once per winner")
-        void GivenWinner_WhenDraw_ThenInventoryLockedOnce() {
+        @DisplayName("Inventory is NOT pre-allocated at draw time — winner picks tickets later")
+        void GivenWinner_WhenDraw_ThenInventoryNotPreAllocated() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
             register(memberId, 2);
             eventService.drawLottery(OWNER_TOKEN, eventId, 10);
 
             Event event = eventRepository.findById(eventId).orElseThrow();
             InventoryZone zone = event.findZone(zoneId);
-            assertEquals(98, zone.getAvailableCount(), "2 tickets should be locked, 98 remain");
+            assertEquals(100, zone.getAvailableCount(), "inventory must not be locked at draw time");
         }
     }
 
@@ -316,7 +316,7 @@ class LotteryEnforcementTest {
     class WinnerRight {
 
         @Test
-        @DisplayName("Winner receives a persisted LOTTERY_WIN order with correct member/event/zone")
+        @DisplayName("Winner receives a persisted empty LOTTERY_WIN order with correct member/event/deadline")
         void GivenWinner_WhenDraw_ThenOrderPersistedWithCorrectAttributes() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
             register(memberId, 2);
@@ -328,8 +328,8 @@ class LotteryEnforcementTest {
             assertEquals(memberId, order.getMemberId());
             assertEquals(eventId, order.getEventId());
             assertNotNull(order.getPurchaseWindowDeadline());
-            assertEquals(zoneId, order.getItems().get(0).getZoneId());
-            assertEquals(2, order.getItems().get(0).getQuantity());
+            // New flow: order is EMPTY at draw time — winner picks tickets on the Events page
+            assertTrue(order.getItems().isEmpty(), "draw must not pre-allocate any items");
         }
 
         @Test
@@ -344,15 +344,15 @@ class LotteryEnforcementTest {
         }
 
         @Test
-        @DisplayName("Winner cannot add extra tickets to their order")
-        void GivenWinner_WhenAddTicketsToOrder_ThenRejected() {
+        @DisplayName("Winner can add tickets to their empty LOTTERY_WIN order from the Events page")
+        void GivenWinner_WhenAddTicketsToOrder_ThenAllowed() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
             register(memberId, 1);
             eventService.drawLottery(OWNER_TOKEN, eventId, 10);
 
-            IllegalStateException ex = assertThrows(IllegalStateException.class,
-                    () -> orderService.addGATicketsToOrder(MEMBER_TOKEN, eventId, zoneId, 2));
-            assertTrue(ex.getMessage().toLowerCase().contains("lottery"), ex.getMessage());
+            // New flow: winner picks their own tickets after winning — adding must succeed
+            assertDoesNotThrow(
+                    () -> orderService.addGATicketsToOrder(MEMBER_TOKEN, eventId, zoneId, 1));
         }
 
         @Test
