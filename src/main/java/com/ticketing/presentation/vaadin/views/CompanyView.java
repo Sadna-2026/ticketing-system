@@ -155,6 +155,7 @@ public class CompanyView extends VerticalLayout {
     private final Span eventStatus = new Span();
     private Button editEventButton;
     private Button designHallButton;
+    private Button editVenueLayoutButton;
     private FormLayout eventSelectionForm;
     private HorizontalLayout eventActions;
     private VerticalLayout eventControls;
@@ -725,12 +726,13 @@ public class CompanyView extends VerticalLayout {
     private VerticalLayout eventManagementSection() {
         editEventButton = new Button("Edit event", event -> openEditEventDialog());
         designHallButton = new Button("Create event", event -> openVenueDesigner());
+        editVenueLayoutButton = new Button("Edit venue layout", event -> openEditVenueLayout());
         designHallButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         eventSelectionForm = new FormLayout(eventCompanyName);
         eventSelectionForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
 
-        eventActions = new HorizontalLayout(designHallButton, editEventButton);
+        eventActions = new HorizontalLayout(designHallButton, editEventButton, editVenueLayoutButton);
         eventActions.setAlignItems(Alignment.BASELINE);
         eventControls = new VerticalLayout(eventSelectionForm, eventActions);
         eventControls.setPadding(false);
@@ -1394,14 +1396,18 @@ public class CompanyView extends VerticalLayout {
         CompanyAccessResult access = companyAccessFor(eventCompanyName, "Select a company to show event controls.");
         boolean eventLifecycle = access.canManageEvents();
         boolean mapDefinition = access.canDefineMaps();
-        eventControls.setVisible(eventLifecycle || mapDefinition);
-        eventSelectionForm.setVisible(eventLifecycle || mapDefinition);
-        eventActions.setVisible(eventLifecycle || mapDefinition);
-        designHallButton.setVisible(eventLifecycle || mapDefinition);
-        editEventButton.setVisible(eventLifecycle);
+        eventControls.setVisible(true);
+        eventSelectionForm.setVisible(true);
+        eventActions.setVisible(true);
+        designHallButton.setVisible(true);
+        designHallButton.setEnabled(eventLifecycle);
+        editEventButton.setVisible(true);
+        editEventButton.setEnabled(eventLifecycle);
+        editVenueLayoutButton.setVisible(true);
+        editVenueLayoutButton.setEnabled(mapDefinition);
         boolean denied = access.companyName() != null && !eventLifecycle && !mapDefinition;
         eventStatus.setText(denied
-                ? missingPermissionsMessage(access, ManagerPermission.EVENT_LIFECYCLE)
+                ? missingPermissionsMessage(access, ManagerPermission.EVENT_LIFECYCLE, ManagerPermission.MAP_DEFINITION)
                 : "");
         eventStatus.setVisible(denied);
     }
@@ -1533,6 +1539,15 @@ public class CompanyView extends VerticalLayout {
             return;
         }
         new VenueDesignerDialog(presenter, company).open();
+    }
+
+    private void openEditVenueLayout() {
+        String company = companyNameOf(eventCompanyName);
+        if (company == null) {
+            UiMessages.error("Select a company first.");
+            return;
+        }
+        new EditVenueLayoutDialog(presenter, company).open();
     }
 
     private void openEditEventDialog() {
