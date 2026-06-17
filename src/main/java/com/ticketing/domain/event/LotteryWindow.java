@@ -26,11 +26,11 @@ public class LotteryWindow {
     @Column(name = "lottery_registration_close")
     private Instant registrationClose;
     /** How many registrants are selected as winners when the draw runs. Default 50. */
-    @Column(name = "lottery_max_winners")
-    private int maxWinners;
+    @Column(name = "lottery_max_winners", columnDefinition = "INT DEFAULT 50")
+    private Integer maxWinners;
     /** Hours that winners have to purchase before tickets open to all. Default 48. */
-    @Column(name = "lottery_purchase_window_hours")
-    private int purchaseWindowHours;
+    @Column(name = "lottery_purchase_window_hours", columnDefinition = "INT DEFAULT 48")
+    private Integer purchaseWindowHours;
 
     // Required by JPA; do not use directly.
     protected LotteryWindow() {
@@ -57,8 +57,8 @@ public class LotteryWindow {
 
     public Instant registrationOpen() { return registrationOpen; }
     public Instant registrationClose() { return registrationClose; }
-    public int maxWinners() { return maxWinners; }
-    public int purchaseWindowHours() { return purchaseWindowHours; }
+    public int maxWinners() { return maxWinners != null ? maxWinners : 50; }
+    public int purchaseWindowHours() { return purchaseWindowHours != null ? purchaseWindowHours : 48; }
 
     /**
      * Returns true when {@code now} falls within [registrationOpen, registrationClose).
@@ -73,10 +73,10 @@ public class LotteryWindow {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         LotteryWindow that = (LotteryWindow) o;
-        return maxWinners == that.maxWinners
-                && purchaseWindowHours == that.purchaseWindowHours
-                && Objects.equals(registrationOpen, that.registrationOpen)
-                && Objects.equals(registrationClose, that.registrationClose);
+        return Objects.equals(registrationOpen, that.registrationOpen)
+                && Objects.equals(registrationClose, that.registrationClose)
+                && Objects.equals(maxWinners, that.maxWinners)
+                && Objects.equals(purchaseWindowHours, that.purchaseWindowHours);
     }
 
     @Override
