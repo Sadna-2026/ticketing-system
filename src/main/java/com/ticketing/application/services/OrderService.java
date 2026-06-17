@@ -640,6 +640,11 @@ public class OrderService {
     public QueueEntryDto tryEnterOrQueue(UUID eventId, UUID sessionId) {
         log.info("Try enter or queue: eventId={}, sessionId={}", eventId, sessionId);
 
+        Event event = findEvent(eventId);
+        if (event.getStatus() == EventStatus.SOLD_OUT) {
+            throw new IllegalStateException("Event is sold out — no tickets available.");
+        }
+
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue == null || !queue.isActive()) {
             return null;

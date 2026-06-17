@@ -54,7 +54,7 @@ public class QueuePresenter {
             }
             return QueueResult.queued(
                     "You have been placed in the virtual queue. Status: " + entry.getStatus() + ".", entry);
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException | IllegalStateException ex) {
             return QueueResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
             logger.warn(JOIN_FAILURE_MESSAGE, ex);
@@ -102,6 +102,8 @@ public class QueuePresenter {
                 return QueueResult.directEntry("No queue active — entering directly.");
             }
             return QueueResult.queued("You have been placed in the virtual queue.", entry);
+        } catch (IllegalStateException ex) {
+            return QueueResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
             logger.warn("Queue gate check failed for event {}, allowing through", eventId, ex);
             return QueueResult.directEntry("Queue check skipped — entering directly.");
