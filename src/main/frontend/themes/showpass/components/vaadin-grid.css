@@ -1,0 +1,27 @@
+/* Showpass grid polish (injected into vaadin-grid shadow DOM).
+   Engineered, scannable tables: distinct uppercase header, hairline rows,
+   a subtle cyan row hover. */
+
+[part~="header-cell"] {
+  background-color: var(--app-surface-2);
+  color: var(--app-muted);
+  font-family: "Sora", var(--lumo-font-family);
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+[part~="cell"] {
+  border-color: var(--app-border);
+}
+
+/* Subtle hover highlight across the row. */
+[part~="row"]:hover > [part~="body-cell"] {
+  background-color: color-mix(in srgb, var(--app-cyan) 7%, transparent);
+}
+
+/* Selected row picks up the brand tint instead of Lumo blue. */
+[part~="row"][selected] > [part~="body-cell"] {
+  background-color: color-mix(in srgb, var(--app-cyan) 12%, transparent);
+}

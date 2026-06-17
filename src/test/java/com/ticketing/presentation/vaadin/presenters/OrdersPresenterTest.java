@@ -5,9 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -20,10 +21,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.EventMapDTO;
@@ -33,15 +34,19 @@ import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.ZoneType;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutQuoteResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.CheckoutResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.HistoryResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.InventoryResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderComplianceResult;
+import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderLabels;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderMutationResult;
 import com.ticketing.presentation.vaadin.presenters.OrdersPresenter.OrderResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
 
 @DisplayName("OrdersPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class OrdersPresenterTest {
 
     private OrderService orderService;
@@ -53,12 +58,6 @@ class OrdersPresenterTest {
         orderService = mock(OrderService.class);
         eventService = mock(EventService.class);
         presenter = new OrdersPresenter(orderService, eventService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
     }
 
 
@@ -78,7 +77,7 @@ class OrdersPresenterTest {
                 seatItem(seatItemId, seatZoneId, seatId)));
         SessionContext.setSessionToken("guest-token");
         when(orderService.addGATicketsToOrder("guest-token", eventId, gaZoneId, 2)).thenReturn(gaItemId);
-        when(orderService.addSeatToOrder("guest-token", eventId, seatZoneId, seatId)).thenReturn(seatItemId);
+        when(orderService.addSelectionToOrder(eq("guest-token"), any())).thenReturn(List.of(seatItemId));
         when(orderService.getActiveOrder("guest-token")).thenReturn(gaOrder, seatOrder);
 
         OrderMutationResult gaResult = presenter.addGATickets(eventId, gaZoneId, 2);
@@ -90,10 +89,10 @@ class OrdersPresenterTest {
         assertSame(gaOrder, gaResult.order());
         assertTrue(seatResult.success());
         assertEquals("Assigned seat added.", seatResult.message());
-        assertEquals(seatItemId, seatResult.itemId());
+        assertNull(seatResult.itemId());
         assertSame(seatOrder, seatResult.order());
         verify(orderService).addGATicketsToOrder("guest-token", eventId, gaZoneId, 2);
-        verify(orderService).addSeatToOrder("guest-token", eventId, seatZoneId, seatId);
+        verify(orderService).addSelectionToOrder(eq("guest-token"), any());
     }
 
     @Test
@@ -118,14 +117,78 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         UUID purchaseId = UUID.randomUUID();
         SessionContext.setSessionToken("guest-token");
-        when(orderService.checkout("guest-token", "SAVE20")).thenReturn(purchaseId);
+        when(orderService.checkout(eq("guest-token"), eq("SAVE20"), any()))
+                .thenReturn(new OrderService.CheckoutCompletion(purchaseId, new BigDecimal("80.00")));
 
         CheckoutResult result = presenter.checkout(" SAVE20 ");
 
         assertTrue(result.success());
         assertEquals("Checkout complete.", result.message());
         assertEquals(purchaseId, result.purchaseId());
-        verify(orderService).checkout("guest-token", "SAVE20");
+        assertEquals(new BigDecimal("80.00"), result.chargedAmount());
+        verify(orderService).checkout(eq("guest-token"), eq("SAVE20"), any());
+    }
+
+    @Test
+    void GivenOrderWithCoupon_WhenQuotingCheckout_ThenQuoteReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.quoteCheckout("guest-token", "SAVE20"))
+                .thenReturn(new OrderService.CheckoutQuote(new BigDecimal("100.00"), new BigDecimal("80.00")));
+
+        CheckoutQuoteResult result = presenter.quoteCheckout(" SAVE20 ");
+
+        assertTrue(result.success());
+        assertEquals(new BigDecimal("100.00"), result.subtotal());
+        assertEquals(new BigDecimal("80.00"), result.total());
+        verify(orderService).quoteCheckout("guest-token", "SAVE20");
+    }
+
+    @Test
+    void GivenNoSession_WhenQuotingCheckout_ThenFailureReturned() {
+        SessionContext.clear();
+
+        CheckoutQuoteResult result = presenter.quoteCheckout("SAVE20");
+
+        assertFalse(result.success());
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void GivenQuoteServiceFails_WhenQuotingCheckout_ThenDomainMessageIsPreserved() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.quoteCheckout("guest-token", null))
+                .thenThrow(new IllegalArgumentException("No active order with tickets to checkout"));
+
+        CheckoutQuoteResult result = presenter.quoteCheckout(null);
+
+        assertFalse(result.success());
+        assertEquals("No active order with tickets to checkout", result.message());
+    }
+
+    @Test
+    void GivenCompliantOrder_WhenCheckingCompliance_ThenSuccessReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.checkPurchasePolicy("guest-token"))
+                .thenReturn(OrderService.PurchasePolicyStatus.ok());
+
+        OrderComplianceResult result = presenter.checkOrderCompliance();
+
+        assertTrue(result.success());
+        assertTrue(result.compliant());
+        assertEquals("Order meets purchase requirements.", result.message());
+    }
+
+    @Test
+    void GivenPolicyViolation_WhenCheckingCompliance_ThenReasonReturned() {
+        SessionContext.setSessionToken("guest-token");
+        when(orderService.checkPurchasePolicy("guest-token"))
+                .thenReturn(OrderService.PurchasePolicyStatus.violation("You must purchase at least 2 tickets"));
+
+        OrderComplianceResult result = presenter.checkOrderCompliance();
+
+        assertTrue(result.success());
+        assertFalse(result.compliant());
+        assertEquals("You must purchase at least 2 tickets", result.message());
     }
 
     @Test
@@ -133,7 +196,7 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         String policyMessage = "Purchase policy violation: AGE_RESTRICTED - Buyer does not meet age policy";
         SessionContext.setSessionToken("guest-token");
-        when(orderService.checkout("guest-token", null))
+        when(orderService.checkout(eq("guest-token"), isNull(), any()))
                 .thenThrow(new IllegalStateException(policyMessage));
 
         CheckoutResult result = presenter.checkout(null);
@@ -141,7 +204,7 @@ class OrdersPresenterTest {
         assertFalse(result.success());
         assertEquals(policyMessage, result.message());
         assertNull(result.purchaseId());
-        verify(orderService).checkout("guest-token", null);
+        verify(orderService).checkout(eq("guest-token"), isNull(), any());
     }
 
     @Test
@@ -170,6 +233,24 @@ class OrdersPresenterTest {
         verify(orderService).getPurchaseHistory("member-token");
     }
 
+    @Test
+    void GivenMemberSession_WhenPurchaseHistoryServiceThrows_ThenFallbackFailureMessageIsReturned() {
+        UUID memberId = UUID.randomUUID();
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(memberId);
+        SessionContext.setUsername("alice");
+        when(orderService.getPurchaseHistory("member-token"))
+                .thenThrow(new RuntimeException("repository unavailable"));
+
+        HistoryResult result = presenter.loadPurchaseHistory();
+
+        assertFalse(result.success());
+        assertFalse(result.memberOnly());
+        assertEquals("Could not load purchase history. Please try again.", result.message());
+        assertTrue(result.purchases().isEmpty());
+        verify(orderService).getPurchaseHistory("member-token");
+    }
+
 
 
     @Test
@@ -194,6 +275,39 @@ class OrdersPresenterTest {
     }
 
     @Test
+    void GivenActiveOrder_WhenCancellingOrder_ThenCartIsClearedAndServiceIsCalled() {
+        SessionContext.setSessionToken("guest-token");
+
+        OrderMutationResult result = presenter.cancelOrder();
+
+        assertTrue(result.success(), result.message());
+        assertEquals("Cart cleared.", result.message());
+        assertNull(result.order());
+        verify(orderService).cancelOrder("guest-token");
+    }
+
+    @Test
+    void GivenNoSession_WhenCancellingOrder_ThenSessionMessageAndNoServiceCall() {
+        OrderMutationResult result = presenter.cancelOrder();
+
+        assertFalse(result.success());
+        assertEquals("Start a guest or member session before managing orders.", result.message());
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void GivenNoActiveOrder_WhenCancellingOrder_ThenDomainReasonIsSurfaced() {
+        SessionContext.setSessionToken("guest-token");
+        doThrow(new IllegalArgumentException("No active order found"))
+                .when(orderService).cancelOrder("guest-token");
+
+        OrderMutationResult result = presenter.cancelOrder();
+
+        assertFalse(result.success());
+        assertEquals("No active order found", result.message());
+    }
+
+    @Test
     void GivenEventId_WhenLoadingInventory_ThenEventQueryServiceIsCalledWithoutSessionToken() {
         UUID eventId = UUID.randomUUID();
         EventMapDTO eventMap = eventMap(eventId);
@@ -210,6 +324,70 @@ class OrdersPresenterTest {
 
 
     @Test
+    void GivenActiveOrder_WhenResolvingLabels_ThenZoneNamesAndSeatLabelsAreReturned() {
+        UUID eventId = UUID.randomUUID();
+        UUID gaZoneId = UUID.randomUUID();
+        UUID seatZoneId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(UUID.randomUUID(), eventId, List.of(
+                gaItem(UUID.randomUUID(), gaZoneId, 2),
+                seatItem(UUID.randomUUID(), seatZoneId, seatId)));
+        EventMapDTO eventMap = new EventMapDTO(
+                eventId,
+                "Spring Concert",
+                "Acme",
+                EventStatus.PUBLISHED,
+                Map.of("Floor", gaZoneId, "Balcony", seatZoneId),
+                List.of(
+                        new EventMapDTO.ZoneInfo(gaZoneId, "Floor", ZoneType.GENERAL_ADMISSION,
+                                new BigDecimal("50.00"), 100, 80, 20, List.of()),
+                        new EventMapDTO.ZoneInfo(seatZoneId, "Balcony", ZoneType.ASSIGNED_SEATING,
+                                new BigDecimal("150.00"), null, null, null,
+                                List.of(new EventMapDTO.SeatInfo(seatId, "A", "1", true)))));
+        when(eventService.getEventMap(eventId)).thenReturn(Optional.of(eventMap));
+
+        OrderLabels labels = presenter.labelsFor(order);
+
+        assertEquals("Floor", labels.zoneNames().get(gaZoneId));
+        assertEquals("Balcony", labels.zoneNames().get(seatZoneId));
+        assertEquals("A-1", labels.seatLabels().get(seatId));
+        verify(eventService).getEventMap(eventId);
+    }
+
+    @Test
+    void GivenNullOrder_WhenResolvingLabels_ThenEmptyLabelsAreReturned() {
+        OrderLabels labels = presenter.labelsFor(null);
+
+        assertTrue(labels.zoneNames().isEmpty());
+        assertTrue(labels.seatLabels().isEmpty());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    void GivenOrderWithNoItems_WhenResolvingLabels_ThenEmptyLabelsAndNoEventMapLookup() {
+        ActiveOrderDto order = activeOrder(UUID.randomUUID(), UUID.randomUUID(), List.of());
+
+        OrderLabels labels = presenter.labelsFor(order);
+
+        assertTrue(labels.zoneNames().isEmpty());
+        assertTrue(labels.seatLabels().isEmpty());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    void GivenEventMapLookupFails_WhenResolvingLabels_ThenEmptyLabelsAreReturned() {
+        UUID eventId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(UUID.randomUUID(), eventId,
+                List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        when(eventService.getEventMap(eventId)).thenThrow(new RuntimeException("boom"));
+
+        OrderLabels labels = presenter.labelsFor(order);
+
+        assertTrue(labels.zoneNames().isEmpty());
+        assertTrue(labels.seatLabels().isEmpty());
+    }
+
+    @Test
     void GivenGuestSession_WhenLoadingPurchaseHistory_ThenMemberOnlyInfoIsReturned() {
         SessionContext.setSessionToken("guest-token");
 
@@ -220,22 +398,6 @@ class OrdersPresenterTest {
         assertEquals("Purchase history is available for members only.", result.message());
         assertTrue(result.purchases().isEmpty());
         verifyNoInteractions(orderService);
-    }
-
-    private void installVaadinSession() {
-        VaadinSession session = mock(VaadinSession.class);
-        Map<String, Object> attributes = new java.util.HashMap<>();
-
-        doAnswer(invocation -> {
-            attributes.put(invocation.getArgument(0, String.class), invocation.getArgument(1));
-            return null;
-        }).when(session).setAttribute(anyString(), nullable(Object.class));
-
-        when(session.getAttribute(anyString())).thenAnswer(invocation ->
-                attributes.get(invocation.getArgument(0, String.class))
-        );
-
-        VaadinSession.setCurrent(session);
     }
 
     private static ActiveOrderDto activeOrder(UUID orderId, UUID eventId, List<OrderItemDto> items) {

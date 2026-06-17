@@ -1,12 +1,14 @@
 package com.ticketing.application.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventStatus;
+import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
 
 /**
@@ -19,11 +21,62 @@ public record EventMapDTO(
         String companyName,
         EventStatus status,
         Map<String, UUID> venueMap,
-        List<ZoneInfo> zones
+        List<ZoneInfo> zones,
+        // Optional visual grid layout (null when the event has no designed layout).
+        LayoutInfo layout,
+        String description,
+        List<EventPolicyBadgeDTO> purchaseRestrictions,
+        List<EventPolicyBadgeDTO> visibleDiscounts,
+        // Non-null only for LOTTERY events.
+        LotteryInfo lotteryInfo
 ) {
     public EventMapDTO {
         venueMap = venueMap == null ? Map.of() : Map.copyOf(venueMap);
         zones    = zones == null    ? List.of() : List.copyOf(zones);
+        description = description == null ? "" : description;
+        purchaseRestrictions = purchaseRestrictions == null ? List.of() : List.copyOf(purchaseRestrictions);
+        visibleDiscounts = visibleDiscounts == null ? List.of() : List.copyOf(visibleDiscounts);
+    }
+
+    public boolean isLottery() {
+        return lotteryInfo != null;
+    }
+
+    /** Backwards-compatible constructor for callers that don't carry a layout. */
+    public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
+                       Map<String, UUID> venueMap, List<ZoneInfo> zones) {
+        this(eventId, eventName, companyName, status, venueMap, zones, null, "", List.of(), List.of(), null);
+    }
+
+    /** Backwards-compatible constructor for callers that don't carry policy metadata. */
+    public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
+                       Map<String, UUID> venueMap, List<ZoneInfo> zones, LayoutInfo layout) {
+        this(eventId, eventName, companyName, status, venueMap, zones, layout, "", List.of(), List.of(), null);
+    }
+
+    /** Backwards-compatible constructor for callers that don't carry lottery info. */
+    public EventMapDTO(UUID eventId, String eventName, String companyName, EventStatus status,
+                       Map<String, UUID> venueMap, List<ZoneInfo> zones, LayoutInfo layout,
+                       String description, List<EventPolicyBadgeDTO> purchaseRestrictions,
+                       List<EventPolicyBadgeDTO> visibleDiscounts) {
+        this(eventId, eventName, companyName, status, venueMap, zones, layout, description,
+                purchaseRestrictions, visibleDiscounts, null);
+    }
+
+    /** Lottery registration window metadata, non-null only for LOTTERY events. */
+    public record LotteryInfo(
+            Instant registrationOpen,
+            Instant registrationClose,
+            boolean registrationIsOpen,
+            int maxWinners,
+            int purchaseWindowHours,
+            /** Total registrants so far; exposed for managers. */
+            int participantCount
+    ) {
+        /** Backward-compat for callers that don't carry winner/window/count fields. */
+        public LotteryInfo(Instant registrationOpen, Instant registrationClose, boolean registrationIsOpen) {
+            this(registrationOpen, registrationClose, registrationIsOpen, 50, 48, 0);
+        }
     }
 
     public record ZoneInfo(
@@ -49,4 +102,14 @@ public record EventMapDTO(
      * the buyer doesn't need to distinguish "someone else is buying it" from "already gone".
      */
     public record SeatInfo(UUID id, String row, String seatNumber, boolean available) {}
+
+    /** A visual grid layout for spatial rendering of the hall. */
+    public record LayoutInfo(int rows, int cols, List<CellInfo> cells) {
+        public LayoutInfo {
+            cells = cells == null ? List.of() : List.copyOf(cells);
+        }
+    }
+
+    /** One placed cell in the grid. {@code zoneId}/{@code seatId} are null for non-sellable cells. */
+    public record CellInfo(int row, int col, LayoutCellType type, String label, UUID zoneId, UUID seatId) {}
 }

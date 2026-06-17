@@ -8,4 +8,25 @@ logs/
 
 application.properties
 self_assignments.md
-src/main/frontend/
+# Vaadin-generated frontend artifacts (but DO track src/main/frontend/themes/)
+src/main/frontend/generated/
+src/main/frontend/index.html
+src/main/bundles/
+
+# Personal / local workspace artifacts (not part of the repo)
+.claude/
+.context/
+HANDOFF.md
+rewrite.yml
+requirements/
+node_modules
+.vscode/
+
+# Vaadin frontend files
+.vaadin-node-tasks.lock
+package-lock.json
+package.json
+tsconfig.json
+types.d.ts
+run-cloud.ps1
+DEMO-CLOUD-SQL.md

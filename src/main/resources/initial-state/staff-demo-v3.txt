@@ -1,0 +1,34 @@
+# V3 staff demo scenario (issue #415 — V3-INIT-STATE)
+# Replay with:
+#   ticketing.bootstrap.dataset=initial-state-file
+#   ticketing.seed.enabled=false
+#   ticketing.initial-state.file=classpath:initial-state/staff-demo-v3.txt
+
+guest-registration(u1, u1@example.com, secret1);
+guest-registration(u2, u2@example.com, secret2);
+guest-registration(u3, u3@example.com, secret3);
+guest-registration(u4, u4@example.com, secret4);
+
+login(u1, secret1);
+open-production-company(u1_token, p1, Staff demo production company);
+appoint-owner(u1_token, p1, u2);
+
+login(u2, secret2);
+accept-role-offer(u2_token, p1, OWNER);
+appoint-manager(u2_token, p1, u3, MAP_DEFINITION);
+
+login(u3, secret3);
+accept-role-offer(u3_token, p1, MANAGER);
+
+login(u2, secret2);
+# Set the company coupon BEFORE creating e1 so the event snapshots the discount
+# at creation time (events copy company.getDiscountPolicy() when created, and a
+# later company-policy change does not propagate to already-created events).
+set-company-coupon-discount(u2_token, p1, 20, sale123);
+create-event(u2_token, p1, e1, Staff scenario event, CONCERT, Standing, 30, 50, Seating, 10, 10, 100);
+set-event-seating-layout(u2_token, p1, e1, Seating, 10, 10);
+
+logout(u1_token);
+logout(u2_token);
+logout(u3_token);
+logout(u4_token);

@@ -1,9 +1,11 @@
 package com.ticketing.presentation.vaadin.presenters;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -11,10 +13,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.SearchEventsRequest;
+import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
+import com.ticketing.application.dto.LotteryRegistrationRequest;
+import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
+import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
 public class EventsPresenter {
@@ -27,9 +34,21 @@ public class EventsPresenter {
     private static final String MAP_FAILURE_MESSAGE = "Could not load event map. Please try again.";
 
     private final EventService eventService;
+    private final CompanyService companyService;
 
-    public EventsPresenter(EventService eventService) {
+    public EventsPresenter(EventService eventService, CompanyService companyService) {
         this.eventService = eventService;
+        this.companyService = companyService;
+    }
+
+    /** Active companies for the optional company filter; empty on failure. */
+    public List<CompanySummaryDTO> searchCompanies(String query) {
+        try {
+            return companyService.searchCompanies(query);
+        } catch (RuntimeException ex) {
+            logger.warn("Company search failed", ex);
+            return List.of();
+        }
     }
 
     public SearchResult searchEvents(
@@ -82,6 +101,48 @@ public class EventsPresenter {
         }
     }
 
+    public LotteryRegistrationResult registerForLottery(UUID eventId) {
+        SessionContext.UiState state = SessionContext.currentUiState();
+        if (state.noSession()) {
+            return LotteryRegistrationResult.failure("You must be logged in to register for a lottery.");
+        }
+        if (state.guest()) {
+            return LotteryRegistrationResult.failure("Lottery registration is for members only. Please log in as a member.");
+        }
+        String token = SessionContext.getSessionToken();
+        if (token == null) {
+            return LotteryRegistrationResult.failure("No active session found. Please log in again.");
+        }
+        if (eventId == null) {
+            return LotteryRegistrationResult.failure("Event ID is required.");
+        }
+        try {
+            LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
+            LotteryRegistrationResponse response = eventService.registerForLottery(token, request);
+            if (response.success()) {
+                return LotteryRegistrationResult.success(response.message(), response.lotteryEntryId(), response.registeredAt());
+            }
+            return LotteryRegistrationResult.failure(response.message());
+        } catch (IllegalArgumentException ex) {
+            return LotteryRegistrationResult.failure(ex.getMessage());
+        } catch (RuntimeException ex) {
+            logger.warn("Lottery registration failed unexpectedly", ex);
+            return LotteryRegistrationResult.failure("Could not register for the lottery. Please try again.");
+        }
+    }
+
+    public Optional<LotteryRegistrationResponse> getLotteryStatus(UUID eventId) {
+        if (eventId == null) return Optional.empty();
+        String token = SessionContext.getSessionToken();
+        if (token == null) return Optional.empty();
+        try {
+            return eventService.getMemberLotteryEntry(token, eventId);
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to get lottery status for eventId={}", eventId, ex);
+            return Optional.empty();
+        }
+    }
+
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
@@ -121,6 +182,21 @@ public class EventsPresenter {
 
         public static MapResult failure(String message) {
             return new MapResult(false, message, null);
+        }
+    }
+
+    public record LotteryRegistrationResult(
+            boolean success,
+            String message,
+            UUID lotteryEntryId,
+            Instant registeredAt
+    ) {
+        public static LotteryRegistrationResult success(String message, UUID lotteryEntryId, Instant registeredAt) {
+            return new LotteryRegistrationResult(true, message, lotteryEntryId, registeredAt);
+        }
+
+        public static LotteryRegistrationResult failure(String message) {
+            return new LotteryRegistrationResult(false, message, null, null);
         }
     }
 }

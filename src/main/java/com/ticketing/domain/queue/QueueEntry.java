@@ -1,6 +1,5 @@
 package com.ticketing.domain.queue;
 
-
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;

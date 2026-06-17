@@ -11,47 +11,47 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
+import com.ticketing.application.dto.CompanySummaryDTO;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SuspensionDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsMetricsDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO.AnalyticsRateDTO;
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.CompanyService;
+import com.ticketing.application.services.EventService;
+import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SuspensionListResult;
+import com.ticketing.presentation.vaadin.presenters.AdminPresenter.SystemAnalyticsResult;
+import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
-import com.vaadin.flow.server.VaadinSession;
-
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.doAnswer;
 
 @DisplayName("AdminPresenter")
+@ExtendWith(VaadinSessionExtension.class)
 class AdminPresenterTest {
 
     private AdminService adminService;
+    private CompanyService companyService;
     private AdminPresenter presenter;
 
     @BeforeEach
     void setUp() {
         adminService = mock(AdminService.class);
-        presenter = new AdminPresenter(adminService);
-        installVaadinSession();
-    }
-
-    @AfterEach
-    void tearDown() {
-        VaadinSession.setCurrent(null);
+        companyService = mock(CompanyService.class);
+        presenter = new AdminPresenter(adminService, companyService, mock(OrderService.class), mock(EventService.class));
     }
 
     @Test
@@ -90,6 +90,20 @@ class AdminPresenterTest {
     }
 
     @Test
+    void GivenRegularMemberSession_WhenLoadingGlobalHistory_ThenNoServiceIsCalledAndAdminSessionMessageIsReturned() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setUsername("alice");
+
+        PurchaseHistoryResult result = presenter.loadGlobalPurchaseHistory(UUID.randomUUID(), "Acme");
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        assertTrue(result.purchases().isEmpty());
+        verifyNoInteractions(adminService);
+    }
+
+    @Test
     void GivenAdminSessionAndTargetMember_WhenRemovingMember_ThenAdminServiceIsCalledDirectly() {
         adminSession();
         UUID targetId = UUID.randomUUID();
@@ -99,6 +113,38 @@ class AdminPresenterTest {
         assertTrue(result.success());
         assertEquals("Member removed.", result.message());
         verify(adminService).removeMember("admin-token", targetId);
+    }
+
+    @Test
+    void GivenAdminSessionAndCompany_WhenClosingCompany_ThenCompanyServiceAdminCloseIsCalled() {
+        adminSession();
+
+        ActionResult result = presenter.closeCompany(" Acme ");
+
+        assertTrue(result.success());
+        assertEquals("Company closed.", result.message());
+        verify(companyService).permanentCloseByAdmin("admin-token", "Acme");
+    }
+
+    @Test
+    void GivenNoAdminSession_WhenClosingCompany_ThenNoServiceIsCalledAndSessionMessageIsReturned() {
+        ActionResult result = presenter.closeCompany("Acme");
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        verifyNoInteractions(companyService);
+    }
+
+    @Test
+    void GivenAdminCloseFails_WhenClosingCompany_ThenSpecificReasonIsReturned() {
+        adminSession();
+        org.mockito.Mockito.doThrow(new SecurityException("System admin permission required"))
+                .when(companyService).permanentCloseByAdmin("admin-token", "Acme");
+
+        ActionResult result = presenter.closeCompany("Acme");
+
+        assertFalse(result.success());
+        assertEquals("System admin permission required", result.message());
     }
 
     @Test
@@ -169,20 +215,46 @@ class AdminPresenterTest {
         verify(adminService).listSuspensions("admin-token", true);
     }
 
+    @Test
+    void GivenAdminSession_WhenSearchingMembers_ThenServiceIsCalledAndResultsReturned() {
+        adminSession();
+        UUID memberId = UUID.randomUUID();
+        when(adminService.searchMembers("admin-token", "ali"))
+                .thenReturn(List.of(new MemberSummaryDTO(memberId, "alice")));
+
+        List<MemberSummaryDTO> result = presenter.searchMembers("ali");
+
+        assertEquals(1, result.size());
+        assertEquals("alice", result.get(0).username());
+        assertEquals(memberId, result.get(0).id());
+        verify(adminService).searchMembers("admin-token", "ali");
+    }
+
+    @Test
+    void GivenAdminSession_WhenSearchingCompanies_ThenCompanyServiceResultsReturned() {
+        adminSession();
+        when(companyService.searchCompanies("ac"))
+                .thenReturn(List.of(new CompanySummaryDTO("Acme")));
+
+        List<CompanySummaryDTO> result = presenter.searchCompanies("ac");
+
+        assertEquals(List.of(new CompanySummaryDTO("Acme")), result);
+        verify(companyService).searchCompanies("ac");
+    }
+
+    @Test
+    void GivenNoAdminSession_WhenSearchingMembers_ThenEmptyListIsReturnedWithoutCallingService() {
+        List<MemberSummaryDTO> result = presenter.searchMembers("ali");
+
+        assertTrue(result.isEmpty());
+        verifyNoInteractions(adminService);
+    }
+
     private void adminSession() {
         SessionContext.setSessionToken("admin-token");
         SessionContext.setMemberId(UUID.randomUUID());
         SessionContext.setUsername("root");
         SessionContext.setPermissions(Set.of("SYSTEM_ADMIN"));
-    }
-
-    private void installVaadinSession() {
-        Map<String, Object> attributes = new HashMap<>();
-        VaadinSession session = mock(VaadinSession.class);
-        doAnswer(invocation -> attributes.put(invocation.getArgument(0), invocation.getArgument(1)))
-                .when(session).setAttribute(anyString(), nullable(Object.class));
-        when(session.getAttribute(anyString())).thenAnswer(invocation -> attributes.get(invocation.getArgument(0)));
-        VaadinSession.setCurrent(session);
     }
 
     private static PurchaseRecordDTO purchase(UUID memberId) {
@@ -212,5 +284,45 @@ class AdminPresenterTest {
                 false,
                 "Spam"
         );
+    }
+
+    @Test
+    void GivenAdminSession_WhenLoadingSystemAnalytics_ThenServiceIsCalledAndAnalyticsReturned() {
+        SessionContext.setSessionToken("admin-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setUsername("admin");
+        SessionContext.setPermissions(Set.of("SYSTEM_ADMIN"));
+
+        SystemAnalyticsDTO analytics = sampleAnalytics();
+        when(adminService.getSystemAnalytics("admin-token")).thenReturn(analytics);
+
+        SystemAnalyticsResult result = presenter.loadSystemAnalytics();
+
+        assertTrue(result.success());
+        assertEquals(analytics, result.analytics());
+        verify(adminService).getSystemAnalytics("admin-token");
+    }
+
+    @Test
+    void GivenGuestSession_WhenLoadingSystemAnalytics_ThenAdminSessionMessageReturned() {
+        SessionContext.setSessionToken("guest-token");
+
+        SystemAnalyticsResult result = presenter.loadSystemAnalytics();
+
+        assertFalse(result.success());
+        assertEquals("Start a session with system admin permissions before using admin actions.", result.message());
+        verifyNoInteractions(adminService);
+    }
+
+    private static SystemAnalyticsDTO sampleAnalytics() {
+        AnalyticsRateDTO rate = new AnalyticsRateDTO(3, 0.6);
+        AnalyticsMetricsDTO metrics = new AnalyticsMetricsDTO(rate, rate, rate, rate, rate);
+        return new SystemAnalyticsDTO(
+                Instant.parse("2026-06-01T12:00:00Z"),
+                2,
+                "last 5 minute(s)",
+                "last 10 minute(s)",
+                metrics,
+                metrics);
     }
 }

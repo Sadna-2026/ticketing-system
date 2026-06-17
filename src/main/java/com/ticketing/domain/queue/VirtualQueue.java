@@ -1,6 +1,5 @@
 package com.ticketing.domain.queue;
 
-
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -74,9 +73,25 @@ public class VirtualQueue {
     }
 
     /**
+     * Returns the most recent non-LEFT entry for a session, or empty if none exists.
+     * Used to detect whether a session is already WAITING or ADMITTED before creating a new entry.
+     */
+    public Optional<QueueEntry> findActiveEntry(UUID sessionId) {
+        return entries.stream()
+                .filter(e -> sessionId.equals(e.getSessionId()) && e.getStatus() != QueueEntryStatus.LEFT)
+                .reduce((first, second) -> second);
+    }
+
+    /**
      * Adds a user to the queue.
+     * Idempotent: if the session already has a non-LEFT (WAITING or ADMITTED) entry, that
+     * entry is returned unchanged instead of creating a duplicate.
      */
     public QueueEntry enqueue(UUID sessionId, Instant now) {
+        Optional<QueueEntry> existing = findActiveEntry(sessionId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         QueueEntry entry = new QueueEntry(UUID.randomUUID(), sessionId, now);
         entries.add(entry);
         return entry;
@@ -115,6 +130,43 @@ public class VirtualQueue {
     }
 
     /**
+     * Removes a specific session from the queue and releases any slot it held.
+     * <ul>
+     *   <li>An {@code ADMITTED} entry is marked {@code LEFT} and frees its active slot.</li>
+     *   <li>A {@code WAITING} entry is marked {@code LEFT} (it held no active slot).</li>
+     *   <li>A session with no current entry is treated as a direct-entry user that
+     *       bypassed the queue, so its active slot is released.</li>
+     * </ul>
+     * Idempotent: an entry already {@code LEFT} is ignored, so a slot is never
+     * released twice for the same enqueued/admitted session.
+     */
+    public void leave(UUID sessionId) {
+        if (sessionId == null) {
+            return;
+        }
+        List<QueueEntry> sessionEntries = entries.stream()
+                .filter(e -> sessionId.equals(e.getSessionId()))
+                .collect(Collectors.toList());
+        QueueEntry active = sessionEntries.stream()
+                .filter(e -> e.getStatus() != QueueEntryStatus.LEFT)
+                .reduce((first, second) -> second)
+                .orElse(null);
+        if (active == null) {
+            // No active entry. If the session was never enqueued it is a direct-entry
+            // user releasing the slot it held; if it already has LEFT entries it has
+            // left before, so this is an idempotent no-op (no second slot released).
+            if (sessionEntries.isEmpty() && currentActiveUsers > 0) {
+                currentActiveUsers--;
+            }
+            return;
+        }
+        if (active.getStatus() == QueueEntryStatus.ADMITTED && currentActiveUsers > 0) {
+            currentActiveUsers--;
+        }
+        active.leave();
+    }
+
+    /**
      * Updates the queue configuration (Admin action).
      */
     public void updateConfig(QueueConfig newConfig) {
@@ -124,9 +176,14 @@ public class VirtualQueue {
 
     /**
      * Flushes/clears the queue (Admin emergency action).
+     * Marks all WAITING and ADMITTED entries LEFT and releases the active-user slots
+     * held by any ADMITTED entries so the counter resets correctly.
      */
     public void flush() {
-        entries.stream().filter(QueueEntry::isWaiting).forEach(QueueEntry::leave);
+        entries.stream()
+                .filter(e -> e.getStatus() == QueueEntryStatus.ADMITTED || e.getStatus() == QueueEntryStatus.WAITING)
+                .forEach(QueueEntry::leave);
+        currentActiveUsers = 0;
     }
 
     public void deactivate() { this.active = false; }

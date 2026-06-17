@@ -2,6 +2,7 @@ package com.ticketing.application.auth;
 
 import java.time.Instant;
 import java.util.UUID;
+
 public class SessionToken {
 
     private final UUID tokenId;

@@ -3,6 +3,18 @@ package com.ticketing.domain.event;
 import java.math.BigDecimal;
 import java.util.*;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
 /**
  * Entity within the Event aggregate.
  *
@@ -13,22 +25,58 @@ import java.util.*;
  * - GA zones: availableCount cannot exceed maxCapacity.
  * - Assigned zones: seats are individually managed.
  * - Price must be non-negative.
+ *
+ * <p>JPA mapping: mapped as an {@code @Entity} (it owns a seat collection). {@code seats}
+ * is a {@code @OneToMany(cascade=ALL, orphanRemoval=true)} to {@link Seat} and is loaded
+ * {@code LAZY} — an assigned zone can hold thousands of seats, so callers traverse them
+ * only inside a transaction. {@code final} was removed from {@code id}/{@code type}/{@code seats}
+ * so JPA can set them; the public API and static factories are unchanged.
  */
+@Entity
+@Table(name = "inventory_zones")
 public class InventoryZone {
 
-    private final UUID id;
+    @Id
+    @Column(name = "id")
+    private UUID id;
+    @Column(name = "name")
     private String name;
-    private final ZoneType type;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type")
+    private ZoneType type;
+    @Column(name = "price_per_ticket")
     private BigDecimal pricePerTicket;
 
     // GA fields
+    @Column(name = "max_capacity")
     private int maxCapacity;
+    @Column(name = "available_count")
     private int availableCount;
+    @Column(name = "locked_count")
     private int lockedCount;
+    @Column(name = "sold_count")
     private int soldCount;
 
     // Assigned seating fields
-    private final List<Seat> seats;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "zone_id")
+    private List<Seat> seats;
+
+    // V3-11 (#269): optimistic-lock guard. GA counts (available/locked/sold) live on
+    // THIS zone entity, not on the Event ROOT, so a concurrent GA sell would not bump
+    // the Event's @Version. This per-zone version is bumped on flush whenever the zone's
+    // own state changes, so two concurrent decrements of the last GA ticket conflict —
+    // the second (stale) merge is rejected with an OptimisticLockException → no
+    // double-sell. The in-memory path never reads this field (its CAS uses the Event
+    // aggregate version), so memory-mode behaviour is unchanged.
+    @Version
+    @Column(name = "version")
+    private int version;
+
+    // Required by JPA; do not use directly.
+    protected InventoryZone() {
+        this.seats = new ArrayList<>();
+    }
 
     /**
      * Creates a General Admission zone.
@@ -75,6 +123,29 @@ public class InventoryZone {
     public List<Seat> getSeats() { return Collections.unmodifiableList(seats); }
     public boolean isGA() { return type == ZoneType.GENERAL_ADMISSION; }
     public boolean isAssigned() { return type == ZoneType.ASSIGNED_SEATING; }
+
+    /** Repository-internal (V3-11 #269): the JPA optimistic-lock version of this zone.
+     *  Not meant for domain/service use. */
+    public int getVersion() { return version; }
+
+    /** Repository-internal (V3-11 #269): after a successful merge+flush, the JPA repo
+     *  copies the post-flush versions (this zone and its seats, matched by id) from the
+     *  managed copy back into this (still detached) instance, so a second save of the
+     *  SAME aggregate in the SAME transaction is not mistaken for a concurrent edit. A
+     *  genuinely concurrent writer holds a different snapshot that never receives this
+     *  sync, so it still conflicts. */
+    public void syncVersionFrom(InventoryZone managed) {
+        if (managed == null) {
+            return;
+        }
+        this.version = managed.version;
+        for (Seat seat : this.seats) {
+            managed.seats.stream()
+                    .filter(m -> m.getId().equals(seat.getId()))
+                    .findFirst()
+                    .ifPresent(seat::syncVersionFrom);
+        }
+    }
 
     public void setName(String name) { this.name = name; }
 

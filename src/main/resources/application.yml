@@ -1,10 +1,77 @@
+# Database connection is fully externalized (V3-12): every setting is read from an
+# environment variable, with H2 in-memory defaults for local dev. Switching to
+# PostgreSQL is config-only (the postgresql driver is already on the classpath) —
+# see README "Database configuration". Do NOT hard-code real credentials here.
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:ticketing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    hikari:
+      connection-timeout: 5000
+      max-lifetime: 600000
+      keepalive-time: 30000
+      validation-timeout: 3000
+  jpa:
+    database-platform: ${DB_DIALECT:org.hibernate.dialect.H2Dialect}
+    hibernate:
+      ddl-auto: ${DB_DDL_AUTO:none}
+    open-in-view: false
+    show-sql: ${DB_SHOW_SQL:false}
+  h2:
+    console:
+      enabled: ${H2_CONSOLE_ENABLED:true}
+      path: /h2-console
+
 security:
   jwt:
     secret: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
     expiration-minutes: 120
 
 ticketing:
+  # Repository backend selection (V3-7): "memory" uses the in-memory repositories
+  # (default, unchanged behavior); "jpa" activates the DB-backed JPA repositories.
+  # Exactly one implementation per repository interface is active per mode.
+  persistence: ${TICKETING_PERSISTENCE:memory}
+  # Virtual-queue startup parameters (V3-13): how many users may hold reservations
+  # concurrently before the queue kicks in (threshold), and how many waiting users are
+  # admitted per batch (flow-rate). Used as the default when a queue is created without
+  # explicit values; override per environment via the env vars below.
+  queue:
+    threshold: ${TICKETING_QUEUE_THRESHOLD:100}
+    flow-rate: ${TICKETING_QUEUE_FLOW_RATE:10}
   startup:
     initialize-platform: true
+  bootstrap:
+    # dev-seed | initial-state-file | none — explicit choice; when unset, legacy rules apply:
+    # seed.enabled=true => dev-seed; else initial-state.file set => initial-state-file; else none.
+    dataset: ${TICKETING_BOOTSTRAP_DATASET:}
   seed:
     enabled: true
+  # Initial-state file (V3-15 / #415): used when bootstrap.dataset=initial-state-file, or when
+  # seed.enabled=false and this path is set. Supports filesystem paths and classpath: resources.
+  initial-state:
+    file: ${TICKETING_INITIAL_STATE_FILE:}
+  # External systems integration (V3-16): the WSEP payment + ticket endpoint is a single HTTP
+  # POST endpoint keyed by action_type ("handshake" returns "OK"). The base URL is config-driven;
+  # when set, ExternalSystemsHandshakeRunner verifies connectivity at startup (integrity rule) and
+  # halts on failure. Unset (default) => no handshake; local dev, the stub gateways and tests are
+  # unaffected. See README "External systems".
+  external:
+    base-url: ${TICKETING_EXTERNAL_BASE_URL:}
+    connect-timeout-ms: ${TICKETING_EXTERNAL_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${TICKETING_EXTERNAL_READ_TIMEOUT_MS:5000}
+    # Payment gateway (V3-17): when base-url is set, HttpPaymentGateway replaces StubPaymentGateway
+    # and sends these card + currency fields with the WSEP "pay" action. The purchase flow does not
+    # capture cardholder input (the IPaymentGateway contract is amount + order metadata only), so
+    # they are config-driven with sandbox-friendly defaults. Real cardholder capture is a future
+    # ticket. See README "External systems".
+    payment:
+      currency: ${TICKETING_EXTERNAL_PAYMENT_CURRENCY:USD}
+      card-number: ${TICKETING_EXTERNAL_PAYMENT_CARD_NUMBER:2222333344445555}
+      card-month: ${TICKETING_EXTERNAL_PAYMENT_CARD_MONTH:12}
+      card-year: ${TICKETING_EXTERNAL_PAYMENT_CARD_YEAR:2030}
+      card-holder: ${TICKETING_EXTERNAL_PAYMENT_CARD_HOLDER:Ticketing System}
+      card-cvv: ${TICKETING_EXTERNAL_PAYMENT_CARD_CVV:123}
+      card-id: ${TICKETING_EXTERNAL_PAYMENT_CARD_ID:000000000}

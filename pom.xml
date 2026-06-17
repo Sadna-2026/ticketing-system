@@ -59,6 +59,25 @@
       <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
 
+    <!-- Persistence / ORM -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- PostgreSQL driver on the classpath so H2<->Postgres is a config-only switch (V3-12) -->
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
     <!-- Vaadin UI -->
     <dependency>
       <groupId>com.vaadin</groupId>
@@ -104,7 +123,6 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-junit-jupiter</artifactId>
-      <version>${mockito.version}</version>
       <scope>test</scope>
     </dependency>
 
@@ -117,12 +135,49 @@
 
   <build>
     <plugins>
+    <plugin>
+    <groupId>net.revelc.code</groupId>
+    <artifactId>impsort-maven-plugin</artifactId>
+    <version>1.12.0</version>
+    <configuration>
+        <compliance>21</compliance>
+        <!-- Automatically cleans up imports you aren't using -->
+        <removeUnused>true</removeUnused>
+        <!-- Specify grouping preferences (e.g., standard libraries first) -->
+        <groups>java.,javax.,org.,com.</groups>
+        <staticGroups>*</staticGroups>
+    </configuration>
+    <executions>
+        <execution>
+            <id>sort-imports</id>
+            <goals>
+                <goal>sort</goal> <!-- Runs automatically during compilation -->
+            </goals>
+        </execution>
+    </executions>
+</plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.2.5</version>
         <configuration>
           <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+          <!-- V3-25: isolated test configuration. Activate the `test` profile
+               (src/test/resources/application-test.yml) for every test run, and pin the datasource +
+               external endpoint as system properties. System properties outrank OS environment
+               variables (DB_URL / TICKETING_EXTERNAL_BASE_URL), so tests never touch a real database
+               or the real WSEP external systems even if those vars are exported. CI runs `mvn verify`,
+               so it inherits this automatically. The base-url is a single space, which trims to
+               empty everywhere (handshake skipped, stub gateways active). -->
+          <systemPropertyVariables>
+            <spring.profiles.active>test</spring.profiles.active>
+            <spring.datasource.url>jdbc:h2:mem:ticketing-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</spring.datasource.url>
+            <spring.datasource.driver-class-name>org.h2.Driver</spring.datasource.driver-class-name>
+            <spring.datasource.username>sa</spring.datasource.username>
+            <spring.jpa.database-platform>org.hibernate.dialect.H2Dialect</spring.jpa.database-platform>
+            <ticketing.external.base-url> </ticketing.external.base-url>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
 
@@ -142,7 +197,19 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
-        <version>0.8.12</version>
+        <version>0.8.14</version>
+
+        <configuration>
+          <!-- Scope coverage strictly to domain and application layers -->
+          <excludes>
+            <exclude>com/ticketing/presentation/**</exclude>
+            <exclude>com/ticketing/infrastructure/**</exclude>
+            <exclude>com/ticketing/TicketingApplication.class</exclude>
+            <exclude>com/ticketing/SecurityConfig.class</exclude>
+            <exclude>com/ticketing/TicketingConfiguration.class</exclude>
+          </excludes>
+        </configuration>
+
         <executions>
           <execution>
             <id>prepare-agent</id>
@@ -150,21 +217,46 @@
               <goal>prepare-agent</goal>
             </goals>
           </execution>
+
           <execution>
             <id>report</id>
             <phase>test</phase>
             <goals>
               <goal>report</goal>
             </goals>
+          </execution>
+
+          <execution>
+            <id>check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
             <configuration>
-              <!-- Scope coverage strictly to domain and application layers -->
-              <excludes>
-                <exclude>com/ticketing/presentation/**</exclude>
-                <exclude>com/ticketing/infrastructure/**</exclude>
-                <exclude>com/ticketing/TicketingApplication.class</exclude>
-                <exclude>com/ticketing/SecurityConfig.class</exclude>
-                <exclude>com/ticketing/TicketingConfiguration.class</exclude>
-              </excludes>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.75</minimum>
+                    </limit>
+
+                    <limit>
+                      <counter>INSTRUCTION</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.75</minimum>
+                    </limit>
+
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.75</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
             </configuration>
           </execution>
         </executions>

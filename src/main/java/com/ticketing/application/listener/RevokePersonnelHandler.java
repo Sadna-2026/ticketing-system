@@ -66,6 +66,9 @@ public class RevokePersonnelHandler implements IEventListener {
         if (appointerAppointment == null) {
             throw new IllegalArgumentException("Revoker does not have a staff appointment in this company");
         }
+        if (appointerAppointment.isRevoked()) {
+            throw new IllegalArgumentException("Revoker's own appointment has been revoked and they no longer have authority in this company.");
+        }
 
         appointerAppointment.removeAppointedStaffMember(targetMemberId);
         targetAppointment.revoke();

@@ -21,7 +21,6 @@ import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.SuspensionDTO;
 import com.ticketing.application.services.AdminService;
 import com.ticketing.domain.admin.IAdminRepository;
-import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.IOrderRepository;

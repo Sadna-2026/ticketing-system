@@ -10,17 +10,52 @@ import java.util.UUID;
 
 import com.ticketing.application.dto.OrderItemDto;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+@Entity
+@Table(name = "active_orders")
 public class ActiveOrder{
 
-    private final UUID id;
+    @Id
+    @Column(name = "id")
+    private UUID id;
+    @Column(name = "session_id")
     private UUID sessionId;
+    @Column(name = "member_id")
     private UUID memberId;
-    private final UUID eventId;
-    private final Instant createdAt;
+    @Column(name = "event_id")
+    private UUID eventId;
+    @Column(name = "created_at")
+    private Instant createdAt;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
     private OrderStatus status;
-    private final List<OrderItem> items;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origin")
+    private OrderOrigin origin;
+    @Column(name = "purchase_window_deadline")
+    private Instant purchaseWindowDeadline;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "order_id")
+    private List<OrderItem> items;
+    @Version
+    @Column(name = "version")
     private int version;
-     
+
+    // Required by JPA; do not use directly.
+    protected ActiveOrder() {
+        this.items = new ArrayList<>();
+    }
+
     /**
      * Creates an ActiveOrder without a memberId (guest order).
      *
@@ -53,8 +88,17 @@ public class ActiveOrder{
         this.eventId = eventId;
         this.createdAt = createdAt;
         this.status = OrderStatus.ACTIVE;
+        this.origin = OrderOrigin.REGULAR;
         this.items = new ArrayList<>();
         this.version = 0;
+    }
+
+    /** Creates a lottery-win order with a purchase window deadline. */
+    public ActiveOrder(UUID id, UUID sessionId, UUID memberId, UUID eventId, Instant createdAt,
+                       Instant purchaseWindowDeadline) {
+        this(id, sessionId, memberId, eventId, createdAt);
+        this.origin = OrderOrigin.LOTTERY_WIN;
+        this.purchaseWindowDeadline = purchaseWindowDeadline;
     }
 
     public void updateSessionId(UUID newSessionId) {
@@ -74,6 +118,12 @@ public class ActiveOrder{
     public OrderStatus getStatus() { return status; }
     public UUID getEventId() { return eventId; }
     public UUID getMemberId() { return memberId; }
+    public OrderOrigin getOrigin() { return origin; }
+    public Instant getPurchaseWindowDeadline() { return purchaseWindowDeadline; }
+    public boolean isLotteryWin() { return origin == OrderOrigin.LOTTERY_WIN; }
+    public boolean isPurchaseWindowExpired(Instant now) {
+        return isLotteryWin() && purchaseWindowDeadline != null && now.isAfter(purchaseWindowDeadline);
+    }
 
     public boolean isExpiredAt(Instant now, Duration lockDuration) {
         return now.isAfter(createdAt.plus(lockDuration));
@@ -137,6 +187,33 @@ public class ActiveOrder{
         }
         if (additionalCount > 0) {
             simulated.items.add(OrderItem.forGA(UUID.randomUUID(), UUID.randomUUID(), additionalCount, BigDecimal.ZERO));
+        }
+        return simulated;
+    }
+
+    /** Snapshot with one line item removed — used to validate policies after a removal. */
+    public ActiveOrder simulateWithoutItem(UUID itemId) {
+        ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        for (OrderItem item : items) {
+            if (!item.getId().equals(itemId)) {
+                simulated.items.add(item);
+            }
+        }
+        return simulated;
+    }
+
+    /** Snapshot with a GA zone quantity replaced — used before applying a quantity update. */
+    public ActiveOrder simulateGAQuantity(UUID zoneId, int newQuantity) {
+        ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        for (OrderItem item : items) {
+            if (!item.isAssignedSeat() && item.getZoneId().equals(zoneId)) {
+                if (newQuantity > 0) {
+                    simulated.items.add(OrderItem.forGA(
+                            item.getId(), zoneId, newQuantity, item.getPricePerTicket()));
+                }
+            } else {
+                simulated.items.add(item);
+            }
         }
         return simulated;
     }

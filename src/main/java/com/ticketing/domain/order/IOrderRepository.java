@@ -17,6 +17,8 @@ public interface IOrderRepository {
 
     List<ActiveOrder> findActiveByEventId(UUID eventId);
 
+    Optional<ActiveOrder> findActiveLotteryWinByMemberIdAndEventId(UUID memberId, UUID eventId);
+
     void save(CompletedPurchase purchase);
 
     Optional<CompletedPurchase> findCompletedById(UUID purchaseId);

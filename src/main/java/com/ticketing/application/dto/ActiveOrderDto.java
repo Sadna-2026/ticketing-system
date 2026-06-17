@@ -19,16 +19,31 @@ public final class ActiveOrderDto {
     private final List<OrderItemDto> items;
     private final BigDecimal totalPrice;
     private final String eventName;
+    private final boolean lotteryWin;
+    private final Instant purchaseWindowDeadline;
 
     public ActiveOrderDto(UUID id, UUID sessionId, UUID memberId, UUID eventId,
                           Instant createdAt, String status, List<OrderItemDto> items,
                           BigDecimal totalPrice) {
-        this(id, sessionId, memberId, eventId, createdAt, status, items, totalPrice, null);
+        this(id, sessionId, memberId, eventId, createdAt, status, items, totalPrice, null, false, null);
     }
 
     public ActiveOrderDto(UUID id, UUID sessionId, UUID memberId, UUID eventId,
                           Instant createdAt, String status, List<OrderItemDto> items,
                           BigDecimal totalPrice, String eventName) {
+        this(id, sessionId, memberId, eventId, createdAt, status, items, totalPrice, eventName, false, null);
+    }
+
+    public ActiveOrderDto(UUID id, UUID sessionId, UUID memberId, UUID eventId,
+                          Instant createdAt, String status, List<OrderItemDto> items,
+                          BigDecimal totalPrice, String eventName, boolean lotteryWin) {
+        this(id, sessionId, memberId, eventId, createdAt, status, items, totalPrice, eventName, lotteryWin, null);
+    }
+
+    public ActiveOrderDto(UUID id, UUID sessionId, UUID memberId, UUID eventId,
+                          Instant createdAt, String status, List<OrderItemDto> items,
+                          BigDecimal totalPrice, String eventName, boolean lotteryWin,
+                          Instant purchaseWindowDeadline) {
         this.id = id;
         this.sessionId = sessionId;
         this.memberId = memberId;
@@ -38,6 +53,8 @@ public final class ActiveOrderDto {
         this.items = items;
         this.totalPrice = totalPrice;
         this.eventName = eventName;
+        this.lotteryWin = lotteryWin;
+        this.purchaseWindowDeadline = purchaseWindowDeadline;
     }
 
     public UUID getId() { return id; }
@@ -49,5 +66,7 @@ public final class ActiveOrderDto {
     public List<OrderItemDto> getItems() { return items; }
     public BigDecimal getTotalPrice() { return totalPrice; }
     public String getEventName() { return eventName; }
+    public boolean isLotteryWin() { return lotteryWin; }
+    public Instant getPurchaseWindowDeadline() { return purchaseWindowDeadline; }
 }
 

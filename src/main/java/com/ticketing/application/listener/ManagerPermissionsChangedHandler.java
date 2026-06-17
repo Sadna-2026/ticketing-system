@@ -42,6 +42,9 @@ public class ManagerPermissionsChangedHandler implements IEventListener {
         if (callerAppt == null) {
             throw new SecurityException("Caller is not a staff member of company: " + changeEvent.getCompanyName());
         }
+        if (callerAppt.isRevoked()) {
+            throw new SecurityException("Caller's appointment has been revoked and they no longer have authority in this company.");
+        }
 
         Member targetMember = memberRepository.findById(changeEvent.getTargetMemberId())
                 .orElseThrow(() -> new IllegalArgumentException("Target member not found: " + changeEvent.getTargetMemberId()));
@@ -49,6 +52,10 @@ public class ManagerPermissionsChangedHandler implements IEventListener {
         StaffAppointment targetAppt = targetMember.getStaffAppointment(changeEvent.getCompanyName());
         if (targetAppt == null) {
             throw new IllegalArgumentException("Target is not a staff member of company: " + changeEvent.getCompanyName());
+        }
+
+        if (targetAppt.isRevoked()) {
+            throw new IllegalArgumentException("Cannot modify permissions for a revoked manager appointment.");
         }
 
         if (!targetAppt.isManager()) {

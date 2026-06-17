@@ -1,26 +1,24 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
@@ -36,7 +34,7 @@ import com.ticketing.domain.event.LotteryWindow;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.member.Member;
-import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
@@ -115,7 +113,7 @@ public class LotteryRegistrationTest {
     @Test
     @DisplayName("SuccessfulLotteryRegistration — member registers for lottery and entry is persisted")
     void GivenLotteryEventWithOpenWindow_WhenRegisterForLottery_ThenEntryCreated() {
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId, zoneId, 2);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
 
         LotteryRegistrationResponse response = eventService.registerForLottery(VALID_TOKEN, request);
 
@@ -143,7 +141,7 @@ public class LotteryRegistrationTest {
         regularEvent.publish();
         eventRepository.save(regularEvent);
 
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(regularEventId, regularZoneId, 1);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(regularEventId);
 
         LotteryRegistrationResponse response = eventService.registerForLottery(VALID_TOKEN, request);
 
@@ -157,7 +155,7 @@ public class LotteryRegistrationTest {
     @Test
     @DisplayName("DuplicateLotteryRegistration — member already registered, second attempt denied")
     void GivenMemberAlreadyRegistered_WhenRegisterForLottery_ThenDenied() {
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId, zoneId, 2);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
 
         // first registration succeeds
         LotteryRegistrationResponse first = eventService.registerForLottery(VALID_TOKEN, request);
@@ -192,13 +190,28 @@ public class LotteryRegistrationTest {
         closedEvent.publish();
         eventRepository.save(closedEvent);
 
-        LotteryRegistrationRequest request = new LotteryRegistrationRequest(closedEventId, closedZoneId, 1);
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(closedEventId);
 
         LotteryRegistrationResponse response = eventService.registerForLottery(VALID_TOKEN, request);
 
         assertFalse(response.success());
         assertTrue(response.message().contains("closed"));
         assertTrue(lotteryRepository.findByEventId(closedEventId).isEmpty());
+    }
+
+    @Test
+    @DisplayName("SuspendedLotteryRegistration — suspended member cannot register for lottery")
+    void GivenSuspendedMember_WhenRegisterForLottery_ThenRejectedAndEntryNotPersisted() {
+        Member suspended = memberRepository.findById(memberId).orElseThrow();
+        suspended.addSuspension(new Suspension(UUID.randomUUID(), NOW.minus(1, ChronoUnit.HOURS),
+                Duration.ofDays(7), "blocked"));
+        memberRepository.save(suspended);
+
+        LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
+
+        assertThrows(IllegalStateException.class,
+                () -> eventService.registerForLottery(VALID_TOKEN, request));
+        assertTrue(lotteryRepository.findByEventAndMember(eventId, memberId).isEmpty());
     }
 
     // --- helpers ---

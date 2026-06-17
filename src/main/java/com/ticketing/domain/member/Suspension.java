@@ -4,18 +4,32 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+
 /**
  * Value object representing a user suspension imposed by a system admin.
  * A suspension can be timed (has a duration) or permanent (duration is null).
  */
+@Embeddable
 public class Suspension {
 
-    private final UUID suspensionId;
-    private final UUID imposedByAdminId;
-    private final Instant startTime;
-    private final Duration duration;      // null = permanent
-    private final String reason;
+    @Column(name = "suspension_id")
+    private UUID suspensionId;
+    @Column(name = "imposed_by_admin_id")
+    private UUID imposedByAdminId;
+    @Column(name = "start_time")
+    private Instant startTime;
+    @Column(name = "duration")
+    private Duration duration;      // null = permanent
+    @Column(name = "reason")
+    private String reason;
+    @Column(name = "cancelled")
     private boolean cancelled;
+
+    // Required by JPA; do not use directly.
+    protected Suspension() {
+    }
 
     public Suspension(UUID imposedByAdminId, Instant startTime, Duration duration, String reason) {
         if (imposedByAdminId == null) {

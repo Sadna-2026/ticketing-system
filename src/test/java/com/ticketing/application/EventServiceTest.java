@@ -1,6 +1,12 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -16,20 +22,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.CancelEventResponse;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
@@ -37,6 +39,7 @@ import com.ticketing.application.services.EventService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.CompanyStatus;
 import com.ticketing.domain.company.ICompanyRepository;
+import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
@@ -44,17 +47,24 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.LotteryWindow;
+import com.ticketing.domain.event.NoDiscountPolicy;
+import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.VenueMap;
+import com.ticketing.domain.lottery.LotteryEntry;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
+import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
+import com.ticketing.infrastructure.InMemoryLotteryRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.infrastructure.InMemoryOrderRepository;
 
 @DisplayName("EventService")
 class EventServiceTest {
@@ -120,6 +130,17 @@ class EventServiceTest {
         }
 
         @Test
+        public void GivenSuspendedOwner_WhenCreateEvent_ThenRejectedBeforeEventIsSaved() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(member);
+
+            assertThrows(IllegalStateException.class,
+                    () -> eventService.createEvent(VALID_TOKEN, validRequest()));
+            assertTrue(eventRepository.findAll().isEmpty());
+        }
+
+        @Test
         public void GivenOwnerAndDraftEvent_WhenPublishEvent_ThenEventBecomesPublished() {
             appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
             UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
@@ -128,6 +149,18 @@ class EventServiceTest {
 
             Event saved = eventRepository.findById(eventId).orElseThrow();
             assertEquals(EventStatus.PUBLISHED, saved.getStatus());
+        }
+
+        @Test
+        public void GivenSuspendedOwner_WhenPublishEvent_ThenRejectedAndEventStaysDraft() {
+            appointAs(StaffAppointment.StaffRole.OWNER, Set.of());
+            UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
+            member.addSuspension(new Suspension(UUID.randomUUID(), Instant.now(), Duration.ofDays(7), "blocked"));
+            memberRepository.save(member);
+
+            assertThrows(IllegalStateException.class,
+                    () -> eventService.publishEvent(VALID_TOKEN, eventId));
+            assertEquals(EventStatus.DRAFT, eventRepository.findById(eventId).orElseThrow().getStatus());
         }
 
         @Test
@@ -178,9 +211,8 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerWithBothPermissions_WhenCreateEvent_ThenSucceed() {
-            appointAs(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
+        public void GivenManagerWithEventLifecycle_WhenCreateEvent_ThenSucceed() {
+            appointAs(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.EVENT_LIFECYCLE));
 
             UUID eventId = eventService.createEvent(VALID_TOKEN, validRequest());
 
@@ -189,18 +221,9 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerMissingMapDefinition_WhenCreateEvent_ThenThrowSecurityException() {
+        public void GivenManagerWithoutEventLifecycle_WhenCreateEvent_ThenThrowSecurityException() {
             appointAs(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.INVENTORY_MGMT));
-
-            assertThrows(SecurityException.class,
-                    () -> eventService.createEvent(VALID_TOKEN, validRequest()));
-        }
-
-        @Test
-        public void GivenManagerMissingInventoryMgmt_WhenCreateEvent_ThenThrowSecurityException() {
-            appointAs(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.MAP_DEFINITION));
+                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
 
             assertThrows(SecurityException.class,
                     () -> eventService.createEvent(VALID_TOKEN, validRequest()));
@@ -499,9 +522,8 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerWithBothPermissions_WhenEditEvent_ThenSucceed() {
-            appoint(StaffAppointment.StaffRole.MANAGER,
-                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
+        public void GivenManagerWithEventLifecycle_WhenEditEvent_ThenSucceed() {
+            appoint(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.EVENT_LIFECYCLE));
             EditEventRequest req = new EditEventRequest(eventId, "Renamed", null, null, null);
 
             EventDetailsDTO dto = eventService.editEvent(TOKEN, req);
@@ -510,17 +532,9 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenManagerMissingMapDefinition_WhenEditEvent_ThenThrowSecurityException() {
-            appoint(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.INVENTORY_MGMT));
-            EditEventRequest req = new EditEventRequest(eventId, "X", null, null, null);
-
-            assertThrows(SecurityException.class,
-                    () -> eventService.editEvent(TOKEN, req));
-        }
-
-        @Test
-        public void GivenManagerMissingInventoryMgmt_WhenEditEvent_ThenThrowSecurityException() {
-            appoint(StaffAppointment.StaffRole.MANAGER, Set.of(ManagerPermission.MAP_DEFINITION));
+        public void GivenManagerWithoutEventLifecycle_WhenEditEvent_ThenThrowSecurityException() {
+            appoint(StaffAppointment.StaffRole.MANAGER,
+                    Set.of(ManagerPermission.MAP_DEFINITION, ManagerPermission.INVENTORY_MGMT));
             EditEventRequest req = new EditEventRequest(eventId, "X", null, null, null);
 
             assertThrows(SecurityException.class,
@@ -1064,12 +1078,16 @@ class EventServiceTest {
         }
 
         @Test
-        public void GivenAlreadyCancelledEvent_WhenCancelEvent_ThenThrowIllegalStateException() {
+        public void GivenAlreadyCancelledEvent_WhenCancelEvent_ThenIdempotentAndStaysCancelled() {
             addStaff(StaffAppointment.StaffRole.OWNER, Set.of());
             eventService.cancelEvent(TOKEN, eventId);
 
-            assertThrows(IllegalStateException.class,
-                    () -> eventService.cancelEvent(TOKEN, eventId));
+            // Repeating the request must not fail or re-process; the event stays cancelled.
+            CancelEventResponse second = eventService.cancelEvent(TOKEN, eventId);
+
+            assertTrue(second.success());
+            assertEquals(EventStatus.CANCELLED,
+                    eventRepo.findById(eventId).orElseThrow().getStatus());
         }
 
         @Test
@@ -1459,6 +1477,14 @@ class EventServiceTest {
                 companyRepo.save(a);
 
                 assertTrue(service.searchEvents(SearchEventsRequest.empty()).isEmpty());
+
+                a = companyRepo.findByName(COMPANY_A).orElseThrow();
+                a.reopen();
+                companyRepo.save(a);
+
+                List<EventSummaryDTO> hits = service.searchEvents(SearchEventsRequest.empty());
+                assertEquals(1, hits.size());
+                assertEquals("Hidden", hits.get(0).name());
             }
 
             @Test
@@ -1597,6 +1623,217 @@ class EventServiceTest {
                 e.addZone(InventoryZone.createGA(UUID.randomUUID(), "Floor", price, 50));
 
                 return e;
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("EventService.listCompanyEvents")
+    class ListCompanyEvents {
+
+        private InMemoryEventRepository eventRepository;
+        private EventService eventService;
+        private ISessionTokenService sessionTokenService;
+
+        @BeforeEach
+        void setUp() {
+            eventRepository = new InMemoryEventRepository();
+            sessionTokenService = mock(ISessionTokenService.class);
+            when(sessionTokenService.isValid(ArgumentMatchers.anyString())).thenReturn(true);
+            when(sessionTokenService.extractMemberId(ArgumentMatchers.anyString())).thenReturn(UUID.randomUUID());
+            eventService = new EventService(eventRepository,
+                    new InMemoryCompanyRepository(),
+                    new InMemoryMemberRepository(),
+                    new InMemoryOrderRepository(),
+                    sessionTokenService);
+        }
+
+        @Test
+        void GivenCompanyWithEvents_WhenFindingCompanyEvents_ThenOnlyThatCompanysEventsReturnedSortedByName() {
+            eventRepository.save(draftEvent("Acme", "Spring Show"));
+            eventRepository.save(draftEvent("Acme", "Autumn Show"));
+            eventRepository.save(draftEvent("Other", "Beta Show"));
+
+            List<EventSummaryDTO> results = eventService.listCompanyEvents("token", "Acme");
+
+            assertEquals(List.of("Autumn Show", "Spring Show"), results.stream().map(EventSummaryDTO::name).toList());
+        }
+
+        @Test
+        void GivenDraftAndCancelledEvents_WhenFindingCompanyEvents_ThenNonBrowsableStatusesAreIncluded() {
+            eventRepository.save(draftEvent("Acme", "Draft Show"));
+            Event cancelled = draftEvent("Acme", "Cancelled Show");
+            cancelled.cancel();
+            eventRepository.save(cancelled);
+
+            List<EventSummaryDTO> results = eventService.listCompanyEvents("token", "Acme");
+
+            assertEquals(2, results.size());
+            assertTrue(results.stream().anyMatch(e -> e.status() == EventStatus.DRAFT));
+            assertTrue(results.stream().anyMatch(e -> e.status() == EventStatus.CANCELLED));
+        }
+
+        @Test
+        void GivenBlankCompanyName_WhenFindingCompanyEvents_ThenEmptyListReturned() {
+            eventRepository.save(draftEvent("Acme", "Spring Show"));
+
+            assertTrue(eventService.listCompanyEvents("token", "  ").isEmpty());
+            assertTrue(eventService.listCompanyEvents("token", null).isEmpty());
+        }
+
+        private Event draftEvent(String companyName, String name) {
+            Instant start = Instant.now().plus(30, ChronoUnit.DAYS);
+            return new Event(
+                    UUID.randomUUID(),
+                    companyName,
+                    name,
+                    "desc",
+                    EventCategory.CONCERT,
+                    new EventSchedule(start, start.plus(2, ChronoUnit.HOURS), start.minus(1, ChronoUnit.HOURS)),
+                    new LockTimerDuration(Duration.ofMinutes(15))
+            );
+        }
+    }
+
+    @Nested
+    @DisplayName("EventService.drawLottery")
+    class DrawLottery {
+
+        private static final String COMPANY_NAME = "Lottery Corp";
+        private static final Instant CLOCK = Instant.parse("2026-07-01T12:00:00Z");
+
+        private InMemoryLotteryRepository lotteryRepository;
+        private InMemoryEventRepository eventRepository;
+        private InMemoryOrderRepository orderRepository;
+        private InMemoryCompanyRepository companyRepository;
+        private InMemoryMemberRepository memberRepository;
+        private ISystemClock systemClock;
+        private ISessionTokenService sessionTokenService;
+        private EventService eventService;
+
+        private UUID organizerId;
+        private UUID eventId;
+        private UUID zoneId;
+
+        @BeforeEach
+        void setUp() {
+            lotteryRepository = new InMemoryLotteryRepository();
+            eventRepository = new InMemoryEventRepository();
+            orderRepository = new InMemoryOrderRepository();
+            companyRepository = new InMemoryCompanyRepository();
+            memberRepository = new InMemoryMemberRepository();
+            systemClock = () -> CLOCK;
+
+            organizerId = UUID.randomUUID();
+            sessionTokenService = mock(ISessionTokenService.class);
+            when(sessionTokenService.isValid(ArgumentMatchers.anyString())).thenReturn(true);
+            when(sessionTokenService.extractMemberId(ArgumentMatchers.anyString())).thenReturn(organizerId);
+
+            // Company + owner member required for drawLottery authorization
+            companyRepository.save(new Company(COMPANY_NAME, "desc", organizerId));
+            Member organizer = new Member(organizerId, "organizer", "org@test.com", "pw");
+            organizer.addStaffAppointment(COMPANY_NAME,
+                    new StaffAppointment(COMPANY_NAME, organizerId, StaffAppointment.StaffRole.OWNER,
+                            java.util.Set.of()));
+            memberRepository.save(organizer);
+
+            eventId = UUID.randomUUID();
+            zoneId = UUID.randomUUID();
+
+            // Registration window closed (close time before CLOCK) so draw is allowed
+            Event event = new Event(
+                    eventId, COMPANY_NAME, "Big Lottery Show", "desc",
+                    EventCategory.CONCERT,
+                    new EventSchedule(CLOCK.plusSeconds(100000), CLOCK.plusSeconds(110000), CLOCK.plusSeconds(90000)),
+                    new LockTimerDuration(Duration.ofMinutes(15)),
+                    new AlwaysAllowPolicy(), new NoDiscountPolicy(),
+                    SaleMethod.LOTTERY,
+                    new LotteryWindow(CLOCK.minusSeconds(20000), CLOCK.minusSeconds(10000)));
+
+            event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 500));
+            event.setVenueMap(new VenueMap(Map.of("Section A", zoneId)));
+            event.publish();
+            eventRepository.save(event);
+
+            eventService = new EventService(eventRepository, companyRepository, memberRepository,
+                    orderRepository, sessionTokenService, lotteryRepository, systemClock);
+        }
+
+        @Test
+        @DisplayName("Winners count = min(registrants, total event capacity)")
+        void GivenRegistrantsAndCapacity_WhenDraw_ThenWinnerCountIsMinOfBoth() {
+            // Capacity caps winners: 5 registrants, capacity 3 -> 3 winners.
+            UUID cappedEvent = createClosedLotteryEvent(3);
+            registerMembers(cappedEvent, 5);
+            assertEquals(3, eventService.drawLotteryAutomatically(cappedEvent).size());
+
+            // Registrants cap winners: 3 registrants, capacity 5 -> 3 winners.
+            UUID roomyEvent = createClosedLotteryEvent(5);
+            registerMembers(roomyEvent, 3);
+            assertEquals(3, eventService.drawLotteryAutomatically(roomyEvent).size());
+        }
+
+        @Test
+        @DisplayName("No duplicate winners")
+        void GivenRegistrants_WhenDraw_ThenNoDuplicateWinners() {
+            registerMembers(eventId, 10);
+
+            // Setup event capacity (500) exceeds registrants, so all 10 win — each exactly once.
+            List<ActiveOrder> winners = eventService.drawLotteryAutomatically(eventId);
+
+            assertEquals(10, winners.size());
+
+            Set<UUID> uniqueMemberIds = winners.stream().map(ActiveOrder::getMemberId).collect(Collectors.toSet());
+            assertEquals(10, uniqueMemberIds.size());
+        }
+
+        @Test
+        @DisplayName("Winners receive reservation/authorization")
+        void GivenRegistrants_WhenDraw_ThenWinnersReceiveReservation() {
+            UUID memberId = UUID.randomUUID();
+            lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, systemClock.now()));
+
+            List<ActiveOrder> winners = eventService.drawLotteryAutomatically(eventId);
+
+            assertEquals(1, winners.size());
+            ActiveOrder order = winners.get(0);
+
+            assertEquals(memberId, order.getMemberId());
+            assertEquals(eventId, order.getEventId());
+            assertNotNull(order.getSessionId());
+
+            // New flow: draw creates an EMPTY LOTTERY_WIN order; winner picks tickets later
+            assertTrue(order.isLotteryWin(), "order should be marked LOTTERY_WIN");
+            assertTrue(order.getItems().isEmpty(), "order should have no pre-allocated items");
+            assertNotNull(order.getPurchaseWindowDeadline(), "winner must have a purchase deadline");
+
+            // Inventory is NOT pre-allocated at draw time
+            Event event = eventRepository.findById(eventId).get();
+            assertEquals(500, event.findZone(zoneId).getAvailableCount(), "inventory must not be locked at draw time");
+        }
+
+        /** Creates a published lottery event with a closed registration window and the given GA capacity. */
+        private UUID createClosedLotteryEvent(int capacity) {
+            UUID id = UUID.randomUUID();
+            UUID zone = UUID.randomUUID();
+            Event event = new Event(
+                    id, COMPANY_NAME, "Capped Lottery", "desc",
+                    EventCategory.CONCERT,
+                    new EventSchedule(CLOCK.plusSeconds(100000), CLOCK.plusSeconds(110000), CLOCK.plusSeconds(90000)),
+                    new LockTimerDuration(Duration.ofMinutes(15)),
+                    new AlwaysAllowPolicy(), new NoDiscountPolicy(),
+                    SaleMethod.LOTTERY,
+                    new LotteryWindow(CLOCK.minusSeconds(20000), CLOCK.minusSeconds(10000)));
+            event.addZone(InventoryZone.createGA(zone, "Floor", new BigDecimal("50.00"), capacity));
+            event.setVenueMap(new VenueMap(Map.of("Section A", zone)));
+            event.publish();
+            eventRepository.save(event);
+            return id;
+        }
+
+        private void registerMembers(UUID forEventId, int count) {
+            for (int i = 0; i < count; i++) {
+                lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), forEventId, UUID.randomUUID(), systemClock.now()));
             }
         }
     }

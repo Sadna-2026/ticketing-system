@@ -1,6 +1,15 @@
 package com.ticketing.application;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
@@ -8,21 +17,17 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.auth.ISessionTokenService;
+import com.ticketing.application.dto.MemberSummaryDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.dto.SystemAnalyticsDTO;
 import com.ticketing.application.services.AdminService;
+import com.ticketing.application.services.SystemAnalyticsCollector;
 import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
@@ -282,5 +287,84 @@ public class AdminServiceTest {
 
         assertEquals(1, results.size());
         assertEquals(companyName, results.get(0).companyName());
+    }
+
+    @Test
+    public void GivenAdminAndBlankQuery_WhenSearchMembers_ThenAllMembersReturned() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "alice", "alice@example.com", "pass"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "bob", "bob@example.com", "pass"));
+
+        List<MemberSummaryDTO> results = adminService.searchMembers(adminToken, "");
+
+        assertEquals(2, results.size());
+    }
+
+    @Test
+    public void GivenAdminAndPartialQuery_WhenSearchMembers_ThenOnlyMatchingUsernamesReturned() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "manager", "manager@example.com", "pass"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "alice", "alice@example.com", "pass"));
+
+        List<MemberSummaryDTO> results = adminService.searchMembers(adminToken, "man");
+
+        assertEquals(1, results.size());
+        assertEquals("manager", results.get(0).username());
+    }
+
+    @Test
+    public void GivenAdminAndMixedCaseQuery_WhenSearchMembers_ThenMatchIsCaseInsensitive() {
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+        memberRepository.saveIfUsernameAndEmailAvailable(new Member(UUID.randomUUID(), "Alice", "alice@example.com", "pass"));
+
+        List<MemberSummaryDTO> results = adminService.searchMembers(adminToken, "ALI");
+
+        assertEquals(1, results.size());
+        assertEquals("Alice", results.get(0).username());
+    }
+
+    @Test
+    public void GivenNonAdminToken_WhenSearchMembers_ThenSecurityExceptionThrown() {
+        String token = "user-token";
+        when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
+
+        assertThrows(SecurityException.class, () -> adminService.searchMembers(token, ""));
+    }
+
+    @Test
+    public void GivenAdmin_WhenGetSystemAnalytics_ThenMetricsAreReturned() {
+        TestClock clock = new TestClock(Instant.parse("2026-06-01T12:00:00Z"));
+        SystemAnalyticsCollector collector = new SystemAnalyticsCollector(clock);
+        collector.recordVisitorEnter();
+        collector.recordRegistration();
+        adminService = new AdminService(
+                memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository,
+                null, collector);
+
+        String adminToken = "admin-token";
+        when(sessionTokenService.extractPermissions(adminToken)).thenReturn(Set.of("SYSTEM_ADMIN"));
+
+        SystemAnalyticsDTO analytics = adminService.getSystemAnalytics(adminToken);
+
+        assertEquals(1, analytics.activeVisitors());
+        assertEquals(1, analytics.historical().registration().count());
+        assertTrue(analytics.live().visitorEnter().perMinute() > 0);
+    }
+
+    @Test
+    public void GivenNonAdmin_WhenGetSystemAnalytics_ThenSecurityExceptionThrown() {
+        TestClock clock = new TestClock();
+        SystemAnalyticsCollector collector = new SystemAnalyticsCollector(clock);
+        adminService = new AdminService(
+                memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository,
+                null, collector);
+
+        String token = "user-token";
+        when(sessionTokenService.extractPermissions(token)).thenReturn(Collections.emptySet());
+
+        assertThrows(SecurityException.class, () -> adminService.getSystemAnalytics(token));
     }
 }
