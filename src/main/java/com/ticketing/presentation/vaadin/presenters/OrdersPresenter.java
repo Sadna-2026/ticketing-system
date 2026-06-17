@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.application.CardPaymentInfo;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.OrderItemDto;
@@ -280,13 +281,17 @@ public class OrdersPresenter {
     }
 
     public CheckoutResult checkout(String couponCode) {
+        return checkout(couponCode, null);
+    }
+
+    public CheckoutResult checkout(String couponCode, CardPaymentInfo card) {
         String token = sessionToken();
         if (token == null) {
             return CheckoutResult.failure(NO_SESSION_MESSAGE);
         }
 
         try {
-            OrderService.CheckoutCompletion completion = orderService.checkout(token, blankToNull(couponCode));
+            OrderService.CheckoutCompletion completion = orderService.checkout(token, blankToNull(couponCode), card);
             return CheckoutResult.success(
                     "Checkout complete.", completion.purchaseId(), completion.chargedAmount());
         } catch (RuntimeException ex) {

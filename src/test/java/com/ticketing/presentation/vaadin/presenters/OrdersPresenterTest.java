@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -116,7 +117,7 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         UUID purchaseId = UUID.randomUUID();
         SessionContext.setSessionToken("guest-token");
-        when(orderService.checkout("guest-token", "SAVE20"))
+        when(orderService.checkout(eq("guest-token"), eq("SAVE20"), any()))
                 .thenReturn(new OrderService.CheckoutCompletion(purchaseId, new BigDecimal("80.00")));
 
         CheckoutResult result = presenter.checkout(" SAVE20 ");
@@ -125,7 +126,7 @@ class OrdersPresenterTest {
         assertEquals("Checkout complete.", result.message());
         assertEquals(purchaseId, result.purchaseId());
         assertEquals(new BigDecimal("80.00"), result.chargedAmount());
-        verify(orderService).checkout("guest-token", "SAVE20");
+        verify(orderService).checkout(eq("guest-token"), eq("SAVE20"), any());
     }
 
     @Test
@@ -195,7 +196,7 @@ class OrdersPresenterTest {
         UUID orderId = UUID.randomUUID();
         String policyMessage = "Purchase policy violation: AGE_RESTRICTED - Buyer does not meet age policy";
         SessionContext.setSessionToken("guest-token");
-        when(orderService.checkout("guest-token", null))
+        when(orderService.checkout(eq("guest-token"), isNull(), any()))
                 .thenThrow(new IllegalStateException(policyMessage));
 
         CheckoutResult result = presenter.checkout(null);
@@ -203,7 +204,7 @@ class OrdersPresenterTest {
         assertFalse(result.success());
         assertEquals(policyMessage, result.message());
         assertNull(result.purchaseId());
-        verify(orderService).checkout("guest-token", null);
+        verify(orderService).checkout(eq("guest-token"), isNull(), any());
     }
 
     @Test

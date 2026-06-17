@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -68,6 +69,7 @@ import com.ticketing.domain.member.Suspension;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
+import com.ticketing.domain.order.RefundStatus;
 import com.ticketing.domain.services.OrderTimeDomainService;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
@@ -387,6 +389,35 @@ public class OrderServiceTest {
         assertNotNull(completion.purchaseId());
         assertEquals(new BigDecimal("50.00"), completion.chargedAmount());
         verify(notificationService).notify(memberId.toString(), "Your checkout was completed successfully.");
+    }
+
+    @Test
+    void GivenMemberPurchase_WhenCancelOrdersAndRefund_ThenBuyerNotifiedWithAmountAndRefundReference() {
+        INotificationService notificationService = mock(INotificationService.class);
+        OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
+        OrderService notifyingService = new OrderService(
+                sessionService, orderRepo, eventRepo, memberRepo,
+                List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null,
+                orderTimeDomainService, notificationService);
+
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "buyer", "buyer@example.com", "pw",
+                "050-4444444", LocalDate.of(1990, 1, 1));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        notifyingService.createOrder(memberToken, eventId);
+        notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        notifyingService.checkout(memberToken, null);
+
+        notifyingService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        // Registered buyer is notified with the event name, refunded amount, and a refund reference.
+        verify(notificationService).notify(eq(memberId.toString()),
+                argThat(msg -> msg.contains("Demo Event")
+                        && msg.contains("was refunded")
+                        && msg.contains("Refund reference:")));
     }
 
     @Test
@@ -1116,24 +1147,69 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenEventWithCompletedPurchases_WhenRefundEventPurchases_ThenAllPurchasesRefunded() {
-        // Create a successful order to refund
+    void GivenEventWithCompletedPurchases_WhenCancelOrdersAndRefund_ThenAllPurchasesRefundedWithReference() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
         UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
 
         assertNotNull(purchaseId);
-        assertEquals(0, paymentGateway.refundCalls); // Should be 0 before we call refundEventPurchases
+        assertEquals(0, paymentGateway.refundCalls);
 
-        // Now trigger the refund (which simulates the Event cancellation side-effect for OrderService)
-        orderService.refundEventPurchases(eventId);
+        OrderService.EventCancellationOutcome outcome =
+                orderService.cancelOrdersAndRefund(eventId, "Demo Event");
 
-        // Verify that the refund was processed via the payment gateway
         assertEquals(1, paymentGateway.refundCalls);
-        assertEquals(new BigDecimal("100.00"), paymentGateway.chargedAmount); // Original charge amount was 100
-        
-        // Ensure that the CompletedPurchase still exists but refund logic executed
-        assertTrue(orderRepo.findCompletedById(purchaseId).isPresent());
+        assertEquals(1, outcome.purchasesFound());
+        assertEquals(1, outcome.refundsSucceeded());
+        assertEquals(0, outcome.refundsPending());
+        assertEquals(0, outcome.refundsFailed());
+
+        CompletedPurchase refunded = orderRepo.findCompletedById(purchaseId).orElseThrow();
+        assertTrue(refunded.isRefunded());
+        assertNotNull(refunded.getRefundReference());
+    }
+
+    @Test
+    void GivenAlreadyRefundedPurchase_WhenCancelOrdersAndRefundAgain_ThenNoDuplicateRefund() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+        orderService.checkout(guestToken, null);
+
+        orderService.cancelOrdersAndRefund(eventId, "Demo Event");
+        assertEquals(1, paymentGateway.refundCalls);
+
+        // Retrying must skip the already-refunded purchase (no second gateway call).
+        OrderService.EventCancellationOutcome retry =
+                orderService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        assertEquals(1, paymentGateway.refundCalls);
+        assertEquals(1, retry.refundsSucceeded());
+        assertEquals(0, retry.refundsPending());
+    }
+
+    @Test
+    void GivenRefundFailsThenRecovers_WhenRetried_ThenOnlyUnfinishedRefundIsProcessed() {
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+
+        // Payment service unavailable: refund cannot settle yet.
+        paymentGateway.failRefunds = true;
+        OrderService.EventCancellationOutcome first =
+                orderService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        assertEquals(0, first.refundsSucceeded());
+        assertEquals(1, first.refundsPending());
+        assertEquals(RefundStatus.PENDING, orderRepo.findCompletedById(purchaseId).orElseThrow().getRefundStatus());
+
+        // Payment service recovers; retry settles only the still-pending refund.
+        paymentGateway.failRefunds = false;
+        OrderService.EventCancellationOutcome retry =
+                orderService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        assertEquals(1, retry.refundsSucceeded());
+        assertEquals(0, retry.refundsPending());
+        assertTrue(orderRepo.findCompletedById(purchaseId).orElseThrow().isRefunded());
     }
 
     // ── Suspension checks ──────────────────────────────────────

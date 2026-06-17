@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketing.application.CardPaymentInfo;
 import com.ticketing.application.ISystemClock;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.ActiveOrderDto;
@@ -45,6 +46,7 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.domain.order.OrderStatus;
+import com.ticketing.domain.order.RefundStatus;
 import com.ticketing.domain.order.SelectionRequest;
 import com.ticketing.domain.queue.IQueueRepository;
 import com.ticketing.domain.queue.QueueConfig;
@@ -399,6 +401,11 @@ public class OrderService {
      */
     @Transactional
     public CheckoutCompletion checkout(String token, String couponCode) {
+        return checkout(token, couponCode, null);
+    }
+
+    @Transactional
+    public CheckoutCompletion checkout(String token, String couponCode, CardPaymentInfo card) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
@@ -410,7 +417,7 @@ public class OrderService {
         validateOrderOwnership(sessionId, order);
 
         Event event = findEvent(order.getEventId());
-        if (event.isCancelled()) {
+        if (event.isCancellationStarted()) {
             throw new IllegalStateException(
                     "This event has been cancelled. Your order cannot be checked out.");
         }
@@ -434,7 +441,7 @@ public class OrderService {
 
         CompletedPurchase purchase;
         try {
-            purchase = processCheckout(order, event, buyerContact, normalizeCoupon(couponCode), buyerDob);
+            purchase = processCheckout(order, event, buyerContact, normalizeCoupon(couponCode), buyerDob, card);
         } catch (IllegalStateException e) {
             saveOrder(order);
             if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
@@ -467,36 +474,117 @@ public class OrderService {
         return new CheckoutCompletion(purchase.purchaseId(), purchase.amount());
     }
 
+    /** Outcome of cancelling an event's orders and refunding its purchases. */
+    public record EventCancellationOutcome(
+            int activeOrdersCancelled, int purchasesFound,
+            int refundsSucceeded, int refundsPending, int refundsFailed) {
+        public static EventCancellationOutcome empty() {
+            return new EventCancellationOutcome(0, 0, 0, 0, 0);
+        }
+    }
+
+    /**
+     * Cancels every active order for the event (releasing its inventory) and refunds every
+     * completed purchase exactly once, using each purchase's original payment transaction id.
+     *
+     * <p>Idempotent and retry-safe: purchases already marked {@link RefundStatus#REFUNDED} are
+     * skipped, and a partial payment-service failure leaves the purchase {@code PENDING}/{@code FAILED}
+     * (not refunded) so a later retry processes only the unfinished ones. Notification failures are
+     * swallowed so they can never trigger a duplicate refund.
+     */
     @Transactional
-    public List<CompletedPurchase> refundEventPurchases(UUID eventId) {
-        // Cancel all active (in-cart) orders and release their locked inventory
-        List<ActiveOrder> activeOrders = orderRepository.findActiveByEventId(eventId);
-        for (ActiveOrder order : activeOrders) {
+    public EventCancellationOutcome cancelOrdersAndRefund(UUID eventId, String eventName) {
+        int activeCancelled = 0;
+        for (ActiveOrder order : orderRepository.findActiveByEventId(eventId)) {
             if (order.isActive()) {
                 releaseAllInventoryForOrder(eventId, order);
                 order.cancel();
                 saveOrder(order);
-                if (notificationService != null && order.getMemberId() != null) {
-                    notificationService.notify(order.getMemberId().toString(),
-                            "The event you had tickets reserved for has been cancelled. Your cart has been cleared.");
-                }
+                activeCancelled++;
+                safeNotify(order.getMemberId(),
+                        "The event you had tickets reserved for has been cancelled. Your cart has been cleared.");
             }
         }
+        log.info("Cancel-event: eventId={}, activeOrdersCancelled={}", eventId, activeCancelled);
 
-        // Refund completed purchases
         List<CompletedPurchase> purchases = orderRepository.findCompletedByEventId(eventId);
+        int succeeded = 0;
+        int pending = 0;
+        int failed = 0;
+        log.info("Cancel-event: eventId={}, completedPurchasesFound={}", eventId, purchases.size());
         for (CompletedPurchase purchase : purchases) {
-            refundPayment(purchase.transactionId(), purchase.amount());
-        }
-        if (notificationService != null) {
-            for (CompletedPurchase purchase : purchases) {
-                if (purchase.memberId() != null) {
-                    notificationService.notify(purchase.memberId().toString(),
-                            "The event you purchased tickets for has been cancelled and you have been refunded.");
-                }
+            if (purchase.isRefunded()) {
+                log.warn("Cancel-event: purchase {} already refunded (ref={}), skipping",
+                        purchase.purchaseId(), purchase.getRefundReference());
+                succeeded++;
+                continue;
+            }
+            String transactionId = purchase.transactionId();
+            if (transactionId == null || transactionId.isBlank()) {
+                log.error("Cancel-event: purchase {} has no payment transaction id; cannot refund",
+                        purchase.purchaseId());
+                purchase.markRefundFailed();
+                orderRepository.save(purchase);
+                failed++;
+                continue;
+            }
+            RefundResult refund = refundOnce(transactionId, purchase.amount());
+            if (refund != null && refund.success()) {
+                purchase.markRefunded(refund.refundTransactionId(), purchase.amount());
+                orderRepository.save(purchase);
+                succeeded++;
+                log.info("Cancel-event: refunded purchase {} (ref={})",
+                        purchase.purchaseId(), refund.refundTransactionId());
+                notifyRefunded(purchase, eventName);
+            } else {
+                purchase.markRefundPending();
+                orderRepository.save(purchase);
+                pending++;
+                log.warn("Cancel-event: refund still pending for purchase {}: {}",
+                        purchase.purchaseId(),
+                        refund != null ? refund.errorMessage() : "all gateways failed");
             }
         }
-        return purchases;
+        return new EventCancellationOutcome(activeCancelled, purchases.size(), succeeded, pending, failed);
+    }
+
+    /** Attempts a refund across the configured gateways, returning the first success or last failure. */
+    private RefundResult refundOnce(String transactionId, BigDecimal amount) {
+        RefundResult refund = null;
+        for (IPaymentGateway gateway : paymentGateways) {
+            try {
+                refund = gateway.refund(transactionId, amount.doubleValue());
+                if (refund != null && refund.success()) {
+                    return refund;
+                }
+            } catch (Exception e) {
+                log.error("Refund gateway failed with exception", e);
+            }
+        }
+        return refund;
+    }
+
+    private void notifyRefunded(CompletedPurchase purchase, String eventName) {
+        if (purchase.memberId() == null) {
+            return; // guest purchase: refunded, but no in-system member notification
+        }
+        String ref = purchase.getRefundReference();
+        String message = "Event " + eventName + " was cancelled. Your purchase of "
+                + purchase.amount().toPlainString() + " was refunded."
+                + (ref != null && !ref.isBlank() ? " Refund reference: " + ref + "." : "");
+        safeNotify(purchase.memberId(), message);
+    }
+
+    private void safeNotify(UUID memberId, String message) {
+        if (notificationService == null || memberId == null) {
+            return;
+        }
+        try {
+            notificationService.notify(memberId.toString(), message);
+        } catch (RuntimeException e) {
+            // A notification failure must never roll back or repeat a refund.
+            log.warn("Cancel-event: notification delivery deferred/failed for member {}", memberId, e);
+        }
     }
 
     public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
@@ -920,7 +1008,7 @@ public class OrderService {
 
     private CompletedPurchase processCheckout(ActiveOrder order, Event event,
                                                BuyerContactSnapshot buyerContact, String couponCode,
-                                               LocalDate buyerDateOfBirth) {
+                                               LocalDate buyerDateOfBirth, CardPaymentInfo card) {
         // Re-check suspension as late as possible: a member could have been suspended
         // after checkout began but before any payment/issuance side effect runs.
         rejectIfMemberSuspended(order.getMemberId());
@@ -931,7 +1019,7 @@ public class OrderService {
 
         order.startCheckout();
 
-        PaymentResult payment = chargePayment(order, event, buyerContact, finalAmount);
+        PaymentResult payment = chargePayment(order, event, buyerContact, finalAmount, card);
         if (payment == null || !payment.success()) {
             order.revertToActive();
             throw new IllegalStateException("Payment failed: " + (payment != null ? payment.errorMessage() : "All gateways failed"));
@@ -984,12 +1072,17 @@ public class OrderService {
         }
     }
 
-    private PaymentResult chargePayment(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact, BigDecimal finalAmount) {
+    private PaymentResult chargePayment(ActiveOrder order, Event event, BuyerContactSnapshot buyerContact,
+                                        BigDecimal finalAmount, CardPaymentInfo card) {
+        PaymentDetails details = card == null
+                ? new PaymentDetails(order.getId(), event.getId(), order.getMemberId(), buyerContact.getEmail())
+                : new PaymentDetails(order.getId(), event.getId(), order.getMemberId(), buyerContact.getEmail(),
+                        card.currency(), card.cardNumber(), card.month(), card.year(),
+                        card.holder(), card.cvv(), card.cardId());
         PaymentResult payment = null;
         for (IPaymentGateway gateway : paymentGateways) {
             try {
-                payment = gateway.charge(finalAmount,
-                        new PaymentDetails(order.getId(), event.getId(), order.getMemberId(), buyerContact.getEmail()));
+                payment = gateway.charge(finalAmount, details);
                 if (payment != null && payment.success()) {
                     break;
                 }

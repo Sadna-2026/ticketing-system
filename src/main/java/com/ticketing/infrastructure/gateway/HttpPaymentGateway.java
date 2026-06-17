@@ -77,13 +77,14 @@ public class HttpPaymentGateway implements IPaymentGateway {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("action_type", ACTION_PAY);
         params.put("amount", finalAmount.toPlainString());
-        params.put("currency", card.currency());
-        params.put("card_number", card.cardNumber());
-        params.put("month", card.cardMonth());
-        params.put("year", card.cardYear());
-        params.put("holder", card.cardHolder());
-        params.put("cvv", card.cardCvv());
-        params.put("id", card.cardId());
+        // Prefer the buyer's checkout-dialog card data; fall back to the configured sandbox card.
+        params.put("currency", orElse(details.currency(), card.currency()));
+        params.put("card_number", orElse(details.cardNumber(), card.cardNumber()));
+        params.put("month", orElse(details.month(), card.cardMonth()));
+        params.put("year", orElse(details.year(), card.cardYear()));
+        params.put("holder", orElse(details.holder(), card.cardHolder()));
+        params.put("cvv", orElse(details.cvv(), card.cardCvv()));
+        params.put("id", orElse(details.cardId(), card.cardId()));
 
         try {
             String body = client.send(params).trim();
@@ -120,6 +121,10 @@ public class HttpPaymentGateway implements IPaymentGateway {
             log.error("External payment system unavailable during refund: {}", ex.getMessage());
             return RefundResult.failed("Payment system is currently unavailable.");
         }
+    }
+
+    private static String orElse(String preferred, String fallback) {
+        return preferred != null && !preferred.isBlank() ? preferred : fallback;
     }
 
     private static Integer parseIntOrNull(String value) {

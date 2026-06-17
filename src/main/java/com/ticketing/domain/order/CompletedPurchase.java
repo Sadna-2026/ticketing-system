@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -57,6 +59,16 @@ public class CompletedPurchase {
     private BigDecimal amount;
     @Column(name = "purchased_at")
     private Instant purchasedAt;
+
+    // Refund tracking for the cancel-event use case (V3-CANCEL-EVENT). Nullable columns so existing
+    // rows default to NONE on read. refundReference is the external refund transaction id.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "refund_status")
+    private RefundStatus refundStatus = RefundStatus.NONE;
+    @Column(name = "refund_reference")
+    private String refundReference;
+    @Column(name = "refunded_amount")
+    private BigDecimal refundedAmount;
 
     // Required by JPA; do not use directly.
     protected CompletedPurchase() {
@@ -128,6 +140,34 @@ public class CompletedPurchase {
     public String transactionId() { return transactionId; }
     public BigDecimal amount() { return amount; }
     public Instant purchasedAt() { return purchasedAt; }
+
+    // ── Refund tracking (cancel-event) ──
+    public RefundStatus getRefundStatus() {
+        return refundStatus == null ? RefundStatus.NONE : refundStatus;
+    }
+
+    public String getRefundReference() { return refundReference; }
+
+    public BigDecimal getRefundedAmount() { return refundedAmount; }
+
+    public boolean isRefunded() { return getRefundStatus() == RefundStatus.REFUNDED; }
+
+    /** Records a successful refund. The reference is the external refund transaction id. */
+    public void markRefunded(String refundReference, BigDecimal refundedAmount) {
+        this.refundStatus = RefundStatus.REFUNDED;
+        this.refundReference = refundReference;
+        this.refundedAmount = refundedAmount;
+    }
+
+    /** Refund not yet settled (gateway unavailable / declined) — eligible for retry. */
+    public void markRefundPending() {
+        this.refundStatus = RefundStatus.PENDING;
+    }
+
+    /** Refund cannot proceed (e.g. missing transaction id) — needs investigation. */
+    public void markRefundFailed() {
+        this.refundStatus = RefundStatus.FAILED;
+    }
 
     @Override
     public boolean equals(Object o) {
