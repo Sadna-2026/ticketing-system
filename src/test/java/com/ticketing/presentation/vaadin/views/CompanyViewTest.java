@@ -819,10 +819,17 @@ class CompanyViewTest {
         findCompanyCombo(view, "Selected company").setValue(company("Acme"));
         
         selectTab(view, "Events");
+        // event selector is visible (implicitly verified if it can be found, but we can check if the combo is enabled)
+        assertNotNull(findEventCombo(view, "Draft event"));
         assertTrue(hasVisibleButton(view, "Edit venue layout"));
         assertFalse(hasVisibleButton(view, "Create event"));
         assertFalse(hasVisibleButton(view, "Edit event"));
+        // Metadata, publish, cancel are all hidden because "Edit event" is hidden.
         assertFalse(hasText(view, "doesn't have EVENT_LIFECYCLE, MAP_DEFINITION permissions"));
+
+        selectTab(view, "Policies");
+        assertFalse(hasVisibleButton(view, "Set purchase policy"));
+        assertFalse(hasVisibleButton(view, "Set discount policy"));
     }
 
 
