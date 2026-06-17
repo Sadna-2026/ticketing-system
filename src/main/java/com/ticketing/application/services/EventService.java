@@ -17,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ApplicationEventPublisherAware;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.CreateEventRequest;
@@ -30,6 +32,7 @@ import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.application.scheduling.LotteryScheduleEvent;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AndPolicy;
@@ -67,7 +70,7 @@ import com.ticketing.domain.order.IOrderRepository;
  */
 @org.springframework.stereotype.Service
 @Transactional(readOnly = true)
-public class EventService {
+public class EventService implements ApplicationEventPublisherAware {
 
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
 
@@ -83,7 +86,23 @@ public class EventService {
     private final INotificationService notificationService;
     private final java.util.Random random;
 
+    // Injected by Spring (setter-based, so the test constructors stay unchanged); null in
+    // plain-`new` unit tests, in which case lottery-draw scheduling is simply not published.
+    private ApplicationEventPublisher eventPublisher;
+
     private final ConcurrentHashMap<UUID, Object> eventLocks = new ConcurrentHashMap<>();
+
+    @Override
+    public void setApplicationEventPublisher(ApplicationEventPublisher publisher) {
+        this.eventPublisher = publisher;
+    }
+
+    /** Asks {@code LotteryDrawScheduler} to (re)arm the automatic draw for a lottery event. */
+    private void scheduleLotteryDraw(UUID eventId) {
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new LotteryScheduleEvent(eventId));
+        }
+    }
 
     // Backward compat constructors for tests
     public EventService(IEventRepository eventRepository,
@@ -371,6 +390,10 @@ public class EventService {
         log.info("Publishing event: eventId={}, companyName={}", eventId, company.getName());
         event.publish();
         saveEvent(event);
+        // A published lottery event draws automatically when its registration window closes.
+        if (event.isLottery() && event.getLotteryWindow() != null) {
+            scheduleLotteryDraw(eventId);
+        }
     }
 
     @Transactional
@@ -426,6 +449,10 @@ public class EventService {
         }
 
         saveEvent(event);
+        // Re-arm the automatic draw if the registration window moved.
+        if (request.lotteryWindow() != null && event.isLottery()) {
+            scheduleLotteryDraw(event.getId());
+        }
         log.info("Event edited: eventId={}, companyName={}, by={}",
                 event.getId(), company.getName(), memberId);
         return EventDetailsDTO.from(event);
@@ -455,13 +482,10 @@ public class EventService {
                 throw new IllegalStateException("Member is already registered for this lottery.");
             }
 
-            event.findZone(request.zoneId());
             entry = new LotteryEntry(
                     UUID.randomUUID(),
                     event.getId(),
                     memberId,
-                    request.zoneId(),
-                    request.quantity(),
                     now);
             lotteryRepository.save(entry);
         } catch (IllegalStateException e) {
@@ -491,15 +515,17 @@ public class EventService {
         }
     }
 
+    /**
+     * System-triggered lottery draw (requirement §II.3.6): runs automatically when the
+     * registration window closes — scheduled by {@code LotteryDrawScheduler}. There is no
+     * session token or permission check, since no user initiates it. The number of winners
+     * is bounded by the event's total ticket capacity; each winner receives an empty
+     * lottery-win order and a 48-hour window to choose and purchase tickets.
+     */
     @Transactional
-    public List<ActiveOrder> drawLottery(String token, UUID eventId, int capacity) {
+    public List<ActiveOrder> drawLotteryAutomatically(UUID eventId) {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
-        UUID memberId = authenticateMember(token);
-        rejectIfSuspended(memberId);
-
-        if (capacity <= 0)
-            throw new IllegalArgumentException("Capacity must be at least 1");
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
@@ -507,22 +533,27 @@ public class EventService {
         if (!event.isLottery())
             throw new IllegalArgumentException("Event is not a lottery event");
 
-        // Require EVENT_LIFECYCLE permission on the event's company
-        Company company = companyRepository.findByName(event.getCompanyName())
-                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + event.getCompanyName()));
-        StaffAppointment appt = loadAppointment(memberId, company.getName());
-        if (!appt.hasPermission(ManagerPermission.EVENT_LIFECYCLE))
-            throw new SecurityException("Insufficient permissions to draw lottery");
+        return performDraw(event, event.totalCapacity());
+    }
+
+    /**
+     * Core draw: selects up to {@code capacity} winners at random, creates a lottery-win
+     * order per winner (48h deadline), and notifies winners and non-winners. Requires the
+     * registration window to be closed and is idempotent — an event whose draw already
+     * produced lottery-win orders is never drawn twice (a no-op returning no new orders).
+     */
+    private List<ActiveOrder> performDraw(Event event, int capacity) {
+        UUID eventId = event.getId();
 
         // Registration window must be closed before drawing
         if (event.getLotteryWindow() != null && event.getLotteryWindow().isOpen(systemClock.now()))
             throw new IllegalStateException("Registration window is still open. Wait until it closes before drawing winners.");
 
-        // Idempotency: reject if draw was already run for this event
-        boolean alreadyDrawn = !orderRepository.findActiveByEventId(eventId).isEmpty()
-                && orderRepository.findActiveByEventId(eventId).stream().anyMatch(ActiveOrder::isLotteryWin);
+        // Idempotency: skip if a draw already produced lottery-win orders for this event
+        boolean alreadyDrawn = orderRepository.findActiveByEventId(eventId).stream()
+                .anyMatch(ActiveOrder::isLotteryWin);
         if (alreadyDrawn) {
-            throw new IllegalStateException("Lottery has already been drawn for this event. The draw cannot be repeated.");
+            return new ArrayList<>();
         }
 
         List<LotteryEntry> allEntries = lotteryRepository.findByEventId(eventId);
@@ -569,18 +600,13 @@ public class EventService {
         return createdOrders;
     }
 
-    // Capacity = tickets. Entries requesting more tickets than remaining capacity are skipped.
-    private List<LotteryEntry> selectLotteryWinners(List<LotteryEntry> entries, int ticketCapacity) {
+    // Winner count is capacity-bounded: a uniformly random sample of up to `capacity` entries.
+    private List<LotteryEntry> selectLotteryWinners(List<LotteryEntry> entries, int capacity) {
         List<LotteryEntry> pool = new ArrayList<>(entries);
         List<LotteryEntry> winners = new ArrayList<>();
-        int remaining = ticketCapacity;
-        while (!pool.isEmpty() && remaining > 0) {
-            int index = random.nextInt(pool.size());
-            LotteryEntry candidate = pool.remove(index);
-            if (candidate.quantity() <= remaining) {
-                winners.add(candidate);
-                remaining -= candidate.quantity();
-            }
+        int numWinners = Math.min(pool.size(), Math.max(capacity, 0));
+        for (int i = 0; i < numWinners; i++) {
+            winners.add(pool.remove(random.nextInt(pool.size())));
         }
         return winners;
     }

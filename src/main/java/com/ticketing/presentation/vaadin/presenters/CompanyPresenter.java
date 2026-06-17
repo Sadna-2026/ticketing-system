@@ -40,7 +40,6 @@ import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -743,39 +742,6 @@ public class CompanyPresenter {
                     create ? "Event created with " + zones.size() + " zone(s)." : "Event updated.", id);
         } catch (RuntimeException ex) {
             return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
-        }
-    }
-
-    public record DrawLotteryResult(boolean success, String message, int winnersCount, List<UUID> winnerMemberIds) {
-        public static DrawLotteryResult success(String message, int winnersCount, List<UUID> winnerMemberIds) {
-            return new DrawLotteryResult(true, message, winnersCount, winnerMemberIds);
-        }
-        public static DrawLotteryResult failure(String message) {
-            return new DrawLotteryResult(false, message, 0, List.of());
-        }
-    }
-
-    public DrawLotteryResult drawLottery(UUID eventId, int capacity) {
-        String token = memberToken();
-        if (token == null) {
-            return DrawLotteryResult.failure(MEMBER_SESSION_REQUIRED);
-        }
-        if (eventId == null) {
-            return DrawLotteryResult.failure("Select an event before drawing the lottery.");
-        }
-        if (capacity <= 0) {
-            return DrawLotteryResult.failure("Maximum ticket capacity must be at least 1.");
-        }
-        try {
-            List<ActiveOrder> winners = eventService.drawLottery(token, eventId, capacity);
-            List<UUID> memberIds = winners.stream()
-                    .map(ActiveOrder::getMemberId)
-                    .filter(java.util.Objects::nonNull)
-                    .toList();
-            return DrawLotteryResult.success(
-                    "Lottery drawn: " + winners.size() + " winner(s) selected and orders created.", winners.size(), memberIds);
-        } catch (RuntimeException ex) {
-            return DrawLotteryResult.failure(userMessage(ex, "Could not draw lottery. Please try again."));
         }
     }
 

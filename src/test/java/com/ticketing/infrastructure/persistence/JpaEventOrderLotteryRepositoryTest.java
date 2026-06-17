@@ -174,8 +174,7 @@ class JpaEventOrderLotteryRepositoryTest {
         UUID entryId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID memberId = UUID.randomUUID();
-        UUID zoneId = UUID.randomUUID();
-        LotteryEntry entry = new LotteryEntry(entryId, eventId, memberId, zoneId, 2,
+        LotteryEntry entry = new LotteryEntry(entryId, eventId, memberId,
                 Instant.parse("2026-08-05T00:00:00Z"));
 
         lotteryRepository.save(entry);
@@ -184,8 +183,6 @@ class JpaEventOrderLotteryRepositoryTest {
         assertThat(found).isPresent();
         assertThat(found.get().eventId()).isEqualTo(eventId);
         assertThat(found.get().memberId()).isEqualTo(memberId);
-        assertThat(found.get().zoneId()).isEqualTo(zoneId);
-        assertThat(found.get().quantity()).isEqualTo(2);
         // First store bumps the version 0 → 1, mirroring the in-memory repo.
         assertThat(found.get().version()).isEqualTo(1);
 

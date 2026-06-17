@@ -101,7 +101,7 @@ public class EventsPresenter {
         }
     }
 
-    public LotteryRegistrationResult registerForLottery(UUID eventId, UUID zoneId, Integer quantity) {
+    public LotteryRegistrationResult registerForLottery(UUID eventId) {
         SessionContext.UiState state = SessionContext.currentUiState();
         if (state.noSession()) {
             return LotteryRegistrationResult.failure("You must be logged in to register for a lottery.");
@@ -116,14 +116,8 @@ public class EventsPresenter {
         if (eventId == null) {
             return LotteryRegistrationResult.failure("Event ID is required.");
         }
-        if (zoneId == null) {
-            return LotteryRegistrationResult.failure("Please select a zone.");
-        }
-        if (quantity == null || quantity <= 0) {
-            return LotteryRegistrationResult.failure("Please enter a positive quantity.");
-        }
         try {
-            LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId, zoneId, quantity);
+            LotteryRegistrationRequest request = new LotteryRegistrationRequest(eventId);
             LotteryRegistrationResponse response = eventService.registerForLottery(token, request);
             if (response.success()) {
                 return LotteryRegistrationResult.success(response.message(), response.lotteryEntryId(), response.registeredAt());

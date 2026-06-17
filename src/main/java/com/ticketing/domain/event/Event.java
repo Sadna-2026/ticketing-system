@@ -169,6 +169,17 @@ public class Event{
         return zones.stream().mapToInt(InventoryZone::getAvailableCount).sum();
     }
 
+    /**
+     * The event's full ticket capacity across all zones — GA max capacity plus the seat
+     * count of assigned-seating zones. Used to bound the number of winners in an automatic
+     * lottery draw (requirement §II.3.6): at most one winning slot per available ticket.
+     */
+    public int totalCapacity() {
+        return zones.stream()
+                .mapToInt(z -> z.isGA() ? z.getMaxCapacity() : z.getSeats().size())
+                .sum();
+    }
+
     public boolean isPublished() { return status == EventStatus.PUBLISHED; }
 
     public void markSoldOut() {

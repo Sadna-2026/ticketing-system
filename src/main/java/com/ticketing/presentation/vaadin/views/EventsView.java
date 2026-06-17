@@ -528,21 +528,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             return panel;
         }
 
-        if (eventMap.zones().isEmpty()) {
-            panel.add(new Span("No zones available for lottery registration."));
-            return panel;
-        }
-
         panel.add(new H4("Register for the lottery"));
-
-        ComboBox<EventMapDTO.ZoneInfo> zoneSelect = new ComboBox<>("Select zone");
-        zoneSelect.setItems(eventMap.zones());
-        zoneSelect.setItemLabelGenerator(z -> z.name() + " — " + formatPrice(z.pricePerTicket()));
-        zoneSelect.setRequired(true);
-
-        IntegerField quantityField = new IntegerField("Quantity");
-        quantityField.setMin(1);
-        quantityField.setValue(1);
+        panel.add(new Paragraph("Enter the lottery for a chance to buy tickets. If you win, you'll be "
+                + "notified and get a limited window to choose and purchase your tickets."));
 
         Button enterButton = new Button("Enter lottery");
         enterButton.addThemeVariants(com.vaadin.flow.component.button.ButtonVariant.LUMO_PRIMARY);
@@ -550,21 +538,12 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         Span confirmationSpan = new Span();
 
         enterButton.addClickListener(e -> {
-            EventMapDTO.ZoneInfo selectedZone = zoneSelect.getValue();
-            if (selectedZone == null) {
-                resStatus.setText("Please select a zone.");
-                UiMessages.error("Please select a zone.");
-                return;
-            }
-            Integer qty = quantityField.getValue();
-            LotteryRegistrationResult result = presenter.registerForLottery(eventId, selectedZone.id(), qty);
+            LotteryRegistrationResult result = presenter.registerForLottery(eventId);
             resStatus.setText(result.message());
             if (result.success()) {
                 UiMessages.success(result.message());
                 enterButton.setEnabled(false);
                 enterButton.setText("Registered");
-                zoneSelect.setEnabled(false);
-                quantityField.setEnabled(false);
                 confirmationSpan.setText("You are registered for this lottery. Registered at: "
                         + formatInstant(result.registeredAt()));
             } else {
@@ -572,7 +551,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             }
         });
 
-        panel.add(zoneSelect, quantityField, enterButton, confirmationSpan);
+        panel.add(enterButton, confirmationSpan);
         return panel;
     }
 
