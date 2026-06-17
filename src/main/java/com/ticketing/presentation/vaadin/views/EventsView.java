@@ -424,7 +424,18 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
         mainTicketDialog.addOpenedChangeListener(e -> {
             if (!e.isOpened()) {
-                releaseQueueSlot();
+                // Only release queue slot if user has no active order (no tickets in cart).
+                // If they still have tickets, they're holding the slot for potential checkout.
+                OrderResult orderCheck = ordersPresenter.loadCurrentOrder();
+                if (orderCheck.success() && orderCheck.order() != null) {
+                    int ticketCount = orderCheck.order().getItems().stream()
+                            .mapToInt(item -> item.getQuantity()).sum();
+                    if (ticketCount == 0) {
+                        releaseQueueSlot();
+                    }
+                } else {
+                    releaseQueueSlot();
+                }
                 refreshActiveOrderStatus();
                 stopMapPolling();
                 mainTicketDialog = null;
