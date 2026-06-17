@@ -264,13 +264,41 @@ public class Event{
         }
     }
     
-    public boolean isCancelled() { return status == EventStatus.CANCELLED; }
+    /** True once the event is cancelled (whether or not refunds are fully settled). */
+    public boolean isCancelled() {
+        return status == EventStatus.CANCELLED || status == EventStatus.CANCELLED_WITH_PENDING_REFUNDS;
+    }
+
+    /** True from the moment cancellation begins — used to block new purchases immediately. */
+    public boolean isCancellationStarted() {
+        return status == EventStatus.CANCELLATION_IN_PROGRESS || isCancelled();
+    }
 
     public void cancel() {
         if (status == EventStatus.CANCELLED) {
             throw new IllegalStateException("Event is already cancelled");
         }
         this.status = EventStatus.CANCELLED;
+    }
+
+    /**
+     * Moves the event into {@link EventStatus#CANCELLATION_IN_PROGRESS} so purchases are blocked
+     * while orders are released and refunds run. Idempotent for retries (any non-final state is
+     * re-entered); a fully {@code CANCELLED} event cannot be re-cancelled.
+     */
+    public void beginCancellation() {
+        if (status == EventStatus.CANCELLED) {
+            throw new IllegalStateException("Event is already cancelled");
+        }
+        this.status = EventStatus.CANCELLATION_IN_PROGRESS;
+    }
+
+    public void completeCancellation() {
+        this.status = EventStatus.CANCELLED;
+    }
+
+    public void markCancelledWithPendingRefunds() {
+        this.status = EventStatus.CANCELLED_WITH_PENDING_REFUNDS;
     }
 
     // --- core-detail setters (used by EventService.editEvent) ---

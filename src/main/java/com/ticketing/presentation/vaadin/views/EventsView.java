@@ -208,6 +208,14 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         resultsGrid.asSingleSelect().addValueChangeListener(event -> {
             selectedEvent = event.getValue();
             viewMap.setEnabled(selectedEvent != null);
+            // Picking a different event must release any prior queue admission. Otherwise
+            // currentEventId() stays pinned to directlyAdmittedEventId (the previously viewed
+            // event) and its map is reloaded forever — so after that event is cancelled, no
+            // other event's map can ever be loaded until the app restarts.
+            UUID newId = selectedEvent == null ? null : selectedEvent.id();
+            if (directlyAdmittedEventId != null && !directlyAdmittedEventId.equals(newId)) {
+                releaseQueueSlot();
+            }
         });
     }
 

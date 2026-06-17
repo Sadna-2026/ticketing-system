@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
+import com.ticketing.application.CardPaymentInfo;
 import com.ticketing.application.dto.ActiveOrderDto;
 import com.ticketing.application.dto.OrderItemDto;
 import com.ticketing.application.dto.PurchaseRecordDTO;
@@ -24,9 +25,11 @@ import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -234,15 +237,63 @@ public class OrdersView extends VerticalLayout {
             UiMessages.info(NO_TICKETS_CHECKOUT_MESSAGE);
             return;
         }
+        buildCheckoutDialog().open();
+    }
 
-        CheckoutResult result = presenter.checkout(couponCode.getValue());
+    /**
+     * Payment dialog that collects the buyer's card details for the WSEP {@code pay} action.
+     * Package-private so view-layer tests can drive it without opening an overlay.
+     */
+    Dialog buildCheckoutDialog() {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Payment");
+
+        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
+        Span amount = new Span(quote.success() && quote.total() != null
+                ? "Amount due: " + quote.total().toPlainString()
+                : "Amount due at checkout.");
+
+        TextField currency = new TextField("Currency");
+        currency.setValue("USD");
+        TextField cardNumber = new TextField("Card number");
+        TextField month = new TextField("Expiry month");
+        TextField year = new TextField("Expiry year");
+        TextField holder = new TextField("Card holder");
+        TextField cvv = new TextField("CVV");
+        TextField cardId = new TextField("ID");
+
+        Span dialogStatus = new Span();
+        Button pay = new Button("Pay", e -> submitPayment(dialog, dialogStatus, new CardPaymentInfo(
+                currency.getValue(), cardNumber.getValue(), month.getValue(), year.getValue(),
+                holder.getValue(), cvv.getValue(), cardId.getValue())));
+        pay.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        Button cancel = new Button("Cancel", e -> dialog.close());
+
+        dialog.add(new VerticalLayout(
+                new H4("Card details"), amount,
+                currency, cardNumber, month, year, holder, cvv, cardId,
+                new HorizontalLayout(pay, cancel), dialogStatus));
+        return dialog;
+    }
+
+    private void submitPayment(Dialog dialog, Span dialogStatus, CardPaymentInfo card) {
+        if (isBlank(card.cardNumber()) || isBlank(card.holder()) || isBlank(card.cvv())
+                || isBlank(card.month()) || isBlank(card.year()) || isBlank(card.cardId())) {
+            dialogStatus.setText("All card fields are required.");
+            UiMessages.error("All card fields are required.");
+            return;
+        }
+
+        CheckoutResult result = presenter.checkout(couponCode.getValue(), card);
         if (!result.success()) {
+            dialogStatus.setText(result.message());
             checkoutStatus.setText(result.message());
             orderActionStatus.setText(result.message());
             UiMessages.error(result.message());
             return;
         }
 
+        dialog.close();
         currentOrder = null;
         couponCode.clear();
         refreshOrderDisplay();
@@ -250,6 +301,10 @@ public class OrdersView extends VerticalLayout {
         checkoutStatus.setText(successMessage);
         orderActionStatus.setText(successMessage);
         UiMessages.success(successMessage);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private boolean canCheckout() {

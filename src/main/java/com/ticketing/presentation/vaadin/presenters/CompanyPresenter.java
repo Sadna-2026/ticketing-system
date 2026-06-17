@@ -17,6 +17,7 @@ import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.application.EditEventRequest;
 import com.ticketing.application.SearchEventsRequest;
+import com.ticketing.application.dto.CancelEventResponse;
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
@@ -844,8 +845,8 @@ public class CompanyPresenter {
         }
 
         try {
-            eventService.cancelEvent(token, eventId);
-            return ActionResult.success("Event cancelled.");
+            CancelEventResponse response = eventService.cancelEvent(token, eventId);
+            return ActionResult.success(response.message());
         } catch (RuntimeException ex) {
             return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
         }

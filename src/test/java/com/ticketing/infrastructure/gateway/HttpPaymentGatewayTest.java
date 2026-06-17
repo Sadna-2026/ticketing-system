@@ -65,6 +65,26 @@ class HttpPaymentGatewayTest {
     }
 
     @Test
+    void GivenBuyerCardDetails_WhenCharge_ThenBuyerCardOverridesConfiguredCard() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("currency=EUR")))
+                .andExpect(content().string(containsString("card_number=5555666677778888")))
+                .andExpect(content().string(containsString("cvv=321")))
+                .andExpect(content().string(containsString("id=987654321")))
+                .andRespond(withSuccess("55000", MediaType.TEXT_PLAIN));
+
+        PaymentDetails buyerCard = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com",
+                "EUR", "5555666677778888", "4", "2029", "Real Buyer", "321", "987654321");
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
+
+        assertThat(result.success()).isTrue();
+        server.verify();
+    }
+
+    @Test
     void GivenMinusOne_WhenCharge_ThenDeclined() {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);

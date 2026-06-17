@@ -30,6 +30,7 @@ import org.mockito.ArgumentCaptor;
 
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.dto.CancelEventResponse;
 import com.ticketing.application.dto.CompanyPublicDTO;
 import com.ticketing.application.dto.CompanySummaryDTO;
 import com.ticketing.application.dto.EventDetailsDTO;
@@ -282,6 +283,9 @@ class CompanyPresenterTest {
                 EventCategory.CONCERT, new EventSchedule(start, end, doors), EventStatus.DRAFT);
         when(eventService.createEvent(eq("member-token"), any(CreateEventRequest.class))).thenReturn(eventId);
         when(eventService.editEvent(eq("member-token"), any(EditEventRequest.class))).thenReturn(edited);
+        when(eventService.cancelEvent(eq("member-token"), eq(eventId))).thenReturn(
+                new CancelEventResponse(true, "Event cancelled successfully. 0 purchases were refunded.",
+                        eventId, 0, 0, 0, 0, 0, "CANCELLED"));
 
         EventActionResult created = presenter.createEvent(" Acme ", " Show ", "desc", EventCategory.CONCERT,
                 start, end, doors, 15, " Floor ", new BigDecimal("50.00"), 100, " Main Hall ");
