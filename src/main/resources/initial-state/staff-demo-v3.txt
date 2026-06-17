@@ -15,7 +15,7 @@ appoint-owner(u1_token, p1, u2);
 
 login(u2, secret2);
 accept-role-offer(u2_token, p1, OWNER);
-appoint-manager(u2_token, p1, u3, MAP_DEFINITION);
+appoint-manager(u2_token, p1, u3, EVENT_LIFECYCLE);
 
 login(u3, secret3);
 accept-role-offer(u3_token, p1, MANAGER);
