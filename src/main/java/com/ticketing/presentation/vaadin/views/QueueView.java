@@ -68,6 +68,7 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
     private UUID activeEventId;
     private Registration pollRegistration;
     private boolean inWaitingRoom = false;
+    private boolean pollingDisabled = false;
 
     public QueueView(QueuePresenter presenter) {
         this.presenter = presenter;
@@ -372,6 +373,9 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
     // ── Polling ─────────────────────────────────────────────────────
 
     private void startPolling() {
+        if (pollingDisabled) {
+            return;
+        }
         getUI().ifPresent(ui -> {
             ui.setPollInterval(POLL_INTERVAL_MS);
             if (pollRegistration == null) {
@@ -381,6 +385,7 @@ public class QueueView extends VerticalLayout implements BeforeEnterObserver, Be
     }
 
     private void stopPolling() {
+        pollingDisabled = true;
         if (pollRegistration != null) {
             pollRegistration.remove();
             pollRegistration = null;
