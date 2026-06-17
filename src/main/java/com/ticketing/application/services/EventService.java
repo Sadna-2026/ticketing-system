@@ -591,7 +591,7 @@ public class EventService implements ApplicationEventPublisherAware {
             throw new IllegalArgumentException("Event is not a lottery event");
 
         int maxWinners = event.getLotteryWindow() != null ? event.getLotteryWindow().maxWinners() : event.totalCapacity();
-        return performDraw(event, maxWinners);
+        return performDraw(event, Math.min(maxWinners, event.totalCapacity()));
     }
 
     /**
