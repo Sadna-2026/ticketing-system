@@ -59,7 +59,6 @@ public class BuyerContactSnapshot {
         BuyerContactSnapshot that = (BuyerContactSnapshot) o;
         return Objects.equals(email, that.email) &&
                Objects.equals(username, that.username) &&
-               Objects.equals(phoneNumber, that.phoneNumber) &&
                Objects.equals(phoneNumber, that.phoneNumber);
     }
 

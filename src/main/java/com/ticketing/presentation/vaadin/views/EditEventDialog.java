@@ -93,7 +93,11 @@ public class EditEventDialog extends Dialog {
     // Lottery window
     private final DateTimePicker lotteryOpenPicker = new DateTimePicker("Registration opens");
     private final DateTimePicker lotteryClosePicker = new DateTimePicker("Registration closes");
+    private final IntegerField maxWinnersField = new IntegerField("Max winners");
+    private final IntegerField purchaseWindowHoursField = new IntegerField("Winner purchase window (hours)");
+    private final Span participantCountSpan = new Span();
     private boolean isLotteryEvent;
+    private boolean lotteryRegistrationClosed;
     // Lifecycle
     private final Span lifecycleStatus = new Span();
 
@@ -175,11 +179,30 @@ public class EditEventDialog extends Dialog {
         section.setSpacing(true);
 
         if (isLotteryEvent) {
-            HorizontalLayout lotteryRow = new HorizontalLayout(lotteryOpenPicker, lotteryClosePicker);
-            lotteryRow.setWidthFull();
-            Button saveLottery = new Button("Save lottery window", e -> saveLotteryWindow());
+            maxWinnersField.setMin(1);
+            maxWinnersField.setStepButtonsVisible(true);
+            purchaseWindowHoursField.setMin(1);
+            purchaseWindowHoursField.setStepButtonsVisible(true);
+
+            boolean canEdit = !lotteryRegistrationClosed;
+            lotteryOpenPicker.setReadOnly(!canEdit);
+            lotteryClosePicker.setReadOnly(!canEdit);
+            maxWinnersField.setReadOnly(!canEdit);
+            purchaseWindowHoursField.setReadOnly(!canEdit);
+
+            HorizontalLayout lotteryRow1 = new HorizontalLayout(lotteryOpenPicker, lotteryClosePicker);
+            lotteryRow1.setWidthFull();
+            HorizontalLayout lotteryRow2 = new HorizontalLayout(maxWinnersField, purchaseWindowHoursField);
+            lotteryRow2.setWidthFull();
+
+            Button saveLottery = new Button("Save lottery settings", e -> saveLotteryWindow());
             saveLottery.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-            section.add(new H4("Lottery registration window"), lotteryRow, saveLottery);
+            saveLottery.setEnabled(canEdit);
+
+            section.add(new H4("Lottery settings"), participantCountSpan, lotteryRow1, lotteryRow2, saveLottery);
+            if (lotteryRegistrationClosed) {
+                section.add(new Span("Registration is closed — lottery settings are locked."));
+            }
         }
 
         return section;
@@ -205,8 +228,18 @@ public class EditEventDialog extends Dialog {
             UiMessages.error("Both registration open and close times are required.");
             return;
         }
+        Integer maxWinners = maxWinnersField.getValue();
+        Integer purchaseHours = purchaseWindowHoursField.getValue();
+        if (maxWinners == null || maxWinners < 1) {
+            UiMessages.error("Max winners must be at least 1.");
+            return;
+        }
+        if (purchaseHours == null || purchaseHours < 1) {
+            UiMessages.error("Winner purchase window must be at least 1 hour.");
+            return;
+        }
         EventActionResult result = presenter.editEvent(
-                eventId, null, null, null, null, null, null, open, close);
+                eventId, null, null, null, null, null, null, open, close, maxWinners, purchaseHours);
         detailsStatus.setText(result.message());
         showResult(result.success(), result.message());
     }
@@ -398,8 +431,15 @@ public class EditEventDialog extends Dialog {
         }
         layoutEditor.setEventMap(map);
         if (isLotteryEvent && map.lotteryInfo() != null) {
-            lotteryOpenPicker.setValue(toLocal(map.lotteryInfo().registrationOpen()));
-            lotteryClosePicker.setValue(toLocal(map.lotteryInfo().registrationClose()));
+            EventMapDTO.LotteryInfo li = map.lotteryInfo();
+            lotteryOpenPicker.setValue(toLocal(li.registrationOpen()));
+            lotteryClosePicker.setValue(toLocal(li.registrationClose()));
+            maxWinnersField.setValue(li.maxWinners());
+            purchaseWindowHoursField.setValue(li.purchaseWindowHours());
+            participantCountSpan.setText("Registered participants: " + li.participantCount());
+            lotteryRegistrationClosed = !li.registrationIsOpen()
+                    && li.registrationClose() != null
+                    && li.registrationClose().isBefore(java.time.Instant.now());
         }
     }
 

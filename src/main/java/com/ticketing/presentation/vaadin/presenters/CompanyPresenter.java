@@ -829,6 +829,23 @@ public class CompanyPresenter {
             Instant lotteryOpen,
             Instant lotteryClose
     ) {
+        return editEvent(eventId, name, description, artist, startTime, endTime, doorsOpenTime,
+                lotteryOpen, lotteryClose, 50, 48);
+    }
+
+    public EventActionResult editEvent(
+            UUID eventId,
+            String name,
+            String description,
+            String artist,
+            Instant startTime,
+            Instant endTime,
+            Instant doorsOpenTime,
+            Instant lotteryOpen,
+            Instant lotteryClose,
+            int maxWinners,
+            int purchaseWindowHours
+    ) {
         String token = memberToken();
         if (token == null) {
             return EventActionResult.failure(MEMBER_SESSION_REQUIRED);
@@ -843,7 +860,7 @@ public class CompanyPresenter {
                     : new EventSchedule(startTime, endTime, doorsOpenTime);
             LotteryWindow lotteryWindow = lotteryOpen == null && lotteryClose == null
                     ? null
-                    : new LotteryWindow(lotteryOpen, lotteryClose);
+                    : new LotteryWindow(lotteryOpen, lotteryClose, maxWinners, purchaseWindowHours);
             EventDetailsDTO details = eventService.editEvent(token, new EditEventRequest(
                     eventId,
                     blankToNull(name),

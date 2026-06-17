@@ -54,7 +54,7 @@ public class QueuePresenter {
             }
             return QueueResult.queued(
                     "You have been placed in the virtual queue. Status: " + entry.getStatus() + ".", entry);
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException | IllegalStateException ex) {
             return QueueResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
             logger.warn(JOIN_FAILURE_MESSAGE, ex);
@@ -102,6 +102,8 @@ public class QueuePresenter {
                 return QueueResult.directEntry("No queue active — entering directly.");
             }
             return QueueResult.queued("You have been placed in the virtual queue.", entry);
+        } catch (IllegalStateException ex) {
+            return QueueResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
             logger.warn("Queue gate check failed for event {}, allowing through", eventId, ex);
             return QueueResult.directEntry("Queue check skipped — entering directly.");
@@ -140,9 +142,12 @@ public class QueuePresenter {
         }
         try {
             VirtualQueueDto queue = orderService.getQueueForEvent(eventId);
+            // Use the most recent non-LEFT entry for this session.
+            // findFirst() would return the oldest entry, which may be a stale LEFT entry
+            // from a prior queue visit — causing the UI to show "Status: LEFT" forever.
             QueueEntryDto myEntry = queue.getEntries().stream()
-                    .filter(e -> sessionId.equals(e.getSessionId()))
-                    .findFirst()
+                    .filter(e -> sessionId.equals(e.getSessionId()) && !"LEFT".equals(e.getStatus()))
+                    .reduce((first, second) -> second)
                     .orElse(null);
             if (myEntry == null) {
                 return QueueStatusResult.notInQueue("You are not in the queue for this event.");
@@ -150,9 +155,10 @@ public class QueuePresenter {
             if ("ADMITTED".equals(myEntry.getStatus())) {
                 return QueueStatusResult.admitted("It's your turn! You have been admitted.", myEntry, 0);
             }
-            // Count WAITING entries that joined before this session
+            // Count WAITING AND ADMITTED entries that joined before this session
+            // (both are occupying a slot ahead of us)
             int waitingAhead = (int) queue.getEntries().stream()
-                    .filter(e -> "WAITING".equals(e.getStatus())
+                    .filter(e -> ("WAITING".equals(e.getStatus()) || "ADMITTED".equals(e.getStatus()))
                             && !sessionId.equals(e.getSessionId())
                             && myEntry.getJoinedAt() != null
                             && e.getJoinedAt() != null

@@ -64,7 +64,20 @@ public record EventMapDTO(
     }
 
     /** Lottery registration window metadata, non-null only for LOTTERY events. */
-    public record LotteryInfo(Instant registrationOpen, Instant registrationClose, boolean registrationIsOpen) {}
+    public record LotteryInfo(
+            Instant registrationOpen,
+            Instant registrationClose,
+            boolean registrationIsOpen,
+            int maxWinners,
+            int purchaseWindowHours,
+            /** Total registrants so far; exposed for managers. */
+            int participantCount
+    ) {
+        /** Backward-compat for callers that don't carry winner/window/count fields. */
+        public LotteryInfo(Instant registrationOpen, Instant registrationClose, boolean registrationIsOpen) {
+            this(registrationOpen, registrationClose, registrationIsOpen, 50, 48, 0);
+        }
+    }
 
     public record ZoneInfo(
             UUID id,

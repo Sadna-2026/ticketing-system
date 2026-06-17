@@ -150,9 +150,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
                 loadEventById(pendingEventId);
                 pendingEventId = null;
             }
-            if (currentEventMap != null) {
-                startMapPolling();
-            }
+            // Do NOT restart map polling on re-attach — polling only runs while dialog is open,
+            // which is stopped when the dialog closes. Restarting here would cause spurious
+            // queue gate checks every 2s whenever the user returns to the Events page.
         });
     }
 
@@ -168,12 +168,24 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             }
         } else {
             pendingEventId = null;
+            // Normal navigation to /events — reset stale selection state so the page
+            // starts clean instead of showing the previously selected event map.
+            selectedEvent = null;
+            currentEventMap = null;
+            directlyAdmittedEventId = null;
+            viewMap.setEnabled(false);
+            resultsStatus.setText("Search for events to see results.");
+            resultsGrid.setItems(List.of());
+            clearSelectionState();
+            stopMapPolling();
         }
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        releaseQueueSlot();
+        // Always release queue slot when view detaches, even if user has items in cart.
+        // They're leaving the Events page, so they should no longer occupy a queue slot.
+        releaseQueueSlotForce();
         super.onDetach(detachEvent);
     }
 
@@ -345,7 +357,6 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             refreshDialogOrderStatus(ticketDialogOrderStatus);
         } else {
             openTicketDialog(eventId, result.eventMap());
-            startMapPolling();
         }
     }
 
@@ -395,6 +406,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     // ── Ticket-selection dialog (opened after queue admission) ──────
 
     private void openTicketDialog(UUID eventId, EventMapDTO eventMap) {
+        stopMapPolling();
         mainTicketDialog = new Dialog();
         activeTicketDialog = mainTicketDialog;
         mainTicketDialog.setHeaderTitle(eventMap.eventName() + " — Ticket Selection");
@@ -424,7 +436,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
         mainTicketDialog.addOpenedChangeListener(e -> {
             if (!e.isOpened()) {
-                releaseQueueSlot();
+                releaseQueueSlotForce();
                 refreshActiveOrderStatus();
                 stopMapPolling();
                 mainTicketDialog = null;
@@ -637,6 +649,13 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     private void releaseQueueSlot() {
+        if (directlyAdmittedEventId != null) {
+            queuePresenter.notifyLeft(directlyAdmittedEventId);
+            directlyAdmittedEventId = null;
+        }
+    }
+
+    private void releaseQueueSlotForce() {
         if (directlyAdmittedEventId != null) {
             queuePresenter.notifyLeft(directlyAdmittedEventId);
             directlyAdmittedEventId = null;

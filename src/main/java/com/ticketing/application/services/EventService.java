@@ -29,12 +29,12 @@ import com.ticketing.application.RedefineVenueRequest;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CancelEventResponse;
-import com.ticketing.application.scheduling.LotteryScheduleEvent;
 import com.ticketing.application.dto.EventDetailsDTO;
 import com.ticketing.application.dto.EventMapDTO;
 import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.LotteryRegistrationRequest;
 import com.ticketing.application.dto.LotteryRegistrationResponse;
+import com.ticketing.application.scheduling.LotteryScheduleEvent;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.AndPolicy;
@@ -590,7 +590,8 @@ public class EventService implements ApplicationEventPublisherAware {
         if (!event.isLottery())
             throw new IllegalArgumentException("Event is not a lottery event");
 
-        return performDraw(event, event.totalCapacity());
+        int maxWinners = event.getLotteryWindow() != null ? event.getLotteryWindow().maxWinners() : event.totalCapacity();
+        return performDraw(event, Math.min(maxWinners, event.totalCapacity()));
     }
 
     /**
@@ -620,8 +621,8 @@ public class EventService implements ApplicationEventPublisherAware {
             return new ArrayList<>();
         }
 
-        // Winners get 48 hours to complete their purchase before the event opens to all
-        Instant purchaseWindowDeadline = systemClock.now().plus(Duration.ofHours(48));
+        int purchaseHours = (event.getLotteryWindow() != null) ? event.getLotteryWindow().purchaseWindowHours() : 48;
+        Instant purchaseWindowDeadline = systemClock.now().plus(Duration.ofHours(purchaseHours));
         List<ActiveOrder> createdOrders = new ArrayList<>();
 
         for (LotteryEntry winner : winners) {
@@ -916,7 +917,11 @@ public class EventService implements ApplicationEventPublisherAware {
         EventMapDTO.LotteryInfo lotteryInfo = null;
         if (event.isLottery() && event.getLotteryWindow() != null) {
             com.ticketing.domain.event.LotteryWindow w = event.getLotteryWindow();
-            lotteryInfo = new EventMapDTO.LotteryInfo(w.registrationOpen(), w.registrationClose(), w.isOpen(systemClock.now()));
+            int participantCount = lotteryRepository != null
+                    ? lotteryRepository.findByEventId(event.getId()).size() : 0;
+            lotteryInfo = new EventMapDTO.LotteryInfo(
+                    w.registrationOpen(), w.registrationClose(), w.isOpen(systemClock.now()),
+                    w.maxWinners(), w.purchaseWindowHours(), participantCount);
         }
 
         return Optional.of(new EventMapDTO(

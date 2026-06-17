@@ -173,7 +173,7 @@ class QueueBranchCoverageTest {
         assertFalse(queue.shouldQueue());
         queue.activate();
         assertTrue(queue.isActive());
-        assertTrue(queue.shouldQueue());
+        assertFalse(queue.shouldQueue()); // flush reset currentActiveUsers to 0, so queue is empty after reactivation
 
         queue.updateConfig(new QueueConfig(5, 1));
         assertEquals(5, queue.getConfig().getThreshold());

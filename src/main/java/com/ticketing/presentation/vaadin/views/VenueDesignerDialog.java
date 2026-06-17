@@ -98,7 +98,10 @@ public class VenueDesignerDialog extends Dialog {
     private final ComboBox<String> saleMethodCombo = new ComboBox<>("Sale method");
     private final DateTimePicker lotteryOpenTime = new DateTimePicker("Registration opens");
     private final DateTimePicker lotteryCloseTime = new DateTimePicker("Registration closes");
-    private final HorizontalLayout lotterySection = new HorizontalLayout(lotteryOpenTime, lotteryCloseTime);
+    private final IntegerField lotteryMaxWinners = new IntegerField("Max winners");
+    private final IntegerField lotteryPurchaseWindowHours = new IntegerField("Winner purchase window (hours)");
+    private final HorizontalLayout lotterySection = new HorizontalLayout(
+            lotteryOpenTime, lotteryCloseTime, lotteryMaxWinners, lotteryPurchaseWindowHours);
 
     // Grid controls
     private final IntegerField rowsField = new IntegerField("Rows");
@@ -158,6 +161,12 @@ public class VenueDesignerDialog extends Dialog {
 
         saleMethodCombo.setItems("Regular", "Lottery");
         saleMethodCombo.setValue("Regular");
+        lotteryMaxWinners.setMin(1);
+        lotteryMaxWinners.setValue(50);
+        lotteryMaxWinners.setStepButtonsVisible(true);
+        lotteryPurchaseWindowHours.setMin(1);
+        lotteryPurchaseWindowHours.setValue(48);
+        lotteryPurchaseWindowHours.setStepButtonsVisible(true);
         lotterySection.setVisible(false);
         saleMethodCombo.addValueChangeListener(e -> lotterySection.setVisible("Lottery".equals(e.getValue())));
 
@@ -616,7 +625,17 @@ public class VenueDesignerDialog extends Dialog {
                 UiMessages.error("Registration open time must be before close time.");
                 return;
             }
-            lotteryWindow = new LotteryWindow(lotteryOpen, lotteryClose);
+            Integer maxW = lotteryMaxWinners.getValue();
+            Integer pwHours = lotteryPurchaseWindowHours.getValue();
+            if (maxW == null || maxW < 1) {
+                UiMessages.error("Max winners must be at least 1.");
+                return;
+            }
+            if (pwHours == null || pwHours < 1) {
+                UiMessages.error("Winner purchase window must be at least 1 hour.");
+                return;
+            }
+            lotteryWindow = new LotteryWindow(lotteryOpen, lotteryClose, maxW, pwHours);
         }
 
         EventActionResult result = presenter.defineVenue(

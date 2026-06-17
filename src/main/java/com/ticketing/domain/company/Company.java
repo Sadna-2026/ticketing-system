@@ -23,10 +23,12 @@ public class Company {
     @Id
     @Column(name = "name")
     private String name; // also the unique identifier for the company
+    @Column(name = "description")
     private String description;
     @Column(name = "founder_id")
     private UUID founderId;
     @Enumerated(EnumType.STRING)
+    @Column(name = "status")
     private CompanyStatus status;
     // Policy hierarchies are mapped separately in V3-6 (#264); kept @Transient here and
     // defaulted in the JPA no-arg constructor so a reloaded Company is never null.
@@ -34,8 +36,10 @@ public class Company {
     private IPurchasePolicy purchasePolicy;
     @Transient
     private IDiscountPolicy discountPolicy;
+    @Column(name = "allow_discount_stacking", nullable = false)
     private boolean allowDiscountStacking;  // true = company + event discounts both apply
     @Version
+    @Column(name = "version")
     private int version;
 
     /** JPA-only no-arg constructor. */

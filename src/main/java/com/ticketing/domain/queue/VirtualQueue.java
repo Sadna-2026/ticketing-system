@@ -73,9 +73,25 @@ public class VirtualQueue {
     }
 
     /**
+     * Returns the most recent non-LEFT entry for a session, or empty if none exists.
+     * Used to detect whether a session is already WAITING or ADMITTED before creating a new entry.
+     */
+    public Optional<QueueEntry> findActiveEntry(UUID sessionId) {
+        return entries.stream()
+                .filter(e -> sessionId.equals(e.getSessionId()) && e.getStatus() != QueueEntryStatus.LEFT)
+                .reduce((first, second) -> second);
+    }
+
+    /**
      * Adds a user to the queue.
+     * Idempotent: if the session already has a non-LEFT (WAITING or ADMITTED) entry, that
+     * entry is returned unchanged instead of creating a duplicate.
      */
     public QueueEntry enqueue(UUID sessionId, Instant now) {
+        Optional<QueueEntry> existing = findActiveEntry(sessionId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         QueueEntry entry = new QueueEntry(UUID.randomUUID(), sessionId, now);
         entries.add(entry);
         return entry;
@@ -160,9 +176,14 @@ public class VirtualQueue {
 
     /**
      * Flushes/clears the queue (Admin emergency action).
+     * Marks all WAITING and ADMITTED entries LEFT and releases the active-user slots
+     * held by any ADMITTED entries so the counter resets correctly.
      */
     public void flush() {
-        entries.stream().filter(QueueEntry::isWaiting).forEach(QueueEntry::leave);
+        entries.stream()
+                .filter(e -> e.getStatus() == QueueEntryStatus.ADMITTED || e.getStatus() == QueueEntryStatus.WAITING)
+                .forEach(QueueEntry::leave);
+        currentActiveUsers = 0;
     }
 
     public void deactivate() { this.active = false; }
