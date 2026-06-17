@@ -173,7 +173,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        releaseQueueSlot();
+        // Always release queue slot when view detaches, even if user has items in cart.
+        // They're leaving the Events page, so they should no longer occupy a queue slot.
+        releaseQueueSlotForce();
         super.onDetach(detachEvent);
     }
 
@@ -648,6 +650,15 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     private void releaseQueueSlot() {
+        if (directlyAdmittedEventId != null) {
+            queuePresenter.notifyLeft(directlyAdmittedEventId);
+            directlyAdmittedEventId = null;
+        }
+    }
+
+    private void releaseQueueSlotForce() {
+        // Always release queue slot, even if user has items in cart.
+        // Used when user navigates away from Events page entirely (not just closing dialog).
         if (directlyAdmittedEventId != null) {
             queuePresenter.notifyLeft(directlyAdmittedEventId);
             directlyAdmittedEventId = null;
