@@ -25,6 +25,7 @@ import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.application.EditEventRequest;
 import com.ticketing.application.ISystemClock;
+import com.ticketing.application.RedefineVenueRequest;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.auth.ISessionTokenService;
 import com.ticketing.application.dto.CancelEventResponse;
@@ -263,7 +264,6 @@ public class EventService implements ApplicationEventPublisherAware {
             Company company = loadActiveCompany(event.getCompanyName());
             StaffAppointment appointment = loadAppointment(memberId, company.getName());
             authorizeEventCreation(appointment);
-            event.resetVenue();
             if (request.name() != null) {
                 event.setName(request.name());
             }
@@ -275,10 +275,39 @@ public class EventService implements ApplicationEventPublisherAware {
             }
         }
 
+        applyVenueDefinition(event, request.zones(), request.sectionToZoneName(), request.cells(), request.rows(), request.cols());
+
+        saveEvent(event);
+        log.info("Venue defined: eventId={}, zones={}", event.getId(), event.getZones().size());
+        return event.getId();
+    }
+
+    @Transactional
+    public void redefineVenue(String token, RedefineVenueRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+        UUID memberId = authenticateMember(token);
+        rejectIfSuspended(memberId);
+
+        Event event = eventRepository.findById(request.eventId())
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
+        Company company = loadActiveCompany(event.getCompanyName());
+        StaffAppointment appointment = loadAppointment(memberId, company.getName());
+        authorizeMapDefinition(appointment);
+
+        applyVenueDefinition(event, request.zones(), request.sectionToZoneName(), request.cells(), request.rows(), request.cols());
+
+        saveEvent(event);
+        log.info("Venue redefined: eventId={}, zones={}", event.getId(), event.getZones().size());
+    }
+
+    private void applyVenueDefinition(Event event, List<CreateEventRequest.ZoneSpec> zones, Map<String, String> sectionToZoneName, List<DefineVenueRequest.CellSpec> cellSpecs, int rows, int cols) {
+        event.resetVenue();
         // 1) Zones + seats, tracking the generated ids so the layout can reference them.
         Map<String, UUID> zoneIdsByName = new LinkedHashMap<>();
         Map<String, Map<String, UUID>> seatIdsByZone = new HashMap<>();
-        for (CreateEventRequest.ZoneSpec spec : request.zones()) {
+        for (CreateEventRequest.ZoneSpec spec : zones) {
             InventoryZone zone = buildZone(spec);
             if (zoneIdsByName.put(spec.name(), zone.getId()) != null) {
                 throw new IllegalArgumentException("Duplicate zone name: " + spec.name());
@@ -293,12 +322,12 @@ public class EventService implements ApplicationEventPublisherAware {
             event.addZone(zone);
         }
 
-        // 2) Section Γזע zone venue map.
-        event.setVenueMap(buildVenueMap(request.sectionToZoneName(), zoneIdsByName));
+        // 2) Section -> zone venue map.
+        event.setVenueMap(buildVenueMap(sectionToZoneName, zoneIdsByName));
 
         // 3) Visual layout, linked cell-by-cell to the inventory built above.
         List<LayoutCell> cells = new ArrayList<>();
-        for (DefineVenueRequest.CellSpec c : request.cells()) {
+        for (DefineVenueRequest.CellSpec c : cellSpecs) {
             switch (c.type()) {
                 case SEAT -> {
                     UUID zoneId = zoneIdsByName.get(c.zoneName());
@@ -314,15 +343,10 @@ public class EventService implements ApplicationEventPublisherAware {
             }
         }
         if (!cells.isEmpty()) {
-            VenueLayout layout = new VenueLayout(request.rows(), request.cols(), cells);
+            VenueLayout layout = new VenueLayout(rows, cols, cells);
             validateLayoutReferences(event, layout);
             event.setVenueLayout(layout);
         }
-
-        saveEvent(event);
-        log.info("Venue defined: eventId={}, zones={}, cells={}",
-                event.getId(), zoneIdsByName.size(), cells.size());
-        return event.getId();
     }
 
     private static String seatKey(String row, String seatNumber) {

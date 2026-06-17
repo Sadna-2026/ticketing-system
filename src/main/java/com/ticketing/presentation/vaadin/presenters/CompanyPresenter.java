@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import com.ticketing.application.CreateEventRequest;
 import com.ticketing.application.DefineVenueRequest;
 import com.ticketing.application.EditEventRequest;
+import com.ticketing.application.RedefineVenueRequest;
 import com.ticketing.application.SearchEventsRequest;
 import com.ticketing.application.dto.CancelEventResponse;
 import com.ticketing.application.dto.CompanyPublicDTO;
@@ -743,6 +744,61 @@ public class CompanyPresenter {
                     create ? "Event created with " + zones.size() + " zone(s)." : "Event updated.", id);
         } catch (RuntimeException ex) {
             return EventActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    public ActionResult redefineVenue(
+            UUID eventId, int rows, int cols,
+            List<CreateEventRequest.ZoneSpec> zones,
+            Map<String, String> sectionToZoneName,
+            List<DefineVenueRequest.CellSpec> cells) {
+        String token = memberToken();
+        if (token == null) {
+            return ActionResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return ActionResult.failure("Event ID is required.");
+        }
+        try {
+            RedefineVenueRequest request = new RedefineVenueRequest(
+                    eventId, rows, cols, zones, sectionToZoneName, cells);
+            eventService.redefineVenue(token, request);
+            return ActionResult.success("Venue layout and zones updated.");
+        } catch (RuntimeException ex) {
+            return ActionResult.failure(userMessage(ex, EVENT_FAILURE_MESSAGE));
+        }
+    }
+
+    public record DrawLotteryResult(boolean success, String message, int winnersCount, List<UUID> winnerMemberIds) {
+        public static DrawLotteryResult success(String message, int winnersCount, List<UUID> winnerMemberIds) {
+            return new DrawLotteryResult(true, message, winnersCount, winnerMemberIds);
+        }
+        public static DrawLotteryResult failure(String message) {
+            return new DrawLotteryResult(false, message, 0, List.of());
+        }
+    }
+
+    public DrawLotteryResult drawLottery(UUID eventId, int capacity) {
+        String token = memberToken();
+        if (token == null) {
+            return DrawLotteryResult.failure(MEMBER_SESSION_REQUIRED);
+        }
+        if (eventId == null) {
+            return DrawLotteryResult.failure("Select an event before drawing the lottery.");
+        }
+        if (capacity <= 0) {
+            return DrawLotteryResult.failure("Maximum ticket capacity must be at least 1.");
+        }
+        try {
+            List<ActiveOrder> winners = eventService.drawLottery(token, eventId, capacity);
+            List<UUID> memberIds = winners.stream()
+                    .map(ActiveOrder::getMemberId)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            return DrawLotteryResult.success(
+                    "Lottery drawn: " + winners.size() + " winner(s) selected and orders created.", winners.size(), memberIds);
+        } catch (RuntimeException ex) {
+            return DrawLotteryResult.failure(userMessage(ex, "Could not draw lottery. Please try again."));
         }
     }
 
