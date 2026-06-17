@@ -150,9 +150,9 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
                 loadEventById(pendingEventId);
                 pendingEventId = null;
             }
-            if (currentEventMap != null) {
-                startMapPolling();
-            }
+            // Do NOT restart map polling on re-attach — polling only runs while dialog is open,
+            // which is stopped when the dialog closes. Restarting here would cause spurious
+            // queue gate checks every 2s whenever the user returns to the Events page.
         });
     }
 
@@ -168,6 +168,16 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             }
         } else {
             pendingEventId = null;
+            // Normal navigation to /events — reset stale selection state so the page
+            // starts clean instead of showing the previously selected event map.
+            selectedEvent = null;
+            currentEventMap = null;
+            directlyAdmittedEventId = null;
+            viewMap.setEnabled(false);
+            resultsStatus.setText("Search for events to see results.");
+            resultsGrid.setItems(List.of());
+            clearSelectionState();
+            stopMapPolling();
         }
     }
 
