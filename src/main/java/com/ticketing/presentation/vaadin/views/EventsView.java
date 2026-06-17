@@ -347,7 +347,6 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             refreshDialogOrderStatus(ticketDialogOrderStatus);
         } else {
             openTicketDialog(eventId, result.eventMap());
-            startMapPolling();
         }
     }
 
@@ -397,6 +396,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     // ── Ticket-selection dialog (opened after queue admission) ──────
 
     private void openTicketDialog(UUID eventId, EventMapDTO eventMap) {
+        stopMapPolling();
         mainTicketDialog = new Dialog();
         activeTicketDialog = mainTicketDialog;
         mainTicketDialog.setHeaderTitle(eventMap.eventName() + " — Ticket Selection");
