@@ -22,7 +22,6 @@ import com.ticketing.application.services.OrderService;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.*;
 import com.ticketing.domain.lottery.LotteryEntry;
-import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.domain.order.ActiveOrder;
@@ -33,8 +32,10 @@ import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
 
 /**
- * FIX-V3-LOTTERY-FLOW: verifies that the lottery purchase-right rules are
- * enforced end-to-end in the application/domain layer.
+ * FIX-V3-LOTTERY-FLOW: verifies that the lottery purchase-right rules are enforced
+ * end-to-end. The draw itself now runs automatically when the registration window closes
+ * (see {@code LotteryDrawScheduler}); it is a system action with no token/permission gate,
+ * so these tests drive it through {@link EventService#drawLotteryAutomatically(UUID)}.
  */
 @DisplayName("Lottery purchase-right enforcement")
 class LotteryEnforcementTest {
@@ -126,8 +127,8 @@ class LotteryEnforcementTest {
         return e;
     }
 
-    private LotteryEntry register(UUID entryMemberId, int quantity) {
-        LotteryEntry entry = new LotteryEntry(UUID.randomUUID(), eventId, entryMemberId, zoneId, quantity, NOW);
+    private LotteryEntry register(UUID entryMemberId) {
+        LotteryEntry entry = new LotteryEntry(UUID.randomUUID(), eventId, entryMemberId, NOW);
         lotteryRepository.save(entry);
         return entry;
     }
@@ -170,89 +171,6 @@ class LotteryEnforcementTest {
         }
     }
 
-    // ── Draw authorization ────────────────────────────────────────────────────
-
-    @Nested
-    @DisplayName("Draw authorization")
-    class DrawAuthorization {
-
-        @Test
-        @DisplayName("Company owner can draw the lottery")
-        void GivenOwner_WhenDraw_ThenSucceeds() {
-            publishedLotteryEvent(NOW.minusSeconds(3600));
-            register(UUID.randomUUID(), 1);
-            assertDoesNotThrow(() -> eventService.drawLottery(OWNER_TOKEN, eventId, 10));
-        }
-
-        @Test
-        @DisplayName("Authorized manager with EVENT_LIFECYCLE can draw")
-        void GivenManagerWithPermission_WhenDraw_ThenSucceeds() {
-            publishedLotteryEvent(NOW.minusSeconds(3600));
-            register(UUID.randomUUID(), 1);
-
-            UUID managerId = UUID.randomUUID();
-            when(sessionTokenService.extractMemberId("mgr-token")).thenReturn(managerId);
-            Member manager = new Member(managerId, "mgr", "mgr@test.com", "pw");
-            manager.addStaffAppointment(COMPANY,
-                    new StaffAppointment(COMPANY, ownerId, StaffAppointment.StaffRole.MANAGER,
-                            Set.of(ManagerPermission.EVENT_LIFECYCLE)));
-            memberRepository.save(manager);
-
-            assertDoesNotThrow(() -> eventService.drawLottery("mgr-token", eventId, 10));
-        }
-
-        @Test
-        @DisplayName("Regular member without staff role cannot draw")
-        void GivenRegularMember_WhenDraw_ThenRejected() {
-            publishedLotteryEvent(NOW.minusSeconds(3600));
-            assertThrows(SecurityException.class,
-                    () -> eventService.drawLottery(MEMBER_TOKEN, eventId, 10));
-        }
-
-        @Test
-        @DisplayName("Manager of another company cannot draw")
-        void GivenManagerOfOtherCompany_WhenDraw_ThenRejected() {
-            publishedLotteryEvent(NOW.minusSeconds(3600));
-
-            UUID otherId = UUID.randomUUID();
-            when(sessionTokenService.extractMemberId("other-token")).thenReturn(otherId);
-            companyRepository.save(new Company("Other Corp", "other", otherId));
-            Member otherOwner = new Member(otherId, "other", "other@test.com", "pw");
-            otherOwner.addStaffAppointment("Other Corp",
-                    new StaffAppointment("Other Corp", otherId, StaffAppointment.StaffRole.OWNER, Set.of()));
-            memberRepository.save(otherOwner);
-
-            assertThrows(SecurityException.class,
-                    () -> eventService.drawLottery("other-token", eventId, 10));
-        }
-
-        @Test
-        @DisplayName("Manager without EVENT_LIFECYCLE permission cannot draw")
-        void GivenManagerWithoutPermission_WhenDraw_ThenRejected() {
-            publishedLotteryEvent(NOW.minusSeconds(3600));
-
-            UUID noPermId = UUID.randomUUID();
-            when(sessionTokenService.extractMemberId("noperm-token")).thenReturn(noPermId);
-            Member noPermMgr = new Member(noPermId, "noperm", "noperm@test.com", "pw");
-            noPermMgr.addStaffAppointment(COMPANY,
-                    new StaffAppointment(COMPANY, ownerId, StaffAppointment.StaffRole.MANAGER,
-                            Set.of(ManagerPermission.INVENTORY_MGMT)));
-            memberRepository.save(noPermMgr);
-
-            assertThrows(SecurityException.class,
-                    () -> eventService.drawLottery("noperm-token", eventId, 10));
-        }
-
-        @Test
-        @DisplayName("Regular event cannot be drawn")
-        void GivenRegularEvent_WhenDraw_ThenRejected() {
-            Event regular = publishedRegularEvent();
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                    () -> eventService.drawLottery(OWNER_TOKEN, regular.getId(), 10));
-            assertTrue(ex.getMessage().contains("lottery"), ex.getMessage());
-        }
-    }
-
     // ── Draw correctness ──────────────────────────────────────────────────────
 
     @Nested
@@ -260,48 +178,41 @@ class LotteryEnforcementTest {
     class DrawCorrectness {
 
         @Test
+        @DisplayName("A regular (non-lottery) event cannot be drawn")
+        void GivenRegularEvent_WhenDraw_ThenRejected() {
+            Event regular = publishedRegularEvent();
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> eventService.drawLotteryAutomatically(regular.getId()));
+            assertTrue(ex.getMessage().contains("lottery"), ex.getMessage());
+        }
+
+        @Test
         @DisplayName("Draw before registration window closes is rejected")
         void GivenOpenWindow_WhenDraw_ThenRejected() {
             publishedLotteryEvent(NOW.plusSeconds(3600)); // window still open
-            register(UUID.randomUUID(), 1);
+            register(UUID.randomUUID());
             IllegalStateException ex = assertThrows(IllegalStateException.class,
-                    () -> eventService.drawLottery(OWNER_TOKEN, eventId, 10));
+                    () -> eventService.drawLotteryAutomatically(eventId));
             assertTrue(ex.getMessage().toLowerCase().contains("window"), ex.getMessage());
         }
 
         @Test
-        @DisplayName("Repeated draw after results finalized is rejected (idempotency)")
-        void GivenAlreadyDrawn_WhenDrawAgain_ThenRejected() {
+        @DisplayName("Repeated draw after results finalized is a no-op (idempotency)")
+        void GivenAlreadyDrawn_WhenDrawAgain_ThenNoNewWinners() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
-            register(UUID.randomUUID(), 1);
-            eventService.drawLottery(OWNER_TOKEN, eventId, 10);
+            register(UUID.randomUUID());
+            assertEquals(1, eventService.drawLotteryAutomatically(eventId).size());
 
-            IllegalStateException ex = assertThrows(IllegalStateException.class,
-                    () -> eventService.drawLottery(OWNER_TOKEN, eventId, 10));
-            assertTrue(ex.getMessage().toLowerCase().contains("already"), ex.getMessage());
-        }
-
-        @Test
-        @DisplayName("Ticket quantities are respected — capacity counts tickets not entries")
-        void GivenEntriesRequestingMultipleTickets_WhenDraw_ThenTotalTicketsRespectCapacity() {
-            publishedLotteryEvent(NOW.minusSeconds(3600));
-            // 5 entries, each requesting 3 tickets — capacity = 5 tickets → max 1 winner
-            for (int i = 0; i < 5; i++) {
-                register(UUID.randomUUID(), 3);
-            }
-            List<ActiveOrder> winners = eventService.drawLottery(OWNER_TOKEN, eventId, 5);
-            int totalTickets = winners.stream()
-                    .mapToInt(o -> o.getItems().stream().mapToInt(item -> item.getQuantity()).sum())
-                    .sum();
-            assertTrue(totalTickets <= 5, "Total tickets granted must not exceed capacity: " + totalTickets);
+            // Second draw must not produce additional winners.
+            assertTrue(eventService.drawLotteryAutomatically(eventId).isEmpty());
         }
 
         @Test
         @DisplayName("Inventory is NOT pre-allocated at draw time — winner picks tickets later")
         void GivenWinner_WhenDraw_ThenInventoryNotPreAllocated() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
-            register(memberId, 2);
-            eventService.drawLottery(OWNER_TOKEN, eventId, 10);
+            register(memberId);
+            eventService.drawLotteryAutomatically(eventId);
 
             Event event = eventRepository.findById(eventId).orElseThrow();
             InventoryZone zone = event.findZone(zoneId);
@@ -319,8 +230,8 @@ class LotteryEnforcementTest {
         @DisplayName("Winner receives a persisted empty LOTTERY_WIN order with correct member/event/deadline")
         void GivenWinner_WhenDraw_ThenOrderPersistedWithCorrectAttributes() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
-            register(memberId, 2);
-            List<ActiveOrder> winners = eventService.drawLottery(OWNER_TOKEN, eventId, 10);
+            register(memberId);
+            List<ActiveOrder> winners = eventService.drawLotteryAutomatically(eventId);
 
             assertEquals(1, winners.size());
             ActiveOrder order = winners.get(0);
@@ -336,8 +247,8 @@ class LotteryEnforcementTest {
         @DisplayName("Winner can access their pre-allocated order via the regular order flow")
         void GivenWinner_WhenAccessOrder_ThenReturnsExistingLotteryWinOrder() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
-            register(memberId, 1);
-            UUID winOrderId = eventService.drawLottery(OWNER_TOKEN, eventId, 10).get(0).getId();
+            register(memberId);
+            UUID winOrderId = eventService.drawLotteryAutomatically(eventId).get(0).getId();
 
             UUID returnedId = orderService.createOrder(MEMBER_TOKEN, eventId);
             assertEquals(winOrderId, returnedId, "Should return the existing LOTTERY_WIN order");
@@ -347,8 +258,8 @@ class LotteryEnforcementTest {
         @DisplayName("Winner can add tickets to their empty LOTTERY_WIN order from the Events page")
         void GivenWinner_WhenAddTicketsToOrder_ThenAllowed() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
-            register(memberId, 1);
-            eventService.drawLottery(OWNER_TOKEN, eventId, 10);
+            register(memberId);
+            eventService.drawLotteryAutomatically(eventId);
 
             // New flow: winner picks their own tickets after winning — adding must succeed
             assertDoesNotThrow(
@@ -360,10 +271,10 @@ class LotteryEnforcementTest {
         void GivenWinnerOrder_WhenOtherMemberTriesOrder_ThenRejected() {
             publishedLotteryEvent(NOW.minusSeconds(3600));
             UUID winnerId = UUID.randomUUID();
-            register(winnerId, 1);
-            eventService.drawLottery(OWNER_TOKEN, eventId, 10);
+            register(winnerId);
+            eventService.drawLotteryAutomatically(eventId);
 
-            // memberId did not win — should be rejected
+            // memberId did not register — should be rejected
             IllegalStateException ex = assertThrows(IllegalStateException.class,
                     () -> orderService.addGATicketsToOrder(MEMBER_TOKEN, eventId, zoneId, 1));
             assertTrue(ex.getMessage().contains("lottery"), ex.getMessage());
@@ -384,8 +295,8 @@ class LotteryEnforcementTest {
 
             publishedLotteryEvent(NOW.minusSeconds(3600));
             UUID winnerId = UUID.randomUUID();
-            register(winnerId, 1);
-            travelingService.drawLottery(OWNER_TOKEN, eventId, 10);
+            register(winnerId);
+            travelingService.drawLotteryAutomatically(eventId);
 
             // Advance clock 49 hours past the draw — winner window (48h) has expired
             clockTime[0] = NOW.plusSeconds(49 * 3600);

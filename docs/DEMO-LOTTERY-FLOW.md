@@ -11,7 +11,7 @@ Winners get a 48-hour exclusive window to pick their tickets before the event op
 
 | Role | What they do |
 |------|-------------|
-| **Owner / Manager** | Creates the lottery event, draws winners |
+| **Owner / Manager** | Creates and publishes the lottery event (the draw then runs automatically) |
 | **Member A** | Registers for the lottery, wins |
 | **Member B** | Registers for the lottery, does not win (or is blocked) |
 | **Guest** | Should be blocked from the lottery event until the winner window expires |
@@ -38,44 +38,42 @@ Winners get a 48-hour exclusive window to pick their tickets before the event op
 
 1. Log in as **Member A**
 2. Go to **Events** page → find the lottery event
-3. At the bottom of the event card, the lottery panel shows: zone picker + quantity + **"Enter lottery"** button
-4. Select a zone, set quantity, click **Enter lottery**
-5. You should see: *"You have been registered for the lottery."*
+3. At the bottom of the event card, the lottery panel shows a short blurb and an **"Enter lottery"** button — no zone or quantity to pick (the winner chooses those later)
+4. Click **Enter lottery**
+5. You should see: *"You are registered for this lottery."*
 
 Repeat as **Member B** (different session/account).
 
 > **Verification:**
-> - The lottery panel shows **"You are registered for the lottery"** after registration
+> - The lottery panel shows **"You are registered for this lottery"** after registration
 > - Trying to register again shows an error (no duplicates)
 > - A guest sees *"Members only"* on the lottery panel
 
 ---
 
-### Step 3 — Close the registration window (as Owner)
+### Step 3 — The draw happens automatically when the window closes
 
-1. Go to **Company** page → **Events** tab → click the event → **Edit event**
-2. Change **Lottery registration close** to a time in the past (e.g. one minute ago)
-3. Click **Save lottery window**
+There is **no "Draw lottery" button** — the system draws the winners on its own the moment
+the registration window closes (requirement §II.3.6: winners get their right "when the sale
+actually opens"). To see it during a demo, create the event in Step 1 with a **registration
+close just a minute or two out**, then simply wait for that time to pass.
 
-> **Verification:** The lottery panel now shows **Registration: CLOSED**
+- The number of winners is bounded by the event's **total ticket capacity** (one slot per
+  available ticket); winners are picked uniformly at random.
+- Each winner receives a notification: *"You have won the lottery! You have 48 hours to choose
+  and purchase your tickets. Go to the Events page to select your tickets."*
+- Non-winners receive: *"The lottery draw has concluded. Unfortunately, you were not selected
+  this time."*
+- The draw is **idempotent** and **survives a restart**: every published lottery event is
+  re-armed on startup, so stopping and restarting the app before the close time still draws at
+  the right moment.
 
----
-
-### Step 4 — Draw lottery winners (as Owner)
-
-1. Go to **Company** page → **Events** tab → scroll down to **"Lottery management"** section
-2. Select **Lottery company name** → your company appears
-3. Select **Lottery event** → only lottery events appear
-4. Set **Maximum ticket capacity** (total tickets to allocate, e.g. `2`)
-   - This is a ticket count, not a winner count. If Member A registered for 2 tickets and capacity is 2, they win and take the full capacity.
-5. Click **Draw lottery**
-
-> **Result:** Winner member IDs are shown.
-> Each winner receives a notification: *"You have won the lottery! You have 48 hours to choose and purchase your tickets. Go to the Events page to select your tickets."*
+> **Tip:** To move the close time, edit the event (Company → Events → Edit event →
+> **Save lottery window**); the automatic draw re-arms to the new time.
 
 ---
 
-### Step 5 — Winner claims tickets
+### Step 4 — Winner claims tickets
 
 1. Log in as the **winning member**
 2. Go to **Orders** page
@@ -113,7 +111,7 @@ You can modify your ticket selection but cannot cancel this order.
 
 ---
 
-### Step 6 — Non-winner is blocked during the window
+### Step 5 — Non-winner is blocked during the window
 
 1. Log in as **Member B** (non-winner)
 2. Go to **Events** → try to add tickets to the same lottery event
@@ -124,7 +122,7 @@ You can modify your ticket selection but cannot cancel this order.
 
 ---
 
-### Step 7 — Window expires → event opens to all
+### Step 6 — Window expires → event opens to all
 
 After the 48-hour window passes (or you set `purchaseWindowDeadline` to the past in the DB for testing):
 
@@ -152,7 +150,7 @@ After the 48-hour window passes (or you set `purchaseWindowDeadline` to the past
 
 ## Key constraints enforced by the domain
 
-- **No double-draw:** Calling draw a second time throws *"Lottery has already been drawn for this event."*
+- **No double-draw:** the automatic draw is idempotent — once an event has lottery-win orders, re-running it (e.g. a duplicate timer or a restart) produces no new winners.
 - **No pre-allocated tickets:** Draw creates an empty order — inventory is only locked when the winner picks tickets from Events.
 - **No cancel:** Winner cannot clear their cart (it would lose their entitlement). They must either checkout or let the 48h expire.
 - **Idempotent winner state:** If the winner's 48h window expires before checkout, the domain releases any locked inventory and blocks further access.
@@ -180,8 +178,8 @@ The full lottery flow works in memory mode — `LotteryEntry`, draw, and `LOTTER
 
 You cannot directly edit the in-memory state via SQL. To test the window expiry without waiting 48 hours:
 
-- When drawing winners (Step 4), note the `purchaseWindowDeadline` returned is `now + 48h`
-- Instead, set a very short deadline by temporarily changing the constant in `EventService.drawLottery()`:
+- When the draw runs (Step 3), the `purchaseWindowDeadline` is `now + 48h`
+- Instead, set a very short deadline by temporarily changing the constant in `EventService.performDraw()`:
 
 ```java
 // Temporary test-only change — revert after testing

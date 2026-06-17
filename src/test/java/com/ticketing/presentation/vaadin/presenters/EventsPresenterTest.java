@@ -190,7 +190,6 @@ class EventsPresenterTest {
     @DisplayName("Member session calls EventService.registerForLottery with the correct request")
     void GivenMemberSession_WhenRegisteringForLottery_ThenServiceIsCalledWithCorrectRequest() {
         UUID eventId = UUID.randomUUID();
-        UUID zoneId = UUID.randomUUID();
         UUID entryId = UUID.randomUUID();
         Instant now = Instant.now();
         SessionContext.setSessionToken("member-token");
@@ -198,7 +197,7 @@ class EventsPresenterTest {
         when(eventService.registerForLottery(any(), any(LotteryRegistrationRequest.class)))
                 .thenReturn(LotteryRegistrationResponse.success(entryId, now));
 
-        LotteryRegistrationResult result = presenter.registerForLottery(eventId, zoneId, 2);
+        LotteryRegistrationResult result = presenter.registerForLottery(eventId);
 
         ArgumentCaptor<LotteryRegistrationRequest> captor = ArgumentCaptor.forClass(LotteryRegistrationRequest.class);
         verify(eventService).registerForLottery(any(), captor.capture());
@@ -206,14 +205,12 @@ class EventsPresenterTest {
         assertEquals(entryId, result.lotteryEntryId());
         assertEquals(now, result.registeredAt());
         assertEquals(eventId, captor.getValue().eventId());
-        assertEquals(zoneId, captor.getValue().zoneId());
-        assertEquals(2, captor.getValue().quantity());
     }
 
     @Test
     @DisplayName("No session is rejected before calling the service")
     void GivenNoSession_WhenRegisteringForLottery_ThenRejectsWithLoginMessage() {
-        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID());
 
         assertFalse(result.success());
         assertTrue(result.message().toLowerCase().contains("logged in"));
@@ -224,7 +221,7 @@ class EventsPresenterTest {
     void GivenGuestSession_WhenRegisteringForLottery_ThenRejectsWithMembersOnlyMessage() {
         SessionContext.setSessionToken("guest-token");
 
-        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID());
 
         assertFalse(result.success());
         assertTrue(result.message().toLowerCase().contains("members only"));
@@ -239,7 +236,7 @@ class EventsPresenterTest {
         when(eventService.registerForLottery(any(), any(LotteryRegistrationRequest.class)))
                 .thenReturn(LotteryRegistrationResponse.failure(reason));
 
-        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID());
 
         assertFalse(result.success());
         assertEquals(reason, result.message());
@@ -254,22 +251,7 @@ class EventsPresenterTest {
         when(eventService.registerForLottery(any(), any(LotteryRegistrationRequest.class)))
                 .thenReturn(LotteryRegistrationResponse.failure(reason));
 
-        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
-
-        assertFalse(result.success());
-        assertEquals(reason, result.message());
-    }
-
-    @Test
-    @DisplayName("Invalid-zone reason from service is preserved exactly")
-    void GivenServiceReturnsInvalidZoneError_WhenRegisteringForLottery_ThenReasonIsPreserved() {
-        SessionContext.setSessionToken("member-token");
-        SessionContext.setMemberId(UUID.randomUUID());
-        String reason = "Zone not found.";
-        when(eventService.registerForLottery(any(), any(LotteryRegistrationRequest.class)))
-                .thenReturn(LotteryRegistrationResponse.failure(reason));
-
-        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID());
 
         assertFalse(result.success());
         assertEquals(reason, result.message());
@@ -283,7 +265,7 @@ class EventsPresenterTest {
         when(eventService.registerForLottery(any(), any(LotteryRegistrationRequest.class)))
                 .thenThrow(new RuntimeException("unexpected internal error"));
 
-        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID(), UUID.randomUUID(), 1);
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID());
 
         assertFalse(result.success());
         assertFalse(result.message().contains("unexpected internal error"));

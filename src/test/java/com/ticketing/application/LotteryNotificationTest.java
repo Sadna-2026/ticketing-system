@@ -113,7 +113,8 @@ public class LotteryNotificationTest {
                 new AlwaysAllowPolicy(), new NoDiscountPolicy(),
                 SaleMethod.LOTTERY,
                 new LotteryWindow(NOW.minus(3, ChronoUnit.DAYS), NOW.minus(1, ChronoUnit.DAYS)));
-        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 500));
+        // Capacity of 1 so a draw across the two registrants produces exactly one winner.
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 1));
         event.setVenueMap(new VenueMap(Map.of("Section A", zoneId)));
         event.publish();
         eventRepository.save(event);
@@ -139,8 +140,8 @@ public class LotteryNotificationTest {
         notificationService.registerListener(memberAId.toString(), msg -> { inboxA.add(msg); delivered.countDown(); });
         notificationService.registerListener(memberBId.toString(), msg -> { inboxB.add(msg); delivered.countDown(); });
 
-        // When: the draw runs with a single winning slot.
-        List<ActiveOrder> winners = eventService.drawLottery(ORGANIZER_TOKEN, eventId, 1);
+        // When: the draw runs automatically (capacity 1 → a single winning slot).
+        List<ActiveOrder> winners = eventService.drawLotteryAutomatically(eventId);
 
         // Then: both connected users receive a real-time message.
         assertTrue(delivered.await(2, TimeUnit.SECONDS),
@@ -167,7 +168,7 @@ public class LotteryNotificationTest {
     private UUID registerForLottery(String username) {
         UUID memberId = UUID.randomUUID();
         memberRepository.save(new Member(memberId, username, username + "@example.com", "encryptedPw"));
-        lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, zoneId, 1, NOW));
+        lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, NOW));
         return memberId;
     }
 

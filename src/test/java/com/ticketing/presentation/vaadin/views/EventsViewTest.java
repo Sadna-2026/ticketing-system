@@ -3,6 +3,7 @@ package com.ticketing.presentation.vaadin.views;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -745,7 +746,7 @@ class EventsViewTest {
     }
 
     @Test
-    @DisplayName("Member sees registration form with zone and quantity for an open lottery window")
+    @DisplayName("Member sees the simple Enter-lottery button for an open lottery window (no zone/quantity)")
     void GivenMemberSession_WhenLotteryWindowOpen_ThenRegistrationFormIsVisible() {
         EventsPresenter presenter = mock(EventsPresenter.class);
         EventSummaryDTO lottery = lotteryEventSummary("Lottery Concert");
@@ -761,8 +762,9 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(lottery);
         clickButton(view, "Select tickets");
 
+        // Registration is a single click — winners pick zone/quantity later, so no zone combobox here.
         assertTrue(hasButton(view, "Enter lottery"));
-        assertNotNull(findZoneComboBox(view));
+        assertNull(findZoneComboBox(view));
     }
 
     @Test
@@ -819,7 +821,7 @@ class EventsViewTest {
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(lottery)));
         when(presenter.loadEventMap(eq(lottery.id()))).thenReturn(MapResult.success("Event map loaded.", lotteryMap));
         when(presenter.getLotteryStatus(any())).thenReturn(Optional.empty());
-        when(presenter.registerForLottery(any(), any(), any()))
+        when(presenter.registerForLottery(any()))
                 .thenReturn(LotteryRegistrationResult.success("Lottery registration successful.", UUID.randomUUID(), now));
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(UUID.randomUUID());
@@ -829,9 +831,6 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(lottery);
         clickButton(view, "Select tickets");
 
-        ComboBox<EventMapDTO.ZoneInfo> zoneBox = findZoneComboBox(view);
-        assertNotNull(zoneBox);
-        zoneBox.setValue(lotteryMap.zones().get(0));
         clickButton(view, "Enter lottery");
 
         assertTrue(containsText(view, "You are registered for this lottery."));
@@ -849,7 +848,7 @@ class EventsViewTest {
         whenSearch(presenter).thenReturn(SearchResult.success("Found 1 event(s).", List.of(lottery)));
         when(presenter.loadEventMap(eq(lottery.id()))).thenReturn(MapResult.success("Event map loaded.", lotteryMap));
         when(presenter.getLotteryStatus(any())).thenReturn(Optional.empty());
-        when(presenter.registerForLottery(any(), any(), any()))
+        when(presenter.registerForLottery(any()))
                 .thenReturn(LotteryRegistrationResult.failure("Member is already registered for this lottery."));
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(UUID.randomUUID());
@@ -859,9 +858,6 @@ class EventsViewTest {
         findGrid(view).asSingleSelect().setValue(lottery);
         clickButton(view, "Select tickets");
 
-        ComboBox<EventMapDTO.ZoneInfo> zoneBox = findZoneComboBox(view);
-        assertNotNull(zoneBox);
-        zoneBox.setValue(lotteryMap.zones().get(0));
         clickButton(view, "Enter lottery");
 
         assertTrue(containsText(view, "Member is already registered for this lottery."));

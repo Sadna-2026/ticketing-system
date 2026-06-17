@@ -82,8 +82,6 @@ class InMemoryOptimisticLockingTest {
                 entryId,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                UUID.randomUUID(),
-                1,
                 Instant.now());
         repository.save(entry);
 
