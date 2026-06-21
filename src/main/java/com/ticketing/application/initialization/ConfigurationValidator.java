@@ -29,30 +29,30 @@ public class ConfigurationValidator implements ApplicationRunner {
         assertNotBlank("security.jwt.secret");
 
         if (!env.containsProperty("ticketing.persistence")) {
-            throw new IllegalStateException("Missing config: ticketing.persistence");
+            failValidation("ticketing.persistence", "null", "'memory' or 'jpa'");
         }
         String persistence = env.getProperty("ticketing.persistence");
         if (!"memory".equals(persistence) && !"jpa".equals(persistence)) {
-            throw new IllegalStateException("Invalid config: ticketing.persistence must be 'memory' or 'jpa'");
+            failValidation("ticketing.persistence", persistence, "'memory' or 'jpa'");
         }
 
         assertPositiveInt("ticketing.queue.threshold");
         assertPositiveInt("ticketing.queue.flow-rate");
 
         if (!env.containsProperty("ticketing.external.base-url")) {
-            throw new IllegalStateException("Missing config: ticketing.external.base-url");
+            failValidation("ticketing.external.base-url", "null", "present (can be empty)");
         }
         
         assertPositiveInt("ticketing.external.connect-timeout-ms");
         assertPositiveInt("ticketing.external.read-timeout-ms");
 
         if (!env.containsProperty("ticketing.bootstrap.dataset")) {
-            throw new IllegalStateException("Missing config: ticketing.bootstrap.dataset");
+            failValidation("ticketing.bootstrap.dataset", "null", "present (can be empty)");
         }
         String dataset = env.getProperty("ticketing.bootstrap.dataset");
         if (dataset != null && !dataset.isBlank()) {
             if (!"dev-seed".equals(dataset) && !"initial-state-file".equals(dataset) && !"none".equals(dataset)) {
-                throw new IllegalStateException("Invalid config: ticketing.bootstrap.dataset must be 'dev-seed', 'initial-state-file', or 'none'");
+                failValidation("ticketing.bootstrap.dataset", dataset, "'dev-seed', 'initial-state-file', or 'none'");
             }
         }
 
@@ -62,25 +62,37 @@ public class ConfigurationValidator implements ApplicationRunner {
         log.info("Configuration validation passed successfully.");
     }
 
+    private void failValidation(String key, String badValue, String expected) {
+        String msg = String.format("Configuration Error: Key '%s' has invalid value '%s'. Expected: %s", key, badValue, expected);
+        log.error(msg);
+        throw new ConfigurationValidationException(msg, key, badValue, expected);
+    }
+
     private void assertNotBlank(String property) {
+        if (!env.containsProperty(property)) {
+            failValidation(property, "null", "non-blank string");
+        }
         String value = env.getProperty(property);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing or empty config: " + property);
+            failValidation(property, value == null ? "null" : "blank", "non-blank string");
         }
     }
 
     private void assertPositiveInt(String property) {
+        if (!env.containsProperty(property)) {
+            failValidation(property, "null", "positive integer");
+        }
         String value = env.getProperty(property);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing or empty config: " + property);
+            failValidation(property, value == null ? "null" : "blank", "positive integer");
         }
         try {
             int parsed = Integer.parseInt(value);
             if (parsed <= 0) {
-                throw new IllegalStateException("Invalid config: " + property + " must be a positive integer");
+                failValidation(property, value, "positive integer");
             }
         } catch (NumberFormatException e) {
-            throw new IllegalStateException("Invalid config: " + property + " must be a valid integer");
+            failValidation(property, value, "positive integer");
         }
     }
 }
