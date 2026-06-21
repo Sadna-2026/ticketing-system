@@ -35,8 +35,10 @@ import com.ticketing.domain.member.Member;
         properties = {
                 "spring.jpa.hibernate.ddl-auto=create-drop",
                 "ticketing.startup.initialize-platform=false",
-                "spring.datasource.hikari.maximum-pool-size=1",
-                "spring.datasource.hikari.connection-test-query=SELECT 1"
+                "spring.datasource.operational.hikari.maximum-pool-size=1",
+                "spring.datasource.operational.hikari.connection-test-query=SELECT 1",
+                "spring.datasource.config.hikari.maximum-pool-size=1",
+                "spring.datasource.config.hikari.connection-test-query=SELECT 1"
         })
 @ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -67,11 +69,10 @@ class DbConnectionRecoveryJpaTest {
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("TICKETING_PERSISTENCE", () -> "jpa");
-        // Point to the manually started TCP server using file DB. The isolated test config (V3-25)
-        // pins spring.datasource.url to a throwaway in-memory H2, so this must override the canonical
-        // property directly (a @DynamicPropertySource outranks both the test profile and the Surefire
-        // system-property pin) rather than the base config's now-shadowed ${DB_URL} placeholder.
-        registry.add("spring.datasource.url", () -> "jdbc:h2:tcp://localhost:" + H2_PORT + "/./target/recoverytest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
+        // Point to the manually started TCP server using file DB.
+        String tcpUrl = "jdbc:h2:tcp://localhost:" + H2_PORT + "/./target/recoverytest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE";
+        registry.add("spring.datasource.operational.url", () -> tcpUrl);
+        registry.add("spring.datasource.config.url", () -> tcpUrl);
     }
 
     @Test
@@ -96,6 +97,7 @@ class DbConnectionRecoveryJpaTest {
     }
 
     @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("operationalDataSource")
     private javax.sql.DataSource dataSource;
 
     @Test

@@ -68,7 +68,8 @@ public class OperationalJpaConfig {
                         "com.ticketing.domain.member",
                         "com.ticketing.domain.order",
                         "com.ticketing.domain.queue",
-                        "com.ticketing.domain.ticket"
+                        "com.ticketing.domain.ticket",
+                        "com.ticketing.domain.notification"
                 )
                 .persistenceUnit("operational")
                 .properties(properties)
