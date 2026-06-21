@@ -22,7 +22,16 @@ public class TicketingConfiguration {
     }
 
     @Bean
-    public StartupConfiguration startupConfiguration() {
-        return new StartupConfiguration();
+    public StartupConfiguration startupConfiguration(
+            @org.springframework.beans.factory.annotation.Value("${ticketing.admin.username}") String adminUsername,
+            @org.springframework.beans.factory.annotation.Value("${ticketing.admin.password}") String adminPassword
+    ) {
+        return new StartupConfiguration(
+                adminUsername, 
+                "admin@ticketing.local", 
+                adminPassword, 
+                true, 
+                true
+        );
     }
 }
