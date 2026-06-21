@@ -20,8 +20,10 @@ class ConfigurationValidatorTest {
 
     private MockEnvironment createValidEnvironment() {
         MockEnvironment env = new MockEnvironment();
-        env.setProperty("spring.datasource.url", "jdbc:h2:mem:test");
-        env.setProperty("spring.datasource.driver-class-name", "org.h2.Driver");
+        env.setProperty("spring.datasource.operational.url", "jdbc:h2:mem:test");
+        env.setProperty("spring.datasource.operational.driver-class-name", "org.h2.Driver");
+        env.setProperty("spring.datasource.config.url", "jdbc:h2:mem:test_cfg");
+        env.setProperty("spring.datasource.config.driver-class-name", "org.h2.Driver");
         env.setProperty("security.jwt.secret", "secret");
         env.setProperty("ticketing.persistence", "memory");
         env.setProperty("ticketing.queue.threshold", "100");
@@ -55,8 +57,10 @@ class ConfigurationValidatorTest {
     @MethodSource("invalidConfigurations")
     void testInvalidConfiguration(String propertyToSet, String valueToSet, String propertyToClear, String expectedMessagePart, CapturedOutput output) {
         MockEnvironment env = new MockEnvironment();
-        if (!"spring.datasource.url".equals(propertyToClear)) env.setProperty("spring.datasource.url", "jdbc:h2:mem:test");
-        if (!"spring.datasource.driver-class-name".equals(propertyToClear)) env.setProperty("spring.datasource.driver-class-name", "org.h2.Driver");
+        if (!"spring.datasource.operational.url".equals(propertyToClear)) env.setProperty("spring.datasource.operational.url", "jdbc:h2:mem:test");
+        if (!"spring.datasource.operational.driver-class-name".equals(propertyToClear)) env.setProperty("spring.datasource.operational.driver-class-name", "org.h2.Driver");
+        if (!"spring.datasource.config.url".equals(propertyToClear)) env.setProperty("spring.datasource.config.url", "jdbc:h2:mem:test_cfg");
+        if (!"spring.datasource.config.driver-class-name".equals(propertyToClear)) env.setProperty("spring.datasource.config.driver-class-name", "org.h2.Driver");
         if (!"security.jwt.secret".equals(propertyToClear)) env.setProperty("security.jwt.secret", "secret");
         if (!"ticketing.persistence".equals(propertyToClear)) env.setProperty("ticketing.persistence", "memory");
         if (!"ticketing.queue.threshold".equals(propertyToClear)) env.setProperty("ticketing.queue.threshold", "100");
@@ -86,8 +90,10 @@ class ConfigurationValidatorTest {
     private static Stream<Arguments> invalidConfigurations() {
         return Stream.of(
             // Missing/Empty properties
-            Arguments.of(null, null, "spring.datasource.url", "spring.datasource.url"),
-            Arguments.of(null, null, "spring.datasource.driver-class-name", "spring.datasource.driver-class-name"),
+            Arguments.of(null, null, "spring.datasource.operational.url", "spring.datasource.operational.url"),
+            Arguments.of(null, null, "spring.datasource.operational.driver-class-name", "spring.datasource.operational.driver-class-name"),
+            Arguments.of(null, null, "spring.datasource.config.url", "spring.datasource.config.url"),
+            Arguments.of(null, null, "spring.datasource.config.driver-class-name", "spring.datasource.config.driver-class-name"),
             Arguments.of(null, null, "security.jwt.secret", "security.jwt.secret"),
             Arguments.of(null, null, "ticketing.queue.threshold", "ticketing.queue.threshold"),
             Arguments.of(null, null, "ticketing.queue.flow-rate", "ticketing.queue.flow-rate"),

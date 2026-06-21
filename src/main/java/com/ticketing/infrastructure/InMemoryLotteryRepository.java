@@ -82,4 +82,9 @@ public class InMemoryLotteryRepository implements ILotteryRepository {
         if (id == null) return;
         store.remove(id);
     }
+
+    @Override
+    public void deleteAll() {
+        store.clear();
+    }
 }

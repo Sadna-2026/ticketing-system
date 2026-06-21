@@ -62,6 +62,11 @@ public class InMemoryEventRepository implements IEventRepository {
     public List<Event> findAll() {
         return new ArrayList<>(store.values());
     }
+
+    @Override
+    public void deleteAll() {
+        store.clear();
+    }
 }
 
 

@@ -120,4 +120,10 @@ public class JpaLotteryRepository implements ILotteryRepository {
         }
         delegate.deleteById(id);
     }
+
+    @Override
+    @Transactional
+    public void deleteAll() {
+        delegate.deleteAll();
+    }
 }

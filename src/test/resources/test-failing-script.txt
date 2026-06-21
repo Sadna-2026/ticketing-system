@@ -1,0 +1,4 @@
+guest-registration(u1, u1@example.com, secret1);
+login(u1, secret1);
+open-production-company(u1_token, p1);
+set-invalid-operation(u1_token);

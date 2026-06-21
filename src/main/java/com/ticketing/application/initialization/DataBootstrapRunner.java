@@ -46,6 +46,7 @@ public class DataBootstrapRunner implements ApplicationRunner {
     private final DevSeedDataInitializer devSeedDataInitializer;
     private final InitialStateParser parser;
     private final InitialStateExecutor executor;
+    private final OperationalDataWiper wiper;
 
     public DataBootstrapRunner(
             @Value("${ticketing.startup.initialize-platform:true}") boolean initializePlatform,
@@ -54,7 +55,8 @@ public class DataBootstrapRunner implements ApplicationRunner {
             @Value("${ticketing.initial-state.file:}") String initialStateFile,
             PlatformInitializationService platformInitializationService,
             DevSeedDataInitializer devSeedDataInitializer,
-            InitialStateExecutor executor
+            InitialStateExecutor executor,
+            OperationalDataWiper wiper
     ) {
         this.initializePlatform = initializePlatform;
         this.dataset = resolveDataset(configuredDataset, seedEnabled, initialStateFile);
@@ -63,6 +65,7 @@ public class DataBootstrapRunner implements ApplicationRunner {
         this.devSeedDataInitializer = devSeedDataInitializer;
         this.parser = new InitialStateParser();
         this.executor = executor;
+        this.wiper = wiper;
     }
 
     static Dataset resolveDataset(String configuredDataset, boolean seedEnabled, String initialStateFile) {
@@ -120,6 +123,7 @@ public class DataBootstrapRunner implements ApplicationRunner {
             executor.execute(ops);
             log.info("Data bootstrap: applied {} operation(s) from {}", ops.size(), initialStateFile.trim());
         } catch (InitialStateParseException | InitialStateExecutionException ex) {
+            wiper.wipeAll();
             System.err.println("\n*************************************************************");
             System.err.println("  INITIALIZATION ERROR: FAILED TO LOAD INITIAL STATE FILE");
             System.err.println("  " + ex.getMessage());

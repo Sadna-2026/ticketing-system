@@ -12,4 +12,5 @@ public interface IQueueRepository {
     void save(VirtualQueue session);
     void delete(UUID id);
     List<VirtualQueue> findAllActive();
+    void deleteAll();
 }

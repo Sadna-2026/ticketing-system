@@ -75,6 +75,12 @@ public class JpaEventRepository implements IEventRepository {
         return delegate.findAll().stream().map(this::detach).toList();
     }
 
+    @Override
+    @Transactional
+    public void deleteAll() {
+        delegate.deleteAll();
+    }
+
     /**
      * Initialises the LAZY zone/seat graph and detaches the aggregate from the
      * persistence context, so callers receive an independent snapshot (matching the

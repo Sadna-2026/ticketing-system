@@ -14,4 +14,6 @@ public interface IEventRepository {
 
     List<Event> findAll();
 
+    void deleteAll();
+
 }

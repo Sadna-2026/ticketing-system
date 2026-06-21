@@ -10,5 +10,6 @@ public interface IPendingNotificationRepository {
     void savePendingNotification(String userId, String message);
     List<String> getPendingNotifications(String userId);
     void clearPendingNotifications(String userId);
+    void deleteAll();
 }
 

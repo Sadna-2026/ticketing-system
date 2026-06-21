@@ -30,4 +30,6 @@ public interface IOrderRepository {
     List<CompletedPurchase> findCompletedByMemberId(UUID memberId);
 
     List<CompletedPurchase> findAllCompleted();
+
+    void deleteAll();
 }

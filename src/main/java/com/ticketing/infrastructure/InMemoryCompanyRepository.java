@@ -124,6 +124,11 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
         throw new UnsupportedOperationException("Delete not supported");
     }
 
+    @Override
+    public void deleteAll() {
+        companies.clear();
+    }
+
     private static String normalizeKey(String name) {
         return name.toLowerCase().trim();
     }

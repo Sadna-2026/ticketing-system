@@ -186,6 +186,12 @@ public class JpaMemberRepository implements IMemberRepository {
         delegate.findById(member.getId()).ifPresent(delegate::delete);
     }
 
+    @Override
+    @Transactional
+    public void deleteAll() {
+        delegate.deleteAll();
+    }
+
     /**
      * Persists the entity, surfacing version conflicts synchronously via an
      * explicit flush and translating JPA/Spring optimistic-locking failures into
