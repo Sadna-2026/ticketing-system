@@ -96,6 +96,10 @@ public class InitialStateExecutor {
             try {
                 executeOne(op, boundTokens);
             } catch (RuntimeException ex) {
+                log.error("[EXECUTION ERROR] {}:{}: {}", 
+                        op.sourceFile() != null ? op.sourceFile() : "unknown", 
+                        op.line(), 
+                        ex.getMessage());
                 throw new InitialStateExecutionException(
                         "Initial-state operation #" + index + " '" + op.name() + "' failed: "
                                 + ex.getMessage(), ex);

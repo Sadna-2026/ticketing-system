@@ -115,8 +115,16 @@ public class DataBootstrapRunner implements ApplicationRunner {
         }
         log.info("Data bootstrap: initial-state file from {}", initialStateFile.trim());
         String content = InitialStateFileLoader.load(initialStateFile);
-        List<InitialStateOperation> ops = parser.parse(content);
-        executor.execute(ops);
-        log.info("Data bootstrap: applied {} operation(s) from {}", ops.size(), initialStateFile.trim());
+        try {
+            List<InitialStateOperation> ops = parser.parse(content, initialStateFile);
+            executor.execute(ops);
+            log.info("Data bootstrap: applied {} operation(s) from {}", ops.size(), initialStateFile.trim());
+        } catch (InitialStateParseException | InitialStateExecutionException ex) {
+            System.err.println("\n*************************************************************");
+            System.err.println("  INITIALIZATION ERROR: FAILED TO LOAD INITIAL STATE FILE");
+            System.err.println("  " + ex.getMessage());
+            System.err.println("*************************************************************\n");
+            throw ex;
+        }
     }
 }
