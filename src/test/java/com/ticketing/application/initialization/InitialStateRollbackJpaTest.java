@@ -50,7 +50,7 @@ class InitialStateRollbackJpaTest {
                 login(u1, secret1);
                 open-production-company(u1_token, p1);
                 set-invalid-operation(u1_token);
-                """);
+                """, "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));

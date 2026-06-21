@@ -17,6 +17,9 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import com.ticketing.application.ISystemClock;
 import com.ticketing.application.auth.ISessionTokenRepository;
@@ -42,6 +45,7 @@ import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @DisplayName("InitialStateExecutor")
+@ExtendWith(OutputCaptureExtension.class)
 class InitialStateExecutorTest {
 
     private InMemoryMemberRepository memberRepository;
@@ -92,7 +96,7 @@ class InitialStateExecutorTest {
                 login(rina, secret1);
                 open-production-company(rina_token, "Demo Co", "A demo company");
                 appoint-manager(rina_token, "Demo Co", dana);
-                """);
+                """, "test.txt");
 
         executor.execute(ops);
 
@@ -114,7 +118,7 @@ class InitialStateExecutorTest {
     @DisplayName("Staff demo scenario boots company, roles, event, coupon and logouts")
     void givenStaffScenarioFile_whenExecute_thenFullStateIsReady() {
         String content = InitialStateFileLoader.load("classpath:initial-state/staff-demo-v3.txt");
-        executor.execute(parser.parse(content));
+        executor.execute(parser.parse(content, "staff-demo-v3.txt"));
 
         assertNotNull(memberRepository.findByUsername("u1").orElse(null));
         assertNotNull(memberRepository.findByUsername("u2").orElse(null));
@@ -157,11 +161,11 @@ class InitialStateExecutorTest {
 
     @Test
     @DisplayName("Failing step: open-production-company with an unbound token aborts and names the op")
-    void givenUnboundTokenReference_whenExecute_thenThrowsNamingTheOp() {
+    void givenUnboundTokenReference_whenExecute_thenThrowsNamingTheOp(CapturedOutput output) {
         List<InitialStateOperation> ops = parser.parse("""
                 guest-registration(rina, rina@example.com, secret1);
                 open-production-company(ghost_token, "Demo Co", "desc");
-                """);
+                """, "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
@@ -171,46 +175,50 @@ class InitialStateExecutorTest {
                 "message should name the op: " + ex.getMessage());
         assertTrue(ex.getMessage().contains("ghost_token"),
                 "message should name the unbound token: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:2: unbound token reference 'ghost_token'"));
 
         assertFalse(companyRepository.existsByName("Demo Co"));
     }
 
     @Test
     @DisplayName("Failing step: appoint-manager for a nonexistent member aborts")
-    void givenAppointUnknownMember_whenExecute_thenThrows() {
+    void givenAppointUnknownMember_whenExecute_thenThrows(CapturedOutput output) {
         List<InitialStateOperation> ops = parser.parse("""
                 guest-registration(rina, rina@example.com, secret1);
                 login(rina, secret1);
                 open-production-company(rina_token, "Demo Co", "desc");
                 appoint-manager(rina_token, "Demo Co", ghost);
-                """);
+                """, "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
         assertTrue(ex.getMessage().contains("ghost"),
                 "message should reference the missing target: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:4: role appointment target member 'ghost' does not exist"));
     }
 
     @Test
     @DisplayName("Unknown operation name aborts and names the operation")
-    void givenUnknownOperation_whenExecute_thenThrows() {
-        List<InitialStateOperation> ops = parser.parse("teleport(rina, mars);");
+    void givenUnknownOperation_whenExecute_thenThrows(CapturedOutput output) {
+        List<InitialStateOperation> ops = parser.parse("teleport(rina, mars);", "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
         assertTrue(ex.getMessage().contains("teleport"),
                 "message should name the unknown op: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:1: Unknown initial-state operation 'teleport'"));
     }
 
     @Test
     @DisplayName("Wrong argument count aborts")
-    void givenWrongArity_whenExecute_thenThrows() {
-        List<InitialStateOperation> ops = parser.parse("login(rina);");
+    void givenWrongArity_whenExecute_thenThrows(CapturedOutput output) {
+        List<InitialStateOperation> ops = parser.parse("login(rina);", "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
         assertTrue(ex.getMessage().contains("login"),
                 "message should name the failing op: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:1: login expects 2 argument(s) but got 1"));
     }
 
     @Test

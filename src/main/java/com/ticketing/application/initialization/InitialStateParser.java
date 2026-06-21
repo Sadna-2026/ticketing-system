@@ -9,6 +9,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Parses an optional initial-state file (V3-14) into an ordered list of
  * {@link InitialStateOperation}s. The file is a sequence of use-case calls; this class
@@ -40,14 +43,17 @@ import java.util.List;
  */
 public class InitialStateParser {
 
+    private static final Logger log = LoggerFactory.getLogger(InitialStateParser.class);
+
     /**
      * Parses initial-state file content into an ordered list of operations.
      *
      * @param content the full file text; {@code null} is treated as empty
+     * @param sourceFile the source file name for logging
      * @return the operations in the order they appear; empty if there are none
      * @throws InitialStateParseException if the content is malformed
      */
-    public List<InitialStateOperation> parse(String content) {
+    public List<InitialStateOperation> parse(String content, String sourceFile) {
         if (content == null || content.isBlank()) {
             return List.of();
         }
@@ -81,11 +87,11 @@ public class InitialStateParser {
 
             // A bare '/' that is not the start of a '//' comment is invalid here.
             if (c == '/') {
-                throw error(line, "unexpected '/' (use '//' for comments)", content, i);
+                throw error(line, "unexpected '/' (use '//' for comments)", content, i, sourceFile);
             }
 
             // Otherwise we are at the start of an operation.
-            ParseResult result = parseOperation(content, i, line);
+            ParseResult result = parseOperation(content, i, line, sourceFile);
             operations.add(result.operation());
             line = result.endLine();
             i = result.endIndex();
@@ -104,7 +110,7 @@ public class InitialStateParser {
      */
     public List<InitialStateOperation> parse(Path path) {
         try {
-            return parse(Files.readString(path, StandardCharsets.UTF_8));
+            return parse(Files.readString(path, StandardCharsets.UTF_8), path.getFileName().toString());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read initial-state file: " + path, e);
         }
@@ -119,9 +125,9 @@ public class InitialStateParser {
      * @throws InitialStateParseException if the content is malformed
      * @throws UncheckedIOException       if the stream cannot be read
      */
-    public List<InitialStateOperation> parse(InputStream in) {
+    public List<InitialStateOperation> parse(InputStream in, String sourceFile) {
         try {
-            return parse(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return parse(new String(in.readAllBytes(), StandardCharsets.UTF_8), sourceFile);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read initial-state stream", e);
         }
@@ -130,7 +136,7 @@ public class InitialStateParser {
     /**
      * Parses a single {@code name(args);} operation starting at {@code start}.
      */
-    private ParseResult parseOperation(String content, int start, int startLine) {
+    private ParseResult parseOperation(String content, int start, int startLine, String sourceFile) {
         int n = content.length();
         int line = startLine;
         int i = start;
@@ -144,14 +150,14 @@ public class InitialStateParser {
             i++;
         }
         if (i >= n || content.charAt(i) != '(') {
-            throw error(startLine, "missing '(' after operation name", content, start);
+            throw error(startLine, "missing '(' after operation name", content, start, sourceFile);
         }
         String name = content.substring(nameStart, i).trim();
         if (name.isEmpty()) {
-            throw error(startLine, "missing operation name", content, start);
+            throw error(startLine, "missing operation name", content, start, sourceFile);
         }
         if (name.indexOf('\n') >= 0 || hasInteriorWhitespace(name)) {
-            throw error(startLine, "operation name must be a single token: '" + name + "'", content, start);
+            throw error(startLine, "operation name must be a single token: '" + name + "'", content, start, sourceFile);
         }
         i++; // consume '('
 
@@ -167,19 +173,19 @@ public class InitialStateParser {
 
         while (true) {
             if (i >= n) {
-                throw error(line, "unterminated operation (missing ')')", content, start);
+                throw error(line, "unterminated operation (missing ')')", content, start, sourceFile);
             }
             char c = content.charAt(i);
 
             if (c == '"') {
                 if (quotedThisArg || hasNonWhitespace(current)) {
                     throw error(line, "quoted string may not be mixed with other text in an argument",
-                            content, i);
+                            content, i, sourceFile);
                 }
                 quotedThisArg = true;
                 sawAnyToken = true;
                 current.setLength(0); // discard leading whitespace before the opening quote
-                QuoteScan scan = readQuotedString(content, i + 1, line, start, current);
+                QuoteScan scan = readQuotedString(content, i + 1, line, start, current, sourceFile);
                 i = scan.endIndex();
                 line = scan.endLine();
                 closedQuoteThisArg = true;
@@ -212,7 +218,7 @@ public class InitialStateParser {
                 continue;
             }
             if (closedQuoteThisArg && !Character.isWhitespace(c)) {
-                throw error(line, "unexpected text after closing quote in argument", content, i);
+                throw error(line, "unexpected text after closing quote in argument", content, i, sourceFile);
             }
             if (closedQuoteThisArg) {
                 // Whitespace after a closed quote is insignificant; do not retain it.
@@ -233,16 +239,16 @@ public class InitialStateParser {
                 line++;
             }
             if (!Character.isWhitespace(c)) {
-                throw error(line, "expected ';' after ')' but found '" + c + "'", content, i);
+                throw error(line, "expected ';' after ')' but found '" + c + "'", content, i, sourceFile);
             }
             i++;
         }
         if (i >= n) {
-            throw error(line, "missing ';' terminating operation '" + name + "'", content, start);
+            throw error(line, "missing ';' terminating operation '" + name + "'", content, start, sourceFile);
         }
         i++; // consume ';'
 
-        return new ParseResult(new InitialStateOperation(name, args), i, line);
+        return new ParseResult(new InitialStateOperation(name, args, startLine, sourceFile), i, line);
     }
 
     /**
@@ -254,7 +260,7 @@ public class InitialStateParser {
      * @return the scan position just after the closing quote, plus the updated line number
      * @throws InitialStateParseException if the string is never closed (unbalanced quote)
      */
-    private QuoteScan readQuotedString(String content, int start, int line, int opStart, StringBuilder out) {
+    private QuoteScan readQuotedString(String content, int start, int line, int opStart, StringBuilder out, String sourceFile) {
         int n = content.length();
         int i = start;
         while (i < n) {
@@ -276,7 +282,7 @@ public class InitialStateParser {
             out.append(c);
             i++;
         }
-        throw error(line, "unbalanced quote (string is never closed)", content, opStart);
+        throw error(line, "unbalanced quote (string is never closed)", content, opStart, sourceFile);
     }
 
     /**
@@ -305,7 +311,8 @@ public class InitialStateParser {
         return false;
     }
 
-    private static InitialStateParseException error(int line, String message, String content, int index) {
+    private static InitialStateParseException error(int line, String message, String content, int index, String sourceFile) {
+        log.error("[PARSE ERROR] {}:{}: {}", sourceFile != null ? sourceFile : "unknown", line, message);
         return new InitialStateParseException(
                 "Initial-state parse error at line " + line + ": " + message
                         + " (near: \"" + snippet(content, index) + "\")");
