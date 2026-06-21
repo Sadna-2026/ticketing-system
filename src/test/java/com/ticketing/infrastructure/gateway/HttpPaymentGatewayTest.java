@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -166,6 +167,21 @@ class HttpPaymentGatewayTest {
         server.verify();
     }
 
+    @Test
+    void GivenConnectionTimeout_WhenCharge_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
+
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("10.00"), details());
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
     // ---- refund ----------------------------------------------------------------------------
 
     @Test
@@ -216,6 +232,21 @@ class HttpPaymentGatewayTest {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
         server.expect(requestTo(BASE_URL)).andRespond(withServerError());
+
+        RefundResult result = gatewayFor(restTemplate).refund("55000", 150.00);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void GivenConnectionTimeout_WhenRefund_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
 
         RefundResult result = gatewayFor(restTemplate).refund("55000", 150.00);
 

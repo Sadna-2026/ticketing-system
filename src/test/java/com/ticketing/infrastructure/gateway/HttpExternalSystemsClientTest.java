@@ -8,6 +8,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.net.SocketTimeoutException;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -90,6 +91,32 @@ class HttpExternalSystemsClientTest {
 
         assertThatThrownBy(() -> clientFor(restTemplate).send(Map.of("action_type", "pay")))
                 .isInstanceOf(ExternalSystemsUnavailableException.class);
+        server.verify();
+    }
+
+    @Test
+    void GivenConnectionTimeout_WhenSend_ThenThrowsExternalSystemsUnavailable() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        // A socket timeout surfaces from RestTemplate as a ResourceAccessException (a RestClientException).
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
+
+        assertThatThrownBy(() -> clientFor(restTemplate).send(Map.of("action_type", "pay")))
+                .isInstanceOf(ExternalSystemsUnavailableException.class);
+        server.verify();
+    }
+
+    @Test
+    void GivenConnectionTimeout_WhenHandshake_ThenReturnsFalse() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
+
+        assertThat(clientFor(restTemplate).handshake()).isFalse();
         server.verify();
     }
 
