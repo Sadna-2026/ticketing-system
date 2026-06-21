@@ -12,4 +12,5 @@ public interface ILotteryRepository {
     Optional<LotteryEntry> findByEventAndMember(UUID eventId, UUID memberId);
     void save(LotteryEntry entry);
     void delete(UUID id);
+    void deleteAll();
 }

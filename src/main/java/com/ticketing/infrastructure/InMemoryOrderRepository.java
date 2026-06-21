@@ -129,5 +129,11 @@ public class InMemoryOrderRepository implements IOrderRepository {
         return new ArrayList<>(completedPurchases.values());
     }
 
+    @Override
+    public void deleteAll() {
+        activeOrders.clear();
+        completedPurchases.clear();
+    }
+
 }
 

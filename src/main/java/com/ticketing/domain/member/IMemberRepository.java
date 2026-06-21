@@ -28,6 +28,8 @@ public interface IMemberRepository {
     void delete(Member member);
 
     List<Member> findAll();
+    
+    void deleteAll();
 }
 
 // public interface IMemberRepository {

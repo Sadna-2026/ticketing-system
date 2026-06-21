@@ -215,4 +215,11 @@ public class JpaOrderRepository implements IOrderRepository {
     public List<CompletedPurchase> findAllCompleted() {
         return completedPurchases.findAll();
     }
+
+    @Override
+    @Transactional
+    public void deleteAll() {
+        activeOrders.deleteAll();
+        completedPurchases.deleteAll();
+    }
 }

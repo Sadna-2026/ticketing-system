@@ -318,5 +318,10 @@ public class CompanyServiceConcurrencyTest {
         public void delete(String id) {
             delegate.delete(id);
         }
+
+        @Override
+        public void deleteAll() {
+            delegate.deleteAll();
+        }
     }
 }

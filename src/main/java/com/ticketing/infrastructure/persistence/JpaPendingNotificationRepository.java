@@ -47,4 +47,10 @@ public class JpaPendingNotificationRepository implements IPendingNotificationRep
                 .setParameter("userId", userId)
                 .executeUpdate();
     }
+
+    @Override
+    @Transactional
+    public void deleteAll() {
+        entityManager.createQuery("DELETE FROM PendingNotification").executeUpdate();
+    }
 }

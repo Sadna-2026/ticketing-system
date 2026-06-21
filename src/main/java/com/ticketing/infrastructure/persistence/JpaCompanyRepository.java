@@ -165,6 +165,12 @@ public class JpaCompanyRepository implements ICompanyRepository {
         throw new UnsupportedOperationException("Delete not supported");
     }
 
+    @Override
+    @Transactional
+    public void deleteAll() {
+        delegate.deleteAll();
+    }
+
     /**
      * Resolves a company by its normalized key. The {@code @Id} is the raw name,
      * so an exact-id lookup is tried first and, on miss, a scan compares

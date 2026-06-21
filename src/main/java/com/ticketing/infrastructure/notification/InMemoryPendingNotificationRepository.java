@@ -42,4 +42,9 @@ public class InMemoryPendingNotificationRepository implements IPendingNotificati
         if (userId == null) return;
         store.remove(userId);
     }
+
+    @Override
+    public void deleteAll() {
+        store.clear();
+    }
 }

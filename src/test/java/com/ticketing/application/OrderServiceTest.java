@@ -821,6 +821,7 @@ public class OrderServiceTest {
         @Override public long count() { return delegate.count(); }
         @Override public List<Member> findByCompanyAppointment(String companyName) { return delegate.findByCompanyAppointment(companyName); }
         @Override public void delete(Member member) { delegate.delete(member); }
+        @Override public void deleteAll() { delegate.deleteAll(); }
         @Override public List<Member> findAll() { return delegate.findAll(); }
     }
 

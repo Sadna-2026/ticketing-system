@@ -86,4 +86,10 @@ public class InMemoryQueueRepository implements IQueueRepository {
                 .filter(VirtualQueue::isActive)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public void deleteAll() {
+        store.clear();
+        idsByEventId.clear();
+    }
 }

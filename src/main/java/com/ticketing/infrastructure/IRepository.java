@@ -8,4 +8,5 @@ public interface IRepository<T, S> {
     List<T> getAll();
     void delete(S id);
     void save(T entity);
+    void deleteAll();
 }

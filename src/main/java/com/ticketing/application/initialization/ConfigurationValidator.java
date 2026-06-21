@@ -24,8 +24,10 @@ public class ConfigurationValidator implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         log.info("Validating configuration parameters before initialization...");
 
-        assertNotBlank("spring.datasource.url");
-        assertNotBlank("spring.datasource.driver-class-name");
+        assertNotBlank("spring.datasource.operational.url");
+        assertNotBlank("spring.datasource.operational.driver-class-name");
+        assertNotBlank("spring.datasource.config.url");
+        assertNotBlank("spring.datasource.config.driver-class-name");
         assertNotBlank("security.jwt.secret");
 
         if (!env.containsProperty("ticketing.persistence")) {
