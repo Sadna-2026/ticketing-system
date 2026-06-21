@@ -3,18 +3,27 @@ package com.ticketing.domain.admin;
 import java.util.Objects;
 import java.util.UUID;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Version;
+
 /**
  * System-administrator aggregate. Distinct from {@code Member} so that
  * platform-wide privileged operations (force-close company, etc.) have a
  * dedicated identity that doesn't accidentally inherit member-side concerns.
  */
+@Entity
 public class Admin {
 
-    private final UUID id;
+    @Id
+    private UUID id;
     private String username;
     private String email;
+    @Version
     private int version;
     private String encryptedPassword;
+
+    protected Admin() {} // JPA
 
     public Admin(UUID id, String username, String email, String encryptedPassword) {
         if (id == null) throw new IllegalArgumentException("id is required");

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.domain.notification.IPendingNotificationRepository;
@@ -15,6 +16,7 @@ import com.ticketing.domain.notification.IPendingNotificationRepository;
  * Stores pending notifications for users who are offline at the time of dispatch.
  */
 @Component
+@ConditionalOnProperty(name = "ticketing.persistence", havingValue = "memory", matchIfMissing = true)
 public class InMemoryPendingNotificationRepository implements IPendingNotificationRepository {
 
     private final ConcurrentHashMap<String, ConcurrentLinkedQueue<String>> store = new ConcurrentHashMap<>();
