@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.domain.admin.Admin;
@@ -13,6 +14,7 @@ import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.exception.OptimisticLockException;
 
 @Repository
+@ConditionalOnProperty(name = "ticketing.persistence", havingValue = "memory", matchIfMissing = true)
 public class InMemoryAdminRepository implements IAdminRepository {
 
     private final ConcurrentHashMap<UUID, Admin> byId = new ConcurrentHashMap<>();
