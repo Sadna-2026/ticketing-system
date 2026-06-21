@@ -301,6 +301,73 @@ public class OrderServiceTest {
         assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
     }
 
+    // ── #495 purchase integrity: a company is paid only on a fully successful purchase,
+    //    and is never charged more than the declared amount. ──────────────────────────
+
+    @Test
+    void GivenPaymentAndSupplyConfirm_WhenCheckout_ThenOrderCompleteReceiptIssuedAndChargedExactlyDeclaredAmount() {
+        // Given: an order whose declared total is 3 GA @ 50.00 + 1 seat @ 150.00 = 300.00
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
+        orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
+        BigDecimal declaredAmount = new BigDecimal("300.00");
+
+        // When: both payment and supply confirm
+        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+
+        // Then: the order completes and a receipt is issued for the declared amount
+        assertEquals(OrderStatus.COMPLETED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        CompletedPurchase receipt = orderRepo.findCompletedById(purchaseId).orElseThrow();
+        assertEquals(declaredAmount, receipt.amount());
+
+        // And: the company is credited exactly the declared amount — no overcharge, no refund
+        assertEquals(1, paymentGateway.chargeCalls);
+        assertEquals(declaredAmount, paymentGateway.chargedAmount);
+        assertEquals(0, paymentGateway.refundCalls);
+        assertEquals(1, ticketSupplyGateway.issueCalls);
+    }
+
+    @Test
+    void GivenPaymentFails_WhenCheckout_ThenOrderNotCompletedSupplyNotAttemptedAndBuyerNotCharged() {
+        // Given: the payment gateway declines every charge
+        paymentGateway.failCharges = true;
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+
+        // When: checkout is attempted
+        assertThrows(IllegalStateException.class,
+                () -> orderService.checkout(guestToken, null));
+
+        // Then: the order is not completed and no receipt is written
+        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+
+        // And: supply is never attempted and the buyer is never charged (no successful capture)
+        assertEquals(0, ticketSupplyGateway.issueCalls);
+        assertEquals(0, paymentGateway.refundCalls);
+    }
+
+    @Test
+    void GivenSupplyFails_WhenCheckout_ThenOrderNotCompletedAndBuyerNetChargeIsZero() {
+        // Given: payment confirms but ticket supply fails
+        ticketSupplyGateway.failIssue = true;
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+
+        // When: checkout is attempted
+        assertThrows(IllegalStateException.class,
+                () -> orderService.checkout(guestToken, null));
+
+        // Then: the order is not completed and no receipt is written
+        assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+
+        // And: the charge was fully reversed — the buyer's net charge is zero
+        assertEquals(1, paymentGateway.chargeCalls);
+        assertEquals(1, paymentGateway.refundCalls);
+        assertEquals(paymentGateway.chargedAmount.doubleValue(), paymentGateway.refundedAmount);
+    }
+
     @Test
     void GivenPurchasePolicyRejects_WhenAddingTickets_ThenReservationBlockedAndPaymentNotCharged() {
         UUID policyEventId = UUID.randomUUID();
@@ -832,6 +899,7 @@ public class OrderServiceTest {
         int chargeCalls;
         int refundCalls;
         BigDecimal chargedAmount;
+        double refundedAmount;
         PaymentDetails lastDetails;
         // Transaction ids whose refund should fail, leaving only some purchases pending in a batch.
         final java.util.Set<String> failRefundForTransactionIds = new java.util.HashSet<>();
@@ -850,6 +918,7 @@ public class OrderServiceTest {
         @Override
         public RefundResult refund(String transactionId, double amount) {
             refundCalls++;
+            refundedAmount = amount;
             if (failRefunds || failRefundForTransactionIds.contains(transactionId)) {
                 return RefundResult.failed("refund failed");
             }

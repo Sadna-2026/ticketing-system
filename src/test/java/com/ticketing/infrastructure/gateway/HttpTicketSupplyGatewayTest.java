@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.net.SocketTimeoutException;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -182,6 +183,21 @@ class HttpTicketSupplyGatewayTest {
         server.verify();
     }
 
+    @Test
+    void GivenConnectionTimeout_WhenIssue_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
+
+        SupplyResult result = gatewayFor(restTemplate).issueTickets(List.of(ga("t-1")), CUSTOMER);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
     // ---- cancel ----------------------------------------------------------------------------
 
     @Test
@@ -235,6 +251,21 @@ class HttpTicketSupplyGatewayTest {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
         server.expect(requestTo(BASE_URL)).andRespond(withServerError());
+
+        CancelResult result = gatewayFor(restTemplate).cancelTickets(List.of("TKT-1"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void GivenConnectionTimeout_WhenCancel_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
 
         CancelResult result = gatewayFor(restTemplate).cancelTickets(List.of("TKT-1"));
 
