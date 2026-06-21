@@ -75,3 +75,6 @@ ticketing:
       card-holder: ${TICKETING_EXTERNAL_PAYMENT_CARD_HOLDER:Ticketing System}
       card-cvv: ${TICKETING_EXTERNAL_PAYMENT_CARD_CVV:123}
       card-id: ${TICKETING_EXTERNAL_PAYMENT_CARD_ID:000000000}
+  admin:
+    username: ${TICKETING_ADMIN_USERNAME:admin}
+    password: ${TICKETING_ADMIN_PASSWORD:admin123}
