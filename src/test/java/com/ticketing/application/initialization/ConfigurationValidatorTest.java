@@ -7,11 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.mock.env.MockEnvironment;
 
+@ExtendWith(OutputCaptureExtension.class)
 class ConfigurationValidatorTest {
 
     private MockEnvironment createValidEnvironment() {
@@ -49,7 +53,7 @@ class ConfigurationValidatorTest {
 
     @ParameterizedTest
     @MethodSource("invalidConfigurations")
-    void testInvalidConfiguration(String propertyToSet, String valueToSet, String propertyToClear, String expectedMessagePart) {
+    void testInvalidConfiguration(String propertyToSet, String valueToSet, String propertyToClear, String expectedMessagePart, CapturedOutput output) {
         MockEnvironment env = new MockEnvironment();
         if (!"spring.datasource.url".equals(propertyToClear)) env.setProperty("spring.datasource.url", "jdbc:h2:mem:test");
         if (!"spring.datasource.driver-class-name".equals(propertyToClear)) env.setProperty("spring.datasource.driver-class-name", "org.h2.Driver");
@@ -69,9 +73,14 @@ class ConfigurationValidatorTest {
         }
 
         ConfigurationValidator validator = new ConfigurationValidator(env);
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> validator.run(null));
+        ConfigurationValidationException exception = assertThrows(ConfigurationValidationException.class, () -> validator.run(null));
         assertTrue(exception.getMessage().contains(expectedMessagePart), 
                 "Expected message to contain '" + expectedMessagePart + "' but was '" + exception.getMessage() + "'");
+        
+        // Assert exactly one descriptive error-log entry was captured
+        String logOutput = output.getAll();
+        assertTrue(logOutput.contains("ERROR"), "Expected ERROR log to be emitted");
+        assertTrue(logOutput.contains(expectedMessagePart), "Expected error log to contain '" + expectedMessagePart + "'");
     }
 
     private static Stream<Arguments> invalidConfigurations() {
@@ -91,16 +100,16 @@ class ConfigurationValidatorTest {
             Arguments.of(null, null, "ticketing.external.read-timeout-ms", "ticketing.external.read-timeout-ms"),
 
             // Wrong type or value
-            Arguments.of("ticketing.persistence", "redis", null, "ticketing.persistence must be 'memory' or 'jpa'"),
-            Arguments.of("ticketing.queue.threshold", "abc", null, "must be a valid integer"),
-            Arguments.of("ticketing.queue.threshold", "-5", null, "must be a positive integer"),
-            Arguments.of("ticketing.queue.flow-rate", "0", null, "must be a positive integer"),
-            Arguments.of("ticketing.queue.flow-rate", "5.5", null, "must be a valid integer"),
+            Arguments.of("ticketing.persistence", "redis", null, "Expected: 'memory' or 'jpa'"),
+            Arguments.of("ticketing.queue.threshold", "abc", null, "Expected: positive integer"),
+            Arguments.of("ticketing.queue.threshold", "-5", null, "Expected: positive integer"),
+            Arguments.of("ticketing.queue.flow-rate", "0", null, "Expected: positive integer"),
+            Arguments.of("ticketing.queue.flow-rate", "5.5", null, "Expected: positive integer"),
             
-            Arguments.of("ticketing.external.connect-timeout-ms", "0", null, "must be a positive integer"),
-            Arguments.of("ticketing.external.read-timeout-ms", "-1", null, "must be a positive integer"),
+            Arguments.of("ticketing.external.connect-timeout-ms", "0", null, "Expected: positive integer"),
+            Arguments.of("ticketing.external.read-timeout-ms", "-1", null, "Expected: positive integer"),
             
-            Arguments.of("ticketing.bootstrap.dataset", "invalid", null, "ticketing.bootstrap.dataset must be 'dev-seed', 'initial-state-file', or 'none'")
+            Arguments.of("ticketing.bootstrap.dataset", "invalid", null, "Expected: 'dev-seed', 'initial-state-file', or 'none'")
         );
     }
 }
