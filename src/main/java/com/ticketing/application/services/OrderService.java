@@ -758,6 +758,39 @@ public class OrderService {
         }
     }
 
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 60_000)
+    @Transactional
+    public void retryPendingRefunds() {
+        List<com.ticketing.domain.order.FailedCheckoutRefund> pendingRefunds = orderRepository.findPendingRefunds();
+        for (com.ticketing.domain.order.FailedCheckoutRefund pending : pendingRefunds) {
+            log.info("Retrying pending refund for transaction {}", pending.getTransactionId());
+            boolean success = false;
+            for (IPaymentGateway gateway : paymentGateways) {
+                try {
+                    RefundResult result = gateway.refund(pending.getTransactionId(), pending.getAmount().doubleValue());
+                    if (result != null && result.success()) {
+                        success = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    log.error("Retry Refund Gateway failed with exception", e);
+                }
+            }
+            if (success) {
+                pending.markRefunded();
+                orderRepository.save(pending);
+                log.info("Successfully retried pending refund for transaction {}", pending.getTransactionId());
+                if (notificationService != null && pending.getMemberId() != null) {
+                    notificationService.notify(pending.getMemberId().toString(), 
+                            "A previous checkout failure has been resolved and your payment of " 
+                            + pending.getAmount().toPlainString() + " has been refunded successfully.");
+                }
+            } else {
+                log.warn("Retry failed for pending refund transaction {}", pending.getTransactionId());
+            }
+        }
+    }
+
     // ── Reservation internals ───────────────────────────────────────
 
     @Transactional
@@ -1032,10 +1065,15 @@ public class OrderService {
 
         SupplyResult supply = supplyTickets(order, event, buyerContact);
         if (supply == null || !supply.success()) {
-            refundPayment(payment.transactionId(), finalAmount);
+            boolean refundSuccess = refundPayment(payment.transactionId(), finalAmount, event.getId(), order.getMemberId());
             order.cancel();
-            throw new IllegalStateException("Ticket generation failed. Payment has been refunded: "
-                    + (supply != null ? supply.errorMessage() : "All gateways failed"));
+            if (refundSuccess) {
+                throw new IllegalStateException("Ticket generation failed. Payment has been refunded: "
+                        + (supply != null ? supply.errorMessage() : "All gateways failed"));
+            } else {
+                throw new IllegalStateException("Ticket generation failed. Payment refund is pending: "
+                        + (supply != null ? supply.errorMessage() : "All gateways failed"));
+            }
         }
 
         order.complete();
@@ -1052,22 +1090,32 @@ public class OrderService {
                 systemClock.now());
     }
 
-    public void refundPayment(String transactionId, BigDecimal amount) {
+    public boolean refundPayment(String transactionId, BigDecimal amount, UUID eventId, UUID memberId) {
         RefundResult refund = null;
         for (IPaymentGateway gateway : paymentGateways) {
             try {
                 refund = gateway.refund(transactionId, amount.doubleValue());
                 if (refund != null && refund.success()) {
-                    break;
+                    return true;
                 }
             } catch (Exception e) {
                 log.error("Refund Gateway failed with exception", e);
             }
         }
-        if (refund == null || !refund.success()) {
-            log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
-                    refund != null ? refund.errorMessage() : "All gateways failed");
+        log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
+                refund != null ? refund.errorMessage() : "All gateways failed");
+        
+        com.ticketing.domain.order.FailedCheckoutRefund pendingRefund = new com.ticketing.domain.order.FailedCheckoutRefund(
+                UUID.randomUUID(), eventId, memberId, transactionId, amount, systemClock.now());
+        orderRepository.save(pendingRefund);
+        
+        if (notificationService != null && memberId != null) {
+            notificationService.notify(memberId.toString(), 
+                    "Ticket generation failed but we could not immediately refund your payment. "
+                    + "A pending refund has been registered and will be processed shortly.");
         }
+        
+        return false;
     }
 
     private void requirePurchasePolicyCompliance(Event event, PurchaseContext ctx) {

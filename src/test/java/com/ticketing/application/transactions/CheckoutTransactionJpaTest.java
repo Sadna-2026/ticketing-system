@@ -180,6 +180,40 @@ class CheckoutTransactionJpaTest {
     }
 
     @Test
+    @DisplayName("Given a checkout that fails at ticket supply and refund fails, When it throws, Then pending refund is saved")
+    void GivenCheckoutFailsAtSupplyAndRefundFails_WhenItThrows_ThenPendingRefundIsSaved() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        eventRepository.save(publishedGaEvent(eventId, zoneId, 1));
+
+        UUID memberId = UUID.randomUUID();
+        memberRepository.save(member(memberId, "buyer-refund-fail"));
+
+        String token = memberToken(memberId);
+
+        // Reservation
+        orderService.createOrder(token, eventId);
+        orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
+        UUID orderId = orderRepository.findActiveByMemberId(memberId).orElseThrow().getId();
+
+        // Force both supply and payment gateways to fail (payment fails on refund)
+        supplyGateway.setShouldFail(true);
+        paymentGateway.setRefundShouldFail(true);
+
+        assertThatThrownBy(() -> orderService.checkout(token, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Payment refund is pending");
+
+        // Assert pending refund was saved
+        java.util.List<com.ticketing.domain.order.FailedCheckoutRefund> pendingRefunds = orderRepository.findPendingRefunds();
+        assertThat(pendingRefunds).hasSize(1);
+        com.ticketing.domain.order.FailedCheckoutRefund pending = pendingRefunds.get(0);
+        assertThat(pending.getEventId()).isEqualTo(eventId);
+        assertThat(pending.getMemberId()).isEqualTo(memberId);
+        assertThat(pending.getStatus()).isEqualTo(com.ticketing.domain.order.RefundStatus.PENDING);
+    }
+
+    @Test
     @DisplayName("Given a healthy checkout, When it completes, Then the sale is committed exactly once")
     void GivenHealthyCheckout_WhenItCompletes_ThenSaleIsCommitted() {
         UUID eventId = UUID.randomUUID();
