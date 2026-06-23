@@ -1179,6 +1179,8 @@ public class OrderServiceTest {
     void GivenGuestToken_WhenGetPurchaseHistory_ThenThrowsSecurityException() {
         assertThrows(SecurityException.class, () -> orderService.getPurchaseHistory(guestToken));
     }
+
+    @Test
     void GivenPrimaryPaymentFails_WhenCheckout_ThenFailsOverToSecondary() {
         TestPaymentGateway primaryPayment = new TestPaymentGateway();
         primaryPayment.failCharges = true;
@@ -1217,6 +1219,37 @@ public class OrderServiceTest {
         ActiveOrder active = orderRepo.findById(orderId).get();
         assertEquals(OrderStatus.ACTIVE, active.getStatus());
         assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+    }
+
+    @Test
+    void GivenTwoPaymentAndTwoSupplyProviders_WhenPrimariesFail_ThenCheckoutCompletesViaSecondaries() {
+        // reqs I.3/I.4: with more than one payment AND more than one supply provider registered,
+        // a failure of the first of each falls over to the second, on both axes in a single checkout.
+        TestPaymentGateway primaryPayment = new TestPaymentGateway();
+        primaryPayment.failCharges = true;
+        TestPaymentGateway secondaryPayment = new TestPaymentGateway();
+        TestTicketSupplyGateway primarySupply = new TestTicketSupplyGateway();
+        primarySupply.failIssue = true;
+        TestTicketSupplyGateway secondarySupply = new TestTicketSupplyGateway();
+
+        OrderService multiProviderService = new OrderService(
+                sessionService, orderRepo, eventRepo, memberRepo,
+                List.of(primaryPayment, secondaryPayment),
+                List.of(primarySupply, secondarySupply),
+                clock, null, null, null);
+
+        UUID orderId = multiProviderService.createOrder(guestToken, eventId);
+        multiProviderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
+
+        UUID purchaseId = multiProviderService.checkout(guestToken, null).purchaseId();
+
+        // Both first providers were tried and failed; both second providers were used and succeeded.
+        assertEquals(1, primaryPayment.chargeCalls);
+        assertEquals(1, secondaryPayment.chargeCalls);
+        assertEquals(1, primarySupply.issueCalls);
+        assertEquals(1, secondarySupply.issueCalls);
+        assertEquals(OrderStatus.COMPLETED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertNotNull(orderRepo.findCompletedById(purchaseId).orElseThrow());
     }
 
     @Test
