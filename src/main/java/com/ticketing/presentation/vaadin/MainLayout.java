@@ -47,7 +47,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
     private final Map<Class<? extends Component>, Tab> tabsByTarget = new HashMap<>();
 
     // Delivers real-time notifications as toasts for the whole session, on every route (#490).
-    private final transient RealtimeNotificationBinder realtimeNotifications;
+    private final RealtimeNotificationBinder realtimeNotifications;
 
     public MainLayout(NotificationsPresenter notificationsPresenter) {
         this.realtimeNotifications = new RealtimeNotificationBinder(notificationsPresenter);
