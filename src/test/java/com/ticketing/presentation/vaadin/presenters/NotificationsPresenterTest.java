@@ -61,7 +61,7 @@ class NotificationsPresenterTest {
     void GivenMemberSession_WhenLoadingNotifications_ThenPendingMessagesAreReturned() {
         UUID memberId = UUID.randomUUID();
         SessionContext.setMemberId(memberId);
-        when(notificationQueryService.getPendingNotifications(memberId.toString()))
+        when(notificationQueryService.getNotificationHistory(memberId.toString()))
                 .thenReturn(List.of("Role offer accepted.", "Company ownership changed."));
 
         NotificationResult result = presenter.loadPendingNotifications();
@@ -75,7 +75,7 @@ class NotificationsPresenterTest {
     void GivenMemberSessionAndNoPendingMessages_WhenLoadingNotifications_ThenEmptyStateIsReturned() {
         UUID memberId = UUID.randomUUID();
         SessionContext.setMemberId(memberId);
-        when(notificationQueryService.getPendingNotifications(memberId.toString())).thenReturn(List.of());
+        when(notificationQueryService.getNotificationHistory(memberId.toString())).thenReturn(List.of());
 
         NotificationResult result = presenter.loadPendingNotifications();
 
@@ -124,7 +124,7 @@ class NotificationsPresenterTest {
     void GivenApplicationFailure_WhenLoadingNotifications_ThenGenericMessageIsReturned() {
         UUID memberId = UUID.randomUUID();
         SessionContext.setMemberId(memberId);
-        when(notificationQueryService.getPendingNotifications(memberId.toString()))
+        when(notificationQueryService.getNotificationHistory(memberId.toString()))
                 .thenThrow(new IllegalStateException("repository internals"));
 
         NotificationResult result = presenter.loadPendingNotifications();
