@@ -5,7 +5,6 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResul
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
-import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
@@ -40,8 +39,6 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
     private final Button refresh = new Button("Refresh notifications");
     private final Button clear = new Button("Clear notifications");
 
-    private String registeredMemberId;
-    private String registeredListenerId;
     private int visibleNotificationCount;
 
     public NotificationsView(NotificationsPresenter presenter) {
@@ -79,11 +76,15 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
                 historyCard
         );
 
+        // Real-time delivery (toasts) is wired once at app-shell level in MainLayout (#490), so it
+        // works on every route. This tab is the inbox: it loads/clears persisted history only and
+        // must not register its own listener (that would double-toast and tear delivery down on exit).
         addAttachListener(event -> {
-            registerRealtimeNotifications(event.getUI());
+            connectionStatus.setText(
+                    "New notifications appear as toasts on any page. This tab is your history inbox.");
+            loadPendingNotifications(false);
             renderRoleOffers();
         });
-        addDetachListener(event -> unregisterRealtimeNotifications());
     }
 
     private void configureActions() {
@@ -95,37 +96,6 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
         HorizontalLayout layout = new HorizontalLayout(refresh, clear);
         layout.setAlignItems(Alignment.BASELINE);
         return layout;
-    }
-
-    private void registerRealtimeNotifications(UI ui) {
-        unregisterRealtimeNotifications();
-
-        RegistrationResult result = presenter.registerRealtimeListener(message ->
-                ui.access(() -> receiveRealtimeNotification(message))
-        );
-        if (!result.success()) {
-            registeredMemberId = null;
-            registeredListenerId = null;
-            connectionStatus.setText(result.message());
-            notificationsStatus.setText(result.message());
-            UiMessages.info(result.message());
-            return;
-        }
-
-        registeredMemberId = result.memberId();
-        registeredListenerId = result.registrationId();
-        connectionStatus.setText(result.message());
-        notificationsStatus.setText("No pending notifications.");
-    }
-
-    private void unregisterRealtimeNotifications() {
-        if (registeredMemberId == null || registeredListenerId == null) {
-            return;
-        }
-
-        presenter.unregisterRealtimeListener(registeredMemberId, registeredListenerId);
-        registeredMemberId = null;
-        registeredListenerId = null;
     }
 
     private void loadPendingNotifications(boolean showToast) {
@@ -162,26 +132,6 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
         renderNotifications(java.util.List.of());
         notificationsStatus.setText(result.message());
         UiMessages.success(result.message());
-    }
-
-    void receiveRealtimeNotification(String message) {
-        if (message == null || message.isBlank()) {
-            return;
-        }
-
-        renderRoleOffers();
-
-        if (message.startsWith("You have a new role offer")) {
-            return;
-        }
-
-        if (visibleNotificationCount == 0) {
-            notificationsList.removeAll();
-        }
-        notificationsList.add(notificationCard(message));
-        visibleNotificationCount++;
-        notificationsStatus.setText("Showing " + visibleNotificationCount + " notification(s).");
-        UiMessages.info(message);
     }
 
     void renderRoleOffers() {

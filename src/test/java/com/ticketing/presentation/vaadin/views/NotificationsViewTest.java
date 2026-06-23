@@ -10,19 +10,16 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.domain.member.StaffAppointment;
-import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.NotificationResult;
-import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter.RegistrationResult;
 import com.ticketing.presentation.vaadin.testsupport.SynchronousUi;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
@@ -84,10 +81,13 @@ class NotificationsViewTest {
     @Test
     void GivenClearSucceeds_WhenClearClicked_ThenVisibleNotificationsAreRemoved() {
         NotificationsPresenter presenter = mockPresenter();
+        when(presenter.loadPendingNotifications())
+                .thenReturn(NotificationResult.success("Loaded 1 notification(s).", List.of("Live update.")));
         when(presenter.clearPendingNotifications())
                 .thenReturn(NotificationResult.success("Notifications cleared.", List.of()));
         NotificationsView view = new NotificationsView(presenter);
-        view.receiveRealtimeNotification("Live update.");
+        clickButton(view, "Refresh notifications");
+        assertTrue(hasText(view, "Live update."));
 
         clickButton(view, "Clear notifications");
 
@@ -96,59 +96,19 @@ class NotificationsViewTest {
     }
 
     @Test
-    void GivenRealtimeNotification_WhenReceived_ThenMessageIsShownInPanel() {
+    void GivenViewAttached_WhenLoggedInMember_ThenHistoryIsLoadedAndNoRealtimeListenerIsRegistered() {
         NotificationsPresenter presenter = mockPresenter();
-        NotificationsView view = new NotificationsView(presenter);
-
-        view.receiveRealtimeNotification("Your role appointment was approved.");
-
-        assertTrue(hasText(view, "Your role appointment was approved."));
-        assertTrue(hasText(view, "Showing 1 notification(s)."));
-    }
-
-    @Test
-    void GivenViewAttached_WhenRealtimeRegistrationSucceeds_ThenPendingNotificationsAreNotReloadedOverFlush() {
-        NotificationsPresenter presenter = mockPresenter();
-        when(presenter.registerRealtimeListener(any()))
-                .thenReturn(RegistrationResult.success("member-1", "listener-1"));
+        when(presenter.loadPendingNotifications())
+                .thenReturn(NotificationResult.success("Loaded 1 notification(s).", List.of("Earlier message.")));
         NotificationsView view = new NotificationsView(presenter);
 
         attachViewToCurrentUi(view);
 
-        assertTrue(hasText(view, "Real-time notifications connected."));
-        assertTrue(hasText(view, "No pending notifications."));
-        verify(presenter, never()).loadPendingNotifications();
-    }
-
-    @Test
-    void GivenRegisteredView_WhenServicePushesNotification_ThenListenerUpdatesTheUi() {
-        NotificationsPresenter presenter = mockPresenter();
-        AtomicReference<NotificationListener> captured = new AtomicReference<>();
-        when(presenter.registerRealtimeListener(any())).thenAnswer(invocation -> {
-            captured.set(invocation.getArgument(0));
-            return RegistrationResult.success("member-1", "listener-1");
-        });
-        NotificationsView view = new NotificationsView(presenter);
-        attachViewToSynchronousUi(view);
-
-        assertNotNull(captured.get(), "view did not register a realtime listener on attach");
-        captured.get().onMessage("Role appointment offer received.");
-
-        assertTrue(hasText(view, "Role appointment offer received."));
-        assertTrue(hasText(view, "Showing 1 notification(s)."));
-    }
-
-    @Test
-    void GivenRegisteredView_WhenDetached_ThenOnlyOwnRealtimeRegistrationIsRemoved() {
-        NotificationsPresenter presenter = mockPresenter();
-        when(presenter.registerRealtimeListener(any()))
-                .thenReturn(RegistrationResult.success("member-1", "listener-1"));
-        NotificationsView view = new NotificationsView(presenter);
-        attachViewToCurrentUi(view);
-
-        UI.getCurrent().remove(view);
-
-        verify(presenter).unregisterRealtimeListener("member-1", "listener-1");
+        // The inbox loads persisted history on attach...
+        assertTrue(hasText(view, "Earlier message."));
+        // ...but real-time delivery is owned by MainLayout (#490), so this tab registers no listener
+        // of its own (that would double-toast and tear delivery down when navigating away).
+        verify(presenter, never()).registerRealtimeListener(any());
     }
 
     @Test
@@ -247,13 +207,6 @@ class NotificationsViewTest {
 
     private void attachViewToCurrentUi(Component view) {
         UI ui = new UI();
-        ui.add(view);
-        UI.setCurrent(ui);
-    }
-
-    /** Attaches the view to a {@link SynchronousUi} and makes it current. */
-    private void attachViewToSynchronousUi(Component view) {
-        UI ui = SynchronousUi.create();
         ui.add(view);
         UI.setCurrent(ui);
     }
