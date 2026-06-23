@@ -1,5 +1,6 @@
 package com.ticketing.presentation.vaadin.views;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -63,6 +64,22 @@ class NotificationsViewTest {
         assertTrue(hasText(view, "Loaded 2 notification(s)."));
         assertTrue(hasText(view, "Offer accepted."));
         assertTrue(hasText(view, "Owner changed."));
+    }
+
+    @Test
+    void GivenHistory_WhenRefreshClickedRepeatedly_ThenNotificationsAreNotDuplicated() {
+        NotificationsPresenter presenter = mockPresenter();
+        when(presenter.loadPendingNotifications())
+                .thenReturn(NotificationResult.success("Loaded 2 notification(s).", List.of("Offer accepted.", "Owner changed.")));
+        NotificationsView view = new NotificationsView(presenter);
+
+        clickButton(view, "Refresh notifications");
+        clickButton(view, "Refresh notifications");
+        clickButton(view, "Refresh notifications");
+
+        // Loading the full history re-renders; repeated refreshes must not stack duplicates.
+        assertEquals(1, countText(view, "Offer accepted."));
+        assertEquals(1, countText(view, "Owner changed."));
     }
 
     @Test
@@ -240,5 +257,10 @@ class NotificationsViewTest {
             return true;
         }
         return root.getChildren().anyMatch(child -> hasText(child, text));
+    }
+
+    private int countText(Component root, String text) {
+        int self = (root instanceof HasText hasText && text.equals(hasText.getText())) ? 1 : 0;
+        return self + root.getChildren().mapToInt(child -> countText(child, text)).sum();
     }
 }

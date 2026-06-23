@@ -109,8 +109,9 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
             return;
         }
 
-        // When user clicks Refresh, only append new notifications (don't clear old ones)
-        appendNotifications(result.notifications());
+        // Load reads the full history every time, so re-render (replace) — appending would
+        // duplicate the whole history on each Refresh.
+        renderNotifications(result.notifications());
         notificationsStatus.setText(result.message());
         if (showToast) {
             if (result.empty()) {
@@ -188,18 +189,6 @@ public class NotificationsView extends VerticalLayout implements BeforeEnterObse
         }
 
         notifications.forEach(message -> notificationsList.add(notificationCard(message)));
-    }
-
-    private void appendNotifications(java.util.List<String> notifications) {
-        if (notifications == null || notifications.isEmpty()) {
-            return;
-        }
-        // Remove the "No notifications" placeholder if present and this is the first append
-        if (visibleNotificationCount == 0) {
-            notificationsList.removeAll();
-        }
-        notifications.forEach(message -> notificationsList.add(notificationCard(message)));
-        visibleNotificationCount += notifications.size();
     }
 
     private Span notificationCard(String message) {
