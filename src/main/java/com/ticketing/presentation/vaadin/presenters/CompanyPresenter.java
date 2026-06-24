@@ -711,30 +711,33 @@ public class CompanyPresenter {
             return EventActionResult.failure("At least one zone is required.");
         }
         boolean create = eventId == null;
-        EventSchedule schedule = startTime == null && endTime == null && doorsOpenTime == null
-                ? null
-                : new EventSchedule(startTime, endTime, doorsOpenTime);
-        LockTimerDuration lock = lockMinutes != null && lockMinutes > 0
-                ? new LockTimerDuration(Duration.ofMinutes(lockMinutes))
-                : null;
-        if (create) {
-            if (blankToNull(companyName) == null) {
-                return EventActionResult.failure("Company name is required.");
-            }
-            if (blankToNull(name) == null) {
-                return EventActionResult.failure("Event name is required.");
-            }
-            if (schedule == null) {
-                return EventActionResult.failure("Start and end times are required.");
-            }
-            if (lock == null) {
-                return EventActionResult.failure("Lock minutes must be positive.");
-            }
-            if (saleMethod == SaleMethod.LOTTERY && lotteryWindow == null) {
-                return EventActionResult.failure("Lottery registration open and close times are required for lottery events.");
-            }
-        }
         try {
+            // Build the schedule inside the try so domain validation failures
+            // (e.g. doors-open after start time) surface as a specific message
+            // rather than escaping as an uncaught exception (silent save failure).
+            EventSchedule schedule = startTime == null && endTime == null && doorsOpenTime == null
+                    ? null
+                    : new EventSchedule(startTime, endTime, doorsOpenTime);
+            LockTimerDuration lock = lockMinutes != null && lockMinutes > 0
+                    ? new LockTimerDuration(Duration.ofMinutes(lockMinutes))
+                    : null;
+            if (create) {
+                if (blankToNull(companyName) == null) {
+                    return EventActionResult.failure("Company name is required.");
+                }
+                if (blankToNull(name) == null) {
+                    return EventActionResult.failure("Event name is required.");
+                }
+                if (schedule == null) {
+                    return EventActionResult.failure("Start and end times are required.");
+                }
+                if (lock == null) {
+                    return EventActionResult.failure("Lock minutes must be positive.");
+                }
+                if (saleMethod == SaleMethod.LOTTERY && lotteryWindow == null) {
+                    return EventActionResult.failure("Lottery registration open and close times are required for lottery events.");
+                }
+            }
             SaleMethod sm = saleMethod != null ? saleMethod : SaleMethod.REGULAR;
             DefineVenueRequest request = new DefineVenueRequest(
                     eventId, blankToNull(companyName), blankToNull(name), blankToNull(description),
