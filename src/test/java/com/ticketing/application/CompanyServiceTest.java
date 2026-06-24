@@ -427,6 +427,43 @@ class CompanyServiceTest {
         }
 
         /**
+         * Inactive company blocks role offers (manager and owner appointments).
+         */
+        @Test
+        public void GivenInactiveCompany_WhenOfferRoleAppointment_ThenThrowsIllegalArgumentException() {
+            UUID appointerId = UUID.randomUUID();
+            UUID targetId = UUID.randomUUID();
+            String companyName = "SuspendedOfferCo";
+            String validToken = "valid-" + appointerId.toString();
+
+            Member appointer = new Member(appointerId, "appointer", "appointer@test.com", "pass");
+            Member target = new Member(targetId, "target", "target@test.com", "pass");
+            memberRepository.save(appointer);
+            memberRepository.save(target);
+
+            when(sessionTokenServiceMock.isValid(validToken)).thenReturn(true);
+            when(sessionTokenServiceMock.extractMemberId(validToken)).thenReturn(appointerId);
+
+            Company inactiveCompany = new Company(companyName, "desc", appointerId);
+            inactiveCompany.suspend();
+            companyRepository.save(inactiveCompany);
+
+            IllegalArgumentException managerOffer = assertThrows(IllegalArgumentException.class, () ->
+                    companyService.offerRoleAppointment(validToken, companyName, targetId,
+                            StaffAppointment.StaffRole.MANAGER, Collections.emptySet()));
+            assertEquals("Cannot offer role appointments for a suspended or closed company",
+                    managerOffer.getMessage());
+
+            IllegalArgumentException ownerOffer = assertThrows(IllegalArgumentException.class, () ->
+                    companyService.offerRoleAppointment(validToken, companyName, targetId,
+                            StaffAppointment.StaffRole.OWNER, Collections.emptySet()));
+            assertEquals("Cannot offer role appointments for a suspended or closed company",
+                    ownerOffer.getMessage());
+
+            assertTrue(memberRepository.findById(targetId).orElseThrow().getPendingOffers().isEmpty());
+        }
+
+        /**
          * Fulfills Acceptance Test: "Valid Relinquishment Request Initiated" (happy path)
          * Tests the core success path of the service layer before delegating to the Handler.
          */
@@ -525,7 +562,8 @@ class CompanyServiceTest {
         public void GivenValidTokenAndCompany_WhenChangeManagerPermissions_ThenEventPublished() {
             when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
             when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(CALLER_ID);
-            when(companyRepository.existsByName(COMPANY_NAME)).thenReturn(true);
+            Company company = new Company(COMPANY_NAME, "desc", CALLER_ID);
+            when(companyRepository.findByName(COMPANY_NAME)).thenReturn(Optional.of(company));
 
             Set<ManagerPermission> newPerms = Set.of(ManagerPermission.VIEW_REPORTS);
 
