@@ -227,4 +227,92 @@ class InitialStateExecutorTest {
         executor.execute(List.of());
         assertEquals(0, memberRepository.count());
     }
+
+    // ── #543 init-file edge cases: every failure aborts with a located error (file:line, op #index/name) ──
+
+    @Test
+    @DisplayName("Duplicate registration: the same username twice aborts with a located error")
+    void givenDuplicateRegistration_whenExecute_thenThrowsLocatedError(CapturedOutput output) {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                guest-registration(rina, other@example.com, secret2);
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("#1"), "names the offending op index: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("guest-registration"), "names the op: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("rina"), "names the duplicate user: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:2:"),
+                "logs a located error: " + output.getOut());
+        assertEquals(1, memberRepository.count(), "the duplicate must not create a second member");
+    }
+
+    @Test
+    @DisplayName("Duplicate company name: opening the same company twice aborts with a located error")
+    void givenDuplicateCompanyName_whenExecute_thenThrowsLocatedError(CapturedOutput output) {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                login(rina, secret1);
+                open-production-company(rina_token, "Demo Co", "first");
+                open-production-company(rina_token, "Demo Co", "second");
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("#3"), "names the offending op index: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("open-production-company"), "names the op: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:4:"),
+                "logs a located error: " + output.getOut());
+        assertTrue(companyRepository.existsByName("Demo Co"), "the first company still exists");
+    }
+
+    @Test
+    @DisplayName("Out-of-order: logging in before the user is registered aborts with a located error")
+    void givenLoginBeforeRegister_whenExecute_thenThrowsLocatedError(CapturedOutput output) {
+        List<InitialStateOperation> ops = parser.parse("login(rina, secret1);", "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("login"), "names the op: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("rina"), "names the unknown user: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:1:"),
+                "logs a located error: " + output.getOut());
+    }
+
+    @Test
+    @DisplayName("Reference to a non-existent company: appointing on a company never opened aborts")
+    void givenAppointOnUnknownCompany_whenExecute_thenThrowsLocatedError(CapturedOutput output) {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                guest-registration(dana, dana@example.com, secret2);
+                login(rina, secret1);
+                appoint-manager(rina_token, "Ghost Co", dana);
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("#3"), "names the offending op index: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("appoint-manager"), "names the op: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:4:"),
+                "logs a located error: " + output.getOut());
+    }
+
+    @Test
+    @DisplayName("Reference to a non-existent event: setting a layout on an event never created aborts")
+    void givenSetLayoutOnUnknownEvent_whenExecute_thenThrowsLocatedError(CapturedOutput output) {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                login(rina, secret1);
+                open-production-company(rina_token, "Demo Co", "desc");
+                set-event-seating-layout(rina_token, "Demo Co", "GhostEvent", "Seating", 5, 5);
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("#3"), "names the offending op index: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("set-event-seating-layout"), "names the op: " + ex.getMessage());
+        assertTrue(output.getOut().contains("[EXECUTION ERROR] test.txt:4:"),
+                "logs a located error: " + output.getOut());
+    }
 }
