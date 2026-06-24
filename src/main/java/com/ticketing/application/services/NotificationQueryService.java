@@ -25,6 +25,15 @@ public class NotificationQueryService {
         return result;
     }
 
+    /** Full notification history (delivered + undelivered) for the member's Notifications inbox. */
+    public List<String> getNotificationHistory(String memberId) {
+        log.info("Fetching notification history for member: {}", memberId);
+        List<String> result = pendingNotificationRepository.getNotificationHistory(memberId);
+        log.info("Notification history completed: memberId={}, count={}", memberId, result.size());
+
+        return result;
+    }
+
     public void clearPendingNotifications(String memberId) {
         log.info("Clearing pending notifications for member: {}", memberId);
 
