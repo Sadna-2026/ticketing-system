@@ -27,6 +27,8 @@ public class AuthPresenter {
 
     private static final String ALREADY_MEMBER_SESSION_MESSAGE = "You are already logged in. Log out before switching accounts.";
     private static final String NO_MEMBER_SESSION_MESSAGE = "No authenticated member session exists.";
+    private static final String SESSION_ALREADY_ENDED_MESSAGE =
+            "Your session had already ended. You have been signed out.";
     private static final String NOT_AN_ADMIN_MESSAGE = "These credentials are not authorized for admin access.";
 
     private final MemberService memberService;
@@ -52,6 +54,7 @@ public class AuthPresenter {
     }
 
     public AuthResult startGuestSession() {
+        reconcileStoredSession();
         if (SessionContext.isLoggedInMember()) {
             return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
@@ -71,6 +74,7 @@ public class AuthPresenter {
      * automatically — the user does not need to click "Enter as guest" first.
      */
     public AuthResult login(String username, String password) {
+        reconcileStoredSession();
         if (SessionContext.isLoggedInMember()) {
             return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
@@ -103,6 +107,7 @@ public class AuthPresenter {
      * does not, the session is rolled back to no-session state.
      */
     public AuthResult adminLogin(String username, String password) {
+        reconcileStoredSession();
         if (SessionContext.isLoggedInMember()) {
             return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
@@ -147,6 +152,7 @@ public class AuthPresenter {
             String phoneNumber,
             LocalDate dateOfBirth
     ) {
+        reconcileStoredSession();
         if (SessionContext.isLoggedInMember()) {
             return AuthResult.failure(ALREADY_MEMBER_SESSION_MESSAGE);
         }
@@ -199,10 +205,38 @@ public class AuthPresenter {
         }
     }
 
+    /**
+     * Drops client-side session attributes when the stored token is no longer valid
+     * (expired, revoked, or unknown after a server restart). Called on navigation so
+     * the UI does not show a logged-in state that the backend will reject.
+     *
+     * @return {@code true} if stale client state was cleared
+     */
+    public boolean reconcileStoredSession() {
+        String token = SessionContext.getSessionToken();
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        if (sessionTokenService.isValid(token)) {
+            return false;
+        }
+        SessionContext.clear();
+        return true;
+    }
+
     private AuthResult logoutMember(String sessionToken) {
+        if (!sessionTokenService.isValid(sessionToken)) {
+            SessionContext.clear();
+            return AuthResult.success(SESSION_ALREADY_ENDED_MESSAGE);
+        }
+
         try {
             LogoutResponse response = memberService.logout(sessionToken);
             if (!response.success()) {
+                if (NO_MEMBER_SESSION_MESSAGE.equals(response.message())) {
+                    SessionContext.clear();
+                    return AuthResult.success(SESSION_ALREADY_ENDED_MESSAGE);
+                }
                 return AuthResult.failure(response.message());
             }
 
@@ -225,13 +259,19 @@ public class AuthPresenter {
     }
 
     private AuthResult exitGuestSession(String sessionToken) {
+        if (!sessionTokenService.isValid(sessionToken)) {
+            SessionContext.clear();
+            return AuthResult.success("Guest session ended.");
+        }
+
         try {
             if (orderService.getActiveOrder(sessionToken) != null) {
                 orderService.cancelOrder(sessionToken);
             }
             boolean success = sessionTokenService.endSession(sessionToken);
             if (!success) {
-                return AuthResult.failure("Failed to exit guest session.");
+                SessionContext.clear();
+                return AuthResult.success("Guest session ended.");
             }
             recordVisitorExit();
             SessionContext.clear();
@@ -258,8 +298,11 @@ public class AuthPresenter {
      */
     private String ensureGuestToken() {
         String existing = SessionContext.getSessionToken();
-        if (existing != null && !existing.isBlank()) {
+        if (existing != null && !existing.isBlank() && sessionTokenService.isValid(existing)) {
             return existing;
+        }
+        if (existing != null && !existing.isBlank()) {
+            SessionContext.clear();
         }
         String newToken = sessionTokenService.generateGuestToken();
         storeGuestSession(newToken);

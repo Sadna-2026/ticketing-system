@@ -5,12 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
@@ -53,6 +53,7 @@ class AuthPresenterTest {
         adminService = mock(AdminService.class);
         orderService = mock(OrderService.class);
         presenter = new AuthPresenter(memberService, adminService, sessionTokenService, orderService);
+        when(sessionTokenService.isValid(anyString())).thenReturn(true);
     }
 
     // ── startGuestSession ──────────────────────────────────────────────────────
@@ -89,7 +90,8 @@ class AuthPresenterTest {
         assertEquals(memberId, SessionContext.getMemberId());
         assertEquals("alice", SessionContext.getUsername());
         assertEquals("Member", SessionContext.getRole());
-        verifyNoMoreInteractions(sessionTokenService);
+        verify(sessionTokenService).isValid("member-token");
+        verifyNoInteractions(memberService);
     }
 
     // ── login — auto-token behaviour ───────────────────────────────────────────
@@ -259,6 +261,7 @@ class AuthPresenterTest {
         SessionContext.setMemberId(UUID.randomUUID());
         SessionContext.setUsername("carol");
         SessionContext.setRole("Member");
+        when(sessionTokenService.isValid("member-token")).thenReturn(true);
         when(memberService.logout("member-token")).thenReturn(LogoutResponse.success("guest-token"));
         when(sessionTokenService.endSession("guest-token")).thenReturn(true);
 
@@ -344,6 +347,7 @@ class AuthPresenterTest {
     void GivenLogoutThrowsRuntimeException_WhenLogout_ThenGenericFailureMessageIsReturned() {
         SessionContext.setSessionToken("member-token");
         SessionContext.setMemberId(UUID.randomUUID());
+        when(sessionTokenService.isValid("member-token")).thenReturn(true);
         when(memberService.logout("member-token"))
                 .thenThrow(new IllegalStateException("internal logout stack detail"));
 
@@ -357,6 +361,7 @@ class AuthPresenterTest {
     void GivenGuestSessionWithActiveOrder_WhenLogout_ThenOrderIsCancelled() {
         SessionContext.setSessionToken("guest-token");
         SessionContext.setRole("Guest");
+        when(sessionTokenService.isValid("guest-token")).thenReturn(true);
         when(orderService.getActiveOrder("guest-token")).thenReturn(mock(ActiveOrderDto.class));
         when(sessionTokenService.endSession("guest-token")).thenReturn(true);
 
@@ -371,6 +376,7 @@ class AuthPresenterTest {
     void GivenGuestSessionWithoutActiveOrder_WhenLogout_ThenOrderIsNotCancelled() {
         SessionContext.setSessionToken("guest-token");
         SessionContext.setRole("Guest");
+        when(sessionTokenService.isValid("guest-token")).thenReturn(true);
         when(orderService.getActiveOrder("guest-token")).thenReturn(null);
         when(sessionTokenService.endSession("guest-token")).thenReturn(true);
 
@@ -382,16 +388,85 @@ class AuthPresenterTest {
     }
 
     @Test
-    void GivenGuestSession_WhenEndSessionFails_ThenFailureMessageReturned() {
+    void GivenGuestSession_WhenEndSessionFails_ThenClientStateIsStillCleared() {
         SessionContext.setSessionToken("guest-token");
         SessionContext.setRole("Guest");
+        when(sessionTokenService.isValid("guest-token")).thenReturn(true);
         when(orderService.getActiveOrder("guest-token")).thenReturn(null);
         when(sessionTokenService.endSession("guest-token")).thenReturn(false);
 
         AuthResult result = presenter.logout();
 
-        assertFalse(result.success());
-        assertEquals("Failed to exit guest session.", result.message());
+        assertTrue(result.success());
+        assertEquals("Guest session ended.", result.message());
+        assertNull(SessionContext.getSessionToken());
+    }
+
+    @Test
+    void GivenExpiredMemberToken_WhenLogout_ThenClientStateIsClearedWithoutCallingService() {
+        SessionContext.setSessionToken("expired-member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setUsername("owner");
+        SessionContext.setRole("Member");
+        when(sessionTokenService.isValid("expired-member-token")).thenReturn(false);
+
+        AuthResult result = presenter.logout();
+
+        assertTrue(result.success());
+        assertEquals("Your session had already ended. You have been signed out.", result.message());
+        assertNull(SessionContext.getSessionToken());
+        assertNull(SessionContext.getMemberId());
+        verifyNoInteractions(memberService);
+    }
+
+    @Test
+    void GivenExpiredMemberToken_WhenServiceRejectsLogout_ThenClientStateIsCleared() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setRole("Member");
+        when(sessionTokenService.isValid("member-token")).thenReturn(true);
+        when(memberService.logout("member-token"))
+                .thenReturn(LogoutResponse.failure("No authenticated member session exists."));
+
+        AuthResult result = presenter.logout();
+
+        assertTrue(result.success());
+        assertEquals("Your session had already ended. You have been signed out.", result.message());
+        assertNull(SessionContext.getSessionToken());
+        assertNull(SessionContext.getMemberId());
+    }
+
+    @Test
+    void GivenExpiredStoredToken_WhenReconcileStoredSession_ThenClientStateIsCleared() {
+        SessionContext.setSessionToken("stale-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setUsername("owner");
+        when(sessionTokenService.isValid("stale-token")).thenReturn(false);
+
+        assertTrue(presenter.reconcileStoredSession());
+        assertNull(SessionContext.getSessionToken());
+        assertNull(SessionContext.getMemberId());
+    }
+
+    @Test
+    void GivenStaleMemberContext_WhenLogin_ThenUserCanSignInAgain() {
+        UUID memberId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        SessionContext.setSessionToken("stale-token");
+        SessionContext.setMemberId(memberId);
+        SessionContext.setUsername("owner");
+        SessionContext.setRole("Member");
+        when(sessionTokenService.isValid("stale-token")).thenReturn(false);
+        when(sessionTokenService.generateGuestToken()).thenReturn("fresh-guest");
+        when(sessionTokenService.extractSessionId("fresh-guest")).thenReturn(sessionId);
+        when(memberService.login(any(LoginRequest.class), eq("fresh-guest")))
+                .thenReturn(LoginResponse.success(member(memberId, "owner"), "member-token"));
+        when(sessionTokenService.extractSessionId("member-token")).thenReturn(sessionId);
+
+        AuthResult result = presenter.login("owner", "owner123");
+
+        assertTrue(result.success());
+        assertEquals("member-token", SessionContext.getSessionToken());
     }
 
     @Test
