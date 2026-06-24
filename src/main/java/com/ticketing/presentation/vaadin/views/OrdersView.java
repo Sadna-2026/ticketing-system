@@ -290,6 +290,13 @@ public class OrdersView extends VerticalLayout {
             checkoutStatus.setText(result.message());
             orderActionStatus.setText(result.message());
             UiMessages.error(result.message());
+            if (isAccountSuspensionMessage(result.message())) {
+                dialog.close();
+                String suspensionMessage = result.message();
+                loadActiveOrder(false);
+                checkoutStatus.setText(suspensionMessage);
+                orderActionStatus.setText(suspensionMessage);
+            }
             return;
         }
 
@@ -305,6 +312,13 @@ public class OrdersView extends VerticalLayout {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean isAccountSuspensionMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        return message.contains("Account is suspended") || message.contains("permanently suspended");
     }
 
     private boolean canCheckout() {

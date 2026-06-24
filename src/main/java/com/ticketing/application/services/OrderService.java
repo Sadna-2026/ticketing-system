@@ -962,18 +962,13 @@ public class OrderService {
     }
 
     private void releaseInventoryForItem(Event event, OrderItem item) {
-        InventoryZone zone = event.findZone(item.getZoneId());
-        if (item.isAssignedSeat()) {
-            zone.releaseSeat(item.getSeatId());
-        } else {
-            zone.releaseGA(item.getQuantity());
-        }
+        event.releaseReservationFor(item);
     }
 
     private void releaseAllInventory(Event event, ActiveOrder order) {
         for (OrderItem item : order.getItems()) {
             try {
-                releaseInventoryForItem(event, item);
+                event.releaseReservationFor(item);
             } catch (Exception e) {
                 log.error("Failed to release inventory for item: {}", item.getId(), e);
             }
@@ -1003,8 +998,7 @@ public class OrderService {
      * If so, transitions the event status back to PUBLISHED and persists the change.
      */
     private void checkAndPublishAvailable(Event event) {
-        if (event.hasAvailableTickets() && event.getStatus() == EventStatus.SOLD_OUT) {
-            event.markAvailable();
+        if (event.reopenAvailabilityIfTicketsFreed()) {
             saveEvent(event);
         }
     }
