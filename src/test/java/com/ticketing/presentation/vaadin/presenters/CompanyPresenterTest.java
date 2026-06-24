@@ -783,6 +783,51 @@ class CompanyPresenterTest {
     }
 
     @Test
+    @DisplayName("3.5: Save draft with doors-open after start time returns the specific rule violation, not a silent failure")
+    void GivenDoorsOpenAfterStartTime_WhenDefiningVenue_ThenSpecificRuleMessageIsReturned() {
+        memberSession();
+        Instant start = Instant.parse("2026-06-01T19:00:00Z");
+        Instant end = start.plus(2, ChronoUnit.HOURS);
+        Instant doorsAfterStart = start.plus(30, ChronoUnit.MINUTES);
+
+        EventActionResult result = presenter.defineVenue(
+                null, "Acme", "Grand Concert", "desc", EventCategory.CONCERT,
+                start, end, doorsAfterStart, 15,
+                5, 8,
+                List.of(new CreateEventRequest.GAZoneSpec("GA", BigDecimal.TEN, 100)),
+                Map.of("Main", "GA"), List.of(),
+                com.ticketing.domain.event.SaleMethod.REGULAR, null);
+
+        assertFalse(result.success());
+        assertEquals("Doors open time must be before or at start time", result.message());
+        assertNull(result.eventId());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    @DisplayName("3.5: Save draft with valid schedule reaches the service and creates the event")
+    void GivenValidSchedule_WhenDefiningVenue_ThenEventServiceIsCalledAndDraftIsCreated() {
+        memberSession();
+        UUID eventId = UUID.randomUUID();
+        Instant start = Instant.parse("2026-06-01T19:00:00Z");
+        Instant end = start.plus(2, ChronoUnit.HOURS);
+        Instant doors = start.minus(1, ChronoUnit.HOURS);
+        when(eventService.defineVenue(eq("member-token"), any())).thenReturn(eventId);
+
+        EventActionResult result = presenter.defineVenue(
+                null, "Acme", "Grand Concert", "desc", EventCategory.CONCERT,
+                start, end, doors, 15,
+                5, 8,
+                List.of(new CreateEventRequest.GAZoneSpec("GA", BigDecimal.TEN, 100)),
+                Map.of("Main", "GA"), List.of(),
+                com.ticketing.domain.event.SaleMethod.REGULAR, null);
+
+        assertTrue(result.success());
+        assertEquals(eventId, result.eventId());
+        verify(eventService).defineVenue(eq("member-token"), any());
+    }
+
+    @Test
     @DisplayName("UI-22: Load event map returns zone details with prices for hall configuration")
     void GivenPublishedEventWithMultipleZones_WhenLoadingEventMap_ThenAllZonesWithPricesAreReturned() {
         UUID eventId = UUID.randomUUID();
