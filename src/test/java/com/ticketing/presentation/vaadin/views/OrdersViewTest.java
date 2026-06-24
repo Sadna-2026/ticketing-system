@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -393,6 +394,28 @@ class OrdersViewTest {
         OrdersView view = new OrdersView(presenter);
 
         assertTrue(hasText(view, "Could not load active order. Please try again."));
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenCheckoutFails_ThenCartIsClearedInUi() {
+        OrdersPresenter presenter = mockPresenter();
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        ActiveOrderDto order = activeOrder(orderId, eventId, List.of(gaItem(UUID.randomUUID(), UUID.randomUUID(), 1)));
+        String suspensionMessage = "Account is suspended until 2026-07-01T12:00:00Z. Reason: policy violation";
+        when(presenter.loadCurrentOrder())
+                .thenReturn(OrderResult.success("Active order loaded.", orderId, order))
+                .thenReturn(OrderResult.success("No active order found.", null, null));
+        when(presenter.quoteCheckout("")).thenReturn(CheckoutQuoteResult.success(new BigDecimal("50.00"), new BigDecimal("50.00")));
+        when(presenter.checkout(eq(""), any())).thenReturn(CheckoutResult.failure(suspensionMessage));
+        OrdersView view = new OrdersView(presenter);
+
+        payViaDialog(view);
+
+        assertTrue(hasText(view, suspensionMessage));
+        assertTrue(hasText(view, "No active order. Add tickets from the Events page."));
+        verify(presenter, times(2)).loadCurrentOrder();
+        verify(presenter).checkout(eq(""), any());
     }
 
     @Test

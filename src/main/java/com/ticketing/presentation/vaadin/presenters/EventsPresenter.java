@@ -32,6 +32,8 @@ public class EventsPresenter {
     private static final String SEARCH_FAILURE_MESSAGE = "Could not search events. Please try again.";
     private static final String MAP_NOT_FOUND_MESSAGE = "Event map not found.";
     private static final String MAP_FAILURE_MESSAGE = "Could not load event map. Please try again.";
+    private static final String LOTTERY_REGISTRATION_FAILURE_MESSAGE =
+            "Could not register for the lottery. Please try again.";
 
     private final EventService eventService;
     private final CompanyService companyService;
@@ -123,11 +125,8 @@ public class EventsPresenter {
                 return LotteryRegistrationResult.success(response.message(), response.lotteryEntryId(), response.registeredAt());
             }
             return LotteryRegistrationResult.failure(response.message());
-        } catch (IllegalArgumentException ex) {
-            return LotteryRegistrationResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
-            logger.warn("Lottery registration failed unexpectedly", ex);
-            return LotteryRegistrationResult.failure("Could not register for the lottery. Please try again.");
+            return LotteryRegistrationResult.failure(userMessage(ex, LOTTERY_REGISTRATION_FAILURE_MESSAGE));
         }
     }
 
@@ -141,6 +140,20 @@ public class EventsPresenter {
             logger.warn("Failed to get lottery status for eventId={}", eventId, ex);
             return Optional.empty();
         }
+    }
+
+    private String userMessage(RuntimeException ex, String fallback) {
+        if (ex instanceof IllegalArgumentException
+                || ex instanceof IllegalStateException
+                || ex instanceof SecurityException) {
+            String message = ex.getMessage();
+            if (message != null && !message.isBlank()) {
+                return message;
+            }
+        }
+
+        logger.warn(fallback, ex);
+        return fallback;
     }
 
     private static String blankToNull(String value) {

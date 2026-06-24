@@ -258,6 +258,21 @@ class EventsPresenterTest {
     }
 
     @Test
+    @DisplayName("Suspended-member reason from service is preserved exactly")
+    void GivenSuspendedMember_WhenRegisteringForLottery_ThenSuspensionMessageIsPreserved() {
+        SessionContext.setSessionToken("member-token");
+        SessionContext.setMemberId(UUID.randomUUID());
+        String reason = "Account is suspended until 2026-07-01T12:00:00Z. Reason: policy violation";
+        when(eventService.registerForLottery(any(), any(LotteryRegistrationRequest.class)))
+                .thenThrow(new IllegalStateException(reason));
+
+        LotteryRegistrationResult result = presenter.registerForLottery(UUID.randomUUID());
+
+        assertFalse(result.success());
+        assertEquals(reason, result.message());
+    }
+
+    @Test
     @DisplayName("Unexpected exception produces a safe generic message without stack traces")
     void GivenUnexpectedException_WhenRegisteringForLottery_ThenSafeGenericMessageIsReturned() {
         SessionContext.setSessionToken("member-token");
