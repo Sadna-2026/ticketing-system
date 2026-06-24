@@ -989,6 +989,30 @@ class CompanyViewTest {
     }
 
     @Test
+    void GivenOwnerMemberSession_WhenRelinquishOwnershipSucceeds_ThenPersonnelControlsRefreshWithoutManualReload() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.relinquishOwnership("Acme")).thenReturn(ActionResult.success("Ownership relinquished for Acme."));
+        when(presenter.loadPersonnelAccess("Acme"))
+                .thenReturn(PersonnelAccessResult.allowed("Owner personnel controls available for Acme."))
+                .thenReturn(PersonnelAccessResult.denied("No active staff appointment for Acme."));
+        when(presenter.loadCompanyAccess("Acme"))
+                .thenReturn(CompanyAccessResult.owner("Acme"))
+                .thenReturn(CompanyAccessResult.denied("Acme", "No active staff appointment for Acme."));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Personnel");
+        findCompanyCombo(view, "Personnel company name").setValue(company("Acme"));
+
+        assertTrue(hasVisibleButton(view, "Relinquish ownership"));
+
+        clickDestructive(view, "Relinquish ownership");
+
+        verify(presenter).relinquishOwnership("Acme");
+        assertFalse(hasVisibleButton(view, "Relinquish ownership"));
+        assertTrue(hasText(view, "No active staff appointment for Acme."));
+    }
+
+    @Test
     void GivenNonOwnerMemberSession_WhenRelinquishOwnershipClicked_ThenFailureMessageFromServiceIsDisplayed() {
         CompanyPresenter presenter = mockPresenter();
         when(presenter.relinquishOwnership("Acme"))
