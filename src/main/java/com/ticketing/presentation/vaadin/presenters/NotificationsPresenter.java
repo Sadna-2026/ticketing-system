@@ -50,7 +50,7 @@ public class NotificationsPresenter {
         }
 
         try {
-            List<String> allNotifications = notificationQueryService.getPendingNotifications(memberId);
+            List<String> allNotifications = notificationQueryService.getNotificationHistory(memberId);
             List<String> notifications = allNotifications.stream()
                     .filter(msg -> !msg.startsWith("You have a new role offer"))
                     .toList();

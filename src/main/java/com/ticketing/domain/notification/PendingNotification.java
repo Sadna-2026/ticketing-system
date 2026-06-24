@@ -24,13 +24,31 @@ public class PendingNotification {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    // false until delivered to the member (e.g. flushed as a toast on login). Retained after
+    // delivery so the Notifications tab can show it as history rather than dropping it (#490).
+    @Column(name = "seen", nullable = false)
+    private boolean seen;
+
     protected PendingNotification() {} // JPA
 
     public PendingNotification(String userId, String message) {
+        this(userId, message, false);
+    }
+
+    public PendingNotification(String userId, String message, boolean seen) {
         this.id = UUID.randomUUID();
         this.userId = userId;
         this.message = message;
         this.createdAt = Instant.now();
+        this.seen = seen;
+    }
+
+    public boolean isSeen() {
+        return seen;
+    }
+
+    public void markSeen() {
+        this.seen = true;
     }
 
     public UUID getId() {

@@ -23,21 +23,46 @@ public class JpaPendingNotificationRepository implements IPendingNotificationRep
     @Override
     @Transactional
     public void savePendingNotification(String userId, String message) {
-        PendingNotification notification = new PendingNotification(userId, message);
-        entityManager.persist(notification);
+        savePendingNotification(userId, message, false);
+    }
+
+    @Override
+    @Transactional
+    public void savePendingNotification(String userId, String message, boolean seen) {
+        entityManager.persist(new PendingNotification(userId, message, seen));
     }
 
     @Override
     public List<String> getPendingNotifications(String userId) {
-        List<PendingNotification> notifications = entityManager.createQuery(
+        return entityManager.createQuery(
+                "SELECT p FROM PendingNotification p WHERE p.userId = :userId AND p.seen = false ORDER BY p.createdAt ASC",
+                PendingNotification.class)
+                .setParameter("userId", userId)
+                .getResultList()
+                .stream()
+                .map(PendingNotification::getMessage)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> getNotificationHistory(String userId) {
+        return entityManager.createQuery(
                 "SELECT p FROM PendingNotification p WHERE p.userId = :userId ORDER BY p.createdAt ASC",
                 PendingNotification.class)
                 .setParameter("userId", userId)
-                .getResultList();
-
-        return notifications.stream()
+                .getResultList()
+                .stream()
                 .map(PendingNotification::getMessage)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void markAllSeen(String userId) {
+        entityManager.createQuery(
+                "UPDATE PendingNotification p SET p.seen = true WHERE p.userId = :userId AND p.seen = false")
+                .setParameter("userId", userId)
+                .executeUpdate();
     }
 
     @Override

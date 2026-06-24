@@ -78,6 +78,61 @@ class InMemoryPendingNotificationRepositoryTest {
     }
 
     // ══════════════════════════════════════════════════════════════════
+    //  Seen flag and history (#490)
+    // ══════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Seen flag and history")
+    class SeenAndHistory {
+
+        @Test
+        void GivenUnseenAndSeen_WhenGetPending_ThenOnlyUnseenReturned_ButHistoryHasBoth() {
+            repo.savePendingNotification("user-1", "undelivered");
+            repo.savePendingNotification("user-1", "already delivered", true);
+
+            assertEquals(List.of("undelivered"), repo.getPendingNotifications("user-1"));
+            assertEquals(List.of("undelivered", "already delivered"), repo.getNotificationHistory("user-1"));
+        }
+
+        @Test
+        void GivenUnseenNotifications_WhenMarkAllSeen_ThenPendingEmptyButHistoryRetained() {
+            repo.savePendingNotification("user-1", "Msg 1");
+            repo.savePendingNotification("user-1", "Msg 2");
+
+            repo.markAllSeen("user-1");
+
+            assertTrue(repo.getPendingNotifications("user-1").isEmpty(), "delivered messages are no longer pending");
+            assertEquals(List.of("Msg 1", "Msg 2"), repo.getNotificationHistory("user-1"),
+                    "delivered messages remain in history");
+        }
+
+        @Test
+        void GivenSeenNotification_WhenSavedAgainUnseen_ThenOnlyTheNewOneIsPending() {
+            repo.savePendingNotification("user-1", "old", true);
+            repo.savePendingNotification("user-1", "new");
+
+            assertEquals(List.of("new"), repo.getPendingNotifications("user-1"));
+            assertEquals(2, repo.getNotificationHistory("user-1").size());
+        }
+
+        @Test
+        void GivenClear_WhenGetHistory_ThenEmpty() {
+            repo.savePendingNotification("user-1", "Msg 1", true);
+            repo.savePendingNotification("user-1", "Msg 2");
+
+            repo.clearPendingNotifications("user-1");
+
+            assertTrue(repo.getNotificationHistory("user-1").isEmpty());
+        }
+
+        @Test
+        void GivenNullUserId_WhenGetHistoryOrMarkSeen_ThenSafe() {
+            assertTrue(repo.getNotificationHistory(null).isEmpty());
+            repo.markAllSeen(null); // no exception
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
     //  Clear
     // ══════════════════════════════════════════════════════════════════
 
