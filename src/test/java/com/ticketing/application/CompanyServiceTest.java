@@ -562,7 +562,8 @@ class CompanyServiceTest {
         public void GivenValidTokenAndCompany_WhenChangeManagerPermissions_ThenEventPublished() {
             when(sessionTokenService.isValid(VALID_TOKEN)).thenReturn(true);
             when(sessionTokenService.extractMemberId(VALID_TOKEN)).thenReturn(CALLER_ID);
-            when(companyRepository.existsByName(COMPANY_NAME)).thenReturn(true);
+            Company company = new Company(COMPANY_NAME, "desc", CALLER_ID);
+            when(companyRepository.findByName(COMPANY_NAME)).thenReturn(Optional.of(company));
 
             Set<ManagerPermission> newPerms = Set.of(ManagerPermission.VIEW_REPORTS);
 

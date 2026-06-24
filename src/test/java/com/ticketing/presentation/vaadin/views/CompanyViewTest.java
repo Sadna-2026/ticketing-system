@@ -278,7 +278,9 @@ class CompanyViewTest {
         findCheckboxGroup(view).setValue(Set.of(ManagerPermission.VIEW_REPORTS));
 
         clickButton(view, "Offer role appointment");
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
         clickButton(view, "Change manager permissions");
+        selectTargetMember(view, "manager", targetId, StaffAppointment.StaffRole.MANAGER);
         clickDestructive(view, "Revoke personnel");
 
         verify(presenter).offerRoleAppointment("Acme", targetId, StaffAppointment.StaffRole.MANAGER,
@@ -1098,6 +1100,8 @@ class CompanyViewTest {
                 .thenReturn(List.of(company("Acme")));
         when(presenter.searchLifecycleCompanies(any()))
                 .thenReturn(List.of(company("Acme")));
+        when(presenter.searchBrowsableEvents()).thenReturn(List.of());
+        when(presenter.listAppointableMembers()).thenReturn(List.of());
         when(presenter.loadCompanyAccess(any()))
                 .thenReturn(CompanyAccessResult.owner("Acme"));
         when(presenter.loadOrganizationChart(any()))
