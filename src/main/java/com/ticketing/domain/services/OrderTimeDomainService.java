@@ -2,6 +2,7 @@ package com.ticketing.domain.services;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,28 @@ public class OrderTimeDomainService {
         if (expiredCount > 0) {
             log.info("Expired {} orders", expiredCount);
         }
+    }
+
+    /**
+     * Cancels a member's active cart and releases reserved tickets (e.g. on admin suspension).
+     */
+    public void cancelActiveOrderForMember(UUID memberId) {
+        if (memberId == null) {
+            return;
+        }
+        orderRepository.findActiveByMemberId(memberId).ifPresent(order -> {
+            if (!order.isActive()) {
+                return;
+            }
+            eventRepository.findById(order.getEventId()).ifPresent(event -> {
+                releaseReservationsQuietly(event, order);
+                event.reopenAvailabilityIfTicketsFreed();
+                eventRepository.save(event);
+            });
+            order.cancel();
+            orderRepository.save(order);
+            log.info("Active order cancelled for member: memberId={}, orderId={}", memberId, order.getId());
+        });
     }
 
     private void expireSingleOrder(ActiveOrder order, Event event) {

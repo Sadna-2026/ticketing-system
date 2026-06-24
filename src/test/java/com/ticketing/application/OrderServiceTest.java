@@ -36,8 +36,10 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.application.services.OrderService;
+import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
@@ -71,6 +73,7 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.order.RefundStatus;
 import com.ticketing.domain.services.OrderTimeDomainService;
+import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
@@ -721,7 +724,12 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenMemberSuspendedAfterCartBuilt_WhenMutatingCart_ThenRejectedAndReadOnlyCartStillVisible() {
+    void GivenActiveCart_WhenAdminSuspendsMember_ThenOrderCancelledAndInventoryReleased() {
+        InMemoryAdminRepository adminRepo = new InMemoryAdminRepository();
+        UUID adminId = UUID.randomUUID();
+        adminRepo.save(new Admin(adminId, "admin", "admin@test.com", "pw"));
+        String adminToken = sessionService.generateMemberToken(UUID.randomUUID(), adminId, Set.of("SYSTEM_ADMIN"));
+
         UUID memberId = UUID.randomUUID();
         Member member = new Member(memberId, "cartUser", "cart@example.com", "pw",
                 "050-1111111", LocalDate.of(1990, 1, 1));
@@ -729,36 +737,22 @@ public class OrderServiceTest {
         String memberToken = sessionService.generateMemberToken(new SessionTokenData(
                 UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
 
+        Event eventBefore = eventRepo.findById(eventId).orElseThrow();
+        int availableBefore = eventBefore.findZone(gaZoneId).getAvailableCount();
+
         UUID orderId = orderService.createOrder(memberToken, eventId);
-        UUID itemId = orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 2);
+        assertEquals(availableBefore - 2, eventRepo.findById(eventId).orElseThrow().findZone(gaZoneId).getAvailableCount());
 
-        member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), Duration.ofDays(7), "fraud"));
-        memberRepo.save(member);
+        AdminService adminService = new AdminService(memberRepo, new InMemoryCompanyRepository(), sessionService,
+                adminRepo, orderRepo, null, null,
+                new OrderTimeDomainService(orderRepo, eventRepo, clock));
+        adminService.suspendUser(adminToken, memberId, Duration.ofDays(7), "fraud");
 
-        assertDoesNotThrow(() -> orderService.getActiveOrder(memberToken));
-        assertEquals(orderId, orderService.getActiveOrder(memberToken).getId());
-
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addSelectionToOrder(memberToken, new SelectionRequest(eventId,
-                        List.of(new SelectionRequest.SeatPick(assignedZoneId, seatId)),
-                        List.of(new SelectionRequest.GAPick(gaZoneId, 1)))));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.updateGAQuantity(memberToken, gaZoneId, 2));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.removeItemFromOrder(memberToken, itemId));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.cancelOrder(memberToken));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(memberToken, null));
-
+        assertNull(orderService.getActiveOrder(memberToken));
+        assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertEquals(availableBefore, eventRepo.findById(eventId).orElseThrow().findZone(gaZoneId).getAvailableCount());
         assertEquals(0, paymentGateway.chargeCalls);
-        assertEquals(0, ticketSupplyGateway.issueCalls);
-        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
-        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
     }
 
     @Test
