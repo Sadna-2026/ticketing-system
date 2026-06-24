@@ -8,6 +8,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.OrderItem;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -194,6 +197,36 @@ public class Event{
             throw new IllegalStateException("Can only mark a SOLD_OUT event as available");
         }
         this.status = EventStatus.PUBLISHED;
+    }
+
+    /** Releases a single reserved line item back to inventory. */
+    public void releaseReservationFor(OrderItem item) {
+        InventoryZone zone = findZone(item.getZoneId());
+        if (item.isAssignedSeat()) {
+            zone.releaseSeat(item.getSeatId());
+        } else {
+            zone.releaseGA(item.getQuantity());
+        }
+    }
+
+    /** Releases every reserved line item on the order back to inventory. */
+    public void releaseReservationsFor(ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            releaseReservationFor(item);
+        }
+    }
+
+    /**
+     * After tickets are released, reopen a sold-out event when stock is available again.
+     *
+     * @return {@code true} if the event transitioned back to {@link EventStatus#PUBLISHED}
+     */
+    public boolean reopenAvailabilityIfTicketsFreed() {
+        if (hasAvailableTickets() && status == EventStatus.SOLD_OUT) {
+            markAvailable();
+            return true;
+        }
+        return false;
     }
 
     public UUID getId() {

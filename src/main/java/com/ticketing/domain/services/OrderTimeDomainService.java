@@ -9,7 +9,6 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.application.ISystemClock;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
-import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
@@ -33,7 +32,6 @@ public class OrderTimeDomainService {
     public void expireOrders() {
         Instant now = systemClock.now();
         List<ActiveOrder> activeOrders = orderRepository.findAllActive();
-        // log.info("Expiration sweep: checking {} active orders", activeOrders.size());
 
         int expiredCount = 0;
         for (ActiveOrder order : activeOrders) {
@@ -61,23 +59,22 @@ public class OrderTimeDomainService {
     }
 
     private void expireSingleOrder(ActiveOrder order, Event event) {
-        for (OrderItem item : order.getItems()) {
-            try {
-                InventoryZone zone = event.findZone(item.getZoneId());
-                if (item.isAssignedSeat()) {
-                    zone.releaseSeat(item.getSeatId());
-                } else {
-                    zone.releaseGA(item.getQuantity());
-                }
-            } catch (Exception e) {
-                log.error("Error releasing inventory for item: {}", item.getId(), e);
-            }
-        }
+        releaseReservationsQuietly(event, order);
         eventRepository.save(event);
 
         order.expire();
         orderRepository.save(order);
 
         log.warn("Reservation expired: orderId={}, eventId={}", order.getId(), order.getEventId());
+    }
+
+    private static void releaseReservationsQuietly(Event event, ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            try {
+                event.releaseReservationFor(item);
+            } catch (Exception e) {
+                log.error("Error releasing inventory for item: {}", item.getId(), e);
+            }
+        }
     }
 }
