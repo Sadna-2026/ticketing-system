@@ -641,9 +641,6 @@ public class CompanyView extends VerticalLayout {
                 CompanyPresenter.ActionResult result = presenter.revokePersonnel(
                         companyNameOf(personnelCompanyName), target.memberId());
                 handlePersonnelResult(result);
-                if (result.success()) {
-                    refreshPersonnelContext();
-                }
             });
         });
         changeManagerPermissionsButton = new Button("Change manager permissions", event -> {
@@ -1536,7 +1533,20 @@ public class CompanyView extends VerticalLayout {
 
     private void handlePersonnelResult(ActionResult result) {
         personnelStatus.setText(result.message());
+        if (result.success()) {
+            refreshAfterPersonnelChange();
+        }
         notify(result);
+    }
+
+    private void refreshAfterPersonnelChange() {
+        refreshSessionStatus();
+        refreshPersonnelContext();
+        refreshEventAccess();
+        refreshInventoryAccess();
+        refreshReportingAccess();
+        refreshPolicyAccess();
+        refreshLifecycleAccess();
     }
 
     private void handleInventoryResult(ActionResult result) {
