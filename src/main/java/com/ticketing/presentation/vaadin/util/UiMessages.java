@@ -1,5 +1,8 @@
 package com.ticketing.presentation.vaadin.util;
 
+import java.util.ArrayDeque;
+import java.util.Queue;
+
 import com.vaadin.flow.component.ComponentUtil;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
@@ -8,6 +11,8 @@ import com.vaadin.flow.component.notification.Notification.Position;
 import com.vaadin.flow.component.notification.NotificationVariant;
 
 public final class UiMessages {
+
+    private static final String INFO_QUEUE_KEY = "infoNotificationQueue";
 
     private UiMessages() {
     }
@@ -20,11 +25,52 @@ public final class UiMessages {
         show(message, 6000, NotificationVariant.LUMO_ERROR);
     }
 
+    /**
+     * Shows an info toast. Rapid-fire calls are queued and shown sequentially so that
+     * simultaneous notifications (e.g. "checkout complete" + "event sold out") do not
+     * overlap visually.
+     */
     public static void info(String message) {
-        if (UI.getCurrent() == null) {
+        UI ui = UI.getCurrent();
+        if (ui == null) {
             return;
         }
-        Notification.show(message, 4000, Position.TOP_CENTER);
+        enqueueInfo(ui, message);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void enqueueInfo(UI ui, String message) {
+        Queue<String> queue = (Queue<String>) ComponentUtil.getData(ui, INFO_QUEUE_KEY);
+        if (queue == null) {
+            queue = new ArrayDeque<>();
+            ComponentUtil.setData(ui, INFO_QUEUE_KEY, queue);
+        }
+        queue.add(message);
+        if (queue.size() == 1) {
+            showNextInfo(ui, queue);
+        }
+    }
+
+    private static void showNextInfo(UI ui, Queue<String> queue) {
+        String message = queue.peek();
+        if (message == null) {
+            return;
+        }
+        Notification notification = new Notification();
+        notification.setDuration(4000);
+        notification.setPosition(Position.TOP_CENTER);
+        Span content = new Span(message);
+        content.getStyle().set("white-space", "pre-line");
+        notification.add(content);
+        notification.addOpenedChangeListener(e -> {
+            if (!e.isOpened()) {
+                queue.poll();
+                if (!queue.isEmpty()) {
+                    ui.access(() -> showNextInfo(ui, queue));
+                }
+            }
+        });
+        notification.open();
     }
 
     /**
