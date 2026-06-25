@@ -990,6 +990,15 @@ public class OrderService {
         if (!event.hasAvailableTickets() && event.isPublished()) {
             event.markSoldOut();
             saveEvent(event);
+            if (notificationService != null && memberRepository != null) {
+                List<Member> staff = memberRepository.findByCompanyAppointment(event.getCompanyName());
+                for (Member member : staff) {
+                    if (member.hasStaffAppointment(event.getCompanyName(), com.ticketing.domain.member.StaffAppointment.StaffRole.OWNER) ||
+                        member.hasStaffAppointment(event.getCompanyName(), com.ticketing.domain.member.StaffAppointment.StaffRole.MANAGER)) {
+                        notificationService.notify(member.getId().toString(), "Event sold out: " + event.getName());
+                    }
+                }
+            }
         }
     }
 
