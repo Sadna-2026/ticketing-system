@@ -31,7 +31,6 @@ import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
-import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxCompositeDiscount;
@@ -40,6 +39,7 @@ import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.PurchaseContext;
+import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
@@ -48,6 +48,7 @@ import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.testsupport.RejectAllPurchasePolicy;
 
 @DisplayName("EventService — Policy management")
 class EventServicePolicyTest {
@@ -106,17 +107,12 @@ class EventServicePolicyTest {
         return event.getId();
     }
 
-    /** Custom purchase policy for testing — rejects everything. */
-    private static IPurchasePolicy rejectAllPolicy() {
-        return (ctx) -> PolicyResult.failure("REJECTED", "test rejection");
+    private static RejectAllPurchasePolicy rejectAllPolicy() {
+        return new RejectAllPurchasePolicy("REJECTED", "test rejection");
     }
 
-    /** Custom discount policy for testing — 50% off. */
-    private static IDiscountPolicy halfPricePolicy() {
-        return (order, couponCode, clock) -> {
-            BigDecimal total = order.getTotalPrice();
-            return total.divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP);
-        };
+    private static SimpleDiscount halfPricePolicy() {
+        return new SimpleDiscount(new BigDecimal("50"));
     }
 
     // ══════════════════════════════════════════════════════════════════
