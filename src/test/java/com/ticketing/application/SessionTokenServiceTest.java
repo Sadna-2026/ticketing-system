@@ -548,8 +548,10 @@ class SessionTokenServiceTest {
         @Test
         void GivenTamperedToken_WhenValidated_ThenRejected() {
             String valid = sessionTokenService.generateGuestToken();
-            String tampered = valid.substring(0, valid.length() - 1)
-                    + (valid.endsWith("a") ? "b" : "a");
+            String[] parts = valid.split("\\.", 3);
+            char[] payload = parts[1].toCharArray();
+            payload[0] = payload[0] == 'A' ? 'B' : 'A';
+            String tampered = parts[0] + "." + new String(payload) + "." + parts[2];
 
             assertFalse(sessionTokenService.isValid(tampered));
             assertThrows(
