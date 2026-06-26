@@ -3,18 +3,23 @@ package com.ticketing.domain.company;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.ticketing.domain.event.AbstractDiscountPolicy;
+import com.ticketing.domain.event.AbstractPurchasePolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 
 @Entity
@@ -30,12 +35,13 @@ public class Company {
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private CompanyStatus status;
-    // Policy hierarchies are mapped separately in V3-6 (#264); kept @Transient here and
-    // defaulted in the JPA no-arg constructor so a reloaded Company is never null.
-    @Transient
-    private IPurchasePolicy purchasePolicy;
-    @Transient
-    private IDiscountPolicy discountPolicy;
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "purchase_policy_id")
+    private AbstractPurchasePolicy purchasePolicy;
+
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "discount_policy_id")
+    private AbstractDiscountPolicy discountPolicy;
     @Column(name = "allow_discount_stacking", nullable = false)
     private boolean allowDiscountStacking;  // true = company + event discounts both apply
     @Version
@@ -86,12 +92,28 @@ public class Company {
 
     public void setPurchasePolicy(IPurchasePolicy policy) {
         if (policy == null) throw new IllegalArgumentException("Purchase policy cannot be null");
-        this.purchasePolicy = policy;
+        this.purchasePolicy = requirePersistentPurchasePolicy(policy);
     }
 
     public void setDiscountPolicy(IDiscountPolicy policy) {
         if (policy == null) throw new IllegalArgumentException("Discount policy cannot be null");
-        this.discountPolicy = policy;
+        this.discountPolicy = requirePersistentDiscountPolicy(policy);
+    }
+
+    private static AbstractPurchasePolicy requirePersistentPurchasePolicy(IPurchasePolicy policy) {
+        if (policy instanceof AbstractPurchasePolicy persistent) {
+            return persistent;
+        }
+        throw new IllegalArgumentException(
+                "Purchase policy must be a persistent entity type, got: " + policy.getClass().getName());
+    }
+
+    private static AbstractDiscountPolicy requirePersistentDiscountPolicy(IDiscountPolicy policy) {
+        if (policy instanceof AbstractDiscountPolicy persistent) {
+            return persistent;
+        }
+        throw new IllegalArgumentException(
+                "Discount policy must be a persistent entity type, got: " + policy.getClass().getName());
     }
 
     public int getVersion() { return version; }

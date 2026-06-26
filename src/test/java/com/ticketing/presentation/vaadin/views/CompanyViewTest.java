@@ -33,9 +33,11 @@ import com.ticketing.application.dto.EventSummaryDTO;
 import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
+import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
+import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.StaffAppointment;
@@ -47,6 +49,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventMapRes
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.LifecycleAccessResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.OrgChartResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PersonnelAccessResult;
+import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PolicyViewResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
 import com.ticketing.presentation.vaadin.testsupport.ConfirmDialogTestSupport;
@@ -1029,6 +1032,25 @@ class CompanyViewTest {
     }
 
     // ── UI-23: Define & edit purchase/discount policies ─────────────
+
+    @Test
+    void GivenSelectedCompanyBeforePoliciesTab_WhenPoliciesTabOpened_ThenCompanyPoliciesAreAutoLoaded() {
+        CompanyPresenter presenter = mockPresenter();
+        when(presenter.loadCompanyPurchasePolicy("Acme"))
+                .thenReturn(PolicyViewResult.purchaseSuccess("Company purchase policy loaded.", new AlwaysAllowPolicy()));
+        when(presenter.loadCompanyDiscountPolicy("Acme"))
+                .thenReturn(PolicyViewResult.discountSuccess("Company discount policy loaded.", new NoDiscountPolicy()));
+
+        CompanyView view = new CompanyView(presenter);
+        selectTab(view, "Events");
+        findCompanyCombo(view, "Selected company").setValue(company("Acme"));
+
+        selectTab(view, "Policies");
+
+        verify(presenter).loadCompanyPurchasePolicy("Acme");
+        verify(presenter).loadCompanyDiscountPolicy("Acme");
+        assertTrue(hasText(view, "Company policies loaded."));
+    }
 
     @Test
     void GivenPolicyCompanySelected_WhenSetPurchasePolicyClicked_ThenSuccessMessageIsDisplayed() {

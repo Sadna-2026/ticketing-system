@@ -35,6 +35,7 @@ class InitializationStartupFailureTest {
                 "--server.port=0",
                 "--spring.profiles.active=test",
                 "--ticketing.seed.enabled=false",
+                "--ticketing.bootstrap.dataset=initial-state-file",
                 "--ticketing.startup.initialize-platform=false",
                 "--ticketing.initial-state.file=" + initialStateFilePath);
     }

@@ -33,8 +33,10 @@ import com.ticketing.domain.member.Member;
  */
 @SpringBootTest(
         properties = {
+                "ticketing.persistence=jpa",
                 "spring.jpa.hibernate.ddl-auto=create-drop",
                 "ticketing.startup.initialize-platform=false",
+                "ticketing.bootstrap.dataset=none",
                 "spring.datasource.operational.hikari.maximum-pool-size=1",
                 "spring.datasource.operational.hikari.connection-test-query=SELECT 1",
                 "spring.datasource.config.hikari.maximum-pool-size=1",
@@ -68,7 +70,7 @@ class DbConnectionRecoveryJpaTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("TICKETING_PERSISTENCE", () -> "jpa");
+        registry.add("ticketing.persistence", () -> "jpa");
         // Point to the manually started TCP server using file DB.
         String tcpUrl = "jdbc:h2:tcp://localhost:" + H2_PORT + "/./target/recoverytest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE";
         registry.add("spring.datasource.operational.url", () -> tcpUrl);

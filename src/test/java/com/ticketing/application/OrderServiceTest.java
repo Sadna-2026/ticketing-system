@@ -53,9 +53,10 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityPolicy;
+import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
-import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
@@ -80,6 +81,7 @@ import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
+import com.ticketing.testsupport.RejectAllPurchasePolicy;
 
 public class OrderServiceTest {
 
@@ -377,8 +379,8 @@ public class OrderServiceTest {
         UUID policyZoneId = UUID.randomUUID();
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (ctx) -> PolicyResult.failure("DENIED", "No tickets for you"),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new RejectAllPurchasePolicy("DENIED", "No tickets for you"),
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
@@ -399,7 +401,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new AgeRestrictionPolicy(18),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
@@ -423,8 +425,8 @@ public class OrderServiceTest {
         UUID discountZoneId = UUID.randomUUID();
         Event event = new Event(discountEventId, companyName, "Discount Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (ctx) -> PolicyResult.success(),
-                (order, coupon, now) -> order.getTotalPrice().subtract(new BigDecimal("20.00")).max(BigDecimal.ZERO));
+                new AlwaysAllowPolicy(),
+                new SimpleDiscount(new BigDecimal("20")));
         event.addZone(InventoryZone.createGA(discountZoneId, "Floor", new BigDecimal("50.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -577,7 +579,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Max Qty Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new MaxQuantityPolicy(3),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -601,7 +603,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Min Qty Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new MinQuantityPolicy(2),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -1529,7 +1531,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1556,7 +1558,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1592,7 +1594,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "B", "1"));
         zone.addSeat(new Seat(seat2, "B", "2"));
@@ -1628,7 +1630,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1659,7 +1661,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1702,7 +1704,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1739,7 +1741,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
