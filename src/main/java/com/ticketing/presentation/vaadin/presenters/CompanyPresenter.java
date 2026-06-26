@@ -363,8 +363,7 @@ public class CompanyPresenter {
         }
         try {
             IPurchasePolicy policy = companyService.getCompanyPurchasePolicy(token, name);
-            String desc = describePurchasePolicy(policy);
-            return PolicyViewResult.success("Company purchase policy loaded.", desc);
+            return PolicyViewResult.purchaseSuccess("Company purchase policy loaded.", policy);
         } catch (RuntimeException ex) {
             return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
         }
@@ -407,7 +406,7 @@ public class CompanyPresenter {
         }
     }
 
-    public PolicyViewResult loadEventPurchasePolicy(UUID eventId) {
+    public PolicyViewResult loadEventPurchasePolicy(UUID eventId, String companyName) {
         String token = memberToken();
         if (token == null) {
             return PolicyViewResult.failure(MEMBER_SESSION_REQUIRED);
@@ -415,10 +414,18 @@ public class CompanyPresenter {
         if (eventId == null) {
             return PolicyViewResult.failure("Event ID is required.");
         }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return PolicyViewResult.failure("Company name is required.");
+        }
         try {
-            IPurchasePolicy policy = eventService.getEventPurchasePolicy(token, eventId);
-            String desc = describePurchasePolicy(policy);
-            return PolicyViewResult.success("Event purchase policy loaded.", desc);
+            IPurchasePolicy eventPolicy = eventService.getEventPurchasePolicy(token, eventId);
+            IPurchasePolicy companyPolicy = companyService.getCompanyPurchasePolicy(token, name);
+            boolean inherited = purchasePoliciesEquivalent(eventPolicy, companyPolicy);
+            String message = inherited
+                    ? "Purchase policy inherited from company."
+                    : "Event-specific purchase policy loaded.";
+            return PolicyViewResult.purchaseSuccess(message, eventPolicy, inherited);
         } catch (RuntimeException ex) {
             return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
         }
@@ -472,8 +479,7 @@ public class CompanyPresenter {
         }
         try {
             IDiscountPolicy policy = companyService.getCompanyDiscountPolicy(token, name);
-            String desc = describeDiscountPolicy(policy);
-            return PolicyViewResult.success("Company discount policy loaded.", desc);
+            return PolicyViewResult.discountSuccess("Company discount policy loaded.", policy);
         } catch (RuntimeException ex) {
             return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
         }
@@ -516,7 +522,7 @@ public class CompanyPresenter {
         }
     }
 
-    public PolicyViewResult loadEventDiscountPolicy(UUID eventId) {
+    public PolicyViewResult loadEventDiscountPolicy(UUID eventId, String companyName) {
         String token = memberToken();
         if (token == null) {
             return PolicyViewResult.failure(MEMBER_SESSION_REQUIRED);
@@ -524,10 +530,18 @@ public class CompanyPresenter {
         if (eventId == null) {
             return PolicyViewResult.failure("Event ID is required.");
         }
+        String name = blankToNull(companyName);
+        if (name == null) {
+            return PolicyViewResult.failure("Company name is required.");
+        }
         try {
-            IDiscountPolicy policy = eventService.getEventDiscountPolicy(token, eventId);
-            String desc = describeDiscountPolicy(policy);
-            return PolicyViewResult.success("Event discount policy loaded.", desc);
+            IDiscountPolicy eventPolicy = eventService.getEventDiscountPolicy(token, eventId);
+            IDiscountPolicy companyPolicy = companyService.getCompanyDiscountPolicy(token, name);
+            boolean inherited = discountPoliciesEquivalent(eventPolicy, companyPolicy);
+            String message = inherited
+                    ? "Discount policy inherited from company."
+                    : "Event-specific discount policy loaded.";
+            return PolicyViewResult.discountSuccess(message, eventPolicy, inherited);
         } catch (RuntimeException ex) {
             return PolicyViewResult.failure(userMessage(ex, POLICY_FAILURE_MESSAGE));
         }
@@ -1319,14 +1333,170 @@ public class CompanyPresenter {
         }
     }
 
-    public record PolicyViewResult(boolean success, String message, String description) {
-        public static PolicyViewResult success(String message, String description) {
-            return new PolicyViewResult(true, message, description);
+    public record PolicyViewResult(
+            boolean success,
+            String message,
+            String description,
+            IPurchasePolicy purchasePolicy,
+            IDiscountPolicy discountPolicy,
+            boolean inheritedFromCompany
+    ) {
+        public static PolicyViewResult purchaseSuccess(String message, IPurchasePolicy policy) {
+            return purchaseSuccess(message, policy, false);
+        }
+
+        public static PolicyViewResult purchaseSuccess(String message, IPurchasePolicy policy, boolean inheritedFromCompany) {
+            return new PolicyViewResult(true, message, describePurchasePolicy(policy), policy, null, inheritedFromCompany);
+        }
+
+        public static PolicyViewResult discountSuccess(String message, IDiscountPolicy policy) {
+            return discountSuccess(message, policy, false);
+        }
+
+        public static PolicyViewResult discountSuccess(String message, IDiscountPolicy policy, boolean inheritedFromCompany) {
+            return new PolicyViewResult(true, message, describeDiscountPolicy(policy), null, policy, inheritedFromCompany);
         }
 
         public static PolicyViewResult failure(String message) {
-            return new PolicyViewResult(false, message, "");
+            return new PolicyViewResult(false, message, "", null, null, false);
         }
+    }
+
+    static boolean purchasePoliciesEquivalent(IPurchasePolicy left, IPurchasePolicy right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left instanceof com.ticketing.domain.event.AlwaysAllowPolicy) {
+            return right instanceof com.ticketing.domain.event.AlwaysAllowPolicy;
+        }
+        if (left instanceof com.ticketing.domain.event.AgeRestrictionPolicy l) {
+            return right instanceof com.ticketing.domain.event.AgeRestrictionPolicy r
+                    && l.getMinimumAge() == r.getMinimumAge();
+        }
+        if (left instanceof com.ticketing.domain.event.MaxQuantityPolicy l) {
+            return right instanceof com.ticketing.domain.event.MaxQuantityPolicy r
+                    && l.getMaxTickets() == r.getMaxTickets();
+        }
+        if (left instanceof com.ticketing.domain.event.MinQuantityPolicy l) {
+            return right instanceof com.ticketing.domain.event.MinQuantityPolicy r
+                    && l.getMinTickets() == r.getMinTickets();
+        }
+        if (left instanceof com.ticketing.domain.event.NoOrphanSeatPolicy) {
+            return right instanceof com.ticketing.domain.event.NoOrphanSeatPolicy;
+        }
+        if (left instanceof com.ticketing.domain.event.AndPolicy l) {
+            if (!(right instanceof com.ticketing.domain.event.AndPolicy r)) {
+                return false;
+            }
+            List<IPurchasePolicy> lChildren = l.getPolicies();
+            List<IPurchasePolicy> rChildren = r.getPolicies();
+            if (lChildren.size() != rChildren.size()) {
+                return false;
+            }
+            for (int i = 0; i < lChildren.size(); i++) {
+                if (!purchasePoliciesEquivalent(lChildren.get(i), rChildren.get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (left instanceof com.ticketing.domain.event.OrPolicy l) {
+            if (!(right instanceof com.ticketing.domain.event.OrPolicy r)) {
+                return false;
+            }
+            List<IPurchasePolicy> lChildren = l.getPolicies();
+            List<IPurchasePolicy> rChildren = r.getPolicies();
+            if (lChildren.size() != rChildren.size()) {
+                return false;
+            }
+            for (int i = 0; i < lChildren.size(); i++) {
+                if (!purchasePoliciesEquivalent(lChildren.get(i), rChildren.get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return left.getClass().equals(right.getClass());
+    }
+
+    static boolean discountPoliciesEquivalent(IDiscountPolicy left, IDiscountPolicy right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left instanceof com.ticketing.domain.event.NoDiscountPolicy) {
+            return right instanceof com.ticketing.domain.event.NoDiscountPolicy;
+        }
+        if (left instanceof com.ticketing.domain.event.SimpleDiscount l) {
+            return right instanceof com.ticketing.domain.event.SimpleDiscount r
+                    && l.getPercentOff().compareTo(r.getPercentOff()) == 0;
+        }
+        if (left instanceof com.ticketing.domain.event.CouponDiscount l) {
+            return right instanceof com.ticketing.domain.event.CouponDiscount r
+                    && l.getPercentOff().compareTo(r.getPercentOff()) == 0
+                    && l.getCouponCode().equalsIgnoreCase(r.getCouponCode())
+                    && java.util.Objects.equals(l.getExpiresAt(), r.getExpiresAt());
+        }
+        if (left instanceof com.ticketing.domain.event.ConditionalDiscount l) {
+            return right instanceof com.ticketing.domain.event.ConditionalDiscount r
+                    && l.getPercentOff().compareTo(r.getPercentOff()) == 0
+                    && discountConditionsEquivalent(l.getCondition(), r.getCondition());
+        }
+        if (left instanceof com.ticketing.domain.event.MaxCompositeDiscount l) {
+            return compositeDiscountEquivalent(l.getPolicies(), right instanceof com.ticketing.domain.event.MaxCompositeDiscount r
+                    ? r.getPolicies() : null);
+        }
+        if (left instanceof com.ticketing.domain.event.SumCompositeDiscount l) {
+            return compositeDiscountEquivalent(l.getPolicies(), right instanceof com.ticketing.domain.event.SumCompositeDiscount r
+                    ? r.getPolicies() : null);
+        }
+        return left.getClass().equals(right.getClass());
+    }
+
+    private static boolean compositeDiscountEquivalent(List<IDiscountPolicy> left, List<IDiscountPolicy> right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null || left.size() != right.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); i++) {
+            if (!discountPoliciesEquivalent(left.get(i), right.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean discountConditionsEquivalent(
+            com.ticketing.domain.event.IDiscountCondition left,
+            com.ticketing.domain.event.IDiscountCondition right
+    ) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left instanceof com.ticketing.domain.event.MinQuantityCondition l) {
+            return right instanceof com.ticketing.domain.event.MinQuantityCondition r
+                    && l.getMinTickets() == r.getMinTickets();
+        }
+        if (left instanceof com.ticketing.domain.event.MaxQuantityCondition l) {
+            return right instanceof com.ticketing.domain.event.MaxQuantityCondition r
+                    && l.getMaxTickets() == r.getMaxTickets();
+        }
+        if (left instanceof com.ticketing.domain.event.DateRangeCondition l) {
+            return right instanceof com.ticketing.domain.event.DateRangeCondition r
+                    && java.util.Objects.equals(l.getFrom(), r.getFrom())
+                    && java.util.Objects.equals(l.getTo(), r.getTo());
+        }
+        return left.getClass().equals(right.getClass());
     }
 
     static String describePurchasePolicy(IPurchasePolicy policy) {
