@@ -18,6 +18,7 @@ import com.ticketing.domain.member.Member;
 /**
  * Verifies that a failed initial-state run wipes the database in memory mode.
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
         "ticketing.persistence=memory",
         "ticketing.seed.enabled=false",

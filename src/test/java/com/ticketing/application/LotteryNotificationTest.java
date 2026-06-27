@@ -13,10 +13,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -165,11 +168,84 @@ public class LotteryNotificationTest {
         assertTrue(pendingRepository.getPendingNotifications(memberBId.toString()).isEmpty());
     }
 
+    @Test
+    @DisplayName("LotteryAllRegistrantsNotified — every winner AND every loser receives a result notification")
+    void GivenManyRegistrants_WhenDrawWithMultipleWinnersAndLosers_ThenEveryRegistrantGetsAResultNotification()
+            throws Exception {
+        // A fresh lottery event with capacity 2 (→ 2 winners) and 5 registrants (→ 3 losers),
+        // so the draw produces both winners and losers per the advisor's requirement.
+        UUID multiEventId = createLotteryEventWithCapacity(2);
+        int registrantCount = 5;
+
+        Map<UUID, List<String>> inboxes = new ConcurrentHashMap<>();
+        List<UUID> registrants = new ArrayList<>();
+        CountDownLatch delivered = new CountDownLatch(registrantCount);
+
+        // Every registrant is connected, so each result lands as a live notification.
+        for (int i = 0; i < registrantCount; i++) {
+            UUID memberId = registerForLottery(multiEventId, "registrant-" + i);
+            registrants.add(memberId);
+            List<String> inbox = Collections.synchronizedList(new ArrayList<>());
+            inboxes.put(memberId, inbox);
+            notificationService.registerListener(memberId.toString(),
+                    msg -> { inbox.add(msg); delivered.countDown(); });
+        }
+
+        // When: the draw runs automatically.
+        List<ActiveOrder> winners = eventService.drawLotteryAutomatically(multiEventId);
+
+        // Then: all five registrants — winners and losers alike — received a result notification.
+        assertTrue(delivered.await(2, TimeUnit.SECONDS),
+                "every registrant (winner or loser) should receive a result notification");
+        assertEquals(2, winners.size(), "capacity 2 → exactly 2 winners");
+
+        Set<UUID> winnerIds = winners.stream().map(ActiveOrder::getMemberId).collect(Collectors.toSet());
+        int winnersNotified = 0;
+        int losersNotified = 0;
+        for (UUID memberId : registrants) {
+            List<String> inbox = inboxes.get(memberId);
+            assertEquals(1, inbox.size(),
+                    "each registrant gets exactly one result notification: " + memberId);
+            String message = inbox.get(0).toLowerCase();
+            if (winnerIds.contains(memberId)) {
+                assertTrue(message.contains("won"), "winner should be told they won, was: " + inbox.get(0));
+                winnersNotified++;
+            } else {
+                assertTrue(message.contains("not selected"),
+                        "loser should be told they were not selected, was: " + inbox.get(0));
+                losersNotified++;
+            }
+        }
+        assertEquals(2, winnersNotified, "both winners were notified");
+        assertEquals(3, losersNotified, "all three losers were notified");
+    }
+
     private UUID registerForLottery(String username) {
+        return registerForLottery(eventId, username);
+    }
+
+    private UUID registerForLottery(UUID lotteryEventId, String username) {
         UUID memberId = UUID.randomUUID();
         memberRepository.save(new Member(memberId, username, username + "@example.com", "encryptedPw"));
-        lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), eventId, memberId, NOW));
+        lotteryRepository.save(new LotteryEntry(UUID.randomUUID(), lotteryEventId, memberId, NOW));
         return memberId;
+    }
+
+    /** Builds, publishes and saves a fresh lottery event whose draw yields up to {@code capacity} winners. */
+    private UUID createLotteryEventWithCapacity(int capacity) {
+        UUID newEventId = UUID.randomUUID();
+        UUID newZoneId = UUID.randomUUID();
+        Event event = new Event(newEventId, COMPANY_NAME, "Multi-Winner Lottery", "desc",
+                EventCategory.CONCERT, defaultSchedule(),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(), new NoDiscountPolicy(),
+                SaleMethod.LOTTERY,
+                new LotteryWindow(NOW.minus(3, ChronoUnit.DAYS), NOW.minus(1, ChronoUnit.DAYS), capacity, 48));
+        event.addZone(InventoryZone.createGA(newZoneId, "Floor", new BigDecimal("50.00"), capacity));
+        event.setVenueMap(new VenueMap(Map.of("Section A", newZoneId)));
+        event.publish();
+        eventRepository.save(event);
+        return newEventId;
     }
 
     private static EventSchedule defaultSchedule() {

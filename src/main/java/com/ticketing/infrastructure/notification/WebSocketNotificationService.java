@@ -73,7 +73,11 @@ public class WebSocketNotificationService implements INotificationService {
                     log.error("Failed to push notification to memberId={}", memberId, e);
                 }
             }
-            if (!delivered) {
+            if (delivered) {
+                // Delivered live (toasted) — retain in history as already seen so it shows in the
+                // Notifications tab but is never re-pushed to a future listener (#490).
+                pendingRepository.savePendingNotification(memberId, message, true);
+            } else {
                 pendingRepository.savePendingNotification(memberId, message);
                 log.info("No active listener accepted notification, saved as pending: memberId={}", memberId);
             }
@@ -148,7 +152,8 @@ public class WebSocketNotificationService implements INotificationService {
                 return;
             }
         }
-        pendingRepository.clearPendingNotifications(memberId);
+        // Mark delivered (not delete) so the messages remain in the member's history inbox (#490).
+        pendingRepository.markAllSeen(memberId);
     }
 }
 

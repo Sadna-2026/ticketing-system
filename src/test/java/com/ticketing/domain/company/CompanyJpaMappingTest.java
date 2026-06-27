@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -14,7 +15,9 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 
 import com.ticketing.domain.event.AlwaysAllowPolicy;
+import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
+import com.ticketing.domain.event.SimpleDiscount;
 
 /**
  * V3-3: the Company aggregate persists and round-trips via H2 (JPA).
@@ -48,7 +51,23 @@ class CompanyJpaMappingTest {
     }
 
     @Test
-    void GivenCompany_WhenReloaded_ThenVersionPresentAndPoliciesDefaulted() {
+    void GivenCompanyWithPolicies_WhenPersistedAndReloaded_ThenPoliciesRoundTrip() {
+        Company company = new Company("Policy Co", "desc", UUID.randomUUID());
+        company.setPurchasePolicy(new MaxQuantityPolicy(5));
+        company.setDiscountPolicy(new SimpleDiscount(new BigDecimal("10")));
+
+        em.persistAndFlush(company);
+        em.clear();
+
+        Company found = em.find(Company.class, "Policy Co");
+        assertInstanceOf(MaxQuantityPolicy.class, found.getPurchasePolicy());
+        assertEquals(5, ((MaxQuantityPolicy) found.getPurchasePolicy()).getMaxTickets());
+        assertInstanceOf(SimpleDiscount.class, found.getDiscountPolicy());
+        assertEquals(0, new BigDecimal("10").compareTo(((SimpleDiscount) found.getDiscountPolicy()).getPercentOff()));
+    }
+
+    @Test
+    void GivenCompany_WhenReloaded_ThenVersionPresentAndDefaultPoliciesRoundTrip() {
         Company company = new Company("Versioned Co", "desc", UUID.randomUUID());
 
         em.persistAndFlush(company);
@@ -56,7 +75,6 @@ class CompanyJpaMappingTest {
 
         Company found = em.find(Company.class, "Versioned Co");
         assertEquals(0, found.getVersion()); // @Version initialised on insert
-        // Policies are @Transient (mapped in V3-6/#264) — defaulted on load, never null.
         assertInstanceOf(AlwaysAllowPolicy.class, found.getPurchasePolicy());
         assertInstanceOf(NoDiscountPolicy.class, found.getDiscountPolicy());
     }

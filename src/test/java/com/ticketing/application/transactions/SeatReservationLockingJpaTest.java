@@ -55,6 +55,7 @@ import com.ticketing.domain.exception.OptimisticLockException;
  * the inventory mutation directly on the aggregate (the same calls the OrderService
  * reservation/checkout path makes) so the test isolates the locking mechanism.
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(
         properties = {
                 "ticketing.persistence=jpa",

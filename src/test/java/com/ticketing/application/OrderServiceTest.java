@@ -37,8 +37,10 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.application.services.OrderService;
+import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
@@ -51,9 +53,10 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityPolicy;
+import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
-import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
@@ -72,11 +75,13 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.order.RefundStatus;
 import com.ticketing.domain.services.OrderTimeDomainService;
+import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
+import com.ticketing.testsupport.RejectAllPurchasePolicy;
 
 public class OrderServiceTest {
 
@@ -374,8 +379,8 @@ public class OrderServiceTest {
         UUID policyZoneId = UUID.randomUUID();
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (ctx) -> PolicyResult.failure("DENIED", "No tickets for you"),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new RejectAllPurchasePolicy("DENIED", "No tickets for you"),
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
@@ -396,7 +401,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new AgeRestrictionPolicy(18),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
@@ -420,8 +425,8 @@ public class OrderServiceTest {
         UUID discountZoneId = UUID.randomUUID();
         Event event = new Event(discountEventId, companyName, "Discount Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (ctx) -> PolicyResult.success(),
-                (order, coupon, now) -> order.getTotalPrice().subtract(new BigDecimal("20.00")).max(BigDecimal.ZERO));
+                new AlwaysAllowPolicy(),
+                new SimpleDiscount(new BigDecimal("20")));
         event.addZone(InventoryZone.createGA(discountZoneId, "Floor", new BigDecimal("50.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -574,7 +579,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Max Qty Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new MaxQuantityPolicy(3),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -598,7 +603,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Min Qty Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new MinQuantityPolicy(2),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -722,7 +727,12 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenMemberSuspendedAfterCartBuilt_WhenMutatingCart_ThenRejectedAndReadOnlyCartStillVisible() {
+    void GivenActiveCart_WhenAdminSuspendsMember_ThenOrderCancelledAndInventoryReleased() {
+        InMemoryAdminRepository adminRepo = new InMemoryAdminRepository();
+        UUID adminId = UUID.randomUUID();
+        adminRepo.save(new Admin(adminId, "admin", "admin@test.com", "pw"));
+        String adminToken = sessionService.generateMemberToken(UUID.randomUUID(), adminId, Set.of("SYSTEM_ADMIN"));
+
         UUID memberId = UUID.randomUUID();
         Member member = new Member(memberId, "cartUser", "cart@example.com", "pw",
                 "050-1111111", LocalDate.of(1990, 1, 1));
@@ -730,36 +740,22 @@ public class OrderServiceTest {
         String memberToken = sessionService.generateMemberToken(new SessionTokenData(
                 UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
 
+        Event eventBefore = eventRepo.findById(eventId).orElseThrow();
+        int availableBefore = eventBefore.findZone(gaZoneId).getAvailableCount();
+
         UUID orderId = orderService.createOrder(memberToken, eventId);
-        UUID itemId = orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 2);
+        assertEquals(availableBefore - 2, eventRepo.findById(eventId).orElseThrow().findZone(gaZoneId).getAvailableCount());
 
-        member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), Duration.ofDays(7), "fraud"));
-        memberRepo.save(member);
+        AdminService adminService = new AdminService(memberRepo, new InMemoryCompanyRepository(), sessionService,
+                adminRepo, orderRepo, null, null,
+                new OrderTimeDomainService(orderRepo, eventRepo, clock));
+        adminService.suspendUser(adminToken, memberId, Duration.ofDays(7), "fraud");
 
-        assertDoesNotThrow(() -> orderService.getActiveOrder(memberToken));
-        assertEquals(orderId, orderService.getActiveOrder(memberToken).getId());
-
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addSelectionToOrder(memberToken, new SelectionRequest(eventId,
-                        List.of(new SelectionRequest.SeatPick(assignedZoneId, seatId)),
-                        List.of(new SelectionRequest.GAPick(gaZoneId, 1)))));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.updateGAQuantity(memberToken, gaZoneId, 2));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.removeItemFromOrder(memberToken, itemId));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.cancelOrder(memberToken));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(memberToken, null));
-
+        assertNull(orderService.getActiveOrder(memberToken));
+        assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertEquals(availableBefore, eventRepo.findById(eventId).orElseThrow().findZone(gaZoneId).getAvailableCount());
         assertEquals(0, paymentGateway.chargeCalls);
-        assertEquals(0, ticketSupplyGateway.issueCalls);
-        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
-        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
     }
 
     @Test
@@ -1179,6 +1175,8 @@ public class OrderServiceTest {
     void GivenGuestToken_WhenGetPurchaseHistory_ThenThrowsSecurityException() {
         assertThrows(SecurityException.class, () -> orderService.getPurchaseHistory(guestToken));
     }
+
+    @Test
     void GivenPrimaryPaymentFails_WhenCheckout_ThenFailsOverToSecondary() {
         TestPaymentGateway primaryPayment = new TestPaymentGateway();
         primaryPayment.failCharges = true;
@@ -1217,6 +1215,37 @@ public class OrderServiceTest {
         ActiveOrder active = orderRepo.findById(orderId).get();
         assertEquals(OrderStatus.ACTIVE, active.getStatus());
         assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+    }
+
+    @Test
+    void GivenTwoPaymentAndTwoSupplyProviders_WhenPrimariesFail_ThenCheckoutCompletesViaSecondaries() {
+        // reqs I.3/I.4: with more than one payment AND more than one supply provider registered,
+        // a failure of the first of each falls over to the second, on both axes in a single checkout.
+        TestPaymentGateway primaryPayment = new TestPaymentGateway();
+        primaryPayment.failCharges = true;
+        TestPaymentGateway secondaryPayment = new TestPaymentGateway();
+        TestTicketSupplyGateway primarySupply = new TestTicketSupplyGateway();
+        primarySupply.failIssue = true;
+        TestTicketSupplyGateway secondarySupply = new TestTicketSupplyGateway();
+
+        OrderService multiProviderService = new OrderService(
+                sessionService, orderRepo, eventRepo, memberRepo,
+                List.of(primaryPayment, secondaryPayment),
+                List.of(primarySupply, secondarySupply),
+                clock, null, null, null);
+
+        UUID orderId = multiProviderService.createOrder(guestToken, eventId);
+        multiProviderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
+
+        UUID purchaseId = multiProviderService.checkout(guestToken, null).purchaseId();
+
+        // Both first providers were tried and failed; both second providers were used and succeeded.
+        assertEquals(1, primaryPayment.chargeCalls);
+        assertEquals(1, secondaryPayment.chargeCalls);
+        assertEquals(1, primarySupply.issueCalls);
+        assertEquals(1, secondarySupply.issueCalls);
+        assertEquals(OrderStatus.COMPLETED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertNotNull(orderRepo.findCompletedById(purchaseId).orElseThrow());
     }
 
     @Test
@@ -1502,7 +1531,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1529,7 +1558,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1565,7 +1594,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "B", "1"));
         zone.addSeat(new Seat(seat2, "B", "2"));
@@ -1601,7 +1630,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1632,7 +1661,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1675,7 +1704,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1712,7 +1741,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));

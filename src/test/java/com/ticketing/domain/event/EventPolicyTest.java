@@ -189,7 +189,7 @@ class EventPolicyTest {
                             Instant.now().plus(29, ChronoUnit.DAYS)),
                     new LockTimerDuration(Duration.ofMinutes(15)),
                     policy,
-                    (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                    new NoDiscountPolicy());
 
             InventoryZone zone = InventoryZone.createAssigned(zoneId, "Main Hall", new BigDecimal("50.00"));
             for (int i = 1; i <= 5; i++) {

@@ -4,8 +4,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
+import com.ticketing.infrastructure.notification.NotificationListener;
+import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
+import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.util.SessionContext;
+import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.ticketing.presentation.vaadin.views.AdminView;
 import com.ticketing.presentation.vaadin.views.AuthView;
 import com.ticketing.presentation.vaadin.views.CompanyView;
@@ -17,6 +22,7 @@ import com.ticketing.presentation.vaadin.views.OrdersView;
 import com.ticketing.presentation.vaadin.views.QueueView;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.Html;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
@@ -41,7 +47,14 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
     private final Tabs navigation = new Tabs();
     private final Map<Class<? extends Component>, Tab> tabsByTarget = new HashMap<>();
 
-    public MainLayout() {
+    // Delivers real-time notifications as toasts for the whole session, on every route (#490).
+    private final RealtimeNotificationBinder realtimeNotifications;
+    private final AuthPresenter authPresenter;
+
+    public MainLayout(NotificationsPresenter notificationsPresenter, AuthPresenter authPresenter) {
+        this.realtimeNotifications = new RealtimeNotificationBinder(notificationsPresenter);
+        this.authPresenter = authPresenter;
+
         // Branded wordmark: an EQ-bar mark (cyan -> magenta) + the product name in Sora.
         Html wordmark = new Html(
                 "<span class='app-wordmark'>"
@@ -82,6 +95,33 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
         getElement().executeJs(
                 "const t=localStorage.getItem('showpass-theme');const el=document.documentElement;"
                         + "if(t==='light'){el.removeAttribute('theme');}else if(t==='dark'){el.setAttribute('theme','dark');}");
+        // Connect real-time notifications for the whole session at app-shell level, so toasts
+        // arrive on every route — not only while the Notifications tab is open (#490).
+        syncRealtimeListener();
+    }
+
+    @Override
+    protected void onDetach(DetachEvent detachEvent) {
+        realtimeNotifications.unbind();
+        super.onDetach(detachEvent);
+    }
+
+    /**
+     * Connects (or reconnects) real-time delivery for the current member: each incoming message
+     * surfaces as a toast on whatever page the user is on. Idempotent and safe to call on every
+     * session change (login / logout / switch user); a no-op for guests.
+     */
+    private void syncRealtimeListener() {
+        UUID memberId = SessionContext.getMemberId();
+        String current = memberId == null ? null : memberId.toString();
+        UI ui = UI.getCurrent();
+        if (current != null && ui == null) {
+            return; // can't build a UI-bound toast listener yet; a later attach/refresh will bind
+        }
+        NotificationListener listener = ui == null
+                ? null
+                : message -> ui.access(() -> UiMessages.info(message));
+        realtimeNotifications.sync(current, listener);
     }
 
     public void refreshNavigation() {
@@ -104,7 +144,11 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
                 .filter(MainLayout.class::isInstance)
                 .map(MainLayout.class::cast)
                 .findFirst()
-                .ifPresent(MainLayout::refreshNavigation);
+                .ifPresent(layout -> {
+                    layout.refreshNavigation();
+                    // The session just changed (login / logout / role switch) — resync delivery.
+                    layout.syncRealtimeListener();
+                });
     }
 
     static List<NavigationItem> navigationItems(SessionContext.UiState session) {
@@ -147,6 +191,11 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
+        if (authPresenter.reconcileStoredSession()) {
+            refreshNavigation();
+            syncRealtimeListener();
+        }
+
         SessionContext.UiState session = SessionContext.currentUiState();
         Class<?> target = event.getNavigationTarget();
 

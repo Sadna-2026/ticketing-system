@@ -22,6 +22,7 @@ import com.ticketing.application.dto.OrgNodeDTO;
 import com.ticketing.application.dto.PurchaseRecordDTO;
 import com.ticketing.application.dto.SalesReportDTO;
 import com.ticketing.domain.event.AgeRestrictionPolicy;
+import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.CouponDiscount;
@@ -34,6 +35,7 @@ import com.ticketing.domain.event.MaxQuantityCondition;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityCondition;
 import com.ticketing.domain.event.MinQuantityPolicy;
+import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.SimpleDiscount;
@@ -203,10 +205,8 @@ public class CompanyView extends VerticalLayout {
     private final ComboBox<String> discountComposition = new ComboBox<>("Discount composition");
     private final Span policyStatus = new Span("View and manage purchase and discount policies.");
     private final Span currentPolicyDisplay = new Span();
-    private Button loadPurchasePolicyButton;
     private Button setPurchasePolicyButton;
     private Button removePurchasePolicyButton;
-    private Button loadDiscountPolicyButton;
     private Button setDiscountPolicyButton;
     private Button removeDiscountPolicyButton;
     private VerticalLayout policyControls;
@@ -286,6 +286,11 @@ public class CompanyView extends VerticalLayout {
             Tab tab = event.getSelectedTab();
             if (tab != null) {
                 showPanelForTab(tab);
+                if (tab.equals(tabByMode.get(CompanyMode.POLICIES))) {
+                    ensurePolicyContextSynced();
+                    refreshPolicyAccess();
+                    autoLoadPolicies();
+                }
             }
         });
     }
@@ -360,8 +365,15 @@ public class CompanyView extends VerticalLayout {
         policyEventId.setItemLabelGenerator(EventSummaryDTO::name);
         policyEventId.setPlaceholder("Optional — leave empty for company-level");
         policyEventId.setClearButtonVisible(true);
+        policyEventId.addValueChangeListener(e -> autoLoadPolicies());
 
-        selectedCompanyName.addValueChangeListener(e -> applySelectedCompany(e.getValue()));
+        selectedCompanyName.addValueChangeListener(e -> {
+            applySelectedCompany(e.getValue());
+            if (isPoliciesTabActive()) {
+                refreshPolicyAccess();
+                autoLoadPolicies();
+            }
+        });
 
         inventoryZonePicker.setItemLabelGenerator(zone -> zone.name() + " — " + zone.type());
         inventoryZonePicker.setPlaceholder("Select an event to list zones");
@@ -379,6 +391,7 @@ public class CompanyView extends VerticalLayout {
         policyCompanyName.addValueChangeListener(e -> {
             reloadCompanyEvents(policyEventId, e.getValue());
             refreshPolicyAccess();
+            autoLoadPolicies();
         });
         inventoryEventId.addValueChangeListener(e -> loadInventoryZones(e.getValue()));
         inventoryZonePicker.addValueChangeListener(e -> {
@@ -641,9 +654,6 @@ public class CompanyView extends VerticalLayout {
                 CompanyPresenter.ActionResult result = presenter.revokePersonnel(
                         companyNameOf(personnelCompanyName), target.memberId());
                 handlePersonnelResult(result);
-                if (result.success()) {
-                    refreshPersonnelContext();
-                }
             });
         });
         changeManagerPermissionsButton = new Button("Change manager permissions", event -> {
@@ -816,8 +826,8 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout policySection() {
-        purchasePolicyType.setItems("Age restriction", "Max quantity", "Min quantity", "No orphan seat");
-        purchasePolicyType.setValue("Age restriction");
+        purchasePolicyType.setItems("Allow all", "Age restriction", "Max quantity", "Min quantity", "No orphan seat");
+        purchasePolicyType.setValue("Allow all");
         policyAge.setMin(1);
         policyAge.setValue(18);
         policyMaxTickets.setMin(1);
@@ -827,8 +837,8 @@ public class CompanyView extends VerticalLayout {
         policyComposition.setItems("Single rule", "AND (all must pass)", "OR (any can pass)");
         policyComposition.setValue("Single rule");
 
-        discountType.setItems("Simple (flat %)", "Conditional (% with condition)", "Coupon (% with code)");
-        discountType.setValue("Simple (flat %)");
+        discountType.setItems("No discount", "Simple (flat %)", "Conditional (% with condition)", "Coupon (% with code)");
+        discountType.setValue("No discount");
         discountPercent.setValue(BigDecimal.TEN);
         couponCodeField.setPlaceholder("e.g. EARLY20");
         discountConditionType.setItems("Min tickets", "Max tickets", "Date range");
@@ -840,10 +850,8 @@ public class CompanyView extends VerticalLayout {
         discountComposition.setItems("Single discount", "MAX (best discount wins)", "SUM (stack all)");
         discountComposition.setValue("Single discount");
 
-        loadPurchasePolicyButton = new Button("Load purchase policy", e -> loadPurchasePolicy());
         setPurchasePolicyButton = new Button("Set purchase policy", e -> setPurchasePolicy());
         removePurchasePolicyButton = new Button("Remove purchase policy", e -> removePurchasePolicy());
-        loadDiscountPolicyButton = new Button("Load discount policy", e -> loadDiscountPolicy());
         setDiscountPolicyButton = new Button("Set discount policy", e -> setDiscountPolicy());
         removeDiscountPolicyButton = new Button("Remove discount policy", e -> removeDiscountPolicy());
 
@@ -853,14 +861,14 @@ public class CompanyView extends VerticalLayout {
         FormLayout purchaseForm = new FormLayout(purchasePolicyType, policyAge, policyMaxTickets, policyMinTickets, policyComposition);
         purchaseForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
-        HorizontalLayout purchaseActions = new HorizontalLayout(loadPurchasePolicyButton, setPurchasePolicyButton, removePurchasePolicyButton);
+        HorizontalLayout purchaseActions = new HorizontalLayout(setPurchasePolicyButton, removePurchasePolicyButton);
         purchaseActions.setAlignItems(Alignment.BASELINE);
 
         FormLayout discountForm = new FormLayout(discountType, discountPercent, couponCodeField, couponExpiry,
                 discountConditionType, conditionMinTickets, conditionMaxTickets, conditionFrom, conditionTo, discountComposition);
         discountForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
-        HorizontalLayout discountActions = new HorizontalLayout(loadDiscountPolicyButton, setDiscountPolicyButton, removeDiscountPolicyButton);
+        HorizontalLayout discountActions = new HorizontalLayout(setDiscountPolicyButton, removeDiscountPolicyButton);
         discountActions.setAlignItems(Alignment.BASELINE);
         policyControls = new VerticalLayout(
                 targetForm,
@@ -885,20 +893,239 @@ public class CompanyView extends VerticalLayout {
         return section;
     }
 
-    private void loadPurchasePolicy() {
+    private void autoLoadPolicies() {
+        if (!isPoliciesTabActive() || policyControls == null) {
+            return;
+        }
+        String companyName = resolvePolicyCompanyName();
+        if (companyName == null) {
+            resetPolicyFormToDefaults();
+            policyStatus.setText("Select a company to load policies.");
+            currentPolicyDisplay.setText("");
+            return;
+        }
+        CompanyAccessResult access = presenter.loadCompanyAccess(companyName);
+        if (!access.canManagePolicies()) {
+            resetPolicyFormToDefaults();
+            return;
+        }
         UUID eventId = selectedEventId(policyEventId);
+        PolicyViewResult purchase = eventId != null
+                ? presenter.loadEventPurchasePolicy(eventId, companyName)
+                : presenter.loadCompanyPurchasePolicy(companyName);
+        PolicyViewResult discount = eventId != null
+                ? presenter.loadEventDiscountPolicy(eventId, companyName)
+                : presenter.loadCompanyDiscountPolicy(companyName);
+
+        if (purchase == null || discount == null) {
+            return;
+        }
+
+        if (purchase.success() && purchase.purchasePolicy() != null) {
+            applyPurchasePolicyToForm(purchase.purchasePolicy());
+        }
+        if (discount.success() && discount.discountPolicy() != null) {
+            applyDiscountPolicyToForm(discount.discountPolicy());
+        }
+
+        if (!purchase.success()) {
+            policyStatus.setText(purchase.message());
+            currentPolicyDisplay.setText("");
+            UiMessages.error(purchase.message());
+            return;
+        }
+        if (!discount.success()) {
+            policyStatus.setText(discount.message());
+            currentPolicyDisplay.setText(formatPurchasePolicyLine(purchase, eventId != null));
+            UiMessages.error(discount.message());
+            return;
+        }
+
+        policyStatus.setText(eventId != null ? "Event policies loaded." : "Company policies loaded.");
+        currentPolicyDisplay.setText(formatPurchasePolicyLine(purchase, eventId != null)
+                + " | " + formatDiscountPolicyLine(discount, eventId != null));
+    }
+
+    private void resetPolicyFormToDefaults() {
+        purchasePolicyType.setValue("Allow all");
+        policyComposition.setValue("Single rule");
+        clearPurchaseThresholdFields();
+        discountType.setValue("No discount");
+        discountComposition.setValue("Single discount");
+        clearDiscountFormAuxiliaryFields();
+    }
+
+    private void clearPurchaseThresholdFields() {
+        policyAge.clear();
+        policyMaxTickets.clear();
+        policyMinTickets.clear();
+    }
+
+    private void clearDiscountFormAuxiliaryFields() {
+        discountPercent.clear();
+        couponCodeField.clear();
+        couponExpiry.clear();
+        discountConditionType.setValue("Min tickets");
+        conditionMinTickets.clear();
+        conditionMaxTickets.clear();
+        conditionFrom.clear();
+        conditionTo.clear();
+    }
+
+    private static String formatPurchasePolicyLine(PolicyViewResult purchase, boolean eventScope) {
+        String line = "Current purchase: " + purchase.description();
+        if (!eventScope) {
+            return line;
+        }
+        return purchase.inheritedFromCompany()
+                ? line + " (inherited from company)"
+                : line + " (event-specific)";
+    }
+
+    private static String formatDiscountPolicyLine(PolicyViewResult discount, boolean eventScope) {
+        String line = "Current discount: " + discount.description();
+        if (!eventScope) {
+            return line;
+        }
+        return discount.inheritedFromCompany()
+                ? line + " (inherited from company)"
+                : line + " (event-specific)";
+    }
+
+    private boolean isPoliciesTabActive() {
+        VerticalLayout panel = panelByTab.get(tabByMode.get(CompanyMode.POLICIES));
+        return panel != null && panel.isVisible();
+    }
+
+    private void ensurePolicyContextSynced() {
+        CompanySummaryDTO selected = selectedCompanyName.getValue();
+        if (selected == null) {
+            return;
+        }
+        CompanySummaryDTO policyCompany = policyCompanyName.getValue();
+        if (policyCompany == null || !policyCompany.name().equalsIgnoreCase(selected.name())) {
+            policyCompanyName.setValue(selected);
+        } else {
+            reloadCompanyEvents(policyEventId, selected);
+        }
+    }
+
+    private String resolvePolicyCompanyName() {
+        String policyCompany = companyNameOf(policyCompanyName);
+        if (policyCompany != null) {
+            return policyCompany;
+        }
+        return companyNameOf(selectedCompanyName);
+    }
+
+    private void loadPurchasePolicy(boolean notifySuccess) {
+        UUID eventId = selectedEventId(policyEventId);
+        String companyName = resolvePolicyCompanyName();
         PolicyViewResult result;
         if (eventId != null) {
-            result = presenter.loadEventPurchasePolicy(eventId);
+            result = presenter.loadEventPurchasePolicy(eventId, companyName);
         } else {
-            result = presenter.loadCompanyPurchasePolicy(companyNameOf(policyCompanyName));
+            result = presenter.loadCompanyPurchasePolicy(companyName);
+        }
+        applyPurchasePolicyResult(result, notifySuccess);
+    }
+
+    private void applyPurchasePolicyResult(PolicyViewResult result, boolean notifySuccess) {
+        if (result.success() && result.purchasePolicy() != null) {
+            applyPurchasePolicyToForm(result.purchasePolicy());
+        }
+        if (!notifySuccess) {
+            return;
         }
         policyStatus.setText(result.message());
-        currentPolicyDisplay.setText(result.success() ? "Current: " + result.description() : "");
+        currentPolicyDisplay.setText(result.success() ? "Current purchase: " + result.description() : "");
         if (result.success()) {
             UiMessages.success(result.message());
         } else {
             UiMessages.error(result.message());
+        }
+    }
+
+    private void applyPurchasePolicyToForm(IPurchasePolicy policy) {
+        if (policy == null || policy instanceof AlwaysAllowPolicy) {
+            purchasePolicyType.setValue("Allow all");
+            policyComposition.setValue("Single rule");
+            clearPurchaseThresholdFields();
+            return;
+        }
+        if (policy instanceof AndPolicy and) {
+            applyPurchaseLeaves(and.getPolicies(), "AND (all must pass)");
+            return;
+        }
+        if (policy instanceof OrPolicy or) {
+            applyPurchaseLeaves(or.getPolicies(), "OR (any can pass)");
+            return;
+        }
+        applyPurchaseLeaves(List.of(policy), "Single rule");
+    }
+
+    private void applyPurchaseLeaves(List<IPurchasePolicy> policies, String composition) {
+        policyComposition.setValue(composition);
+        clearPurchaseThresholdFields();
+
+        List<IPurchasePolicy> leaves = new ArrayList<>();
+        for (IPurchasePolicy child : policies) {
+            leaves.addAll(flattenPurchaseLeaves(child));
+        }
+        if (leaves.isEmpty()) {
+            purchasePolicyType.setValue("Allow all");
+            return;
+        }
+
+        applyPurchaseLeafPrimary(leaves.getFirst());
+        for (int i = 1; i < leaves.size(); i++) {
+            applyPurchaseLeafAuxiliary(leaves.get(i));
+        }
+    }
+
+    private static List<IPurchasePolicy> flattenPurchaseLeaves(IPurchasePolicy policy) {
+        if (policy instanceof AndPolicy and) {
+            List<IPurchasePolicy> flattened = new ArrayList<>();
+            for (IPurchasePolicy child : and.getPolicies()) {
+                flattened.addAll(flattenPurchaseLeaves(child));
+            }
+            return flattened;
+        }
+        if (policy instanceof OrPolicy or) {
+            List<IPurchasePolicy> flattened = new ArrayList<>();
+            for (IPurchasePolicy child : or.getPolicies()) {
+                flattened.addAll(flattenPurchaseLeaves(child));
+            }
+            return flattened;
+        }
+        if (policy instanceof AlwaysAllowPolicy) {
+            return List.of();
+        }
+        return List.of(policy);
+    }
+
+    private void applyPurchaseLeafPrimary(IPurchasePolicy leaf) {
+        if (leaf instanceof AgeRestrictionPolicy age) {
+            purchasePolicyType.setValue("Age restriction");
+            policyAge.setValue(age.getMinimumAge());
+        } else if (leaf instanceof MaxQuantityPolicy max) {
+            purchasePolicyType.setValue("Max quantity");
+            policyMaxTickets.setValue(max.getMaxTickets());
+        } else if (leaf instanceof MinQuantityPolicy min) {
+            purchasePolicyType.setValue("Min quantity");
+            policyMinTickets.setValue(min.getMinTickets());
+        } else if (leaf instanceof NoOrphanSeatPolicy) {
+            purchasePolicyType.setValue("No orphan seat");
+        }
+    }
+
+    private void applyPurchaseLeafAuxiliary(IPurchasePolicy leaf) {
+        if (leaf instanceof AgeRestrictionPolicy age) {
+            policyAge.setValue(age.getMinimumAge());
+        } else if (leaf instanceof MaxQuantityPolicy max) {
+            policyMaxTickets.setValue(max.getMaxTickets());
+        } else if (leaf instanceof MinQuantityPolicy min) {
+            policyMinTickets.setValue(min.getMinTickets());
         }
     }
 
@@ -915,6 +1142,9 @@ public class CompanyView extends VerticalLayout {
         }
         policyStatus.setText(result.message());
         notify(result);
+        if (result.success()) {
+            autoLoadPolicies();
+        }
     }
 
     private void removePurchasePolicy() {
@@ -927,25 +1157,100 @@ public class CompanyView extends VerticalLayout {
                 result = presenter.removeCompanyPurchasePolicy(companyNameOf(policyCompanyName));
             }
             policyStatus.setText(result.message());
-            currentPolicyDisplay.setText("");
             notify(result);
+            if (result.success()) {
+                autoLoadPolicies();
+            }
         });
     }
 
-    private void loadDiscountPolicy() {
+    private void loadDiscountPolicy(boolean notifySuccess) {
         UUID eventId = selectedEventId(policyEventId);
+        String companyName = resolvePolicyCompanyName();
         PolicyViewResult result;
         if (eventId != null) {
-            result = presenter.loadEventDiscountPolicy(eventId);
+            result = presenter.loadEventDiscountPolicy(eventId, companyName);
         } else {
-            result = presenter.loadCompanyDiscountPolicy(companyNameOf(policyCompanyName));
+            result = presenter.loadCompanyDiscountPolicy(companyName);
+        }
+        applyDiscountPolicyResult(result, notifySuccess);
+    }
+
+    private void applyDiscountPolicyResult(PolicyViewResult result, boolean notifySuccess) {
+        if (result.success() && result.discountPolicy() != null) {
+            applyDiscountPolicyToForm(result.discountPolicy());
+        }
+        if (!notifySuccess) {
+            return;
         }
         policyStatus.setText(result.message());
-        currentPolicyDisplay.setText(result.success() ? "Current: " + result.description() : "");
+        currentPolicyDisplay.setText(result.success() ? "Current discount: " + result.description() : "");
         if (result.success()) {
             UiMessages.success(result.message());
         } else {
             UiMessages.error(result.message());
+        }
+    }
+
+    private void applyDiscountPolicyToForm(IDiscountPolicy policy) {
+        if (policy == null || policy instanceof NoDiscountPolicy) {
+            discountType.setValue("No discount");
+            discountComposition.setValue("Single discount");
+            clearDiscountFormAuxiliaryFields();
+            return;
+        }
+        if (policy instanceof MaxCompositeDiscount max) {
+            applyDiscountLeaves(max.getPolicies(), "MAX (best discount wins)");
+            return;
+        }
+        if (policy instanceof SumCompositeDiscount sum) {
+            applyDiscountLeaves(sum.getPolicies(), "SUM (stack all)");
+            return;
+        }
+        applyDiscountLeaves(List.of(policy), "Single discount");
+    }
+
+    private void applyDiscountLeaves(List<IDiscountPolicy> policies, String composition) {
+        discountComposition.setValue(composition);
+        clearDiscountFormAuxiliaryFields();
+        if (policies.isEmpty()) {
+            discountType.setValue("No discount");
+            return;
+        }
+        applyDiscountLeafPrimary(policies.getFirst());
+        for (int i = 1; i < policies.size(); i++) {
+            applyDiscountLeafPrimary(policies.get(i));
+        }
+    }
+
+    private void applyDiscountLeafPrimary(IDiscountPolicy leaf) {
+        if (leaf instanceof SimpleDiscount simple) {
+            discountType.setValue("Simple (flat %)");
+            discountPercent.setValue(simple.getPercentOff());
+        } else if (leaf instanceof CouponDiscount coupon) {
+            discountType.setValue("Coupon (% with code)");
+            discountPercent.setValue(coupon.getPercentOff());
+            couponCodeField.setValue(coupon.getCouponCode());
+            couponExpiry.setValue(LocalDateTime.ofInstant(coupon.getExpiresAt(), ZoneId.systemDefault()));
+        } else if (leaf instanceof ConditionalDiscount conditional) {
+            discountType.setValue("Conditional (% with condition)");
+            discountPercent.setValue(conditional.getPercentOff());
+            IDiscountCondition condition = conditional.getCondition();
+            if (condition instanceof MinQuantityCondition min) {
+                discountConditionType.setValue("Min tickets");
+                conditionMinTickets.setValue(min.getMinTickets());
+            } else if (condition instanceof MaxQuantityCondition max) {
+                discountConditionType.setValue("Max tickets");
+                conditionMaxTickets.setValue(max.getMaxTickets());
+            } else if (condition instanceof DateRangeCondition range) {
+                discountConditionType.setValue("Date range");
+                if (range.getFrom() != null) {
+                    conditionFrom.setValue(LocalDateTime.ofInstant(range.getFrom(), ZoneId.systemDefault()));
+                }
+                if (range.getTo() != null) {
+                    conditionTo.setValue(LocalDateTime.ofInstant(range.getTo(), ZoneId.systemDefault()));
+                }
+            }
         }
     }
 
@@ -962,6 +1267,9 @@ public class CompanyView extends VerticalLayout {
         }
         policyStatus.setText(result.message());
         notify(result);
+        if (result.success()) {
+            autoLoadPolicies();
+        }
     }
 
     private void removeDiscountPolicy() {
@@ -974,8 +1282,10 @@ public class CompanyView extends VerticalLayout {
                 result = presenter.removeCompanyDiscountPolicy(companyNameOf(policyCompanyName));
             }
             policyStatus.setText(result.message());
-            currentPolicyDisplay.setText("");
             notify(result);
+            if (result.success()) {
+                autoLoadPolicies();
+            }
         });
     }
 
@@ -1034,7 +1344,9 @@ public class CompanyView extends VerticalLayout {
     private IPurchasePolicy buildSinglePurchaseRule() {
         String type = purchasePolicyType.getValue();
         try {
-            if ("Age restriction".equals(type)) {
+            if ("Allow all".equals(type)) {
+                return new AlwaysAllowPolicy();
+            } else if ("Age restriction".equals(type)) {
                 Integer age = policyAge.getValue();
                 if (age == null || age <= 0) {
                     policyStatus.setText("Min age must be positive.");
@@ -1088,6 +1400,9 @@ public class CompanyView extends VerticalLayout {
 
     private IDiscountPolicy buildSingleDiscountPolicy() {
         String type = discountType.getValue();
+        if ("No discount".equals(type)) {
+            return new NoDiscountPolicy();
+        }
         BigDecimal percent = discountPercent.getValue();
         if (percent == null || percent.compareTo(BigDecimal.ZERO) <= 0 || percent.compareTo(new BigDecimal("100")) > 0) {
             policyStatus.setText("Discount % must be between 0 and 100.");
@@ -1380,14 +1695,12 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void refreshPolicyAccess() {
-        if (loadPurchasePolicyButton == null) {
+        if (policyControls == null) {
             return;
         }
         CompanyAccessResult access = companyAccessFor(policyCompanyName, "Select a company to show policy controls.");
         boolean policy = access.canManagePolicies();
         policyControls.setVisible(policy);
-        loadPurchasePolicyButton.setVisible(policy);
-        loadDiscountPolicyButton.setVisible(policy);
         setPurchasePolicyButton.setVisible(policy);
         removePurchasePolicyButton.setVisible(policy);
         setDiscountPolicyButton.setVisible(policy);
@@ -1536,7 +1849,20 @@ public class CompanyView extends VerticalLayout {
 
     private void handlePersonnelResult(ActionResult result) {
         personnelStatus.setText(result.message());
+        if (result.success()) {
+            refreshAfterPersonnelChange();
+        }
         notify(result);
+    }
+
+    private void refreshAfterPersonnelChange() {
+        refreshSessionStatus();
+        refreshPersonnelContext();
+        refreshEventAccess();
+        refreshInventoryAccess();
+        refreshReportingAccess();
+        refreshPolicyAccess();
+        refreshLifecycleAccess();
     }
 
     private void handleInventoryResult(ActionResult result) {

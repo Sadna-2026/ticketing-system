@@ -233,6 +233,7 @@ public class AuthView extends VerticalLayout {
     // ── Visibility control ─────────────────────────────────────────────────────
 
     private void refreshSessionStatus() {
+        presenter.reconcileStoredSession();
         sessionStatus.setText(presenter.currentSessionLabel());
         var session = presenter.currentSessionState();
 

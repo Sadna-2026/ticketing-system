@@ -188,6 +188,8 @@ public class AdminView extends VerticalLayout {
         suspensionsGrid.addColumn(s -> s.permanent() ? "Permanent" : "Temporary").setHeader("Permanent").setAutoWidth(true);
         suspensionsGrid.addColumn(suspension -> formatDuration(suspension.duration())).setHeader("Duration").setAutoWidth(true);
         suspensionsGrid.addColumn(suspension -> formatInstant(suspension.startTime())).setHeader("Started").setAutoWidth(true);
+        suspensionsGrid.addColumn(suspension -> suspension.permanent() ? "—" : formatInstant(suspension.endTime()))
+                .setHeader("Ends").setAutoWidth(true);
         suspensionsGrid.addColumn(SuspensionDTO::reason).setHeader("Reason").setAutoWidth(true);
         suspensionsGrid.setMinHeight("180px");
         suspensionsGrid.asSingleSelect().addValueChangeListener(event -> {

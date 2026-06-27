@@ -14,6 +14,7 @@ import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.member.request.LoginRequest;
 import com.ticketing.domain.member.response.LoginResponse;
 
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
     "ticketing.admin.username=testadmin",
     "ticketing.admin.password=testadmin123"

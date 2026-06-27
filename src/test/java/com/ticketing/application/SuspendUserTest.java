@@ -55,7 +55,6 @@ class SuspendUserTest {
         sessionTokenService = mock(ISessionTokenService.class);
         adminRepository = mock(IAdminRepository.class);
         orderRepository = mock(IOrderRepository.class);
-
         adminService = new AdminService(memberRepository, companyRepository,
                 sessionTokenService, adminRepository, orderRepository);
 

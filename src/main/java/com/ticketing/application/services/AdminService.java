@@ -32,6 +32,7 @@ import com.ticketing.domain.member.request.*;
 import com.ticketing.domain.member.response.*;
 import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.domain.services.OrderTimeDomainService;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 /**
@@ -52,6 +53,7 @@ public class AdminService {
     private final ISessionTokenService sessionTokenService;
     private final IAdminRepository adminRepository;
     private final IOrderRepository orderRepository;
+    private final OrderTimeDomainService orderTimeDomainService;
     private final PasswordEncryptionUtils passwordEncryptionUtils = new PasswordEncryptionUtils();
     private final INotificationService notificationService;
     private final SystemAnalyticsCollector analyticsCollector;
@@ -62,7 +64,7 @@ public class AdminService {
             ISessionTokenService sessionTokenService,
             IAdminRepository adminRepository,
             IOrderRepository orderRepository) {
-        this(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository, null, null);
+        this(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository, null, null, null);
     }
 
     public AdminService(
@@ -73,7 +75,19 @@ public class AdminService {
             IOrderRepository orderRepository,
             INotificationService notificationService) {
         this(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository,
-                notificationService, null);
+                notificationService, null, null);
+    }
+
+    public AdminService(
+            IMemberRepository memberRepository,
+            ICompanyRepository companyRepository,
+            ISessionTokenService sessionTokenService,
+            IAdminRepository adminRepository,
+            IOrderRepository orderRepository,
+            INotificationService notificationService,
+            SystemAnalyticsCollector analyticsCollector) {
+        this(memberRepository, companyRepository, sessionTokenService, adminRepository, orderRepository,
+                notificationService, analyticsCollector, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -84,7 +98,8 @@ public class AdminService {
             IAdminRepository adminRepository,
             IOrderRepository orderRepository,
             @org.springframework.beans.factory.annotation.Autowired(required = false) INotificationService notificationService,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) SystemAnalyticsCollector analyticsCollector) {
+            @org.springframework.beans.factory.annotation.Autowired(required = false) SystemAnalyticsCollector analyticsCollector,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) OrderTimeDomainService orderTimeDomainService) {
         if (memberRepository == null || companyRepository == null || sessionTokenService == null || adminRepository == null || orderRepository == null) {
             throw new IllegalArgumentException("Dependencies cannot be null");
         }
@@ -95,6 +110,7 @@ public class AdminService {
         this.orderRepository = orderRepository;
         this.notificationService = notificationService;
         this.analyticsCollector = analyticsCollector;
+        this.orderTimeDomainService = orderTimeDomainService;
     }
 
     @Transactional
@@ -218,6 +234,9 @@ public class AdminService {
         if (isSoleAdmin(targetMemberId)) {
             throw new IllegalStateException("Cannot suspend the last system admin");
         }
+        if (orderTimeDomainService != null) {
+            orderTimeDomainService.cancelActiveOrderForMember(targetMemberId);
+        }
         UUID adminId = sessionTokenService.extractMemberId(adminToken);
         Suspension suspension = target.suspend(adminId != null ? adminId : UUID.randomUUID(), duration, reason);
         memberRepository.save(target);
@@ -268,14 +287,18 @@ public class AdminService {
     }
 
     public List<MemberSummaryDTO> searchMembers(String adminToken, String usernameQuery) {
+        log.info("Admin member search requested: query={}", usernameQuery);
         if (!isAdmin(adminToken)) {
+            log.warn("Admin member search denied: missing system admin permission");
             throw new SecurityException("System admin permission required");
         }
         String query = usernameQuery == null ? "" : usernameQuery.trim().toLowerCase(Locale.ROOT);
-        return memberRepository.findAll().stream()
+        List<MemberSummaryDTO> results = memberRepository.findAll().stream()
                 .filter(m -> query.isEmpty() || m.getUsername().toLowerCase(Locale.ROOT).contains(query))
                 .map(m -> new MemberSummaryDTO(m.getId(), m.getUsername()))
                 .collect(Collectors.toList());
+        log.info("Admin member search completed: query={}, count={}", usernameQuery, results.size());
+        return results;
     }
 
     public List<PurchaseRecordDTO> getGlobalPurchaseHistory(String adminToken, UUID buyerId, String companyName) {

@@ -8,14 +8,19 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.ticketing.domain.order.ActiveOrder;
+import com.ticketing.domain.order.OrderItem;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
@@ -65,12 +70,13 @@ public class Event{
     @Embedded
     private VenueLayout venueLayout;
 
-    // Policy hierarchies are mapped separately in V3-6 (#264); kept @Transient here and
-    // defaulted in the constructors so a reloaded Event is never null.
-    @Transient
-    private IPurchasePolicy purchasePolicy;
-    @Transient
-    private IDiscountPolicy discountPolicy;
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "purchase_policy_id")
+    private AbstractPurchasePolicy purchasePolicy;
+
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "discount_policy_id")
+    private AbstractDiscountPolicy discountPolicy;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "sale_method")
@@ -84,8 +90,7 @@ public class Event{
     @Column(name = "version")
     private int version;
 
-    // Required by JPA; do not use directly. Defaults the @Transient policies so a
-    // reloaded Event never returns null from getPurchasePolicy()/getDiscountPolicy().
+    // Required by JPA; do not use directly. Defaults policies so a new Event is never null.
     protected Event() {
         this.zones = new ArrayList<>();
         this.purchasePolicy = new AlwaysAllowPolicy();
@@ -122,8 +127,8 @@ public class Event{
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
 
-        this.purchasePolicy = eventPurchasePolicy;
-        this.discountPolicy = eventDiscountPolicy;
+        this.purchasePolicy = requirePersistentPurchasePolicy(eventPurchasePolicy);
+        this.discountPolicy = requirePersistentDiscountPolicy(eventDiscountPolicy);
         this.saleMethod = saleMethod;
         this.lotteryWindow = lotteryWindow;
 
@@ -169,6 +174,23 @@ public class Event{
         return zones.stream().mapToInt(InventoryZone::getAvailableCount).sum();
     }
 
+    public int getTotalLockedTickets() {
+        return zones.stream().mapToInt(InventoryZone::getLockedCount).sum();
+    }
+
+    /**
+     * True only when every ticket has actually been SOLD — none available and none merely
+     * locked (reserved in a cart). Reserved tickets can still be released (cart expiry, item
+     * removal, order cancellation), so an event with locked-but-unsold tickets is NOT sold
+     * out. This is the condition that drives the "event sold out" notification and status
+     * transition, so producers are only told an event is sold out once it genuinely is.
+     */
+    public boolean isFullySold() {
+        return totalCapacity() > 0
+                && getTotalAvailableTickets() == 0
+                && getTotalLockedTickets() == 0;
+    }
+
     /**
      * The event's full ticket capacity across all zones — GA max capacity plus the seat
      * count of assigned-seating zones. Used to bound the number of winners in an automatic
@@ -194,6 +216,36 @@ public class Event{
             throw new IllegalStateException("Can only mark a SOLD_OUT event as available");
         }
         this.status = EventStatus.PUBLISHED;
+    }
+
+    /** Releases a single reserved line item back to inventory. */
+    public void releaseReservationFor(OrderItem item) {
+        InventoryZone zone = findZone(item.getZoneId());
+        if (item.isAssignedSeat()) {
+            zone.releaseSeat(item.getSeatId());
+        } else {
+            zone.releaseGA(item.getQuantity());
+        }
+    }
+
+    /** Releases every reserved line item on the order back to inventory. */
+    public void releaseReservationsFor(ActiveOrder order) {
+        for (OrderItem item : order.getItems()) {
+            releaseReservationFor(item);
+        }
+    }
+
+    /**
+     * After tickets are released, reopen a sold-out event when stock is available again.
+     *
+     * @return {@code true} if the event transitioned back to {@link EventStatus#PUBLISHED}
+     */
+    public boolean reopenAvailabilityIfTicketsFreed() {
+        if (hasAvailableTickets() && status == EventStatus.SOLD_OUT) {
+            markAvailable();
+            return true;
+        }
+        return false;
     }
 
     public UUID getId() {
@@ -363,7 +415,7 @@ public class Event{
         if (policy == null) {
             throw new IllegalArgumentException("Purchase policy cannot be null");
         }
-        this.purchasePolicy = policy;
+        this.purchasePolicy = requirePersistentPurchasePolicy(policy);
     }
 
     public void setDiscountPolicy(IDiscountPolicy policy) {
@@ -371,7 +423,23 @@ public class Event{
         if (policy == null) {
             throw new IllegalArgumentException("Discount policy cannot be null");
         }
-        this.discountPolicy = policy;
+        this.discountPolicy = requirePersistentDiscountPolicy(policy);
+    }
+
+    private static AbstractPurchasePolicy requirePersistentPurchasePolicy(IPurchasePolicy policy) {
+        if (policy instanceof AbstractPurchasePolicy persistent) {
+            return persistent;
+        }
+        throw new IllegalArgumentException(
+                "Purchase policy must be a persistent entity type, got: " + policy.getClass().getName());
+    }
+
+    private static AbstractDiscountPolicy requirePersistentDiscountPolicy(IDiscountPolicy policy) {
+        if (policy instanceof AbstractDiscountPolicy persistent) {
+            return persistent;
+        }
+        throw new IllegalArgumentException(
+                "Discount policy must be a persistent entity type, got: " + policy.getClass().getName());
     }
 
     public void setVenueMap(VenueMap venueMap) {
