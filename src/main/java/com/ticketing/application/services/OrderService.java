@@ -800,11 +800,9 @@ public class OrderService {
                 pending.markRefunded();
                 orderRepository.save(pending);
                 log.info("Successfully retried pending refund for transaction {}", pending.getTransactionId());
-                if (notificationService != null && pending.getMemberId() != null) {
-                    notificationService.notify(pending.getMemberId().toString(), 
-                            "A previous checkout failure has been resolved and your payment of " 
-                            + pending.getAmount().toPlainString() + " has been refunded successfully.");
-                }
+                safeNotify(pending.getMemberId(), 
+                        "A previous checkout failure has been resolved and your payment of " 
+                        + pending.getAmount().toPlainString() + " has been refunded successfully.");
             } else {
                 log.warn("Retry failed for pending refund transaction {}", pending.getTransactionId());
             }
@@ -1137,11 +1135,9 @@ public class OrderService {
                 UUID.randomUUID(), eventId, memberId, transactionId, amount, systemClock.now());
         orderRepository.save(pendingRefund);
         
-        if (notificationService != null && memberId != null) {
-            notificationService.notify(memberId.toString(), 
-                    "Ticket generation failed but we could not immediately refund your payment. "
-                    + "A pending refund has been registered and will be processed shortly.");
-        }
+        safeNotify(memberId, 
+                "Ticket generation failed but we could not immediately refund your payment. "
+                + "A pending refund has been registered and will be processed shortly.");
         
         return false;
     }

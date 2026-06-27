@@ -251,6 +251,35 @@ class CheckoutTransactionJpaTest {
     }
 
     @Test
+    @DisplayName("Given a pending refund, When the retry job runs but fails again, Then the refund remains pending")
+    void GivenPendingRefund_WhenRetryJobRunsAndFails_ThenRefundRemainsPending() {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        String txId = "TXN-RETRY-FAIL-" + UUID.randomUUID().toString().substring(0, 4);
+
+        com.ticketing.domain.order.FailedCheckoutRefund pending = new com.ticketing.domain.order.FailedCheckoutRefund(
+            sessionId, eventId, memberId, txId, new java.math.BigDecimal("100.00"), java.time.Instant.now()
+        );
+        orderRepository.save(pending);
+
+        // Ensure payment gateway STILL fails
+        paymentGateway.setRefundShouldFail(true);
+
+        // Run the retry job
+        orderService.retryPendingRefunds();
+
+        // Verify the pending refund is STILL in the database (status = PENDING)
+        com.ticketing.domain.order.FailedCheckoutRefund afterRetry = orderRepository.findPendingRefunds().stream()
+                .filter(r -> r.getId().equals(pending.getId()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(afterRetry).isNotNull();
+        assertThat(afterRetry.getStatus()).isEqualTo(com.ticketing.domain.order.RefundStatus.PENDING);
+    }
+
+    @Test
     @DisplayName("Given a healthy checkout, When it completes, Then the sale is committed exactly once")
     void GivenHealthyCheckout_WhenItCompletes_ThenSaleIsCommitted() {
         UUID eventId = UUID.randomUUID();
