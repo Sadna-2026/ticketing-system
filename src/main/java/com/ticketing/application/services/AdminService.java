@@ -287,14 +287,18 @@ public class AdminService {
     }
 
     public List<MemberSummaryDTO> searchMembers(String adminToken, String usernameQuery) {
+        log.info("Admin member search requested: query={}", usernameQuery);
         if (!isAdmin(adminToken)) {
+            log.warn("Admin member search denied: missing system admin permission");
             throw new SecurityException("System admin permission required");
         }
         String query = usernameQuery == null ? "" : usernameQuery.trim().toLowerCase(Locale.ROOT);
-        return memberRepository.findAll().stream()
+        List<MemberSummaryDTO> results = memberRepository.findAll().stream()
                 .filter(m -> query.isEmpty() || m.getUsername().toLowerCase(Locale.ROOT).contains(query))
                 .map(m -> new MemberSummaryDTO(m.getId(), m.getUsername()))
                 .collect(Collectors.toList());
+        log.info("Admin member search completed: query={}, count={}", usernameQuery, results.size());
+        return results;
     }
 
     public List<PurchaseRecordDTO> getGlobalPurchaseHistory(String adminToken, UUID buyerId, String companyName) {

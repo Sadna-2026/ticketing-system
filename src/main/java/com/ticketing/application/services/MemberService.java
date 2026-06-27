@@ -305,16 +305,19 @@ public class MemberService {
     @Transactional
     public LogoutResponse logout(String sessionToken) {
         if (sessionToken == null || sessionToken.isBlank()) {
+            logger.warn("Logout denied: missing session token");
             return LogoutResponse.failure("No authenticated member session exists.");
         }
 
         if (!sessionTokenService.isValid(sessionToken)) {
+            logger.warn("Logout denied: invalid session token");
             return LogoutResponse.failure("No authenticated member session exists.");
         }
 
         UUID memberId = sessionTokenService.extractMemberId(sessionToken);
 
         if (memberId == null) {
+            logger.warn("Logout denied: guest session");
             return LogoutResponse.failure("No authenticated member session exists.");
         }
 
@@ -329,27 +332,34 @@ public class MemberService {
     }
 
     public MemberDto getMemberDetails(String sessionToken) {
+        logger.info("Member details requested");
         if (!sessionTokenService.isValid(sessionToken)) {
+            logger.warn("Member details denied: invalid session token");
             return null;
         }
         UUID memberId = sessionTokenService.extractMemberId(sessionToken);
         if (memberId == null) {
+            logger.warn("Member details denied: guest session");
             return null;
         }
         Member member = memberRepository.findById(memberId).orElse(null);
         if (member == null) {
+            logger.warn("Member details denied: member not found memberId={}", memberId);
             return null;
         }
+        logger.info("Member details provided: memberId={}", memberId);
         return MemberMapper.toDto(member);
     }
 
     @Transactional
     public MemberExitResponse exitPlatform(String sessionToken) {
         if (sessionToken == null || sessionToken.isBlank()) {
+            logger.warn("Platform exit denied: missing session token");
             return MemberExitResponse.failure("No authenticated member session exists.");
         }
 
         if (!sessionTokenService.isValid(sessionToken)) {
+            logger.warn("Platform exit denied: invalid session token");
             return MemberExitResponse.failure("No authenticated member session exists.");
         }
 
@@ -357,6 +367,7 @@ public class MemberService {
         SessionTokenData tokenData = sessionTokenService.extractTokenData(sessionToken);
 
         if (memberId == null) {
+            logger.warn("Platform exit denied: guest session");
             return MemberExitResponse.failure("No authenticated member session exists.");
         }
 
@@ -375,6 +386,7 @@ public class MemberService {
      * Only accessible to members with the OWNER role in that company.
      */
     public List<OrgNodeDTO> getOrganizationChart(String token, String companyName) {
+        logger.info("Organization chart requested: company={}", companyName);
         if (companyName == null || companyName.isBlank()) {
             throw new IllegalArgumentException("Company name is required.");
         }
@@ -385,6 +397,7 @@ public class MemberService {
 
         StaffAppointment appt = requestor.getStaffAppointment(companyName);
         if (appt == null || appt.getRole() != StaffAppointment.StaffRole.OWNER) {
+            logger.warn("Organization chart denied: company={}, by={}", companyName, requestorId);
             throw new SecurityException("Access denied. Only company owners can view the organization chart.");
         }
 
@@ -420,7 +433,7 @@ public class MemberService {
                 .toList();
 
         if (roots.isEmpty()) {
-            logger.error("Data inconsistency: Company " + companyName + " has members but no hierarchy roots.");
+            logger.warn("Data inconsistency: Company " + companyName + " has members but no hierarchy roots.");
             throw new IllegalStateException("Organization hierarchy is corrupted: no roots found.");
         }
 
@@ -430,19 +443,25 @@ public class MemberService {
     }
 
     public List<com.ticketing.application.dto.MemberSummaryDTO> searchAllMembersExcept(UUID excludeId) {
-        return memberRepository.findAll().stream()
+        logger.info("Member search requested: excludeId={}", excludeId);
+        List<com.ticketing.application.dto.MemberSummaryDTO> results = memberRepository.findAll().stream()
                 .filter(m -> excludeId == null || !m.getId().equals(excludeId))
                 .map(m -> new com.ticketing.application.dto.MemberSummaryDTO(m.getId(), m.getUsername()))
                 .sorted(Comparator.comparing(com.ticketing.application.dto.MemberSummaryDTO::username))
                 .toList();
+        logger.info("Member search completed: excludeId={}, count={}", excludeId, results.size());
+        return results;
     }
 
     // Returns pending role offers addressed to the authenticated member.
     public List<PendingRoleOffer> listPendingRoleOffers(String token) {
         UUID memberId = validateTokenForStaffAccess(token);
+        logger.info("Pending role offers requested: memberId={}", memberId);
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new SecurityException("Authenticated member not found."));
-        return member.getActivePendingOffers();
+        List<PendingRoleOffer> offers = member.getActivePendingOffers();
+        logger.info("Pending role offers completed: memberId={}, count={}", memberId, offers.size());
+        return offers;
     }
 
     // Returns only the authenticated member's own appointment in a company.
@@ -453,13 +472,16 @@ public class MemberService {
         }
 
         UUID memberId = validateTokenForStaffAccess(token);
+        logger.info("Current company appointment requested: company={}, memberId={}", companyName, memberId);
         if (memberId == null) {
+            logger.warn("Current company appointment denied: guest session, company={}", companyName);
             throw new SecurityException("Guests cannot view company permissions. Please log in.");
         }
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new SecurityException("Authenticated member not found."));
         StaffAppointment appt = member.getStaffAppointment(companyName);
         if (appt == null) {
+            logger.info("Current company appointment not found: company={}, memberId={}", companyName, memberId);
             return Optional.empty();
         }
         return Optional.of(new OrgNodeDTO(

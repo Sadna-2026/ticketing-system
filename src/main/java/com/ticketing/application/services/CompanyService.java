@@ -359,12 +359,14 @@ public class CompanyService {
     // ── Read helpers (company policy queries) ───────────────────────
 
     public IPurchasePolicy getCompanyPurchasePolicy(String token, String companyName) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Company purchase policy requested: company={}, by={}", companyName, memberId);
         return loadCompany(companyName).getPurchasePolicy();
     }
 
     public IDiscountPolicy getCompanyDiscountPolicy(String token, String companyName) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Company discount policy requested: company={}, by={}", companyName, memberId);
         return loadCompany(companyName).getDiscountPolicy();
     }
 
@@ -399,16 +401,22 @@ public class CompanyService {
     }
 
     public List<CompanySummaryDTO> searchCompanies(String query) {
-        return companyRepository.findActiveCompanies(query).stream()
+        log.info("Company search requested: query={}", query);
+        List<CompanySummaryDTO> results = companyRepository.findActiveCompanies(query).stream()
                 .map(c -> new CompanySummaryDTO(c.getName()))
                 .toList();
+        log.info("Company search completed: query={}, count={}", query, results.size());
+        return results;
     }
 
     public List<CompanySummaryDTO> searchCompaniesForLookup(String token, String query) {
-        return companyRepository.findLookupVisibleCompanies(lookupMemberId(token), lookupSystemAdmin(token), query)
+        log.info("Company lookup search requested: query={}", query);
+        List<CompanySummaryDTO> results = companyRepository.findLookupVisibleCompanies(lookupMemberId(token), lookupSystemAdmin(token), query)
                 .stream()
                 .map(c -> new CompanySummaryDTO(c.getName()))
                 .toList();
+        log.info("Company lookup search completed: query={}, count={}", query, results.size());
+        return results;
     }
 
     // ── History (inlined from CompanyHistoryDomainService) ───────────
@@ -416,9 +424,12 @@ public class CompanyService {
     public List<CompanySummaryDTO> searchFounderLifecycleCompanies(String token, String query) {
         UUID memberId = requireMember(token);
         rejectIfSuspended(memberId);
-        return companyRepository.findFounderLifecycleCompanies(memberId, query).stream()
+        log.info("Founder lifecycle company search requested: by={}, query={}", memberId, query);
+        List<CompanySummaryDTO> results = companyRepository.findFounderLifecycleCompanies(memberId, query).stream()
                 .map(c -> new CompanySummaryDTO(c.getName()))
                 .toList();
+        log.info("Founder lifecycle company search completed: by={}, count={}", memberId, results.size());
+        return results;
     }
 
     public List<PurchaseRecordDTO> getPurchaseHistory(String token, String companyName) {
@@ -449,6 +460,7 @@ public class CompanyService {
         rejectIfSuspended(memberId);
         Company company = loadCompany(companyName);
         requireFounder(memberId, company);
+        log.info("Founder lifecycle access verified: company={}, by={}", companyName, memberId);
     }
 
     @Transactional
@@ -481,6 +493,7 @@ public class CompanyService {
     public void permanentCloseByFounder(String token, String companyName) {
         UUID memberId = requireMember(token);
         rejectIfSuspended(memberId);
+        log.info("Permanent close by founder requested: company={}, by={}", companyName, memberId);
         synchronized (companyLock(companyName)) {
             Company company = loadCompany(companyName);
             requireFounder(memberId, company);
