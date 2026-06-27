@@ -147,6 +147,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Create order requested: eventId={}, sessionId={}, memberId={}", eventId, sessionId, memberId);
         rejectIfMemberSuspended(memberId);
         return findOrCreateActiveOrder(sessionId, memberId, eventId).getId();
     }
@@ -156,6 +157,8 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Add seat requested: eventId={}, zoneId={}, seatId={}, sessionId={}",
+                eventId, zoneId, seatId, sessionId);
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
@@ -170,6 +173,8 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Add GA tickets requested: eventId={}, zoneId={}, quantity={}, sessionId={}",
+                eventId, zoneId, quantity, sessionId);
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
@@ -186,6 +191,8 @@ public class OrderService {
             throw new IllegalArgumentException("request is required");
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Add selection requested: eventId={}, sessionId={}, seats={}, gaPicks={}",
+                request.eventId(), sessionId, request.seats().size(), request.gaQuantities().size());
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, request.eventId());
         SelectionRequest domainRequest = new SelectionRequest(
@@ -300,6 +307,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Active order requested: sessionId={}, memberId={}", sessionId, memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null)
             return null;
@@ -328,6 +336,8 @@ public class OrderService {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Checkout quote requested: sessionId={}, memberId={}, couponPresent={}",
+                sessionId, memberId, couponCode != null && !couponCode.isBlank());
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) {
             throw new IllegalArgumentException("No active order found");
@@ -362,6 +372,7 @@ public class OrderService {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Purchase policy check requested: sessionId={}, memberId={}", sessionId, memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) {
             throw new IllegalArgumentException("No active order found");
@@ -409,6 +420,8 @@ public class OrderService {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Checkout requested: sessionId={}, memberId={}, couponPresent={}",
+                sessionId, memberId, couponCode != null && !couponCode.isBlank());
 
         rejectIfMemberSuspended(memberId);
 
@@ -521,7 +534,7 @@ public class OrderService {
             }
             String transactionId = purchase.transactionId();
             if (transactionId == null || transactionId.isBlank()) {
-                log.error("Cancel-event: purchase {} has no payment transaction id; cannot refund",
+                log.warn("Cancel-event: purchase {} has no payment transaction id; cannot refund",
                         purchase.purchaseId());
                 purchase.markRefundFailed();
                 orderRepository.save(purchase);
@@ -590,6 +603,7 @@ public class OrderService {
     public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Member purchase history requested: memberId={}", memberId);
         if (memberId == null) {
             throw new SecurityException("User must be logged in to view purchase history");
         }
@@ -598,6 +612,7 @@ public class OrderService {
         for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));
         }
+        log.info("Member purchase history completed: memberId={}, count={}", memberId, result.size());
         return result;
     }
 
@@ -606,6 +621,7 @@ public class OrderService {
     @Transactional
     public UUID createQueue(String token, UUID eventId, int threshold, int flowRate) {
         validateToken(token);
+        log.info("Create queue requested: eventId={}, threshold={}, flowRate={}", eventId, threshold, flowRate);
 
         eventRepository.findById(eventId)
                 .orElseThrow(() -> {
@@ -642,6 +658,7 @@ public class OrderService {
 
         Event event = findEvent(eventId);
         if (event.getStatus() == EventStatus.SOLD_OUT) {
+            log.warn("Try enter or queue denied: eventId={}, reason=sold-out", eventId);
             throw new IllegalStateException("Event is sold out — no tickets available.");
         }
 
@@ -688,6 +705,7 @@ public class OrderService {
      */
     @Transactional
     public void userLeft(UUID eventId, UUID sessionId) {
+        log.info("User left queue: eventId={}, sessionId={}", eventId, sessionId);
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue != null) {
             if (sessionId != null) {
@@ -747,12 +765,14 @@ public class OrderService {
     }
 
     public VirtualQueueDto getQueueForEvent(UUID eventId) {
+        log.info("Queue lookup requested: eventId={}", eventId);
         return findQueueByEvent(eventId).toVirtualQueueDto();
     }
 
     @org.springframework.scheduling.annotation.Scheduled(fixedRate = 10_000)
     @Transactional
     public void expireOrders() {
+        log.info("Order expiry job started");
         if (orderTimeDomainService != null) {
             orderTimeDomainService.expireOrders();
         }
@@ -1059,7 +1079,7 @@ public class OrderService {
             }
         }
         if (refund == null || !refund.success()) {
-            log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
+            log.warn("ESCALATION: Refund failed after ticket supply failure: reason={}",
                     refund != null ? refund.errorMessage() : "All gateways failed");
         }
     }

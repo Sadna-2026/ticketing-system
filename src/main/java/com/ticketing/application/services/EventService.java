@@ -584,6 +584,7 @@ public class EventService implements ApplicationEventPublisherAware {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
 
+        log.info("Automatic lottery draw requested: eventId={}", eventId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
 
@@ -591,7 +592,9 @@ public class EventService implements ApplicationEventPublisherAware {
             throw new IllegalArgumentException("Event is not a lottery event");
 
         int maxWinners = event.getLotteryWindow() != null ? event.getLotteryWindow().maxWinners() : event.totalCapacity();
-        return performDraw(event, Math.min(maxWinners, event.totalCapacity()));
+        List<ActiveOrder> winners = performDraw(event, Math.min(maxWinners, event.totalCapacity()));
+        log.info("Automatic lottery draw completed: eventId={}, winners={}", eventId, winners.size());
+        return winners;
     }
 
     /**
@@ -685,6 +688,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setPurchasePolicy(policy);
         saveEvent(event);
+        log.info("Event purchase policy updated: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -699,6 +703,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setPurchasePolicy(company.getPurchasePolicy());
         saveEvent(event);
+        log.info("Event purchase policy reset to company default: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -719,6 +724,7 @@ public class EventService implements ApplicationEventPublisherAware {
                 : new AndPolicy(List.of(current, policy));
         event.setPurchasePolicy(composed);
         saveEvent(event);
+        log.info("Event purchase policy composed: eventId={}, by={}, useOr={}", eventId, memberId, useOr);
     }
 
     // ── Event-scoped discount policy ────────────────────────────────
@@ -737,6 +743,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setDiscountPolicy(policy);
         saveEvent(event);
+        log.info("Event discount policy updated: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -751,6 +758,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setDiscountPolicy(company.getDiscountPolicy());
         saveEvent(event);
+        log.info("Event discount policy reset to company default: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -771,17 +779,20 @@ public class EventService implements ApplicationEventPublisherAware {
                 : new MaxCompositeDiscount(List.of(current, policy));
         event.setDiscountPolicy(composed);
         saveEvent(event);
+        log.info("Event discount policy composed: eventId={}, by={}, useStacking={}", eventId, memberId, useStacking);
     }
 
     // ── Read helpers (event policy queries) ─────────────────────────
 
     public IPurchasePolicy getEventPurchasePolicy(String token, UUID eventId) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Event purchase policy requested: eventId={}, by={}", eventId, memberId);
         return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventPurchasePolicy();
     }
 
     public IDiscountPolicy getEventDiscountPolicy(String token, UUID eventId) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Event discount policy requested: eventId={}, by={}", eventId, memberId);
         return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventDiscountPolicy();
     }
 
@@ -884,10 +895,12 @@ public class EventService implements ApplicationEventPublisherAware {
     // ── Query (event map) ───────────────────────────────────────────
 
     public Optional<EventMapDTO> getEventMap(UUID eventId) {
+        log.info("Event map requested: eventId={}", eventId);
         return getEventMap(eventId, false);
     }
 
     public Optional<EventMapDTO> getEventMapForManagement(UUID eventId) {
+        log.info("Event map for management requested: eventId={}", eventId);
         return getEventMap(eventId, true);
     }
 
@@ -972,6 +985,7 @@ public class EventService implements ApplicationEventPublisherAware {
     public void validateEventLayout(String token, UUID eventId) {
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
+        log.info("Event layout validation requested: eventId={}, by={}", eventId, memberId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
@@ -979,12 +993,15 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizeMapDefinition(appt);
         VenueLayout layout = event.getVenueLayout();
         if (layout == null) {
+            log.warn("Event layout validation failed: eventId={}, reason=no-layout", eventId);
             throw new IllegalStateException("No layout has been saved for this event");
         }
         if (!layout.hasSellableCell()) {
+            log.warn("Event layout validation failed: eventId={}, reason=no-sellable-cells", eventId);
             throw new IllegalStateException("Layout must contain at least one seat or general-admission area");
         }
         validateLayoutReferences(event, layout);
+        log.info("Event layout validation succeeded: eventId={}", eventId);
     }
 
     private void validateLayoutReferences(Event event, VenueLayout layout) {
@@ -1054,14 +1071,17 @@ public class EventService implements ApplicationEventPublisherAware {
     }
 
     public List<EventSummaryDTO> listCompanyEvents(String token, String companyName) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Company events list requested: company={}, by={}", companyName, memberId);
         if (companyName == null || companyName.isBlank()) {
             return List.of();
         }
-        return eventRepository.findByCompanyName(companyName).stream()
+        List<EventSummaryDTO> events = eventRepository.findByCompanyName(companyName).stream()
                 .map(EventSummaryDTO::from)
                 .sorted(Comparator.comparing(EventSummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
+        log.info("Company events list completed: company={}, count={}", companyName, events.size());
+        return events;
     }
 
     // ── Private helpers ─────────────────────────────────────────────
