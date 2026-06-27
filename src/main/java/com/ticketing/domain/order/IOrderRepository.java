@@ -32,4 +32,8 @@ public interface IOrderRepository {
     List<CompletedPurchase> findAllCompleted();
 
     void deleteAll();
+
+    void save(FailedCheckoutRefund pendingRefund);
+
+    List<FailedCheckoutRefund> findPendingRefunds();
 }

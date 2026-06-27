@@ -12,6 +12,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -172,7 +173,10 @@ class WebSocketNotificationServiceTest {
 
             service.notify("user-10", "Live update");
             assertTrue(delivered.await(2, TimeUnit.SECONDS));
-            Thread.sleep(100); // allow the post-delivery history write to settle
+            
+            // Wait for the async executor to finish saving the history
+            Awaitility.await().atMost(2, TimeUnit.SECONDS)
+                .until(() -> pendingRepo.getNotificationHistory("user-10").contains("Live update"));
 
             // Delivered live -> in history, but not pending (so it is never re-pushed).
             assertEquals(List.of("Live update"), pendingRepo.getNotificationHistory("user-10"));
@@ -285,11 +289,15 @@ class WebSocketNotificationServiceTest {
             });
 
             service.notify("flaky-user", "Important message");
-            Thread.sleep(500); // allow async executor to complete
+            
+            // Wait for async executor to complete and save to pending
+            Awaitility.await().atMost(2, TimeUnit.SECONDS)
+                .until(() -> pendingRepo.getPendingNotifications("flaky-user").size() == 1);
 
             List<String> pending = pendingRepo.getPendingNotifications("flaky-user");
             assertEquals(1, pending.size());
             assertEquals("Important message", pending.get(0));
+            // no exception, no pending stored
         }
 
         @Test

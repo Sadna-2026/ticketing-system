@@ -20,10 +20,15 @@ import com.ticketing.domain.gateway.RefundResult;
 @ConditionalOnExpression("'${ticketing.external.base-url:}'.trim() == ''")
 public class StubPaymentGateway implements IPaymentGateway {
     private boolean shouldFail = false;
+    private boolean refundShouldFail = false;
     private final java.util.List<String> lastRefundedTransactions = new java.util.ArrayList<>();
 
     public void setShouldFail(boolean shouldFail) {
         this.shouldFail = shouldFail;
+    }
+
+    public void setRefundShouldFail(boolean refundShouldFail) {
+        this.refundShouldFail = refundShouldFail;
     }
 
     public java.util.List<String> getLastRefundedTransactions() {
@@ -32,6 +37,7 @@ public class StubPaymentGateway implements IPaymentGateway {
 
     public void reset() {
         this.shouldFail = false;
+        this.refundShouldFail = false;
         this.lastRefundedTransactions.clear();
     }
 
@@ -50,7 +56,7 @@ public class StubPaymentGateway implements IPaymentGateway {
 
     @Override
     public RefundResult refund(String transactionId, double amount) {
-        if (shouldFail) {
+        if (shouldFail || refundShouldFail) {
             return RefundResult.failed("Refund failed. Transaction not found or unsettled.");
         }
         if (transactionId != null) {
