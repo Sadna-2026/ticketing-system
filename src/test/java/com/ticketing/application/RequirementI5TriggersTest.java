@@ -84,7 +84,7 @@ class RequirementI5TriggersTest {
         OrderService orderService = new OrderService(sessionTokenService, orderRepository, eventRepository, companyRepository, memberRepository, List.of(), List.of(), Instant::now, mock(com.ticketing.domain.queue.IQueueRepository.class), mock(com.ticketing.domain.services.OrderTimeDomainService.class), notificationService, null);
 
         Event event = mock(Event.class);
-        when(event.hasAvailableTickets()).thenReturn(false);
+        when(event.isFullySold()).thenReturn(true);
         when(event.isPublished()).thenReturn(true);
         when(event.getCompanyName()).thenReturn(companyName);
         when(event.getName()).thenReturn("Concert");

@@ -172,6 +172,23 @@ public class Event{
         return zones.stream().mapToInt(InventoryZone::getAvailableCount).sum();
     }
 
+    public int getTotalLockedTickets() {
+        return zones.stream().mapToInt(InventoryZone::getLockedCount).sum();
+    }
+
+    /**
+     * True only when every ticket has actually been SOLD — none available and none merely
+     * locked (reserved in a cart). Reserved tickets can still be released (cart expiry, item
+     * removal, order cancellation), so an event with locked-but-unsold tickets is NOT sold
+     * out. This is the condition that drives the "event sold out" notification and status
+     * transition, so producers are only told an event is sold out once it genuinely is.
+     */
+    public boolean isFullySold() {
+        return totalCapacity() > 0
+                && getTotalAvailableTickets() == 0
+                && getTotalLockedTickets() == 0;
+    }
+
     /**
      * The event's full ticket capacity across all zones — GA max capacity plus the seat
      * count of assigned-seating zones. Used to bound the number of winners in an automatic
