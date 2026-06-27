@@ -52,6 +52,7 @@ import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
  * {@code ddl-auto=create-drop} builds the schema for the test, and
  * {@code ticketing.seed.enabled=false} keeps the DB clean of dev-seed rows.
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(
         properties = {
                 "ticketing.persistence=jpa",

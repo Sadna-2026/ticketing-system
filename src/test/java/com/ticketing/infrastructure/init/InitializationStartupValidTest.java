@@ -28,6 +28,7 @@ import com.ticketing.domain.member.StaffAppointment;
  * asserts the replayed state is present once startup completes. Seeding is disabled so the asserted
  * state comes solely from the initial-state file.
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
         "ticketing.seed.enabled=false",
         "ticketing.startup.initialize-platform=false"

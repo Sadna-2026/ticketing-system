@@ -15,6 +15,7 @@ import com.ticketing.domain.admin.IAdminRepository;
 import com.ticketing.domain.member.IMemberRepository;
 import com.ticketing.domain.member.Member;
 
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
     "ticketing.persistence=jpa",
     "spring.datasource.operational.url=jdbc:h2:mem:test_op;DB_CLOSE_DELAY=-1",
