@@ -26,11 +26,13 @@ import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.PurchaseContext;
+import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.member.ManagerPermission;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.StaffAppointment;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
+import com.ticketing.testsupport.RejectAllPurchasePolicy;
 
 @DisplayName("CompanyService — Policy management")
 class CompanyServicePolicyTest {
@@ -76,17 +78,12 @@ class CompanyServicePolicyTest {
         memberRepository.save(member);
     }
 
-    /** Custom purchase policy for testing — rejects everything. */
-    private static IPurchasePolicy rejectAllPolicy() {
-        return (ctx) -> PolicyResult.failure("REJECTED", "test rejection");
+    private static RejectAllPurchasePolicy rejectAllPolicy() {
+        return new RejectAllPurchasePolicy("REJECTED", "test rejection");
     }
 
-    /** Custom discount policy for testing — 50% off. */
-    private static IDiscountPolicy halfPricePolicy() {
-        return (order, couponCode, clock) -> {
-            BigDecimal total = order.getTotalPrice();
-            return total.divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP);
-        };
+    private static SimpleDiscount halfPricePolicy() {
+        return new SimpleDiscount(new BigDecimal("50"));
     }
 
     // ══════════════════════════════════════════════════════════════════

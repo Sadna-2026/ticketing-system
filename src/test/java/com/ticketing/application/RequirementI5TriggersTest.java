@@ -200,10 +200,10 @@ class RequirementI5TriggersTest {
                 Instant::now, mock(com.ticketing.domain.queue.IQueueRepository.class),
                 mock(com.ticketing.domain.services.OrderTimeDomainService.class), notificationService, null);
 
-        com.ticketing.domain.event.IPurchasePolicy purchasePolicy = mock(com.ticketing.domain.event.IPurchasePolicy.class);
-        when(purchasePolicy.collectViolations(any())).thenReturn(List.of());
-        com.ticketing.domain.event.IDiscountPolicy discountPolicy = mock(com.ticketing.domain.event.IDiscountPolicy.class);
-        when(discountPolicy.priceAfterDiscount(any(), any(), any())).thenReturn(new java.math.BigDecimal("10.00"));
+        // Real persistent policy types (the Event constructor rejects non-persistent/mocked
+        // policies). AlwaysAllowPolicy lets checkout proceed; NoDiscountPolicy charges the order total.
+        com.ticketing.domain.event.IPurchasePolicy purchasePolicy = new com.ticketing.domain.event.AlwaysAllowPolicy();
+        com.ticketing.domain.event.IDiscountPolicy discountPolicy = new com.ticketing.domain.event.NoDiscountPolicy();
 
         com.ticketing.domain.event.InventoryZone zone = com.ticketing.domain.event.InventoryZone.createGA(
                 zoneId, "GA", new java.math.BigDecimal("10.00"), 10);
@@ -241,7 +241,7 @@ class RequirementI5TriggersTest {
         UUID eventId = UUID.randomUUID();
         EventService eventService = new EventService(eventRepository, companyRepository, memberRepository, orderRepository, sessionTokenService, mock(com.ticketing.domain.lottery.ILotteryRepository.class), Instant::now, mock(OrderService.class), notificationService);
 
-        Event event = new Event(eventId, companyName, "Old Event", "Desc", EventCategory.CONCERT, new EventSchedule(Instant.now(), Instant.now().plus(Duration.ofHours(2)), null), new LockTimerDuration(Duration.ofMinutes(10)), mock(com.ticketing.domain.event.IPurchasePolicy.class), mock(com.ticketing.domain.event.IDiscountPolicy.class), SaleMethod.REGULAR, null);
+        Event event = new Event(eventId, companyName, "Old Event", "Desc", EventCategory.CONCERT, new EventSchedule(Instant.now(), Instant.now().plus(Duration.ofHours(2)), null), new LockTimerDuration(Duration.ofMinutes(10)), new com.ticketing.domain.event.AlwaysAllowPolicy(), new com.ticketing.domain.event.NoDiscountPolicy(), SaleMethod.REGULAR, null);
         when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
 
         Member admin = mock(Member.class);
@@ -289,8 +289,8 @@ class RequirementI5TriggersTest {
                 UUID.randomUUID(), UUID.randomUUID(), expiredMemberId, eventId, longAgo);
         when(localOrderRepo.findAllActive()).thenReturn(List.of(expiredOrder));
 
-        com.ticketing.domain.event.IPurchasePolicy pp = mock(com.ticketing.domain.event.IPurchasePolicy.class);
-        com.ticketing.domain.event.IDiscountPolicy dp = mock(com.ticketing.domain.event.IDiscountPolicy.class);
+        com.ticketing.domain.event.IPurchasePolicy pp = new com.ticketing.domain.event.AlwaysAllowPolicy();
+        com.ticketing.domain.event.IDiscountPolicy dp = new com.ticketing.domain.event.NoDiscountPolicy();
         Event event = new Event(eventId, companyName, "Expiry Event", "Desc", EventCategory.CONCERT,
                 new EventSchedule(Instant.now(), Instant.now().plus(Duration.ofHours(2)), null),
                 new LockTimerDuration(Duration.ofMinutes(10)), pp, dp, SaleMethod.REGULAR, null);

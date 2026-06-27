@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.ticketing.infrastructure.notification.NotificationListener;
+import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.ticketing.presentation.vaadin.util.UiMessages;
@@ -48,9 +49,11 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
 
     // Delivers real-time notifications as toasts for the whole session, on every route (#490).
     private final RealtimeNotificationBinder realtimeNotifications;
+    private final AuthPresenter authPresenter;
 
-    public MainLayout(NotificationsPresenter notificationsPresenter) {
+    public MainLayout(NotificationsPresenter notificationsPresenter, AuthPresenter authPresenter) {
         this.realtimeNotifications = new RealtimeNotificationBinder(notificationsPresenter);
+        this.authPresenter = authPresenter;
 
         // Branded wordmark: an EQ-bar mark (cyan -> magenta) + the product name in Sora.
         Html wordmark = new Html(
@@ -188,6 +191,11 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
+        if (authPresenter.reconcileStoredSession()) {
+            refreshNavigation();
+            syncRealtimeListener();
+        }
+
         SessionContext.UiState session = SessionContext.currentUiState();
         Class<?> target = event.getNavigationTarget();
 

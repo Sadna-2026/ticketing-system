@@ -17,8 +17,10 @@ import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
@@ -68,12 +70,13 @@ public class Event{
     @Embedded
     private VenueLayout venueLayout;
 
-    // Policy hierarchies are mapped separately in V3-6 (#264); kept @Transient here and
-    // defaulted in the constructors so a reloaded Event is never null.
-    @Transient
-    private IPurchasePolicy purchasePolicy;
-    @Transient
-    private IDiscountPolicy discountPolicy;
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "purchase_policy_id")
+    private AbstractPurchasePolicy purchasePolicy;
+
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "discount_policy_id")
+    private AbstractDiscountPolicy discountPolicy;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "sale_method")
@@ -87,8 +90,7 @@ public class Event{
     @Column(name = "version")
     private int version;
 
-    // Required by JPA; do not use directly. Defaults the @Transient policies so a
-    // reloaded Event never returns null from getPurchasePolicy()/getDiscountPolicy().
+    // Required by JPA; do not use directly. Defaults policies so a new Event is never null.
     protected Event() {
         this.zones = new ArrayList<>();
         this.purchasePolicy = new AlwaysAllowPolicy();
@@ -125,8 +127,8 @@ public class Event{
         this.lockTimerDuration = lockTimerDuration;
         this.zones = new ArrayList<>();
 
-        this.purchasePolicy = eventPurchasePolicy;
-        this.discountPolicy = eventDiscountPolicy;
+        this.purchasePolicy = requirePersistentPurchasePolicy(eventPurchasePolicy);
+        this.discountPolicy = requirePersistentDiscountPolicy(eventDiscountPolicy);
         this.saleMethod = saleMethod;
         this.lotteryWindow = lotteryWindow;
 
@@ -413,7 +415,7 @@ public class Event{
         if (policy == null) {
             throw new IllegalArgumentException("Purchase policy cannot be null");
         }
-        this.purchasePolicy = policy;
+        this.purchasePolicy = requirePersistentPurchasePolicy(policy);
     }
 
     public void setDiscountPolicy(IDiscountPolicy policy) {
@@ -421,7 +423,23 @@ public class Event{
         if (policy == null) {
             throw new IllegalArgumentException("Discount policy cannot be null");
         }
-        this.discountPolicy = policy;
+        this.discountPolicy = requirePersistentDiscountPolicy(policy);
+    }
+
+    private static AbstractPurchasePolicy requirePersistentPurchasePolicy(IPurchasePolicy policy) {
+        if (policy instanceof AbstractPurchasePolicy persistent) {
+            return persistent;
+        }
+        throw new IllegalArgumentException(
+                "Purchase policy must be a persistent entity type, got: " + policy.getClass().getName());
+    }
+
+    private static AbstractDiscountPolicy requirePersistentDiscountPolicy(IDiscountPolicy policy) {
+        if (policy instanceof AbstractDiscountPolicy persistent) {
+            return persistent;
+        }
+        throw new IllegalArgumentException(
+                "Discount policy must be a persistent entity type, got: " + policy.getClass().getName());
     }
 
     public void setVenueMap(VenueMap venueMap) {

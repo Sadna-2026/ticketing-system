@@ -31,6 +31,7 @@ import com.ticketing.domain.member.StaffAppointment;
 @org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
         "ticketing.seed.enabled=false",
+        "ticketing.bootstrap.dataset=initial-state-file",
         "ticketing.startup.initialize-platform=false"
 })
 @ActiveProfiles("test")

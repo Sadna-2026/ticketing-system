@@ -168,9 +168,11 @@
         <version>3.2.5</version>
         <configuration>
           <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
-          <!-- Run test classes in parallel: one reusable JVM fork per CPU core. Each fork is an
-               isolated JVM (separate in-memory H2), so Spring contexts and static state don't clash. -->
-          <forkCount>1C</forkCount>
+          <!-- Run test classes in parallel: one reusable JVM fork per two CPU cores. Each fork is an
+               isolated JVM (separate in-memory H2), so Spring contexts and static state don't clash.
+               Held at 0.5C (not 1C) so cores stay free for the async notification executor threads —
+               at full saturation their short Thread.sleep/latch waits time out and flake. -->
+          <forkCount>0.5C</forkCount>
           <reuseForks>true</reuseForks>
           <!-- Skip @Tag("slow") (the @SpringBootTest context boots) on the default run. -->
           <excludedGroups>${test.excludedGroups}</excludedGroups>
@@ -183,6 +185,15 @@
                empty everywhere (handshake skipped, stub gateways active). -->
           <systemPropertyVariables>
             <spring.profiles.active>test</spring.profiles.active>
+            <DB_URL_OPERATIONAL>jdbc:h2:mem:ticketing-test-op;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</DB_URL_OPERATIONAL>
+            <DB_URL_CONFIG>jdbc:h2:mem:ticketing-test-cfg;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</DB_URL_CONFIG>
+            <DB_DRIVER>org.h2.Driver</DB_DRIVER>
+            <DB_DIALECT>org.hibernate.dialect.H2Dialect</DB_DIALECT>
+            <DB_DDL_AUTO>create-drop</DB_DDL_AUTO>
+            <DB_USERNAME>sa</DB_USERNAME>
+            <DB_PASSWORD></DB_PASSWORD>
+            <TICKETING_PERSISTENCE>memory</TICKETING_PERSISTENCE>
+            <TICKETING_BOOTSTRAP_DATASET>none</TICKETING_BOOTSTRAP_DATASET>
             <spring.datasource.url>jdbc:h2:mem:ticketing-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</spring.datasource.url>
             <spring.datasource.driver-class-name>org.h2.Driver</spring.datasource.driver-class-name>
             <spring.datasource.username>sa</spring.datasource.username>

@@ -119,7 +119,7 @@ class EventJpaMappingTest {
         assertThat(reloaded.getLotteryWindow().registrationOpen()).isEqualTo(lotteryOpen);
         assertThat(reloaded.getLotteryWindow().registrationClose()).isEqualTo(lotteryClose);
 
-        // @Transient policies defaulted on load (real mapping is V3-6/#264)
+        // Policies (V3-6 / #264) round-trip via FK + cascade.
         assertThat(reloaded.getPurchasePolicy()).isInstanceOf(AlwaysAllowPolicy.class);
         assertThat(reloaded.getDiscountPolicy()).isInstanceOf(NoDiscountPolicy.class);
 
@@ -173,6 +173,32 @@ class EventJpaMappingTest {
         LayoutCell stageCell = reloadedLayout.cellAt(1, 0).orElseThrow();
         assertThat(stageCell.getType()).isEqualTo(LayoutCellType.STAGE);
         assertThat(stageCell.getLabel()).isEqualTo("Main Stage");
+    }
+
+    @Test
+    void GivenEventWithCustomPolicies_WhenPersistedAndReloaded_ThenPoliciesRoundTrip() {
+        UUID eventId = UUID.randomUUID();
+        UUID gaZoneId = UUID.randomUUID();
+        EventSchedule schedule = new EventSchedule(
+                Instant.parse("2026-11-01T18:00:00Z"),
+                Instant.parse("2026-11-01T21:00:00Z"),
+                null);
+
+        Event event = new Event(
+                eventId, "Acme Productions", "Policy Show", "desc",
+                EventCategory.CONCERT, schedule, new LockTimerDuration(Duration.ofMinutes(5)),
+                new AgeRestrictionPolicy(18), new SimpleDiscount(new BigDecimal("15")));
+        event.addZone(InventoryZone.createGA(gaZoneId, "Floor", new BigDecimal("40.00"), 50));
+        event.publish();
+
+        em.persistAndFlush(event);
+        em.clear();
+        Event reloaded = em.find(Event.class, eventId);
+
+        assertThat(reloaded.getPurchasePolicy()).isInstanceOf(AgeRestrictionPolicy.class);
+        assertThat(((AgeRestrictionPolicy) reloaded.getPurchasePolicy()).getMinimumAge()).isEqualTo(18);
+        assertThat(reloaded.getDiscountPolicy()).isInstanceOf(SimpleDiscount.class);
+        assertThat(((SimpleDiscount) reloaded.getDiscountPolicy()).getPercentOff()).isEqualByComparingTo("15");
     }
 
     @Test

@@ -163,9 +163,9 @@ public class CompanyService {
         }
         rejectIfSuspended(appointerId);
 
-        if (!companyRepository.existsByName(companyName)) {
-            throw new IllegalArgumentException("Company not found");
-        }
+        Company company = companyRepository.findByName(companyName)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+        rejectInactiveCompanyForPersonnel(company, "offer role appointments");
 
         RoleAppointmentOfferRequestedEvent event =
             new RoleAppointmentOfferRequestedEvent(appointerId, targetMemberId, companyName, role, permissions);
@@ -193,9 +193,9 @@ public class CompanyService {
             throw new IllegalArgumentException("Target member ID is required");
         }
 
-        if (!companyRepository.existsByName(companyName)) {
-            throw new IllegalArgumentException("Company not found: " + companyName);
-        }
+        Company company = companyRepository.findByName(companyName)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+        rejectInactiveCompanyForPersonnel(company, "change manager permissions");
 
         ManagerPermissionsChangedEvent event =
             new ManagerPermissionsChangedEvent(callerId, targetMemberId, companyName, newPermissions);
@@ -663,6 +663,13 @@ public class CompanyService {
     private Company loadCompany(String companyName) {
         return companyRepository.findByName(companyName)
                 .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyName));
+    }
+
+    private static void rejectInactiveCompanyForPersonnel(Company company, String action) {
+        if (!company.isActive()) {
+            throw new IllegalArgumentException(
+                    "Cannot " + action + " for a suspended or closed company");
+        }
     }
 
     private Company loadActiveCompanyForPolicy(String companyName) {
