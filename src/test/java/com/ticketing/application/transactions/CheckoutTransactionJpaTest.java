@@ -214,6 +214,42 @@ class CheckoutTransactionJpaTest {
     }
 
     @Test
+    @DisplayName("Given a pending refund, When the retry job runs, Then the refund is processed and marked as complete")
+    void GivenPendingRefund_WhenRetryJobRuns_ThenRefundIsProcessed() {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        String txId = "TXN-RETRY-" + UUID.randomUUID().toString().substring(0, 4);
+
+        // Manually insert a pending refund using the new transaction propagation
+        com.ticketing.domain.order.FailedCheckoutRefund pending = new com.ticketing.domain.order.FailedCheckoutRefund(
+            sessionId, eventId, memberId, txId, new java.math.BigDecimal("100.00"), java.time.Instant.now()
+        );
+        orderRepository.save(pending);
+
+        // Ensure it's there
+        assertThat(orderRepository.findPendingRefunds()).hasSize(1);
+
+        // 1. Ensure the payment gateway is configured to succeed
+        paymentGateway.setRefundShouldFail(false);
+
+        // 2. Run the retry job
+        orderService.retryPendingRefunds();
+
+        // 3. Verify the pending refund is now processed (status = REFUNDED, so it drops from the PENDING list)
+        com.ticketing.domain.order.FailedCheckoutRefund afterRetry = orderRepository.findPendingRefunds().stream()
+                .filter(r -> r.getId().equals(pending.getId()))
+                .findFirst()
+                .orElse(null);
+
+        // It shouldn't be in the pending list anymore
+        assertThat(afterRetry).isNull();
+
+        // Verify the payment gateway was called to refund
+        assertThat(paymentGateway.getLastRefundedTransactions()).contains(txId);
+    }
+
+    @Test
     @DisplayName("Given a healthy checkout, When it completes, Then the sale is committed exactly once")
     void GivenHealthyCheckout_WhenItCompletes_ThenSaleIsCommitted() {
         UUID eventId = UUID.randomUUID();
