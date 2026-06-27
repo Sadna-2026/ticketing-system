@@ -31,6 +31,7 @@ import com.ticketing.domain.member.Member;
  * we verify that the pool successfully auto-resumes operations without requiring
  * an app restart.
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(
         properties = {
                 "ticketing.persistence=jpa",

@@ -42,6 +42,7 @@ import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.infrastructure.gateway.ExternalSystemsHandshakeRunner;
 
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
     "ticketing.external.base-url=http://external.test/api/",
     "ticketing.external.ticket-url=http://external.test/api/",

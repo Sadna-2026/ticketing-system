@@ -491,10 +491,18 @@ public class EventService implements ApplicationEventPublisherAware {
             log.info("editEvent: eventId={} artist '{}' -> '{}'", event.getId(), event.getArtist(), request.artist());
             event.setArtist(request.artist());
         }
-        if (request.schedule() != null) {
+        if (request.schedule() != null && !request.schedule().equals(event.getSchedule())) {
             log.info("editEvent: eventId={} schedule updated to start={}",
                     event.getId(), request.schedule().getStartTime());
             event.setSchedule(request.schedule());
+            if (notificationService != null && orderRepository != null) {
+                java.util.Set<UUID> notifiedMembers = new java.util.HashSet<>();
+                for (com.ticketing.domain.order.CompletedPurchase purchase : orderRepository.findCompletedByEventId(event.getId())) {
+                    if (purchase.memberId() != null && notifiedMembers.add(purchase.memberId())) {
+                        notificationService.notify(purchase.memberId().toString(), "Event '" + event.getName() + "' has been rescheduled to start at " + request.schedule().getStartTime() + ".");
+                    }
+                }
+            }
         }
         if (request.lotteryWindow() != null) {
             if (!event.isLottery())

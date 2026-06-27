@@ -18,6 +18,11 @@
     <vaadin.version>24.6.1</vaadin.version>
 
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
+
+    <!-- JUnit tags excluded from the default `mvn test` run. `slow` covers the @SpringBootTest
+         classes (full Spring context boots). Run them with `mvn test -Dtest.excludedGroups=`
+         (empty) or the `all-tests` profile. -->
+    <test.excludedGroups>slow</test.excludedGroups>
     <mockito.version>5.11.0</mockito.version>
   </properties>
 
@@ -163,6 +168,14 @@
         <version>3.2.5</version>
         <configuration>
           <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+          <!-- Run test classes in parallel: one reusable JVM fork per two CPU cores. Each fork is an
+               isolated JVM (separate in-memory H2), so Spring contexts and static state don't clash.
+               Held at 0.5C (not 1C) so cores stay free for the async notification executor threads —
+               at full saturation their short Thread.sleep/latch waits time out and flake. -->
+          <forkCount>0.5C</forkCount>
+          <reuseForks>true</reuseForks>
+          <!-- Skip @Tag("slow") (the @SpringBootTest context boots) on the default run. -->
+          <excludedGroups>${test.excludedGroups}</excludedGroups>
           <!-- V3-25: isolated test configuration. Activate the `test` profile
                (src/test/resources/application-test.yml) for every test run, and pin the datasource +
                external endpoint as system properties. System properties outrank OS environment
@@ -272,5 +285,16 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- `mvn test -Pall-tests` (or `mvn verify -Pall-tests`) also runs the @Tag("slow")
+         @SpringBootTest classes that the default build skips. CI should use this profile. -->
+    <profile>
+      <id>all-tests</id>
+      <properties>
+        <test.excludedGroups></test.excludedGroups>
+      </properties>
+    </profile>
+  </profiles>
 
 </project>

@@ -907,7 +907,9 @@ public class OrderService {
 
             saveEvent(event);
             saveOrder(order);
-            checkAndPublishSoldOut(event);
+            // No sold-out check here: reserving tickets into a cart does not sell them, and the
+            // event must stay PUBLISHED (and inventory-editable) while tickets are merely locked.
+            // Sold-out is decided at checkout, once the tickets are actually sold.
             if (analyticsCollector != null) {
                 analyticsCollector.recordReservation(request.additionalTicketCount());
             }
@@ -987,9 +989,20 @@ public class OrderService {
     }
 
     private void checkAndPublishSoldOut(Event event) {
-        if (!event.hasAvailableTickets() && event.isPublished()) {
+        // Only when every ticket is actually SOLD — not merely reserved in carts, which can
+        // still be released. This runs at checkout (after the sale), never at reservation.
+        if (event.isFullySold() && event.isPublished()) {
             event.markSoldOut();
             saveEvent(event);
+            if (notificationService != null && memberRepository != null) {
+                List<Member> staff = memberRepository.findByCompanyAppointment(event.getCompanyName());
+                for (Member member : staff) {
+                    if (member.hasStaffAppointment(event.getCompanyName(), com.ticketing.domain.member.StaffAppointment.StaffRole.OWNER) ||
+                        member.hasStaffAppointment(event.getCompanyName(), com.ticketing.domain.member.StaffAppointment.StaffRole.MANAGER)) {
+                        notificationService.notify(member.getId().toString(), "Event sold out: " + event.getName());
+                    }
+                }
+            }
         }
     }
 

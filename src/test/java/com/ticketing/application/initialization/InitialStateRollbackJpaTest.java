@@ -18,6 +18,7 @@ import com.ticketing.domain.member.IMemberRepository;
 /**
  * Verifies that a failed initial-state run does not leave partial data in the database (JPA mode).
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
         "ticketing.persistence=jpa",
         "spring.jpa.hibernate.ddl-auto=create-drop",

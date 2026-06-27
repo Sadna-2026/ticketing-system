@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ticketing.application.ISystemClock;
+import com.ticketing.application.services.INotificationService;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
 import com.ticketing.domain.order.ActiveOrder;
@@ -21,13 +22,24 @@ public class OrderTimeDomainService {
     private final IOrderRepository orderRepository;
     private final IEventRepository eventRepository;
     private final ISystemClock systemClock;
+    private final INotificationService notificationService;
 
     public OrderTimeDomainService(IOrderRepository orderRepository,
                                   IEventRepository eventRepository,
                                   ISystemClock systemClock) {
+        this(orderRepository, eventRepository, systemClock, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public OrderTimeDomainService(IOrderRepository orderRepository,
+                                  IEventRepository eventRepository,
+                                  ISystemClock systemClock,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  INotificationService notificationService) {
         this.orderRepository = orderRepository;
         this.eventRepository = eventRepository;
         this.systemClock = systemClock;
+        this.notificationService = notificationService;
     }
 
     public void expireOrders() {
@@ -89,6 +101,15 @@ public class OrderTimeDomainService {
         orderRepository.save(order);
 
         log.warn("Reservation expired: orderId={}, eventId={}", order.getId(), order.getEventId());
+
+        if (notificationService != null && order.getMemberId() != null) {
+            try {
+                notificationService.notify(order.getMemberId().toString(),
+                        "Your reservation has expired and your reserved tickets have been released.");
+            } catch (RuntimeException e) {
+                log.warn("Failed to notify member {} of order expiry", order.getMemberId(), e);
+            }
+        }
     }
 
     private static void releaseReservationsQuietly(Event event, ActiveOrder order) {
