@@ -64,6 +64,7 @@ class PersistenceProfileSelectionTest {
             ))
             .withUserConfiguration(RepositoryWiringConfig.class)
             .withPropertyValues(
+                    "ticketing.persistence=memory",
                     "spring.datasource.url=jdbc:h2:mem:selection-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false",
                     "spring.datasource.driver-class-name=org.h2.Driver",
                     "spring.datasource.username=sa",

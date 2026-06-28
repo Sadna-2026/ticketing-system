@@ -194,6 +194,7 @@
             <DB_PASSWORD></DB_PASSWORD>
             <TICKETING_PERSISTENCE>memory</TICKETING_PERSISTENCE>
             <TICKETING_BOOTSTRAP_DATASET>none</TICKETING_BOOTSTRAP_DATASET>
+            <TICKETING_BOOTSTRAP_CLEAR_DB_ON_START>false</TICKETING_BOOTSTRAP_CLEAR_DB_ON_START>
             <spring.datasource.url>jdbc:h2:mem:ticketing-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</spring.datasource.url>
             <spring.datasource.driver-class-name>org.h2.Driver</spring.datasource.driver-class-name>
             <spring.datasource.username>sa</spring.datasource.username>

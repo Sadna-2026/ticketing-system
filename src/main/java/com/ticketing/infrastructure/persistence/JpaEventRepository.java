@@ -156,12 +156,31 @@ public class JpaEventRepository implements IEventRepository {
         }
     }
 
+    /**
+     * Purchase/discount policies are shared rows (also referenced from companies). After a
+     * detached read, {@code CascadeType.ALL} on the {@code @ManyToOne} would otherwise try
+     * to {@code persist} an already-persisted policy on flush. Swap in a managed reference.
+     */
+    private void reattachSharedPolicyReferences(Event event) {
+        if (event.getPurchasePolicy() instanceof AbstractPurchasePolicy purchase
+                && purchase.getId() != null) {
+            event.setPurchasePolicy(
+                    entityManager.getReference(AbstractPurchasePolicy.class, purchase.getId()));
+        }
+        if (event.getDiscountPolicy() instanceof AbstractDiscountPolicy discount
+                && discount.getId() != null) {
+            event.setDiscountPolicy(
+                    entityManager.getReference(AbstractDiscountPolicy.class, discount.getId()));
+        }
+    }
+
     @Override
     @Transactional
     public void save(Event event) {
         if (event == null) {
             throw new IllegalArgumentException("event cannot be null");
         }
+        reattachSharedPolicyReferences(event);
         boolean isNew = !delegate.existsById(event.getId());
         try {
             if (isNew) {

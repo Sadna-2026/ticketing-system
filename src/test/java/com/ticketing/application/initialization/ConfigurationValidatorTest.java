@@ -44,6 +44,7 @@ class ConfigurationValidatorTest {
         env.setProperty("ticketing.external.payment.card-cvv", "123");
         env.setProperty("ticketing.external.payment.card-id", "000000000");
         env.setProperty("ticketing.bootstrap.dataset", "dev-seed");
+        env.setProperty("ticketing.bootstrap.clear-db-on-start", "false");
         env.setProperty("ticketing.admin.username", "admin");
         env.setProperty("ticketing.admin.password", "password");
     }
@@ -185,6 +186,9 @@ class ConfigurationValidatorTest {
         }
         if (!"ticketing.bootstrap.dataset".equals(propertyToClear)) {
             env.setProperty("ticketing.bootstrap.dataset", "dev-seed");
+        }
+        if (!"ticketing.bootstrap.clear-db-on-start".equals(propertyToClear)) {
+            env.setProperty("ticketing.bootstrap.clear-db-on-start", "false");
         }
         if (!"ticketing.admin.username".equals(propertyToClear)) {
             env.setProperty("ticketing.admin.username", "admin");
