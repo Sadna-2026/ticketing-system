@@ -7,6 +7,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "pending_notifications")
@@ -14,6 +15,14 @@ public class PendingNotification {
 
     @Id
     private UUID id;
+
+    // #510: optimistic-lock guard. markSeen() is idempotent but is called from
+    // concurrent paths (e.g. the websocket push handler vs. a tab-switch refresh
+    // flushing pending notifications); the explicit @Version surfaces a conflict
+    // rather than silently re-writing the same row.
+    @Version
+    @Column(name = "version", nullable = false)
+    private int version;
 
     @Column(name = "user_id", nullable = false)
     private String userId;

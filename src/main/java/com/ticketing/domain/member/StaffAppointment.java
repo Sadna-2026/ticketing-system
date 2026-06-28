@@ -16,6 +16,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "staff_appointments")
@@ -25,6 +26,15 @@ public class StaffAppointment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
     private Long id;
+
+    // #510: optimistic-lock guard. Mutators (revoke, promoteToOwner, updateManagerPermissions,
+    // add/removeAppointedStaffMember, updateAppointedBy) can be invoked concurrently from
+    // different owners managing the same staff record. The Member root's @Version only catches
+    // conflicts when the same Member is reloaded and saved; concurrent direct edits to a single
+    // appointment row need their own version to reject the loser.
+    @Version
+    @Column(name = "version")
+    private int version;
 
     @Column(name = "company_id")
     private String companyId;
