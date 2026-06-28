@@ -11,6 +11,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
  * Tracks a pending refund for a checkout that failed after the payment was successfully captured.
@@ -23,6 +24,13 @@ public class FailedCheckoutRefund {
     @Id
     @Column(name = "id")
     private UUID id;
+
+    // #510: optimistic-lock guard. markRefunded()/markFailed() transition status in place; a
+    // retry from the refund worker racing with an admin's manual mark would otherwise silently
+    // overwrite. There is no parent aggregate root here — refunds live on their own.
+    @Version
+    @Column(name = "version")
+    private int version;
 
     @Column(name = "event_id")
     private UUID eventId;

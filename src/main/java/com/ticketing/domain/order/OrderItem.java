@@ -10,6 +10,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
  * Entity within the ActiveOrder aggregate.
@@ -32,6 +33,13 @@ public class OrderItem {
     @Id
     @Column(name = "id")
     private UUID id;
+    // #510: optimistic-lock guard. updateQuantity() can be called concurrently when the same
+    // GA item exists in two presenter sessions; without its own version, the slower writer would
+    // silently overwrite. The ActiveOrder root's @Version catches whole-order concurrent edits
+    // but not in-place quantity bumps to a single OrderItem row.
+    @Version
+    @Column(name = "version")
+    private int version;
     @Column(name = "zone_id")
     private UUID zoneId;
     @Column(name = "seat_id")
