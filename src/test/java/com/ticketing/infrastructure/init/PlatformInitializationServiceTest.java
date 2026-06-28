@@ -94,7 +94,7 @@ class PlatformInitializationServiceTest {
         PlatformInitializationService.InitializationResult result = service.initialize();
 
         assertFalse(result.success());
-        assertEquals("Invalid admin credentials", result.message());
+        assertEquals("ticketing.admin.username is blank", result.message());
         assertFalse(service.isActive());
         assertTrue(adminRepository.findAll().isEmpty());
     }
