@@ -8,7 +8,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
 @ExtendWith(OutputCaptureExtension.class)
@@ -131,60 +130,63 @@ public class InitialStateParserTest {
     }
 
     @Test
-    public void givenUnterminatedCallMissingSemicolon_whenParse_thenThrows(CapturedOutput output) {
+    public void givenUnterminatedCallMissingSemicolon_whenParse_thenThrows() {
         String content = "login(rina, pw)";
 
         InitialStateParseException ex =
                 assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
         assertTrue(ex.getMessage().contains("';'"));
-        assertTrue(output.getOut().contains("[PARSE ERROR] test.txt:1: missing ';'"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: missing ';'"));
     }
 
     @Test
-    public void givenMissingClosingParen_whenParse_thenThrows(CapturedOutput output) {
+    public void givenMissingClosingParen_whenParse_thenThrows() {
         String content = "login(rina, pw;";
 
-        assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
-        assertTrue(output.getOut().contains("[PARSE ERROR] test.txt:1: unterminated operation (missing ')')"));
+        InitialStateParseException ex =
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: unterminated operation (missing ')')"));
     }
 
     @Test
-    public void givenMissingOpeningParen_whenParse_thenThrows(CapturedOutput output) {
+    public void givenMissingOpeningParen_whenParse_thenThrows() {
         String content = "login;";
 
         InitialStateParseException ex =
                 assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
         assertTrue(ex.getMessage().contains("'('"));
-        assertTrue(output.getOut().contains("[PARSE ERROR] test.txt:1: missing '('"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: missing '('"));
     }
 
     @Test
-    public void givenUnbalancedQuote_whenParse_thenThrows(CapturedOutput output) {
+    public void givenUnbalancedQuote_whenParse_thenThrows() {
         String content = "login(\"rina, pw);";
 
-        assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
-        assertTrue(output.getOut().contains("[PARSE ERROR] test.txt:1: unbalanced quote"));
+        InitialStateParseException ex =
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: unbalanced quote"));
     }
 
     @Test
-    public void givenMissingOperationName_whenParse_thenThrows(CapturedOutput output) {
+    public void givenMissingOperationName_whenParse_thenThrows() {
         String content = "(rina);";
 
-        assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
-        assertTrue(output.getOut().contains("[PARSE ERROR] test.txt:1: missing operation name"));
+        InitialStateParseException ex =
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: missing operation name"));
     }
 
     @Test
-    public void givenMalformedInput_whenParse_thenMessageIncludesLineNumber(CapturedOutput output) {
+    public void givenMalformedInput_whenParse_thenMessageIncludesLineNumber() {
         String content = """
                 login(rina, pw);
                 open(broken""";
 
         InitialStateParseException ex =
                 assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
-        assertTrue(ex.getMessage().contains("line 2"),
+        assertTrue(ex.getMessage().contains("test.txt:2"),
                 "expected line number in message but was: " + ex.getMessage());
-        assertTrue(output.getOut().contains("[PARSE ERROR] test.txt:2: unterminated operation"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:2: unterminated operation"));
     }
 
     @Test

@@ -94,10 +94,10 @@ public class DataBootstrapRunner implements ApplicationRunner {
             return;
         }
         PlatformInitializationService.InitializationResult result = platformInitializationService.initialize();
-        log.info("Platform initialization: {}", result.message());
         if (!result.success()) {
-            throw new IllegalStateException("Platform initialization failed: " + result.message());
+            StartupHaltException.failInitialization(result.message());
         }
+        log.info("Platform initialization: {}", result.message());
     }
 
     private void bootstrapData() {
@@ -113,21 +113,18 @@ public class DataBootstrapRunner implements ApplicationRunner {
 
     private void runInitialStateFile() {
         if (initialStateFile == null || initialStateFile.isBlank()) {
-            throw new IllegalStateException(
-                    "ticketing.bootstrap.dataset=initial-state-file requires ticketing.initial-state.file");
+            StartupHaltException.failInitialization(
+                    "ticketing.initial-state.file is blank (required when ticketing.bootstrap.dataset=initial-state-file)");
         }
-        log.info("Data bootstrap: initial-state file from {}", initialStateFile.trim());
-        String content = InitialStateFileLoader.load(initialStateFile);
+        String fileLocation = initialStateFile.trim();
+        log.info("Data bootstrap: initial-state file from {}", fileLocation);
         try {
+            String content = InitialStateFileLoader.load(initialStateFile);
             List<InitialStateOperation> ops = parser.parse(content, initialStateFile);
             executor.execute(ops);
-            log.info("Data bootstrap: applied {} operation(s) from {}", ops.size(), initialStateFile.trim());
+            log.info("Data bootstrap: applied {} operation(s) from {}", ops.size(), fileLocation);
         } catch (InitialStateParseException | InitialStateExecutionException ex) {
             wiper.wipeAll();
-            System.err.println("\n*************************************************************");
-            System.err.println("  INITIALIZATION ERROR: FAILED TO LOAD INITIAL STATE FILE");
-            System.err.println("  " + ex.getMessage());
-            System.err.println("*************************************************************\n");
             throw ex;
         }
     }

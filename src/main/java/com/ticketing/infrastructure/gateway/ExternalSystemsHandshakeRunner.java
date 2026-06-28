@@ -8,6 +8,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.application.initialization.StartupHaltException;
 import com.ticketing.domain.gateway.IExternalSystemsClient;
 
 /**
@@ -44,9 +45,12 @@ public class ExternalSystemsHandshakeRunner implements ApplicationRunner {
         }
         log.info("Performing external systems startup handshake against {} ...", baseUrl);
         if (!externalSystemsClient.handshake()) {
-            throw new IllegalStateException(
-                    "External systems handshake failed at startup. Verify ticketing.external.base-url ("
-                    + baseUrl + ") and that the external payment/ticket endpoint is reachable.");
+            StartupHaltException.failInitialization(
+                    "Cannot reach the external payment and ticket-issuance service at " + baseUrl + ". "
+                            + "Because ticketing.external.base-url is set, startup sends a handshake "
+                            + "(POST with action_type=handshake) to verify checkout and ticket delivery will work. "
+                            + "Ensure that service is running and the URL is correct, or leave "
+                            + "ticketing.external.base-url empty to skip this check in local dev.");
         }
         log.info("External systems handshake OK.");
     }

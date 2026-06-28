@@ -3,6 +3,7 @@ package com.ticketing.infrastructure.persistence;
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import jakarta.persistence.EntityManagerFactory;
 
 @Configuration
+@ConditionalOnProperty(name = "ticketing.persistence", havingValue = "jpa")
 @EnableTransactionManagement
 @EnableJpaRepositories(
         basePackages = "com.ticketing.infrastructure.persistence.config",
