@@ -31,7 +31,6 @@ ticketing:
   persistence: memory
   bootstrap:
     dataset: none
-  # Blank base-url => the stub payment/ticket gateways are active and the startup handshake is
-  # skipped, so tests never contact the real WSEP endpoint.
-  external:
-    base-url:
+  # Base url is inherited from application.yml so HttpPaymentGateway is used in tests
+  # external:
+  #   base-url:

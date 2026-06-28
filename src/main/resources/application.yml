@@ -65,7 +65,7 @@ ticketing:
   # halts on failure. Unset (default) => no handshake; local dev, the stub gateways and tests are
   # unaffected. See README "External systems".
   external:
-    base-url: ${TICKETING_EXTERNAL_BASE_URL:}
+    base-url: ${TICKETING_EXTERNAL_BASE_URL:https://damp-lynna-wsep-1984852e.koyeb.app/}
     connect-timeout-ms: ${TICKETING_EXTERNAL_CONNECT_TIMEOUT_MS:5000}
     read-timeout-ms: ${TICKETING_EXTERNAL_READ_TIMEOUT_MS:5000}
     # Payment gateway (V3-17): when base-url is set, HttpPaymentGateway replaces StubPaymentGateway

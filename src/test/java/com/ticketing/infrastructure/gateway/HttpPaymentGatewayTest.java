@@ -86,6 +86,59 @@ class HttpPaymentGatewayTest {
     }
 
     @Test
+    void GivenCvv100_WhenCharge_ThenSucceeds() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("cvv=100")))
+                .andRespond(withSuccess("55000", MediaType.TEXT_PLAIN));
+
+        PaymentDetails buyerCard = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com",
+                "USD", "4111111111111111", "10", "2031", "TESTER", "100", "123456789");
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
+
+        assertThat(result.success()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void GivenCvv988_WhenCharge_ThenDeclined() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("cvv=988")))
+                .andRespond(withSuccess("-1", MediaType.TEXT_PLAIN));
+
+        PaymentDetails buyerCard = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com",
+                "USD", "4111111111111111", "10", "2031", "TESTER", "988", "123456789");
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void GivenCvv986_WhenCharge_ThenDeclinedUnexpected() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("cvv=986")))
+                .andRespond(withSuccess("INVALID_CVV", MediaType.TEXT_PLAIN));
+
+        PaymentDetails buyerCard = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com",
+                "USD", "4111111111111111", "10", "2031", "TESTER", "986", "123456789");
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
+    @Test
     void GivenMinusOne_WhenCharge_ThenDeclined() {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
