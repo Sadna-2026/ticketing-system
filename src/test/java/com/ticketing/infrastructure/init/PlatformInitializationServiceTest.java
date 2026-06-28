@@ -100,6 +100,81 @@ class PlatformInitializationServiceTest {
     }
 
     @Test
+    void GivenInvalidAdminEmail_WhenInitialize_ThenHaltsWithEmailError() {
+        StartupConfiguration invalidConfig = new StartupConfiguration(
+                "admin",
+                "not-an-email",
+                "password1",
+                true,
+                true
+        );
+        PlatformInitializationService service = serviceWith(invalidConfig);
+
+        PlatformInitializationService.InitializationResult result = service.initialize();
+
+        assertFalse(result.success());
+        assertEquals("ticketing.admin.email is missing or invalid", result.message());
+        assertFalse(service.isActive());
+    }
+
+    @Test
+    void GivenShortAdminPassword_WhenInitialize_ThenHaltsWithPasswordError() {
+        StartupConfiguration invalidConfig = new StartupConfiguration(
+                "admin",
+                "admin@ticketing.local",
+                "short",
+                true,
+                true
+        );
+        PlatformInitializationService service = serviceWith(invalidConfig);
+
+        PlatformInitializationService.InitializationResult result = service.initialize();
+
+        assertFalse(result.success());
+        assertEquals("ticketing.admin.password is shorter than 6 characters", result.message());
+        assertFalse(service.isActive());
+    }
+
+    @Test
+    void GivenNoExternalBaseUrl_WhenInitialize_ThenHaltsBeforeReachabilityChecks() {
+        StartupConfiguration invalidConfig = new StartupConfiguration(
+                "admin",
+                "admin@ticketing.local",
+                "password1",
+                false,
+                true
+        );
+        PlatformInitializationService service = serviceWith(invalidConfig);
+
+        PlatformInitializationService.InitializationResult result = service.initialize();
+
+        assertFalse(result.success());
+        assertEquals("ticketing.external.base-url is not configured", result.message());
+        assertEquals(0, paymentGateway.reachabilityChecks);
+        assertFalse(service.isActive());
+    }
+
+    @Test
+    void GivenNoSupplyServiceConfig_WhenInitialize_ThenHaltsBeforeSupplyReachabilityCheck() {
+        StartupConfiguration invalidConfig = new StartupConfiguration(
+                "admin",
+                "admin@ticketing.local",
+                "password1",
+                true,
+                false
+        );
+        PlatformInitializationService service = serviceWith(invalidConfig);
+
+        PlatformInitializationService.InitializationResult result = service.initialize();
+
+        assertFalse(result.success());
+        assertEquals("ticketing.external.base-url is not configured", result.message());
+        assertEquals(1, paymentGateway.reachabilityChecks);
+        assertEquals(0, supplyGateway.reachabilityChecks);
+        assertFalse(service.isActive());
+    }
+
+    @Test
     void GivenInitializedPlatform_WhenInitializeAgain_ThenAdminNotDuplicated() {
         PlatformInitializationService service = serviceWith(new StartupConfiguration());
 

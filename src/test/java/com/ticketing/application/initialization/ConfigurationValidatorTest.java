@@ -3,6 +3,8 @@ package com.ticketing.application.initialization;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.stream.Stream;
 
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.mock.env.MockEnvironment;
 
 class ConfigurationValidatorTest {
@@ -88,6 +91,35 @@ class ConfigurationValidatorTest {
                 "message was: " + ex.getMessage());
         assertTrue(ex.getMessage().contains("space-separated"),
                 "message was: " + ex.getMessage());
+    }
+
+    @Test
+    void givenVeryLongMangledCommandLineValue_whenValidate_thenAbbreviatesInMessage() {
+        MockEnvironment env = createValidEnvironment();
+        String padding = "x".repeat(120);
+        env.setProperty("ticketing.seed.enabled", "false,--" + padding);
+
+        StartupHaltException ex =
+                assertThrows(StartupHaltException.class, () -> TicketingConfigurationRules.validate(env));
+        assertTrue(ex.getMessage().contains("..."),
+                "message was: " + ex.getMessage());
+    }
+
+    @Test
+    void givenValidEnvironment_whenEarlyInitializerRuns_thenPasses() {
+        ConfigurableApplicationContext context = mock(ConfigurableApplicationContext.class);
+        MockEnvironment env = createValidEnvironment();
+        when(context.getEnvironment()).thenReturn(env);
+
+        assertDoesNotThrow(() ->
+                new TicketingConfigurationRules.EarlyValidationInitializer().initialize(context));
+    }
+
+    @Test
+    void givenExplicitNoneDataset_whenValidate_thenPasses() {
+        MockEnvironment env = createValidEnvironment();
+        env.setProperty("ticketing.bootstrap.dataset", "none");
+        assertDoesNotThrow(() -> TicketingConfigurationRules.validate(env));
     }
 
     @ParameterizedTest
@@ -236,7 +268,17 @@ class ConfigurationValidatorTest {
             Arguments.of("ticketing.admin.password", "short", null, "at least 6 characters"),
             Arguments.of("ticketing.bootstrap.dataset", "initial-state-file", null, "ticketing.initial-state.file"),
             Arguments.of("ticketing.external.payment.card-month", "13", null, "integer from 1 to 12"),
-            Arguments.of("ticketing.external.payment.card-year", "1999", null, "integer year >= 2000")
+            Arguments.of("ticketing.external.payment.card-year", "1999", null, "integer year >= 2000"),
+            Arguments.of("spring.datasource.operational.url", "", null, "spring.datasource.operational.url"),
+            Arguments.of("ticketing.admin.password", "", null, "ticketing.admin.password"),
+            Arguments.of("security.jwt.expiration-minutes", "", null, "security.jwt.expiration-minutes"),
+            Arguments.of("ticketing.external.payment.card-month", "0", null, "positive integer"),
+            Arguments.of("ticketing.external.payment.card-holder", "", null, "ticketing.external.payment.card-holder"),
+            Arguments.of("ticketing.external.payment.card-cvv", "", null, "ticketing.external.payment.card-cvv"),
+            Arguments.of("ticketing.external.payment.card-id", "", null, "ticketing.external.payment.card-id"),
+            Arguments.of("ticketing.external.payment.currency", "", null, "ticketing.external.payment.currency"),
+            Arguments.of("ticketing.external.payment.card-number", "", null, "ticketing.external.payment.card-number"),
+            Arguments.of("ticketing.external.payment.card-year", "", null, "ticketing.external.payment.card-year")
         );
     }
 
@@ -246,7 +288,11 @@ class ConfigurationValidatorTest {
             Arguments.of(null, null, "spring.jpa.database-platform", "spring.jpa.database-platform"),
             Arguments.of(null, null, "spring.jpa.hibernate.ddl-auto", "spring.jpa.hibernate.ddl-auto"),
             Arguments.of("spring.jpa.hibernate.ddl-auto", "bogus", null, "Expected: 'none', 'validate'"),
-            Arguments.of("spring.datasource.operational.username", "", null, "spring.datasource.operational.username")
+            Arguments.of("spring.datasource.operational.username", "", null, "spring.datasource.operational.username"),
+            Arguments.of("spring.jpa.hibernate.ddl-auto", "   ", null, "spring.jpa.hibernate.ddl-auto"),
+            Arguments.of(null, null, "spring.datasource.operational.password", "spring.datasource.operational.password"),
+            Arguments.of(null, null, "spring.datasource.config.password", "spring.datasource.config.password"),
+            Arguments.of(null, null, "spring.datasource.config.username", "spring.datasource.config.username")
         );
     }
 }
