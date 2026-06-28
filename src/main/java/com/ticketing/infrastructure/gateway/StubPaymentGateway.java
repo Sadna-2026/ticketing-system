@@ -1,4 +1,4 @@
-package  com.ticketing.infrastructure.gateway;
+package com.ticketing.infrastructure.gateway;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -11,10 +11,14 @@ import com.ticketing.domain.gateway.PaymentResult;
 import com.ticketing.domain.gateway.RefundResult;
 
 /**
- * In-memory payment gateway used for local dev and tests. Active only when no external payment
- * endpoint is configured ({@code ticketing.external.base-url} blank); when a URL is set,
- * {@link HttpPaymentGateway} replaces it (the two conditions are mutually exclusive, so the
- * always-approving stub can never run alongside the real gateway in production).
+ * In-memory payment gateway used for local dev and tests. Active only when no
+ * external payment
+ * endpoint is configured ({@code ticketing.external.base-url} blank); when a
+ * URL is set,
+ * {@link HttpPaymentGateway} replaces it (the two conditions are mutually
+ * exclusive, so the
+ * always-approving stub can never run alongside the real gateway in
+ * production).
  */
 @org.springframework.stereotype.Component
 @ConditionalOnExpression("'${ticketing.external.base-url:}'.trim() == ''")
@@ -22,9 +26,10 @@ public class StubPaymentGateway implements IPaymentGateway {
 
     public static final String SIMULATED_CVV_DECLINE = "988";
     public static final String SIMULATED_CVV_UNEXPECTED = "986";
-    
-    public static final String MSG_DECLINED_BY_ISSUER = "Payment declined by issuer.";
+
+    public static final String MSG_DECLINED_BY_ISSUER = "Payment failed: Payment declined by issuer.";
     public static final String MSG_DECLINED_BY_EXTERNAL = "Payment was declined by the external payment system.";
+    public static final String MSG_REFUND_FAILED = "Refund failed. Transaction not found or unsettled.";
 
     private boolean shouldFail = false;
     private boolean refundShouldFail = false;
@@ -58,7 +63,7 @@ public class StubPaymentGateway implements IPaymentGateway {
         if (shouldFail) {
             return PaymentResult.failed(MSG_DECLINED_BY_ISSUER);
         }
-        
+
         if (details != null && details.cvv() != null) {
             if (SIMULATED_CVV_DECLINE.equals(details.cvv())) {
                 return PaymentResult.failed(MSG_DECLINED_BY_ISSUER);
@@ -67,7 +72,7 @@ public class StubPaymentGateway implements IPaymentGateway {
                 return PaymentResult.failed(MSG_DECLINED_BY_EXTERNAL);
             }
         }
-        
+
         return PaymentResult.successful("TXN-" + UUID.randomUUID().toString().substring(0, 8));
     }
 
@@ -82,6 +87,3 @@ public class StubPaymentGateway implements IPaymentGateway {
         return RefundResult.successful("REF-" + UUID.randomUUID().toString().substring(0, 8));
     }
 }
-
-
-

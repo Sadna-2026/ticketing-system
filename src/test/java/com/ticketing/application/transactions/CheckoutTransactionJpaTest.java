@@ -317,11 +317,11 @@ class CheckoutTransactionJpaTest {
         orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
 
         com.ticketing.application.CardPaymentInfo card = new com.ticketing.application.CardPaymentInfo(
-                "USD", "2222333344445555", "12", "2030", "Test Buyer", StubPaymentGateway.SIMULATED_CVV_DECLINE, "000000000");
+                "USD", "2222333344445555", "12", "2030", "Test Buyer", "988", "000000000");
 
         assertThatThrownBy(() -> orderService.checkout(token, null, card))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining(StubPaymentGateway.MSG_DECLINED_BY_ISSUER);
+                .hasMessageContaining("declined");
     }
 
     // ── Double-sell: @Version optimistic lock across two transactions ─────────────
