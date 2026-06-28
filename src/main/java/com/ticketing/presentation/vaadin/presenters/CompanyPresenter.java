@@ -1146,6 +1146,15 @@ public class CompanyPresenter {
     }
 
     private String userMessage(RuntimeException ex, String fallback) {
+        // #516: distinguish infrastructure failures (DB / external systems) from
+        // domain errors so the user sees an actionable category instead of a generic
+        // "could not complete" with the real cause swallowed into the log.
+        var category = com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.classify(ex);
+        if (category != com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.Category.NONE) {
+            logger.warn("Company action failed ({}): {}", category, ex.toString());
+            return com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.userFacingMessage(category);
+        }
+
         if (ex instanceof IllegalArgumentException
                 || ex instanceof IllegalStateException
                 || ex instanceof SecurityException) {
