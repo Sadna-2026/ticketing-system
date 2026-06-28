@@ -70,11 +70,11 @@ public class Event{
     @Embedded
     private VenueLayout venueLayout;
 
-    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @ManyToOne(cascade = CascadeType.PERSIST, fetch = FetchType.EAGER)
     @JoinColumn(name = "purchase_policy_id")
     private AbstractPurchasePolicy purchasePolicy;
 
-    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @ManyToOne(cascade = CascadeType.PERSIST, fetch = FetchType.EAGER)
     @JoinColumn(name = "discount_policy_id")
     private AbstractDiscountPolicy discountPolicy;
 
