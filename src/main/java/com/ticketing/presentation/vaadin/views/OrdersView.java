@@ -237,21 +237,25 @@ public class OrdersView extends VerticalLayout {
             UiMessages.info(NO_TICKETS_CHECKOUT_MESSAGE);
             return;
         }
-        buildCheckoutDialog().open();
+        
+        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
+        if (!quote.success()) {
+            UiMessages.error(quote.message());
+            return;
+        }
+        
+        buildCheckoutDialog(quote).open();
     }
 
     /**
      * Payment dialog that collects the buyer's card details for the WSEP {@code pay} action.
      * Package-private so view-layer tests can drive it without opening an overlay.
      */
-    Dialog buildCheckoutDialog() {
+    Dialog buildCheckoutDialog(CheckoutQuoteResult quote) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Payment");
 
-        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
-        Span amount = new Span(quote.success() && quote.total() != null
-                ? "Amount due: " + quote.total().toPlainString()
-                : "Amount due at checkout.");
+        Span amount = new Span("Amount due: " + quote.total().toPlainString());
 
         TextField currency = new TextField("Currency");
         currency.setValue("USD");
@@ -353,9 +357,11 @@ public class OrdersView extends VerticalLayout {
 
         CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
         if (!quote.success()) {
-            checkoutStatus.setText(quote.message().isBlank()
-                    ? "Enter an optional coupon code, then checkout."
-                    : quote.message());
+            // Re-quote without the coupon to show the base amount while they are typing an invalid one
+            CheckoutQuoteResult baseQuote = presenter.quoteCheckout(null);
+            checkoutStatus.setText(baseQuote.message().isBlank()
+                    ? formatCheckoutQuote(baseQuote)
+                    : baseQuote.message());
             return;
         }
         checkoutStatus.setText(formatCheckoutQuote(quote));
@@ -533,7 +539,7 @@ public class OrdersView extends VerticalLayout {
         }
         return "Subtotal " + formatPrice(quote.subtotal())
                 + " | Amount due: " + formatPrice(quote.total())
-                + ". Enter an optional coupon code, then checkout.";
+                + ". Coupon applied!";
     }
 
     private String formatCheckoutSuccess(CheckoutResult result) {

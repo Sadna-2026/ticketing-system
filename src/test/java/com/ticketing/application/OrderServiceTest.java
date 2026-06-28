@@ -542,7 +542,7 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenCouponDiscount_WhenQuotingCheckoutWithWrongOrBlankCoupon_ThenFullPriceReturned() {
+    void GivenCouponDiscount_WhenQuotingCheckoutWithWrongOrBlankCoupon_ThenExceptionOrFullPriceReturned() {
         UUID discountEventId = UUID.randomUUID();
         UUID discountZoneId = UUID.randomUUID();
         Instant expiry = clock.now().plus(Duration.ofDays(30));
@@ -557,10 +557,10 @@ public class OrderServiceTest {
         orderService.createOrder(guestToken, discountEventId);
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
 
-        OrderService.CheckoutQuote wrongCode = orderService.quoteCheckout(guestToken, "WRONG");
-        OrderService.CheckoutQuote blankCode = orderService.quoteCheckout(guestToken, "   ");
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.quoteCheckout(guestToken, "WRONG"));
 
-        assertEquals(new BigDecimal("100.00"), wrongCode.total());
+        OrderService.CheckoutQuote blankCode = orderService.quoteCheckout(guestToken, "   ");
         assertEquals(new BigDecimal("100.00"), blankCode.total());
     }
 
