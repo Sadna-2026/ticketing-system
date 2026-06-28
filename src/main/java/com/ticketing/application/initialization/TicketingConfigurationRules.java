@@ -76,6 +76,7 @@ public final class TicketingConfigurationRules {
         if (!env.containsProperty("ticketing.bootstrap.dataset")) {
             failValidation("ticketing.bootstrap.dataset", "null", "present (can be empty)");
         }
+        assertBoolean(env, "ticketing.bootstrap.clear-db-on-start");
         String dataset = env.getProperty("ticketing.bootstrap.dataset");
         if (dataset != null && !dataset.isBlank()) {
             if (!"dev-seed".equals(dataset) && !"initial-state-file".equals(dataset) && !"none".equals(dataset)) {
@@ -249,5 +250,19 @@ public final class TicketingConfigurationRules {
 
     private static void assertPositiveInt(Environment env, String property) {
         parsePositiveInt(env, property);
+    }
+
+    private static void assertBoolean(Environment env, String property) {
+        if (!env.containsProperty(property)) {
+            failValidation(property, "null", "'true' or 'false'");
+        }
+        String value = env.getProperty(property);
+        if (value == null) {
+            failValidation(property, "null", "'true' or 'false'");
+        }
+        String trimmed = value.trim();
+        if (!"true".equalsIgnoreCase(trimmed) && !"false".equalsIgnoreCase(trimmed)) {
+            failValidation(property, value, "'true' or 'false'");
+        }
     }
 }

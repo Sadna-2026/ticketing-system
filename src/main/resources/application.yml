@@ -53,6 +53,10 @@ ticketing:
     # dev-seed | initial-state-file | none — explicit choice; when unset, legacy rules apply:
     # seed.enabled=true => dev-seed; else initial-state.file set => initial-state-file; else none.
     dataset: ${TICKETING_BOOTSTRAP_DATASET:}
+    # When true, wipe operational aggregates (members, companies, events, orders, …) after platform
+    # init and before data bootstrap. Config DB (system admin) is untouched. Default false preserves
+    # existing data for gradual demo fill; set true at meeting start for an empty operational DB.
+    clear-db-on-start: ${TICKETING_BOOTSTRAP_CLEAR_DB_ON_START:false}
   seed:
     enabled: true
   # Initial-state file (V3-15 / #415): used when bootstrap.dataset=initial-state-file, or when

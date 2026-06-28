@@ -49,7 +49,8 @@ then `mvn spring-boot:run`. Full GCP provisioning: [docs/deploy-cloud-sql.md](do
 
 1. Optional **external-systems handshake** when `TICKETING_EXTERNAL_BASE_URL` is set (V3-16).
 2. **Platform initialization** — register system admin, mark platform active (`ticketing.startup.initialize-platform`, default `true`).
-3. **Data bootstrap** — exactly one of: dev seed (default), initial-state file replay, or none.
+3. **Optional operational DB wipe** — when `ticketing.bootstrap.clear-db-on-start=true`, clear durable application data (members, companies, events, orders, …) before bootstrap; config DB (system admin) is preserved.
+4. **Data bootstrap** — exactly one of: dev seed (default), initial-state file replay, or none.
 
 Invalid initialization (e.g. malformed state file) **aborts startup** (V3-24). The test suite uses an
 isolated profile and never touches the remote DB or live externals (V3-25) — see [Testing](#testing).
@@ -76,6 +77,7 @@ Spring maps env vars to `application.yml` keys (e.g. `TICKETING_QUEUE_THRESHOLD`
 | `TICKETING_QUEUE_FLOW_RATE` | `ticketing.queue.flow-rate` | `10` | Users admitted per queue batch |
 | `TICKETING_STARTUP_INITIALIZE_PLATFORM` | `ticketing.startup.initialize-platform` | `true` | Run platform init at boot |
 | `TICKETING_BOOTSTRAP_DATASET` | `ticketing.bootstrap.dataset` | *(unset)* | `dev-seed`, `initial-state-file`, or `none` |
+| `TICKETING_BOOTSTRAP_CLEAR_DB_ON_START` | `ticketing.bootstrap.clear-db-on-start` | `false` | `true` = wipe operational DB after platform init, before bootstrap; `false` = keep existing data |
 | `TICKETING_SEED_ENABLED` | `ticketing.seed.enabled` | `true` | Legacy: `true` ⇒ dev seed when dataset unset |
 | `TICKETING_INITIAL_STATE_FILE` | `ticketing.initial-state.file` | *(empty)* | Path to state file (`classpath:...` or filesystem) |
 
@@ -90,6 +92,12 @@ and [External systems](#external-systems) below.
 
 Choose **one** dataset explicitly for meetings: `dev-seed` for local QA, `initial-state-file` for the
 staff script, `none` for an empty system.
+
+**Meeting / grader workflow (empty DB, gradual fill):** set `TICKETING_BOOTSTRAP_CLEAR_DB_ON_START=true`
+and `TICKETING_BOOTSTRAP_DATASET=none` (and `TICKETING_SEED_ENABLED=false`) at the start of the
+session to wipe operational data without loading seed or a state file. Load data later via the
+initial-state file or the UI. Leave `clear-db-on-start=false` on subsequent restarts to preserve
+what was already created.
 
 > **Transient state (V3-9):** virtual purchase **queues** are **not** persisted — they stay in memory
 > even when `ticketing.persistence=jpa`. Only durable aggregates (member, company, event, order, lottery,

@@ -40,6 +40,7 @@ public class DataBootstrapRunner implements ApplicationRunner {
     }
 
     private final boolean initializePlatform;
+    private final boolean clearDbOnStart;
     private final Dataset dataset;
     private final String initialStateFile;
     private final PlatformInitializationService platformInitializationService;
@@ -50,6 +51,7 @@ public class DataBootstrapRunner implements ApplicationRunner {
 
     public DataBootstrapRunner(
             @Value("${ticketing.startup.initialize-platform:true}") boolean initializePlatform,
+            @Value("${ticketing.bootstrap.clear-db-on-start:false}") boolean clearDbOnStart,
             @Value("${ticketing.bootstrap.dataset:}") String configuredDataset,
             @Value("${ticketing.seed.enabled:false}") boolean seedEnabled,
             @Value("${ticketing.initial-state.file:}") String initialStateFile,
@@ -59,6 +61,7 @@ public class DataBootstrapRunner implements ApplicationRunner {
             OperationalDataWiper wiper
     ) {
         this.initializePlatform = initializePlatform;
+        this.clearDbOnStart = clearDbOnStart;
         this.dataset = resolveDataset(configuredDataset, seedEnabled, initialStateFile);
         this.initialStateFile = initialStateFile;
         this.platformInitializationService = platformInitializationService;
@@ -85,6 +88,7 @@ public class DataBootstrapRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         initializePlatform();
+        clearOperationalDataIfRequested();
         bootstrapData();
     }
 
@@ -98,6 +102,15 @@ public class DataBootstrapRunner implements ApplicationRunner {
             StartupHaltException.failInitialization(result.message());
         }
         log.info("Platform initialization: {}", result.message());
+    }
+
+    private void clearOperationalDataIfRequested() {
+        if (!clearDbOnStart) {
+            log.info("Data bootstrap: clear-db-on-start=false (preserving existing operational data)");
+            return;
+        }
+        log.warn("Data bootstrap: clear-db-on-start=true — wiping operational data before bootstrap");
+        wiper.wipeAll();
     }
 
     private void bootstrapData() {
