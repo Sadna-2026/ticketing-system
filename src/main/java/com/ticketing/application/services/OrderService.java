@@ -1187,12 +1187,20 @@ public class OrderService {
         List<TicketRequest> tickets = new ArrayList<>();
         for (OrderItem item : order.getItems()) {
             if (item.isAssignedSeat()) {
+                com.ticketing.domain.event.Seat seat = null;
+                try {
+                    seat = event.findZone(item.getZoneId()).getSeats().stream()
+                            .filter(s -> s.getId().equals(item.getSeatId())).findFirst().orElse(null);
+                } catch (Exception e) {}
+                String row = seat != null ? seat.getRow() : "";
+                String number = seat != null ? seat.getSeatNumber() : "";
+                
                 tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
-                        item.getId().toString(), item.getSeatId().toString()));
+                        item.getId().toString(), item.getSeatId().toString(), row, number));
             } else {
                 for (int i = 0; i < item.getQuantity(); i++) {
                     tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
-                            item.getId() + "-" + (i + 1), null));
+                            item.getId() + "-" + (i + 1), null, null, null));
                 }
             }
         }

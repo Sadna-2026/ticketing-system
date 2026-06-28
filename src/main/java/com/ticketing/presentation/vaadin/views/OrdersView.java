@@ -240,8 +240,8 @@ public class OrdersView extends VerticalLayout {
         
         CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
         if (!quote.success()) {
-            UiMessages.error(quote.message());
-            return;
+            quote = presenter.quoteCheckout(null);
+            couponCode.setValue("");
         }
         
         buildCheckoutDialog(quote).open();
