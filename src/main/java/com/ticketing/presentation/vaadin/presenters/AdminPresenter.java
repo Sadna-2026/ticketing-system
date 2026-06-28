@@ -302,6 +302,14 @@ public class AdminPresenter {
     }
 
     private String userMessage(RuntimeException ex, String fallback) {
+        // #516: classify infrastructure failures first so the user sees a specific,
+        // actionable message instead of the generic fallback.
+        var category = com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.classify(ex);
+        if (category != com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.Category.NONE) {
+            logger.warn("Admin action failed ({}): {}", category, ex.toString());
+            return com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.userFacingMessage(category);
+        }
+
         if (ex instanceof IllegalStateException) {
             String message = cleanStateMessage(ex.getMessage());
             if (message != null) {
