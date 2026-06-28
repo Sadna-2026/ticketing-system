@@ -53,6 +53,8 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PolicyViewR
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PurchaseHistoryResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.SalesReportResult;
 import com.ticketing.presentation.vaadin.util.DestructiveActionDialogs;
+import com.ticketing.presentation.vaadin.util.ErrorBanner;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -78,6 +80,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.Query;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.shared.Registration;
 import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 
@@ -110,6 +113,13 @@ public class CompanyView extends VerticalLayout {
             .withZone(ZoneId.systemDefault());
 
     private final CompanyPresenter presenter;
+
+    // #517: persistent red banner shown when a DB-connection failure prevents the tab
+    // from loading. Stays mounted; cleared automatically when the periodic recovery
+    // probe finds the backend reachable again.
+    private static final int RECOVERY_POLL_MILLIS = 5_000;
+    private final ErrorBanner dbErrorBanner = new ErrorBanner();
+    private Registration recoveryPollListener;
 
     private final Span sessionStatus = new Span();
     private final Paragraph memberOnlyCompanyHint = new Paragraph("Log in as a member to use company owner and manager actions.");
@@ -236,6 +246,7 @@ public class CompanyView extends VerticalLayout {
 
         add(
                 new H2("Company"),
+                dbErrorBanner,
                 new Paragraph("Choose a section below. Each mode shows only the controls for that area."),
                 new Paragraph("Application services still enforce authorization for every action and their responses are shown in the status area."),
                 sessionStatus,
@@ -245,8 +256,60 @@ public class CompanyView extends VerticalLayout {
                 modeContent
         );
         selectMode(CompanyMode.LOOKUP);
-        refreshSessionStatus();
-        addAttachListener(event -> refreshSessionStatus());
+        // #517: every attempt to refresh the session/pickers may hit the DB. Route the
+        // initial call AND every subsequent re-attach through the safe wrapper so a DB
+        // outage degrades to a banner instead of bubbling to Vaadin's error page.
+        safeRefreshSessionStatus();
+        addAttachListener(event -> safeRefreshSessionStatus());
+        addDetachListener(event -> stopRecoveryPolling());
+    }
+
+    /**
+     * #517: wraps {@link #refreshSessionStatus()} so a DB-connection failure shows the
+     * persistent red banner and starts a recovery poll instead of letting the exception
+     * propagate to Vaadin's error page. On success — including a probe-triggered
+     * recovery — the banner is hidden and polling stops.
+     */
+    private void safeRefreshSessionStatus() {
+        try {
+            refreshSessionStatus();
+            if (dbErrorBanner.isShown()) {
+                dbErrorBanner.hide();
+            }
+            stopRecoveryPolling();
+        } catch (RuntimeException ex) {
+            PresenterErrorClassifier.Category category = PresenterErrorClassifier.classify(ex);
+            if (category == PresenterErrorClassifier.Category.DB_UNAVAILABLE) {
+                dbErrorBanner.showError(PresenterErrorClassifier.userFacingMessage(category));
+                startRecoveryPolling();
+                return;
+            }
+            throw ex; // not an infrastructure outage — let the global handler see it
+        }
+    }
+
+    private void startRecoveryPolling() {
+        com.vaadin.flow.component.UI ui = com.vaadin.flow.component.UI.getCurrent();
+        if (ui == null || recoveryPollListener != null) {
+            return;
+        }
+        ui.setPollInterval(RECOVERY_POLL_MILLIS);
+        recoveryPollListener = ui.addPollListener(event -> {
+            if (presenter.isBackendReachable()) {
+                safeRefreshSessionStatus();
+            }
+        });
+    }
+
+    private void stopRecoveryPolling() {
+        com.vaadin.flow.component.UI ui = com.vaadin.flow.component.UI.getCurrent();
+        if (recoveryPollListener != null) {
+            recoveryPollListener.remove();
+            recoveryPollListener = null;
+        }
+        if (ui != null) {
+            ui.setPollInterval(-1);
+        }
     }
 
     private void initModePanels() {
