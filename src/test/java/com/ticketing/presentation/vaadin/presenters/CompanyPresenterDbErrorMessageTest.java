@@ -111,4 +111,49 @@ class CompanyPresenterDbErrorMessageTest {
                 .as("existing validation-message path should be unchanged")
                 .isEqualTo("Company name already taken");
     }
+
+    // ── #517: backend-reachable probe used by CompanyView's recovery polling ──────
+
+    @Test
+    void GivenBackendUp_WhenIsBackendReachable_ThenReturnsTrue() {
+        when(companyService.searchCompanies("")).thenReturn(java.util.List.of());
+
+        assertThat(presenter.isBackendReachable())
+                .as("a successful read against the backend should report it as reachable")
+                .isTrue();
+    }
+
+    @Test
+    void GivenDbConnectionFailure_WhenIsBackendReachable_ThenReturnsFalse() {
+        when(companyService.searchCompanies(""))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("db down"));
+
+        assertThat(presenter.isBackendReachable())
+                .as("a DB-unavailable exception should be swallowed and reported as unreachable")
+                .isFalse();
+    }
+
+    @Test
+    void GivenWrappedDbConnectionFailure_WhenIsBackendReachable_ThenReturnsFalse() {
+        // The classifier walks the cause chain, so the probe must too — wrapped DB
+        // failures (the realistic shape from a @Transactional aspect) still mean "down".
+        RuntimeException wrapped = new RuntimeException("tx failed",
+                new org.springframework.dao.DataAccessResourceFailureException("HikariPool: not available"));
+        when(companyService.searchCompanies("")).thenThrow(wrapped);
+
+        assertThat(presenter.isBackendReachable()).isFalse();
+    }
+
+    @Test
+    void GivenNonInfraException_WhenIsBackendReachable_ThenRethrowsSoBugsAreNotMasked() {
+        // The probe is allowed to fail on DB outage and return false. Any OTHER exception
+        // (programming bug, auth issue, validation) must propagate — silently swallowing
+        // them would let the banner stay forever even though the real problem is elsewhere.
+        when(companyService.searchCompanies(""))
+                .thenThrow(new IllegalStateException("oops, programming error"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> presenter.isBackendReachable())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("oops, programming error");
+    }
 }

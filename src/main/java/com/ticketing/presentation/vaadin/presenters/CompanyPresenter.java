@@ -1145,6 +1145,29 @@ public class CompanyPresenter {
         return token;
     }
 
+    /**
+     * Cheap probe used by the Company view to detect when the DB has recovered after a
+     * connection drop (#517). Runs the lightest read that the presenter already supports
+     * (a no-filter active-companies search hitting the same repository the tab depends on).
+     *
+     * <p>Returns {@code true} when the call completes; returns {@code false} when the
+     * exception chain classifies as {@code DB_UNAVAILABLE}. Any other exception is
+     * rethrown so non-infra bugs aren't silently masked as "DB still down".
+     */
+    public boolean isBackendReachable() {
+        try {
+            companyService.searchCompanies("");
+            return true;
+        } catch (RuntimeException ex) {
+            var category = com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.classify(ex);
+            if (category == com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.Category.DB_UNAVAILABLE) {
+                logger.debug("Backend probe: DB still unavailable ({})", ex.toString());
+                return false;
+            }
+            throw ex;
+        }
+    }
+
     private String userMessage(RuntimeException ex, String fallback) {
         // #516: distinguish infrastructure failures (DB / external systems) from
         // domain errors so the user sees an actionable category instead of a generic
