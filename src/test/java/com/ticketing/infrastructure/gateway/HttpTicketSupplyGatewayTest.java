@@ -37,11 +37,11 @@ class HttpTicketSupplyGatewayTest {
     private static final CustomerInfo CUSTOMER = new CustomerInfo("user-42", "buyer@test.com", "Jane Buyer");
 
     private static TicketRequest ga(String ticketId) {
-        return new TicketRequest("evt-1", "zone-9", ticketId, null);
+        return new TicketRequest("evt-1", "zone-9", ticketId, null, null, null);
     }
 
     private static TicketRequest seat(String ticketId, String seatId) {
-        return new TicketRequest("evt-1", "zone-9", ticketId, seatId);
+        return new TicketRequest("evt-1", "zone-9", ticketId, seatId, "A", "12");
     }
 
     private HttpTicketSupplyGateway gatewayFor(RestTemplate restTemplate) {
@@ -83,7 +83,8 @@ class HttpTicketSupplyGatewayTest {
                 .andExpect(content().string(containsString("is_seating=true")))
                 // seats is sent as a JSON array; URL-encoded the brackets/quotes survive as %5B%22..%22%5D
                 .andExpect(content().string(containsString("seats=")))
-                .andExpect(content().string(containsString("seat-A1")))
+                .andExpect(content().string(containsString("A")))
+                .andExpect(content().string(containsString("12")))
                 .andExpect(content().string(not(containsString("quantity"))))
                 .andRespond(withSuccess("TKT-2002", MediaType.TEXT_PLAIN));
 

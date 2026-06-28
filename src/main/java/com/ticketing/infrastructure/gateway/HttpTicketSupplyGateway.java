@@ -82,6 +82,8 @@ public class HttpTicketSupplyGateway implements ITicketSupplyGateway {
         params.put("action_type", ACTION_ISSUE);
         if (customer != null && customer.userId() != null) {
             params.put("customer_id", customer.userId());
+        } else {
+            params.put("customer_id", customer != null && customer.email() != null ? customer.email() : "guest");
         }
         params.put("event_id", ticket.eventId());
         params.put("zone", ticket.zoneId());
@@ -89,7 +91,7 @@ public class HttpTicketSupplyGateway implements ITicketSupplyGateway {
             params.put("quantity", "1");
         } else {
             params.put("is_seating", "true");
-            params.put("seats", "[\"" + ticket.seatId() + "\"]");
+            params.put("seats", "[{\"row\": \"" + ticket.seatRow() + "\", \"seat\": \"" + ticket.seatNumber() + "\"}]");
         }
 
         String body = client.send(params).trim();

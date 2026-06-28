@@ -456,12 +456,6 @@ public class OrderService {
         try {
             purchase = processCheckout(order, event, buyerContact, normalizeCoupon(couponCode), buyerDob, card);
         } catch (IllegalStateException e) {
-            saveOrder(order);
-            if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
-                releaseAllInventory(event, order);
-                checkAndPublishAvailable(event);
-                saveEvent(event);
-            }
             log.warn("Failed to checkout order {}: {}", order.getId(), e.getMessage());
             if (notificationService != null && memberId != null) {
                 notificationService.notify(memberId.toString(), "Checkout failed: " + e.getMessage());
@@ -1091,7 +1085,7 @@ public class OrderService {
         SupplyResult supply = supplyTickets(order, event, buyerContact);
         if (supply == null || !supply.success()) {
             boolean refundSuccess = refundPayment(payment.transactionId(), finalAmount, event.getId(), order.getMemberId());
-            order.cancel();
+            order.revertToActive();
             if (refundSuccess) {
                 throw new IllegalStateException("Ticket generation failed. Payment has been refunded: "
                         + (supply != null ? supply.errorMessage() : "All gateways failed"));
@@ -1193,12 +1187,20 @@ public class OrderService {
         List<TicketRequest> tickets = new ArrayList<>();
         for (OrderItem item : order.getItems()) {
             if (item.isAssignedSeat()) {
+                com.ticketing.domain.event.Seat seat = null;
+                try {
+                    seat = event.findZone(item.getZoneId()).getSeats().stream()
+                            .filter(s -> s.getId().equals(item.getSeatId())).findFirst().orElse(null);
+                } catch (Exception e) {}
+                String row = seat != null ? seat.getRow() : "";
+                String number = seat != null ? seat.getSeatNumber() : "";
+                
                 tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
-                        item.getId().toString(), item.getSeatId().toString()));
+                        item.getId().toString(), item.getSeatId().toString(), row, number));
             } else {
                 for (int i = 0; i < item.getQuantity(); i++) {
                     tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
-                            item.getId() + "-" + (i + 1), null));
+                            item.getId() + "-" + (i + 1), null, null, null));
                 }
             }
         }
@@ -1409,7 +1411,14 @@ public class OrderService {
     }
 
     private BigDecimal discountedCheckoutAmount(ActiveOrder order, Event event, String couponCode) {
-        return event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
+        BigDecimal originalAmount = order.getTotalPrice();
+        BigDecimal finalAmount = event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
+
+        if (couponCode != null && finalAmount.compareTo(originalAmount) >= 0) {
+            throw new IllegalArgumentException("Invalid or expired coupon code");
+        }
+
+        return finalAmount;
     }
 
     private static String normalizeCoupon(String couponCode) {
