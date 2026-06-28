@@ -7,6 +7,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
+import com.ticketing.application.initialization.TicketingConfigurationRules;
 import com.vaadin.flow.component.page.AppShellConfigurator;
 import com.vaadin.flow.component.page.Push;
 import com.vaadin.flow.server.AppShellSettings;
@@ -44,7 +45,9 @@ public class TicketingApplication implements AppShellConfigurator {
     }
 
     public static void main(String[] args) {
-        SpringApplication.run(TicketingApplication.class, args);
+        SpringApplication application = new SpringApplication(TicketingApplication.class);
+        application.addInitializers(new TicketingConfigurationRules.EarlyValidationInitializer());
+        application.run(args);
     }
 
 }
