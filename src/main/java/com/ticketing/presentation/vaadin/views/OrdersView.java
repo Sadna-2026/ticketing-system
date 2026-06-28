@@ -262,8 +262,7 @@ public class OrdersView extends VerticalLayout {
         TextField cvv = new TextField("CVV");
         TextField cardId = new TextField("ID");
 
-        Span dialogStatus = new Span();
-        Button pay = new Button("Pay", e -> submitPayment(dialog, dialogStatus, new CardPaymentInfo(
+        Button pay = new Button("Pay", e -> submitPayment(dialog, new CardPaymentInfo(
                 currency.getValue(), cardNumber.getValue(), month.getValue(), year.getValue(),
                 holder.getValue(), cvv.getValue(), cardId.getValue())));
         pay.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -272,24 +271,22 @@ public class OrdersView extends VerticalLayout {
         dialog.add(new VerticalLayout(
                 new H4("Card details"), amount,
                 currency, cardNumber, month, year, holder, cvv, cardId,
-                new HorizontalLayout(pay, cancel), dialogStatus));
+                new HorizontalLayout(pay, cancel)));
         return dialog;
     }
 
-    private void submitPayment(Dialog dialog, Span dialogStatus, CardPaymentInfo card) {
+    private void submitPayment(Dialog dialog, CardPaymentInfo card) {
         if (isBlank(card.cardNumber()) || isBlank(card.holder()) || isBlank(card.cvv())
                 || isBlank(card.month()) || isBlank(card.year()) || isBlank(card.cardId())) {
-            dialogStatus.setText("All card fields are required.");
             UiMessages.error("All card fields are required.");
             return;
         }
 
         CheckoutResult result = presenter.checkout(couponCode.getValue(), card);
         if (!result.success()) {
-            dialogStatus.setText(result.message());
             checkoutStatus.setText(result.message());
             orderActionStatus.setText(result.message());
-            UiMessages.error(result.message());
+            // UiMessages.error(result.message()); // Removed: relying on domain-layer websocket notification
             if (isAccountSuspensionMessage(result.message())) {
                 dialog.close();
                 String suspensionMessage = result.message();

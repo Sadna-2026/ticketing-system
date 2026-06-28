@@ -19,6 +19,13 @@ import com.ticketing.domain.gateway.RefundResult;
 @org.springframework.stereotype.Component
 @ConditionalOnExpression("'${ticketing.external.base-url:}'.trim() == ''")
 public class StubPaymentGateway implements IPaymentGateway {
+
+    public static final String SIMULATED_CVV_DECLINE = "988";
+    public static final String SIMULATED_CVV_UNEXPECTED = "986";
+    
+    public static final String MSG_DECLINED_BY_ISSUER = "Payment declined by issuer.";
+    public static final String MSG_DECLINED_BY_EXTERNAL = "Payment was declined by the external payment system.";
+
     private boolean shouldFail = false;
     private boolean refundShouldFail = false;
     private final java.util.List<String> lastRefundedTransactions = new java.util.ArrayList<>();
@@ -49,8 +56,18 @@ public class StubPaymentGateway implements IPaymentGateway {
     @Override
     public PaymentResult charge(BigDecimal amount, PaymentDetails details) {
         if (shouldFail) {
-            return PaymentResult.failed("Payment declined by issuer.");
+            return PaymentResult.failed(MSG_DECLINED_BY_ISSUER);
         }
+        
+        if (details != null && details.cvv() != null) {
+            if (SIMULATED_CVV_DECLINE.equals(details.cvv())) {
+                return PaymentResult.failed(MSG_DECLINED_BY_ISSUER);
+            }
+            if (SIMULATED_CVV_UNEXPECTED.equals(details.cvv())) {
+                return PaymentResult.failed(MSG_DECLINED_BY_EXTERNAL);
+            }
+        }
+        
         return PaymentResult.successful("TXN-" + UUID.randomUUID().toString().substring(0, 8));
     }
 

@@ -302,6 +302,28 @@ class CheckoutTransactionJpaTest {
         assertThat(zone.getAvailableCount()).isZero();
     }
 
+    @Test
+    @DisplayName("Given a checkout with CVV 988, When it completes, Then it is declined by the gateway because card data propagates end-to-end")
+    void GivenCheckoutWithDeclinedCvv_WhenCheckout_ThenFails() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        eventRepository.save(publishedGaEvent(eventId, zoneId, 1));
+
+        UUID memberId = UUID.randomUUID();
+        memberRepository.save(member(memberId, "declined-cvv"));
+        String token = memberToken(memberId);
+
+        orderService.createOrder(token, eventId);
+        orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
+
+        com.ticketing.application.CardPaymentInfo card = new com.ticketing.application.CardPaymentInfo(
+                "USD", "2222333344445555", "12", "2030", "Test Buyer", StubPaymentGateway.SIMULATED_CVV_DECLINE, "000000000");
+
+        assertThatThrownBy(() -> orderService.checkout(token, null, card))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(StubPaymentGateway.MSG_DECLINED_BY_ISSUER);
+    }
+
     // ── Double-sell: @Version optimistic lock across two transactions ─────────────
 
     /**
