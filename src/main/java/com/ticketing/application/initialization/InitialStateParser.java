@@ -312,10 +312,10 @@ public class InitialStateParser {
     }
 
     private static InitialStateParseException error(int line, String message, String content, int index, String sourceFile) {
-        log.error("[PARSE ERROR] {}:{}: {}", sourceFile != null ? sourceFile : "unknown", line, message);
-        return new InitialStateParseException(
-                "Initial-state parse error at line " + line + ": " + message
-                        + " (near: \"" + snippet(content, index) + "\")");
+        String file = sourceFile != null ? sourceFile : "unknown";
+        String detail = "[PARSE ERROR] " + file + ":" + line + ": " + message
+                + " (near: \"" + snippet(content, index) + "\")";
+        return new InitialStateParseException(StartupHaltException.framedInitializationMessage(detail));
     }
 
     /** A short single-line snippet of the source around {@code index}, for diagnostics. */
