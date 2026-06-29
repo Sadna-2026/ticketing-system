@@ -135,6 +135,22 @@ All users are created on startup when `ticketing.seed.enabled=true`.
 5. Load global purchase history.
 6. Try suspension/removal inputs using member UUIDs from the seed if needed.
 
+### Coupon Edge Cases
+
+These scenarios use the specialized demo events created in `DevSeedDataInitializer`. Go to the `/events` page and add tickets to the respective event's cart to test:
+
+1. **Valid, Unknown, and Removed Coupon:** Use the `Coupon Checkout Demo` event. 
+   - Apply `SAVE20` to verify a 20% discount. 
+   - Apply `BOGUS` or `###` to verify the "Invalid coupon code" error message.
+   - Click "Remove coupon" to verify the price restores to the original amount.
+2. **Expired Coupon:** Use the `Coupon Expired Demo` event. 
+   - Apply `EXPIRED` to verify the specific "Coupon code has expired" message.
+3. **100% Free Checkout:** Use the `Coupon Free Demo (100%)` event.
+   - Apply `FREE` to drop the total to $0.00 and successfully checkout without a gateway charge.
+4. **Stacked / Composite Discounts:** Use the `Coupon Stacked Demo (SumComposite)` event.
+   - The event has a base 10% discount. Apply `EXTRA` to stack an additional 20% coupon, verifying a total 30% reduction.
+
+
 ## V2-INF-4.5 QA Findings
 
 Evidence gathered for issue #193 by reading the Vaadin presentation layer
