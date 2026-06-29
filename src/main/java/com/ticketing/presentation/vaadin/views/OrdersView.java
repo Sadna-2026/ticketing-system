@@ -36,7 +36,6 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.spring.annotation.SpringComponent;
@@ -115,8 +114,6 @@ public class OrdersView extends VerticalLayout {
         orderActionStatus.getStyle().set("white-space", "pre-line");
         policyComplianceStatus.getStyle().set("white-space", "pre-line");
         couponCode.setPlaceholder("Optional");
-        couponCode.setValueChangeMode(ValueChangeMode.EAGER);
-        couponCode.addValueChangeListener(event -> refreshCheckoutState());
         newGAQuantity.setMin(1);
         newGAQuantity.setValue(1);
 
@@ -181,12 +178,20 @@ public class OrdersView extends VerticalLayout {
     }
 
     private VerticalLayout checkoutSection() {
+        Button applyCouponButton = new Button("Apply Coupon", event -> {
+            if (currentOrder != null) {
+                handleMutationResult(presenter.applyCoupon(couponCode.getValue()));
+            }
+        });
+        HorizontalLayout couponForm = new HorizontalLayout(couponCode, applyCouponButton);
+        couponForm.setAlignItems(Alignment.BASELINE);
+
         checkoutButton = new Button("Checkout", event -> checkout());
         checkoutButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        HorizontalLayout form = new HorizontalLayout(couponCode, checkoutButton);
+        HorizontalLayout form = new HorizontalLayout(checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, policyComplianceStatus, checkoutStatus);
+        VerticalLayout section = new VerticalLayout(new H3("Checkout"), couponForm, form, policyComplianceStatus, checkoutStatus);
         section.setPadding(false);
         section.setWidthFull();
         section.addClassName("app-card");
@@ -238,10 +243,9 @@ public class OrdersView extends VerticalLayout {
             return;
         }
         
-        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
+        CheckoutQuoteResult quote = presenter.quoteCheckout();
         if (!quote.success()) {
-            quote = presenter.quoteCheckout(null);
-            couponCode.setValue("");
+            // Already handled below in some cases, or we just pass a failed quote
         }
         
         buildCheckoutDialog(quote).open();
@@ -286,7 +290,7 @@ public class OrdersView extends VerticalLayout {
             return;
         }
 
-        CheckoutResult result = presenter.checkout(couponCode.getValue(), card);
+        CheckoutResult result = presenter.checkout(card);
         if (!result.success()) {
             checkoutStatus.setText(result.message());
             orderActionStatus.setText(result.message());
@@ -355,13 +359,9 @@ public class OrdersView extends VerticalLayout {
         checkoutButton.setEnabled(true);
         policyComplianceStatus.setText(compliance.message());
 
-        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
+        CheckoutQuoteResult quote = presenter.quoteCheckout();
         if (!quote.success()) {
-            // Re-quote without the coupon to show the base amount while they are typing an invalid one
-            CheckoutQuoteResult baseQuote = presenter.quoteCheckout(null);
-            checkoutStatus.setText(baseQuote.message().isBlank()
-                    ? formatCheckoutQuote(baseQuote)
-                    : baseQuote.message());
+            checkoutStatus.setText(quote.message());
             return;
         }
         checkoutStatus.setText(formatCheckoutQuote(quote));
@@ -466,11 +466,26 @@ public class OrdersView extends VerticalLayout {
         }
 
         int ticketCount = items.stream().mapToInt(OrderItemDto::getQuantity).sum();
+        
+        String couponStr = currentOrder.getCouponCode();
+        if (couponStr != null && !couponStr.isBlank()) {
+            couponCode.setValue(couponStr);
+        } else {
+            couponCode.clear();
+        }
+
+        String totalText = "subtotal " + formatPrice(currentOrder.getSubtotal())
+                + " | total " + formatPrice(currentOrder.getTotalPrice());
+        
+        if (couponStr != null && !couponStr.isBlank()) {
+            totalText += " (Coupon applied)";
+        }
+
         orderStatus.setText("Order " + currentOrder.getId()
                 + " | event " + formatEventLabel(currentOrder)
                 + " | status " + currentOrder.getStatus()
                 + " | tickets " + ticketCount
-                + " | total " + formatPrice(currentOrder.getTotalPrice()));
+                + " | " + totalText);
     }
 
     private String formatEventLabel(ActiveOrderDto order) {

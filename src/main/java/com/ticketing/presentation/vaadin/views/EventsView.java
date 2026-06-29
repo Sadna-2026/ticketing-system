@@ -107,6 +107,8 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     private VerticalLayout ticketDialogContent;
     private Span ticketDialogOrderStatus;
     private Span ticketDialogResStatus;
+    private TextField ticketDialogCouponCode;
+    private HorizontalLayout ticketDialogCouponForm;
 
     // Interactive-map selection state (assigned seats staged before checkout).
     private final Set<UUID> selectedSeatIds = new LinkedHashSet<>();
@@ -353,7 +355,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         }
 
         if (mainTicketDialog != null && mainTicketDialog.isOpened()) {
-            renderTicketDialogContent(ticketDialogContent, eventId, result.eventMap(), ticketDialogOrderStatus, ticketDialogResStatus);
+            renderTicketDialogContent(ticketDialogContent, eventId, result.eventMap(), ticketDialogOrderStatus, ticketDialogResStatus, ticketDialogCouponForm);
             refreshDialogOrderStatus(ticketDialogOrderStatus);
         } else {
             openTicketDialog(eventId, result.eventMap());
@@ -396,7 +398,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             return;
         }
         if (mainTicketDialog != null && mainTicketDialog.isOpened()) {
-            renderTicketDialogContent(ticketDialogContent, eventId, result.eventMap(), ticketDialogOrderStatus, ticketDialogResStatus);
+            renderTicketDialogContent(ticketDialogContent, eventId, result.eventMap(), ticketDialogOrderStatus, ticketDialogResStatus, ticketDialogCouponForm);
             refreshDialogOrderStatus(ticketDialogOrderStatus);
         } else {
             openTicketDialog(eventId, result.eventMap());
@@ -425,9 +427,25 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         ticketDialogOrderStatus = new Span();
         ticketDialogResStatus = new Span("Select tickets below to add to your order.");
         ticketDialogResStatus.getStyle().set("white-space", "pre-line");
+        
+        ticketDialogCouponCode = new TextField("Coupon code");
+        ticketDialogCouponCode.setPlaceholder("Optional");
+        Button applyCouponBtn = new Button("Apply", e -> {
+            OrderMutationResult result = ordersPresenter.applyCoupon(ticketDialogCouponCode.getValue());
+            ticketDialogResStatus.setText(result.message());
+            if (result.success()) {
+                UiMessages.success(result.message());
+                refreshDialogOrderStatus(ticketDialogOrderStatus);
+            } else {
+                UiMessages.error(result.message());
+            }
+        });
+        ticketDialogCouponForm = new HorizontalLayout(ticketDialogCouponCode, applyCouponBtn);
+        ticketDialogCouponForm.setAlignItems(Alignment.BASELINE);
+
         refreshDialogOrderStatus(ticketDialogOrderStatus);
 
-        renderTicketDialogContent(ticketDialogContent, eventId, eventMap, ticketDialogOrderStatus, ticketDialogResStatus);
+        renderTicketDialogContent(ticketDialogContent, eventId, eventMap, ticketDialogOrderStatus, ticketDialogResStatus, ticketDialogCouponForm);
 
         mainTicketDialog.add(ticketDialogContent);
 
@@ -460,7 +478,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     private void renderTicketDialogContent(VerticalLayout content, UUID eventId,
-            EventMapDTO eventMap, Span orderStatus, Span resStatus) {
+            EventMapDTO eventMap, Span orderStatus, Span resStatus, Component couponForm) {
         content.removeAll();
 
         content.add(
@@ -497,6 +515,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
                     // Full interactive map: handles both GA (popup) and assigned seating (toggle+add)
                     content.add(renderInteractiveMap(eventMap));
                 }
+                content.add(couponForm);
             } else {
                 content.add(resStatus);
                 content.add(renderLotteryPanel(eventId, eventMap, resStatus));
@@ -508,13 +527,13 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
         if (eventMap.zones().isEmpty()) {
             content.add(new Paragraph("No tickets are available for this event."));
-            return;
-        }
-        if (eventMap.layout() == null || eventMap.layout().cells().isEmpty()) {
+        } else if (eventMap.layout() == null || eventMap.layout().cells().isEmpty()) {
             content.add(new Paragraph("This event has no seating map yet."));
-            return;
+        } else {
+            content.add(renderInteractiveMap(eventMap));
         }
-        content.add(renderInteractiveMap(eventMap));
+        
+        content.add(couponForm);
     }
 
     private Component renderLotteryPanel(UUID eventId, EventMapDTO eventMap, Span resStatus) {
@@ -644,8 +663,25 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         String eventLabel = order.getEventName() != null && !order.getEventName().isBlank()
                 ? order.getEventName()
                 : order.getEventId().toString();
+                
+        String couponStr = order.getCouponCode();
+        if (ticketDialogCouponCode != null) {
+            if (couponStr != null && !couponStr.isBlank()) {
+                ticketDialogCouponCode.setValue(couponStr);
+            } else {
+                ticketDialogCouponCode.clear();
+            }
+        }
+        
+        String totalText = "subtotal " + formatPrice(order.getSubtotal())
+                + " | total " + formatPrice(order.getTotalPrice());
+        
+        if (couponStr != null && !couponStr.isBlank()) {
+            totalText += " (Coupon applied)";
+        }
+        
         target.setText("Active order: " + eventLabel
-                + " | " + ticketCount + " ticket(s) | total " + formatPrice(order.getTotalPrice()));
+                + " | " + ticketCount + " ticket(s) | " + totalText);
     }
 
     private void releaseQueueSlot() {
