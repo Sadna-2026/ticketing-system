@@ -433,11 +433,27 @@ public class Event{
         BigDecimal finalAmount = discountPolicy.priceAfterDiscount(order, couponCode, systemClock);
 
         if (couponCode != null && !couponCode.isBlank() && finalAmount.compareTo(originalAmount) >= 0) {
-            throw new IllegalArgumentException("Invalid or expired coupon code");
+            // Produce a specific message when the policy is a CouponDiscount we can interrogate.
+            String specificReason = resolveRejectionReason(discountPolicy, couponCode, systemClock);
+            throw new IllegalArgumentException(specificReason);
         }
 
         return finalAmount;
     }
+
+    /**
+     * Walks the discount policy tree to find the first {@link CouponDiscount} leaf and asks it
+     * why the code was rejected.  Falls back to the generic message for non-coupon policies.
+     */
+    private static String resolveRejectionReason(IDiscountPolicy policy, String couponCode, Instant clock) {
+        if (policy instanceof CouponDiscount cd) {
+            String reason = cd.getRejectionReason(couponCode, clock);
+            if ("expired".equals(reason)) return "Coupon code has expired";
+            if ("invalid".equals(reason)) return "Invalid coupon code";
+        }
+        return "Invalid or expired coupon code";
+    }
+
 
     private static AbstractPurchasePolicy requirePersistentPurchasePolicy(IPurchasePolicy policy) {
         if (policy instanceof AbstractPurchasePolicy persistent) {
