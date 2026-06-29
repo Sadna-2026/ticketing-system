@@ -109,6 +109,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     private Span ticketDialogResStatus;
     private TextField ticketDialogCouponCode;
     private HorizontalLayout ticketDialogCouponForm;
+    private Button ticketDialogRemoveCouponBtn;
 
     // Interactive-map selection state (assigned seats staged before checkout).
     private final Set<UUID> selectedSeatIds = new LinkedHashSet<>();
@@ -436,12 +437,28 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
             if (result.success()) {
                 UiMessages.success(result.message());
                 refreshDialogOrderStatus(ticketDialogOrderStatus);
+                ticketDialogRemoveCouponBtn.setEnabled(true);
             } else {
                 UiMessages.error(result.message());
             }
         });
-        ticketDialogCouponForm = new HorizontalLayout(ticketDialogCouponCode, applyCouponBtn);
+        ticketDialogRemoveCouponBtn = new Button("Remove coupon", e -> {
+            OrderMutationResult result = ordersPresenter.applyCoupon("");
+            ticketDialogResStatus.setText(result.message());
+            if (result.success()) {
+                UiMessages.success("Coupon removed.");
+                ticketDialogCouponCode.clear();
+                ticketDialogRemoveCouponBtn.setEnabled(false);
+                refreshDialogOrderStatus(ticketDialogOrderStatus);
+            } else {
+                UiMessages.error(result.message());
+            }
+        });
+        ticketDialogRemoveCouponBtn.setId("dialog-remove-coupon-button");
+        ticketDialogRemoveCouponBtn.setEnabled(false);
+        ticketDialogCouponForm = new HorizontalLayout(ticketDialogCouponCode, applyCouponBtn, ticketDialogRemoveCouponBtn);
         ticketDialogCouponForm.setAlignItems(Alignment.BASELINE);
+
 
         refreshDialogOrderStatus(ticketDialogOrderStatus);
 

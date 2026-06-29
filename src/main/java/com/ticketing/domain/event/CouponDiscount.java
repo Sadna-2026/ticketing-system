@@ -50,6 +50,24 @@ public class CouponDiscount extends AbstractDiscountPolicy {
     public String getCouponCode() { return couponCode; }
     public Instant getExpiresAt() { return expiresAt; }
 
+    /**
+     * Returns why the coupon was not applied, or {@code null} if it would be applied.
+     * <ul>
+     *   <li>{@code "expired"}  – code matches but the coupon has passed its expiry date.</li>
+     *   <li>{@code "invalid"}  – code does not match this coupon at all.</li>
+     *   <li>{@code null}       – code matches and coupon is still valid; discount applies.</li>
+     * </ul>
+     */
+    public String getRejectionReason(String couponCode, Instant systemClock) {
+        if (couponCode == null || !this.couponCode.equalsIgnoreCase(couponCode.trim())) {
+            return "invalid";
+        }
+        if (systemClock.isAfter(expiresAt)) {
+            return "expired";
+        }
+        return null;
+    }
+
     @Override
     public BigDecimal priceAfterDiscount(ActiveOrder order, String couponCode, Instant systemClock) {
         if (couponCode == null || !this.couponCode.equalsIgnoreCase(couponCode.trim())) {

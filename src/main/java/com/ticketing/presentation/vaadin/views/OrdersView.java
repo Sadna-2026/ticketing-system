@@ -67,6 +67,7 @@ public class OrdersView extends VerticalLayout {
     private final Span policyComplianceStatus = new Span();
     private final Span checkoutStatus = new Span("Checkout is available once the active order has tickets.");
     private Button checkoutButton;
+    private Button removeCouponButton;
     private final Span historyStatus = new Span("Members can load purchase history.");
     private final Paragraph memberOnlyHistoryHint = new Paragraph("Log in as a member to view purchase history.");
     private final Grid<PurchaseRecordDTO> historyGrid = new Grid<>(PurchaseRecordDTO.class, false);
@@ -183,7 +184,14 @@ public class OrdersView extends VerticalLayout {
                 handleMutationResult(presenter.applyCoupon(couponCode.getValue()));
             }
         });
-        HorizontalLayout couponForm = new HorizontalLayout(couponCode, applyCouponButton);
+        Button removeCouponButton = new Button("Remove coupon", event -> {
+            if (currentOrder != null) {
+                handleMutationResult(presenter.applyCoupon(""));
+            }
+        });
+        removeCouponButton.setId("remove-coupon-button");
+        removeCouponButton.setEnabled(false); // enabled only when a coupon is applied
+        HorizontalLayout couponForm = new HorizontalLayout(couponCode, applyCouponButton, removeCouponButton);
         couponForm.setAlignItems(Alignment.BASELINE);
 
         checkoutButton = new Button("Checkout", event -> checkout());
@@ -191,12 +199,16 @@ public class OrdersView extends VerticalLayout {
         HorizontalLayout form = new HorizontalLayout(checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 
+        // Store reference so refreshOrderDisplay() can toggle the enabled state.
+        this.removeCouponButton = removeCouponButton;
+
         VerticalLayout section = new VerticalLayout(new H3("Checkout"), couponForm, form, policyComplianceStatus, checkoutStatus);
         section.setPadding(false);
         section.setWidthFull();
         section.addClassName("app-card");
         return section;
     }
+
 
     private VerticalLayout historySection() {
         Button loadHistory = new Button("Load purchase history", event -> loadPurchaseHistory());
@@ -472,6 +484,9 @@ public class OrdersView extends VerticalLayout {
             couponCode.setValue(couponStr);
         } else {
             couponCode.clear();
+        }
+        if (removeCouponButton != null) {
+            removeCouponButton.setEnabled(couponStr != null && !couponStr.isBlank());
         }
 
         String totalText = "subtotal " + formatPrice(currentOrder.getSubtotal())

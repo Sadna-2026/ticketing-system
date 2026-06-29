@@ -51,12 +51,14 @@ import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.MaxCompositeDiscount;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.SimpleDiscount;
+import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
@@ -574,6 +576,304 @@ public class OrderServiceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> orderService.quoteCheckout(guestToken));
     }
+
+    // ── Coupon edge cases ─────────────────────────────────────────────────
+
+    /**
+     * #536 / EC-1: An expired coupon must be rejected with a message that clearly
+     * says "expired", and the order price must stay at the full amount.
+     */
+    @Test
+    void GivenExpiredCoupon_WhenApplyCoupon_ThenRejectedWithExpiredMessageAndPriceUnchanged() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        // Coupon expired yesterday.
+        Instant expiredAt = clock.now().minus(Duration.ofDays(1));
+        Event event = new Event(evId, companyName, "Expired Coupon Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("20"), "SAVE20", expiredAt));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "SAVE20"));
+
+        // Message must specifically mention the coupon is expired, not just "invalid".
+        assertTrue(ex.getMessage().toLowerCase().contains("expired"),
+                "Expected message to mention 'expired', got: " + ex.getMessage());
+
+        // The coupon must NOT be stored — full price still applies.
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("100.00"), quote.total());
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+    /**
+     * #536 / EC-2a: An unknown coupon code must be rejected with a message that says
+     * "invalid" (not "expired"), and the order price must stay at the full amount.
+     */
+    @Test
+    void GivenUnknownCouponCode_WhenApplyCoupon_ThenRejectedWithInvalidMessageAndFullPriceKept() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Code Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("15"), "CORRECT15", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "BOGUS"));
+
+        // Message must say "invalid", and must NOT say "expired".
+        String msg = ex.getMessage().toLowerCase();
+        assertTrue(msg.contains("invalid"),
+                "Expected message to mention 'invalid', got: " + ex.getMessage());
+        assertFalse(msg.contains("expired"),
+                "Wrong-code error should not say 'expired', got: " + ex.getMessage());
+
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        assertEquals(new BigDecimal("100.00"), orderService.quoteCheckout(guestToken).total());
+    }
+
+    /**
+     * #536 / EC-2b: A garbled / malformed code must also be rejected cleanly.
+     */
+    @Test
+    void GivenMalformedCouponCode_WhenApplyCoupon_ThenRejectedAndFullPriceKept() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Malformed Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("10"), "CLEAN10", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "##!@INVALID_\t\n"));
+
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        assertEquals(new BigDecimal("100.00"), orderService.quoteCheckout(guestToken).total());
+    }
+
+    /**
+     * #536 / EC-3a: A 100% coupon makes the total $0.  The purchase must still
+     * complete (payment gateway is charged $0) and the CompletedPurchase must record
+     * amount = $0.
+     */
+    @Test
+    void Given100PercentCoupon_WhenCheckout_ThenTotalIsZeroAndPurchaseCompletes() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Free Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("100"), "FREE", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 1); // subtotal $50
+
+        orderService.applyCoupon(guestToken, "FREE");
+        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("50.00"), quote.subtotal());
+        assertEquals(new BigDecimal("0.00"), quote.total());
+
+        // Checkout must succeed: gateway is charged $0, purchase is recorded.
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
+        assertEquals(new BigDecimal("0.00"), paymentGateway.chargedAmount);
+        assertEquals(new BigDecimal("0.00"),
+                orderRepo.findCompletedById(purchaseId).orElseThrow().amount());
+    }
+
+    /**
+     * #536 / EC-3b: Constructing a CouponDiscount with 0% must be rejected
+     * immediately by the constructor (boundary guard).
+     */
+    @Test
+    void GivenZeroPercentCouponValue_WhenConstructed_ThenIllegalArgumentThrown() {
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CouponDiscount(BigDecimal.ZERO, "ZERO", futureExpiry));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CouponDiscount(new BigDecimal("-5"), "NEG", futureExpiry));
+    }
+
+    /**
+     * #536 / EC-4: Applying a coupon then "removing" it via a blank apply restores
+     * the original price.  This is the mechanism behind the UI's "Remove" button.
+     */
+    @Test
+    void GivenCouponAppliedThenRemovedViaBlankApply_WhenQuoteCheckout_ThenPriceReturnsToOriginal() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Remove Coupon Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("25"), "QUARTER", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("40.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $80
+
+        // Apply the coupon → 25% off = $60.
+        orderService.applyCoupon(guestToken, "QUARTER");
+        assertEquals(new BigDecimal("60.00"), orderService.quoteCheckout(guestToken).total());
+        assertEquals("QUARTER", orderService.getActiveOrder(guestToken).getCouponCode());
+
+        // Remove by passing blank → coupon cleared, full price restored.
+        orderService.applyCoupon(guestToken, "   "); // blank normalises to null
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        assertEquals(new BigDecimal("80.00"), orderService.quoteCheckout(guestToken).total());
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+    /**
+     * #536 / EC-5: Coupons are event-scoped.  Applying event-A's code to a cart
+     * for event-B must be rejected; the same code applied to event-A's cart succeeds.
+     */
+    @Test
+    void GivenEventSpecificCoupon_WhenAppliedToWrongEvent_ThenRejected() {
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+
+        // Event A with code "EVENTA10"
+        UUID evIdA = UUID.randomUUID();
+        UUID zoneIdA = UUID.randomUUID();
+        Event eventA = new Event(evIdA, companyName, "Event A", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("10"), "EVENTA10", futureExpiry));
+        eventA.addZone(InventoryZone.createGA(zoneIdA, "Floor", new BigDecimal("50.00"), 10));
+        eventA.publish();
+        eventRepo.save(eventA);
+
+        // Event B with a different code "EVENTB20"
+        UUID evIdB = UUID.randomUUID();
+        UUID zoneIdB = UUID.randomUUID();
+        Event eventB = new Event(evIdB, companyName, "Event B", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("20"), "EVENTB20", futureExpiry));
+        eventB.addZone(InventoryZone.createGA(zoneIdB, "Floor", new BigDecimal("50.00"), 10));
+        eventB.publish();
+        eventRepo.save(eventB);
+
+        // Cart for event B — event-A's code must be rejected.
+        orderService.createOrder(guestToken, evIdB);
+        orderService.addGATicketsToOrder(guestToken, evIdB, zoneIdB, 2); // $100
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "EVENTA10"));
+        assertTrue(ex.getMessage().toLowerCase().contains("invalid"),
+                "Expected 'invalid' in message, got: " + ex.getMessage());
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+
+        // Event-B's own code must be accepted.
+        orderService.applyCoupon(guestToken, "EVENTB20");
+        assertEquals(new BigDecimal("80.00"), orderService.quoteCheckout(guestToken).total());
+    }
+
+    /**
+     * #536 / EC-6a: SumCompositeDiscount stacks a SimpleDiscount (always applied)
+     * and a CouponDiscount additively.
+     * Without coupon: 10% off.  With coupon: 10% + 20% = 30% off.
+     */
+    @Test
+    void GivenSumCompositePolicyCoupon_WhenApplied_ThenDiscountsStack() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+
+        Event event = new Event(evId, companyName, "Stack Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new SumCompositeDiscount(List.of(
+                        new SimpleDiscount(new BigDecimal("10")),
+                        new CouponDiscount(new BigDecimal("20"), "EXTRA", futureExpiry))));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        // Without coupon: only the SimpleDiscount fires → 10% off = $90.
+        OrderService.CheckoutQuote noCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("100.00"), noCode.subtotal());
+        assertEquals(new BigDecimal("90.00"), noCode.total());
+
+        // With coupon: both discounts fire → 10% + 20% = 30% off = $70.
+        orderService.applyCoupon(guestToken, "EXTRA");
+        OrderService.CheckoutQuote withCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("70.00"), withCode.total(),
+                "SumComposite must stack both discounts: expected $70");
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+    /**
+     * #536 / EC-6b: MaxCompositeDiscount does NOT stack — it applies only the best
+     * (largest) single discount.
+     * Without coupon: 10% off.  With coupon: max(10%, 20%) = 20% off only (not 30%).
+     */
+    @Test
+    void GivenMaxCompositePolicyCoupon_WhenApplied_ThenOnlyBestDiscountApplied() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+
+        Event event = new Event(evId, companyName, "No-Stack Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new MaxCompositeDiscount(List.of(
+                        new SimpleDiscount(new BigDecimal("10")),
+                        new CouponDiscount(new BigDecimal("20"), "SAVE20", futureExpiry))));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        // Without coupon: CouponDiscount returns full price (no matching code) →
+        // Max picks SimpleDiscount's 10% off = $90.
+        OrderService.CheckoutQuote noCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("90.00"), noCode.total(),
+                "Without coupon, MaxComposite should apply the 10% SimpleDiscount");
+
+        // With coupon: CouponDiscount yields 20% off ($80), SimpleDiscount yields 10% off ($90).
+        // MaxComposite picks the better deal → $80 (NOT the stacked $70).
+        orderService.applyCoupon(guestToken, "SAVE20");
+        OrderService.CheckoutQuote withCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("80.00"), withCode.total(),
+                "MaxComposite must apply only the best (20%) discount, not stack them");
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+
 
     @Test
     void GivenOrderWithItems_WhenAddingTicketsFailsMaxQuantityPolicy_ThenOrderRemainsActiveWithExistingItems() {

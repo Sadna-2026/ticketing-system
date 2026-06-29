@@ -1468,8 +1468,8 @@ public class CompanyView extends VerticalLayout {
         }
         BigDecimal percent = discountPercent.getValue();
         if (percent == null || percent.compareTo(BigDecimal.ZERO) <= 0 || percent.compareTo(new BigDecimal("100")) > 0) {
-            policyStatus.setText("Discount % must be between 0 and 100.");
-            UiMessages.error("Discount % must be between 0 and 100.");
+            policyStatus.setText("Discount % must be greater than 0 and up to 100.");
+            UiMessages.error("Discount % must be greater than 0 and up to 100.");
             return null;
         }
 
