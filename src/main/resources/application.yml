@@ -1,11 +1,11 @@
 # Database connection is fully externalized (V3-12): every setting is read from an
 # environment variable, with H2 in-memory defaults for local dev. Switching to
-# PostgreSQL is config-only (the postgresql driver is already on the classpath) —
+# PostgreSQL is config-only (the postgresql driver is already on the classpath) â€”
 # see README "Database configuration". Do NOT hard-code real credentials here.
 spring:
   datasource:
     operational:
-      url: ${DB_URL_OPERATIONAL:jdbc:h2:mem:ticketing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}
+      url: ${DB_URL_OPERATIONAL:${DB_URL:jdbc:h2:mem:ticketing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}}
       driver-class-name: ${DB_DRIVER:org.h2.Driver}
       username: ${DB_USERNAME:sa}
       password: ${DB_PASSWORD:}
@@ -15,7 +15,7 @@ spring:
         keepalive-time: 30000
         validation-timeout: 3000
     config:
-      url: ${DB_URL_CONFIG:jdbc:h2:mem:ticketing_cfg;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}
+      url: ${DB_URL_CONFIG:${DB_URL:jdbc:h2:mem:ticketing_cfg;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}}
       driver-class-name: ${DB_DRIVER:org.h2.Driver}
       username: ${DB_USERNAME:sa}
       password: ${DB_PASSWORD:}
@@ -50,10 +50,10 @@ ticketing:
   startup:
     initialize-platform: true
   bootstrap:
-    # dev-seed | initial-state-file | none — explicit choice; when unset, legacy rules apply:
+    # dev-seed | initial-state-file | none â€” explicit choice; when unset, legacy rules apply:
     # seed.enabled=true => dev-seed; else initial-state.file set => initial-state-file; else none.
     dataset: ${TICKETING_BOOTSTRAP_DATASET:}
-    # When true, wipe operational aggregates (members, companies, events, orders, …) after platform
+    # When true, wipe operational aggregates (members, companies, events, orders, â€¦) after platform
     # init and before data bootstrap. Config DB (system admin) is untouched. Default false preserves
     # existing data for gradual demo fill; set true at meeting start for an empty operational DB.
     clear-db-on-start: ${TICKETING_BOOTSTRAP_CLEAR_DB_ON_START:false}

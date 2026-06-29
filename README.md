@@ -375,3 +375,43 @@ needed. As defence-in-depth, Surefire also pins `spring.datasource.url` and
 (`DB_URL` / `TICKETING_EXTERNAL_BASE_URL`), so isolation holds even when those are exported locally.
 A test that legitimately needs a different datasource (e.g. the DB connection-recovery test) overrides
 `spring.datasource.url` via `@DynamicPropertySource`, which outranks both.
+
+
+
+## V3 Review / Verification Guide
+
+The full V3 review response is documented in:
+
+- `docs/V3-REVIEW-RESPONSE.md`
+
+That document maps every V3 review comment to:
+
+- the production classes that implement it,
+- the test classes that verify it,
+- the exact command or UI step to run,
+- the dataset/run-mode differences such as `manager` vs `u1`,
+- the Cloud SQL / PostgreSQL run modes.
+
+Quick commands:
+
+```bash
+# Full build + tests + coverage gate
+mvn clean verify
+
+# Default local run: memory/H2 + dev-seed users
+mvn spring-boot:run
+
+# JPA run with the same dev-seed users
+TICKETING_PERSISTENCE=jpa mvn spring-boot:run
+
+# Interactive run chooser: local / Cloud SQL / split Cloud SQL
+./scripts/run.ps1
+
+# Cloud SQL first run: create/update schema
+./scripts/run.ps1 -Target cloud-split -Mode first
+
+# Cloud SQL normal run: validate schema
+./scripts/run.ps1 -Target cloud-split -Mode normal
+
+# Cloud SQL initial-state run: wipe + load staff-demo-v3.txt
+./scripts/run.ps1 -Target cloud-split -Mode initial

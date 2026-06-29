@@ -28,5 +28,6 @@ package-lock.json
 package.json
 tsconfig.json
 types.d.ts
-run-cloud.ps1
 DEMO-CLOUD-SQL.md
+
+scripts/run-cloud-sql.ps1
