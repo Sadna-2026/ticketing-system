@@ -33,7 +33,9 @@ public final class TicketingConfigurationRules {
 
         @Override
         public void initialize(ConfigurableApplicationContext applicationContext) {
-            validate(applicationContext.getEnvironment());
+            Environment env = applicationContext.getEnvironment();
+            validate(env);
+            DatabaseConnectivityPreflight.verify(env);
         }
     }
 
@@ -195,7 +197,7 @@ public final class TicketingConfigurationRules {
         return """
                 
                 %s
-                  APPLICATION STARTUP HALTED — CONFIGURATION ERROR
+                  APPLICATION STARTUP HALTED â€” CONFIGURATION ERROR
                   %s
                 %s
                 """.formatted(BORDER, detail, BORDER);
@@ -203,7 +205,7 @@ public final class TicketingConfigurationRules {
 
     /**
      * Detects a common mistake when passing multiple {@code --key=value} overrides via
-     * {@code spring-boot.run.arguments} with commas on Windows — Spring receives one glued value
+     * {@code spring-boot.run.arguments} with commas on Windows â€” Spring receives one glued value
      * such as {@code false,--ticketing.bootstrap.dataset=...} instead of separate arguments.
      */
     private static void detectMangledCommandLineArguments(Environment env) {
