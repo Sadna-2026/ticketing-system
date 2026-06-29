@@ -44,6 +44,8 @@ public class ActiveOrder{
     private OrderOrigin origin;
     @Column(name = "purchase_window_deadline")
     private Instant purchaseWindowDeadline;
+    @Column(name = "coupon_code")
+    private String couponCode;
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "order_id")
     private List<OrderItem> items;
@@ -109,6 +111,12 @@ public class ActiveOrder{
     public void updateMemberId(UUID newMemberId) {
         if (newMemberId == null) throw new IllegalArgumentException("Member ID is required");
         this.memberId = newMemberId;
+    }
+
+    public String getCouponCode() { return couponCode; }
+
+    public void setCouponCode(String couponCode) {
+        this.couponCode = couponCode == null || couponCode.isBlank() ? null : couponCode.trim();
     }
 
     public UUID getId() { return id; }
@@ -182,6 +190,7 @@ public class ActiveOrder{
      */
     public ActiveOrder simulateWithAdditionalTickets(int additionalCount) {
         ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        simulated.setCouponCode(this.couponCode);
         for (OrderItem item : items) {
             simulated.items.add(item);
         }
@@ -194,6 +203,7 @@ public class ActiveOrder{
     /** Snapshot with one line item removed — used to validate policies after a removal. */
     public ActiveOrder simulateWithoutItem(UUID itemId) {
         ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        simulated.setCouponCode(this.couponCode);
         for (OrderItem item : items) {
             if (!item.getId().equals(itemId)) {
                 simulated.items.add(item);
@@ -205,6 +215,7 @@ public class ActiveOrder{
     /** Snapshot with a GA zone quantity replaced — used before applying a quantity update. */
     public ActiveOrder simulateGAQuantity(UUID zoneId, int newQuantity) {
         ActiveOrder simulated = new ActiveOrder(id, sessionId, memberId, eventId, createdAt);
+        simulated.setCouponCode(this.couponCode);
         for (OrderItem item : items) {
             if (!item.isAssignedSeat() && item.getZoneId().equals(zoneId)) {
                 if (newQuantity > 0) {

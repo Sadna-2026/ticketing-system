@@ -311,6 +311,15 @@ public class OrderService {
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null)
             return null;
+        Event event = findEvent(order.getEventId());
+        BigDecimal subtotal = order.getTotalPrice();
+        BigDecimal total = subtotal;
+        try {
+            total = event.calculateOrderTotal(order, systemClock.now());
+        } catch (IllegalArgumentException e) {
+            // Invalid coupon stored? We return subtotal as fallback.
+        }
+
         return new ActiveOrderDto(
                 order.getId(),
                 order.getSessionId(),
@@ -319,10 +328,12 @@ public class OrderService {
                 order.getCreatedAt(),
                 order.getStatus().name(),
                 order.getItemsDto(),
-                order.getTotalPrice(),
+                subtotal,
+                total,
                 null,
                 order.isLotteryWin(),
-                order.getPurchaseWindowDeadline());
+                order.getPurchaseWindowDeadline(),
+                order.getCouponCode());
     }
 
     // ── Checkout ────────────────────────────────────────────────────
@@ -332,12 +343,11 @@ public class OrderService {
      * applying the event discount policy and optional coupon without side effects.
      */
     @Transactional
-    public CheckoutQuote quoteCheckout(String token, String couponCode) {
+    public CheckoutQuote quoteCheckout(String token) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        log.info("Checkout quote requested: sessionId={}, memberId={}, couponPresent={}",
-                sessionId, memberId, couponCode != null && !couponCode.isBlank());
+        log.info("Checkout quote requested: sessionId={}, memberId={}", sessionId, memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) {
             throw new IllegalArgumentException("No active order found");
@@ -347,8 +357,33 @@ public class OrderService {
         }
         Event event = findEvent(order.getEventId());
         BigDecimal subtotal = order.getTotalPrice();
-        BigDecimal total = discountedCheckoutAmount(order, event, normalizeCoupon(couponCode));
+        BigDecimal total = event.calculateOrderTotal(order, systemClock.now());
         return new CheckoutQuote(subtotal, total);
+    }
+
+    @Transactional
+    public void applyCoupon(String token, String couponCode) {
+        validateToken(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Apply coupon requested: sessionId={}, memberId={}, couponCode={}", sessionId, memberId, couponCode);
+
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) {
+            throw new IllegalArgumentException("No active order found");
+        }
+        
+        String oldCoupon = order.getCouponCode();
+        order.setCouponCode(couponCode);
+        
+        try {
+            Event event = findEvent(order.getEventId());
+            event.calculateOrderTotal(order, systemClock.now()); // validate it
+            saveOrder(order);
+        } catch (IllegalArgumentException e) {
+            order.setCouponCode(oldCoupon); // rollback in memory
+            throw e;
+        }
     }
 
     public record CheckoutQuote(BigDecimal subtotal, BigDecimal total) {
@@ -411,17 +446,16 @@ public class OrderService {
      * {@code setRollbackOnly()} is required.
      */
     @Transactional
-    public CheckoutCompletion checkout(String token, String couponCode) {
-        return checkout(token, couponCode, null);
+    public CheckoutCompletion checkout(String token) {
+        return checkout(token, null);
     }
 
     @Transactional
-    public CheckoutCompletion checkout(String token, String couponCode, CardPaymentInfo card) {
+    public CheckoutCompletion checkout(String token, CardPaymentInfo card) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
-        log.info("Checkout requested: sessionId={}, memberId={}, couponPresent={}",
-                sessionId, memberId, couponCode != null && !couponCode.isBlank());
+        log.info("Checkout requested: sessionId={}, memberId={}", sessionId, memberId);
 
         rejectIfMemberSuspended(memberId);
 
@@ -454,7 +488,7 @@ public class OrderService {
 
         CompletedPurchase purchase;
         try {
-            purchase = processCheckout(order, event, buyerContact, normalizeCoupon(couponCode), buyerDob, card);
+            purchase = processCheckout(order, event, buyerContact, buyerDob, card);
         } catch (IllegalStateException e) {
             log.warn("Failed to checkout order {}: {}", order.getId(), e.getMessage());
             if (notificationService != null && memberId != null) {
@@ -1064,7 +1098,7 @@ public class OrderService {
     // ── Checkout internals ──────────────────────────────────────────
 
     private CompletedPurchase processCheckout(ActiveOrder order, Event event,
-                                               BuyerContactSnapshot buyerContact, String couponCode,
+                                               BuyerContactSnapshot buyerContact,
                                                LocalDate buyerDateOfBirth, CardPaymentInfo card) {
         // Re-check suspension as late as possible: a member could have been suspended
         // after checkout began but before any payment/issuance side effect runs.
@@ -1072,7 +1106,7 @@ public class OrderService {
         requirePurchasePolicyCompliance(event, PurchaseContext.forOrder(
                 event, order, order.getMemberId(), buyerDateOfBirth));
 
-        BigDecimal finalAmount = discountedCheckoutAmount(order, event, couponCode);
+        BigDecimal finalAmount = event.calculateOrderTotal(order, systemClock.now());
 
         order.startCheckout();
 
@@ -1408,20 +1442,5 @@ public class OrderService {
         order.cancel();
         saveOrder(order);
         log.info("Discarded empty active order after failed add: orderId={}", order.getId());
-    }
-
-    private BigDecimal discountedCheckoutAmount(ActiveOrder order, Event event, String couponCode) {
-        BigDecimal originalAmount = order.getTotalPrice();
-        BigDecimal finalAmount = event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
-
-        if (couponCode != null && finalAmount.compareTo(originalAmount) >= 0) {
-            throw new IllegalArgumentException("Invalid or expired coupon code");
-        }
-
-        return finalAmount;
-    }
-
-    private static String normalizeCoupon(String couponCode) {
-        return couponCode == null || couponCode.isBlank() ? null : couponCode.trim();
     }
 }
