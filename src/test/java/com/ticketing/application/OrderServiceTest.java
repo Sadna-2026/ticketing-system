@@ -235,7 +235,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
         orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
-        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         ActiveOrder order = orderRepo.findById(orderId).orElseThrow();
         assertEquals(OrderStatus.COMPLETED, order.getStatus());
@@ -267,7 +267,7 @@ public class OrderServiceTest {
 
         UUID orderId = orderService.createOrder(guestToken, soldOutEventId);
         orderService.addGATicketsToOrder(guestToken, soldOutEventId, singleZoneId, 1);
-        orderService.checkout(guestToken, null);
+        orderService.checkout(guestToken);
 
         assertEquals(EventStatus.SOLD_OUT, eventRepo.findById(soldOutEventId).orElseThrow().getStatus());
     }
@@ -279,7 +279,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
 
         assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
         Event event = eventRepo.findById(eventId).orElseThrow();
@@ -296,7 +296,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
 
         assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
         Event event = eventRepo.findById(eventId).orElseThrow();
@@ -318,7 +318,7 @@ public class OrderServiceTest {
         BigDecimal declaredAmount = new BigDecimal("300.00");
 
         // When: both payment and supply confirm
-        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         // Then: the order completes and a receipt is issued for the declared amount
         assertEquals(OrderStatus.COMPLETED, orderRepo.findById(orderId).orElseThrow().getStatus());
@@ -341,7 +341,7 @@ public class OrderServiceTest {
 
         // When: checkout is attempted
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
 
         // Then: the order is not completed and no receipt is written
         assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
@@ -361,7 +361,7 @@ public class OrderServiceTest {
 
         // When: checkout is attempted
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
 
         // Then: the order is not completed and no receipt is written
         assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
@@ -433,7 +433,8 @@ public class OrderServiceTest {
 
         UUID orderId = orderService.createOrder(guestToken, discountEventId);
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, "SAVE20").purchaseId();
+        orderService.applyCoupon(guestToken, "SAVE20");
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         assertEquals(new BigDecimal("80.00"), paymentGateway.chargedAmount);
         assertEquals(new BigDecimal("80.00"), orderRepo.findCompletedById(purchaseId).orElseThrow().amount());
@@ -457,7 +458,7 @@ public class OrderServiceTest {
 
         notifyingService.createOrder(memberToken, eventId);
         notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        OrderService.CheckoutCompletion completion = notifyingService.checkout(memberToken, null);
+        OrderService.CheckoutCompletion completion = notifyingService.checkout(memberToken);
 
         assertNotNull(completion.purchaseId());
         assertEquals(new BigDecimal("50.00"), completion.chargedAmount());
@@ -482,7 +483,7 @@ public class OrderServiceTest {
 
         notifyingService.createOrder(memberToken, eventId);
         notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        notifyingService.checkout(memberToken, null);
+        notifyingService.checkout(memberToken);
 
         notifyingService.cancelOrdersAndRefund(eventId, "Demo Event");
 
@@ -514,7 +515,7 @@ public class OrderServiceTest {
         notifyingService.createOrder(memberToken, eventId);
         notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
 
-        assertThrows(IllegalStateException.class, () -> notifyingService.checkout(memberToken, null));
+        assertThrows(IllegalStateException.class, () -> notifyingService.checkout(memberToken));
         verify(notificationService).notify(eq(memberId.toString()), contains("Checkout failed"));
     }
 
@@ -534,7 +535,8 @@ public class OrderServiceTest {
         orderService.createOrder(guestToken, discountEventId);
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
 
-        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken, " SAVE20 ");
+        orderService.applyCoupon(guestToken, " SAVE20 ");
+        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken);
 
         assertEquals(new BigDecimal("100.00"), quote.subtotal());
         assertEquals(new BigDecimal("80.00"), quote.total());
@@ -558,9 +560,10 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
 
         assertThrows(IllegalArgumentException.class,
-                () -> orderService.quoteCheckout(guestToken, "WRONG"));
+                () -> orderService.applyCoupon(guestToken, "WRONG"));
 
-        OrderService.CheckoutQuote blankCode = orderService.quoteCheckout(guestToken, "   ");
+        orderService.applyCoupon(guestToken, "   ");
+        OrderService.CheckoutQuote blankCode = orderService.quoteCheckout(guestToken);
         assertEquals(new BigDecimal("100.00"), blankCode.total());
     }
 
@@ -569,7 +572,7 @@ public class OrderServiceTest {
         orderService.createOrder(guestToken, eventId);
 
         assertThrows(IllegalArgumentException.class,
-                () -> orderService.quoteCheckout(guestToken, null));
+                () -> orderService.quoteCheckout(guestToken));
     }
 
     @Test
@@ -639,7 +642,7 @@ public class OrderServiceTest {
 
         UUID orderId = orderService.createOrder(memberToken, eventId);
         orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(memberToken).purchaseId();
 
         assertEquals(memberId, orderRepo.findCompletedById(purchaseId).orElseThrow().memberId());
         assertEquals(memberId, paymentGateway.lastDetails.memberId());
@@ -664,7 +667,7 @@ public class OrderServiceTest {
         orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId);
 
         // When: the order is checked out successfully
-        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(memberToken).purchaseId();
 
         // Then: the receipt is persisted in the history repository, keyed by its id
         CompletedPurchase receipt = orderRepo.findCompletedById(purchaseId).orElseThrow();
@@ -782,7 +785,7 @@ public class OrderServiceTest {
         racingRepo.arm();
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> racingService.checkout(memberToken, null));
+                () -> racingService.checkout(memberToken));
         assertTrue(ex.getMessage().contains("suspended"));
 
         // The mid-checkout re-check fired before any payment/issuance side effect.
@@ -1052,7 +1055,7 @@ public class OrderServiceTest {
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
 
-        UUID purchaseId = failoverService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = failoverService.checkout(guestToken).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryGateway.issueCalls);
@@ -1075,7 +1078,7 @@ public class OrderServiceTest {
         failoverService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> failoverService.checkout(guestToken, null));
+                () -> failoverService.checkout(guestToken));
         
         assertTrue(ex.getMessage().contains("Ticket generation failed"));
         assertEquals(1, primaryGateway.issueCalls);
@@ -1098,7 +1101,7 @@ public class OrderServiceTest {
         partialService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> partialService.checkout(guestToken, null));
+                () -> partialService.checkout(guestToken));
         
         assertEquals(1, primaryGateway.issueCalls);
         assertEquals(1, primaryGateway.cancelCalls);
@@ -1119,7 +1122,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
         
         assertEquals(1, ticketSupplyGateway.issueCalls);
         assertEquals(1, paymentGateway.refundCalls); // tried to refund
@@ -1145,7 +1148,7 @@ public class OrderServiceTest {
         // Make a purchase
         UUID orderId = orderService.createOrder(memberToken, eventId);
         orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(memberToken).purchaseId();
 
         // Fetch history
         List<PurchaseRecordDTO> history2 = orderService.getPurchaseHistory(memberToken);
@@ -1186,7 +1189,7 @@ public class OrderServiceTest {
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
-        UUID purchaseId = failoverService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = failoverService.checkout(guestToken).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryPayment.chargeCalls);
@@ -1208,7 +1211,7 @@ public class OrderServiceTest {
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> failoverService.checkout(guestToken, null));
+                () -> failoverService.checkout(guestToken));
         
         assertEquals(1, primaryPayment.chargeCalls);
         assertEquals(1, secondaryPayment.chargeCalls);
@@ -1237,7 +1240,7 @@ public class OrderServiceTest {
         UUID orderId = multiProviderService.createOrder(guestToken, eventId);
         multiProviderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
-        UUID purchaseId = multiProviderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = multiProviderService.checkout(guestToken).purchaseId();
 
         // Both first providers were tried and failed; both second providers were used and succeeded.
         assertEquals(1, primaryPayment.chargeCalls);
@@ -1252,7 +1255,7 @@ public class OrderServiceTest {
     void GivenEventWithCompletedPurchases_WhenCancelOrdersAndRefund_ThenAllPurchasesRefundedWithReference() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(0, paymentGateway.refundCalls);
@@ -1275,7 +1278,7 @@ public class OrderServiceTest {
     void GivenAlreadyRefundedPurchase_WhenCancelOrdersAndRefundAgain_ThenNoDuplicateRefund() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
-        orderService.checkout(guestToken, null);
+        orderService.checkout(guestToken);
 
         orderService.cancelOrdersAndRefund(eventId, "Demo Event");
         assertEquals(1, paymentGateway.refundCalls);
@@ -1293,7 +1296,7 @@ public class OrderServiceTest {
     void GivenRefundFailsThenRecovers_WhenRetried_ThenOnlyUnfinishedRefundIsProcessed() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         // Payment service unavailable: refund cannot settle yet.
         paymentGateway.failRefunds = true;
@@ -1324,7 +1327,7 @@ public class OrderServiceTest {
             String token = sessionService.generateGuestToken();
             orderService.createOrder(token, eventId);
             orderService.addGATicketsToOrder(token, eventId, gaZoneId, 1);
-            purchaseIds.add(orderService.checkout(token, null).purchaseId());
+            purchaseIds.add(orderService.checkout(token).purchaseId());
         }
 
         OrderService.EventCancellationOutcome outcome =
@@ -1345,12 +1348,12 @@ public class OrderServiceTest {
         String tokenA = sessionService.generateGuestToken();
         orderService.createOrder(tokenA, eventId);
         orderService.addGATicketsToOrder(tokenA, eventId, gaZoneId, 1);
-        UUID purchaseA = orderService.checkout(tokenA, null).purchaseId();
+        UUID purchaseA = orderService.checkout(tokenA).purchaseId();
 
         String tokenB = sessionService.generateGuestToken();
         orderService.createOrder(tokenB, eventId);
         orderService.addGATicketsToOrder(tokenB, eventId, gaZoneId, 1);
-        UUID purchaseB = orderService.checkout(tokenB, null).purchaseId();
+        UUID purchaseB = orderService.checkout(tokenB).purchaseId();
 
         // The payment service rejects only B's refund: B is left pending, A succeeds, in one batch.
         String txnB = orderRepo.findCompletedById(purchaseB).orElseThrow().transactionId();
@@ -1440,7 +1443,7 @@ public class OrderServiceTest {
 
         notifyingService.createOrder(memberToken, eventId);
         notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        UUID purchaseId = notifyingService.checkout(memberToken, null).purchaseId();
+        UUID purchaseId = notifyingService.checkout(memberToken).purchaseId();
 
         // Now the buyer goes offline: every notification delivery throws. The refund must still
         // complete (notification failure is deferred/swallowed) and must not be retried.
