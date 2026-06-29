@@ -116,7 +116,7 @@ class CheckoutTransactionJpaTest {
         // checkout method, so Spring rolls back every DB write made in that method.
         supplyGateway.setShouldFail(true);
 
-        assertThatThrownBy(() -> orderService.checkout(token, null))
+        assertThatThrownBy(() -> orderService.checkout(token))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Ticket generation failed");
 
@@ -155,7 +155,7 @@ class CheckoutTransactionJpaTest {
         // Fail after issuing 1 ticket
         supplyGateway.setFailAfterCount(1);
 
-        assertThatThrownBy(() -> orderService.checkout(token, null))
+        assertThatThrownBy(() -> orderService.checkout(token))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Ticket generation failed");
 
@@ -201,7 +201,7 @@ class CheckoutTransactionJpaTest {
         supplyGateway.setShouldFail(true);
         paymentGateway.setRefundShouldFail(true);
 
-        assertThatThrownBy(() -> orderService.checkout(token, null))
+        assertThatThrownBy(() -> orderService.checkout(token))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Payment refund is pending");
 
@@ -293,7 +293,7 @@ class CheckoutTransactionJpaTest {
         orderService.createOrder(token, eventId);
         orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
 
-        UUID purchaseId = orderService.checkout(token, null).purchaseId();
+        UUID purchaseId = orderService.checkout(token).purchaseId();
 
         assertThat(orderRepository.findCompletedById(purchaseId)).isPresent();
         InventoryZone zone = eventRepository.findById(eventId).orElseThrow().findZone(zoneId);
@@ -319,7 +319,7 @@ class CheckoutTransactionJpaTest {
         com.ticketing.application.CardPaymentInfo card = new com.ticketing.application.CardPaymentInfo(
                 "USD", "2222333344445555", "12", "2030", "Test Buyer", "988", "000000000");
 
-        assertThatThrownBy(() -> orderService.checkout(token, null, card))
+        assertThatThrownBy(() -> orderService.checkout(token, card))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("declined");
     }

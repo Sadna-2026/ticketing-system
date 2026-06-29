@@ -1,5 +1,6 @@
 package com.ticketing.domain.event;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -424,6 +425,18 @@ public class Event{
             throw new IllegalArgumentException("Discount policy cannot be null");
         }
         this.discountPolicy = requirePersistentDiscountPolicy(policy);
+    }
+
+    public BigDecimal calculateOrderTotal(ActiveOrder order, Instant systemClock) {
+        BigDecimal originalAmount = order.getTotalPrice();
+        String couponCode = order.getCouponCode();
+        BigDecimal finalAmount = discountPolicy.priceAfterDiscount(order, couponCode, systemClock);
+
+        if (couponCode != null && !couponCode.isBlank() && finalAmount.compareTo(originalAmount) >= 0) {
+            throw new IllegalArgumentException("Invalid or expired coupon code");
+        }
+
+        return finalAmount;
     }
 
     private static AbstractPurchasePolicy requirePersistentPurchasePolicy(IPurchasePolicy policy) {
