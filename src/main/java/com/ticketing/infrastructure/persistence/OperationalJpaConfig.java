@@ -9,10 +9,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.data.repository.config.BootstrapMode;
 import org.springframework.orm.jpa.JpaTransactionManager;
-import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
@@ -24,13 +25,14 @@ import jakarta.persistence.EntityManagerFactory;
 @ConditionalOnProperty(name = "ticketing.persistence", havingValue = "jpa")
 @EnableTransactionManagement
 @EnableJpaRepositories(
+        bootstrapMode = BootstrapMode.LAZY,
         basePackages = "com.ticketing.infrastructure.persistence",
         excludeFilters = @org.springframework.context.annotation.ComponentScan.Filter(
                 type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE,
                 classes = {AdminJpaRepository.class}
         ),
         entityManagerFactoryRef = "operationalEntityManagerFactory",
-        transactionManagerRef = "transactionManager" // Spring default name for @Primary
+        transactionManagerRef = "transactionManager"
 )
 public class OperationalJpaConfig {
 
@@ -47,9 +49,10 @@ public class OperationalJpaConfig {
         return properties.initializeDataSourceBuilder().build();
     }
 
+    @Lazy
     @Primary
     @Bean(name = "operationalEntityManagerFactory")
-    public LocalContainerEntityManagerFactoryBean entityManagerFactory(
+    public DeferredLocalContainerEntityManagerFactoryBean entityManagerFactory(
             EntityManagerFactoryBuilder builder,
             @Qualifier("operationalDataSource") DataSource dataSource,
             org.springframework.boot.autoconfigure.orm.jpa.JpaProperties jpaProperties,
@@ -61,9 +64,10 @@ public class OperationalJpaConfig {
             properties.put("hibernate.hbm2ddl.auto", ddlAuto);
         }
 
-        return builder
-                .dataSource(dataSource)
-                .packages(
+        return JpaDeferredBootstrapSupport.deferredEntityManagerFactory(
+                builder,
+                dataSource,
+                new String[] {
                         "com.ticketing.domain.company",
                         "com.ticketing.domain.event",
                         "com.ticketing.domain.lottery",
@@ -72,12 +76,12 @@ public class OperationalJpaConfig {
                         "com.ticketing.domain.queue",
                         "com.ticketing.domain.ticket",
                         "com.ticketing.domain.notification"
-                )
-                .persistenceUnit("operational")
-                .properties(properties)
-                .build();
+                },
+                "operational",
+                properties);
     }
 
+    @Lazy
     @Primary
     @Bean(name = "transactionManager")
     public PlatformTransactionManager transactionManager(

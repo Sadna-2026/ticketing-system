@@ -1,0 +1,5 @@
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+com.ticketing.infrastructure.logging.InfrastructureConnectivityFailureAnalyzer
+
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.ticketing.infrastructure.persistence.JpaLazyInitializationEnvironmentPostProcessor

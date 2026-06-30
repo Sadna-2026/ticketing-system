@@ -49,6 +49,7 @@ import com.ticketing.domain.member.response.RegisterResponse;
  * application layer.
  */
 @Service
+@org.springframework.context.annotation.Lazy
 public class InitialStateExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(InitialStateExecutor.class);

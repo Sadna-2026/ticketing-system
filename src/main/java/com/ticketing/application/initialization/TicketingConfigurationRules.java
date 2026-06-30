@@ -1,5 +1,6 @@
 package com.ticketing.application.initialization;
 
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.context.ApplicationContextInitializer;
@@ -7,6 +8,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.Environment;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.PropertySource;
 
 /**
@@ -33,9 +35,26 @@ public final class TicketingConfigurationRules {
 
         @Override
         public void initialize(ConfigurableApplicationContext applicationContext) {
-            Environment env = applicationContext.getEnvironment();
-            validate(env);
-            DatabaseConnectivityPreflight.verify(env);
+            ConfigurableEnvironment environment = applicationContext.getEnvironment();
+            enableLazyInitializationWhenJpa(environment);
+            validate(environment);
+            DatabaseConnectivityPreflight.verify(environment);
+        }
+
+        /**
+         * Req 5: defer bean creation until first use so JPA/EMF bootstrap does not run during
+         * context refresh when the database is temporarily unreachable at boot.
+         */
+        private static void enableLazyInitializationWhenJpa(ConfigurableEnvironment environment) {
+            if (!"jpa".equals(environment.getProperty("ticketing.persistence"))) {
+                return;
+            }
+            if (Boolean.parseBoolean(environment.getProperty("spring.main.lazy-initialization", "false"))) {
+                return;
+            }
+            environment.getPropertySources().addFirst(new MapPropertySource(
+                    "ticketingJpaLazyInitialization",
+                    Map.of("spring.main.lazy-initialization", true)));
         }
     }
 
@@ -195,9 +214,9 @@ public final class TicketingConfigurationRules {
 
     private static String framedConfigurationError(String detail) {
         return """
-                
+
                 %s
-                  APPLICATION STARTUP HALTED â€” CONFIGURATION ERROR
+                  APPLICATION STARTUP HALTED — CONFIGURATION ERROR
                   %s
                 %s
                 """.formatted(BORDER, detail, BORDER);
@@ -205,7 +224,7 @@ public final class TicketingConfigurationRules {
 
     /**
      * Detects a common mistake when passing multiple {@code --key=value} overrides via
-     * {@code spring-boot.run.arguments} with commas on Windows â€” Spring receives one glued value
+     * {@code spring-boot.run.arguments} with commas on Windows — Spring receives one glued value
      * such as {@code false,--ticketing.bootstrap.dataset=...} instead of separate arguments.
      */
     private static void detectMangledCommandLineArguments(Environment env) {
