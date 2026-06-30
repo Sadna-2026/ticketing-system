@@ -29,6 +29,7 @@ import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.CouponDiscount;
 import com.ticketing.domain.event.DateRangeCondition;
+import com.ticketing.domain.event.DiscountPolicyText;
 import com.ticketing.domain.event.IDiscountCondition;
 import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
@@ -225,10 +226,14 @@ public class CompanyView extends VerticalLayout {
     private final DateTimePicker conditionFrom = new DateTimePicker("Cond. from date");
     private final DateTimePicker conditionTo = new DateTimePicker("Cond. to date");
     private final ComboBox<String> discountComposition = new ComboBox<>("Discount composition");
+    private final List<IDiscountPolicy> discountDrafts = new ArrayList<>();
+    private final VerticalLayout discountDraftList = new VerticalLayout();
     private final Span policyStatus = new Span("View and manage purchase and discount policies.");
     private final Span currentPolicyDisplay = new Span();
     private Button setPurchasePolicyButton;
     private Button removePurchasePolicyButton;
+    private Button addDiscountDraftButton;
+    private Button clearDiscountDraftsButton;
     private Button setDiscountPolicyButton;
     private Button removeDiscountPolicyButton;
     private VerticalLayout policyControls;
@@ -941,6 +946,8 @@ public class CompanyView extends VerticalLayout {
 
         setPurchasePolicyButton = new Button("Set purchase policy", e -> setPurchasePolicy());
         removePurchasePolicyButton = new Button("Remove purchase policy", e -> removePurchasePolicy());
+        addDiscountDraftButton = new Button("+ Add discount", e -> addDiscountDraft());
+        clearDiscountDraftsButton = new Button("Clear discounts", e -> clearDiscountDrafts());
         setDiscountPolicyButton = new Button("Set discount policy", e -> setDiscountPolicy());
         removeDiscountPolicyButton = new Button("Remove discount policy", e -> removeDiscountPolicy());
 
@@ -965,11 +972,17 @@ public class CompanyView extends VerticalLayout {
         purchaseActions.setAlignItems(Alignment.BASELINE);
 
         FormLayout discountForm = new FormLayout(discountType, discountPercent, couponCodeField, couponExpiry,
-                discountConditionType, conditionMinTickets, conditionMaxTickets, conditionFrom, conditionTo, discountComposition);
+                discountConditionType, conditionMinTickets, conditionMaxTickets, conditionFrom, conditionTo);
         discountForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
 
+        discountDraftList.setPadding(false);
+        discountDraftList.setSpacing(true);
+        discountDraftList.setWidthFull();
+        HorizontalLayout discountDraftActions = new HorizontalLayout(addDiscountDraftButton, clearDiscountDraftsButton);
+        discountDraftActions.setAlignItems(Alignment.BASELINE);
         HorizontalLayout discountActions = new HorizontalLayout(setDiscountPolicyButton, removeDiscountPolicyButton);
         discountActions.setAlignItems(Alignment.BASELINE);
+        renderDiscountDrafts();
         policyControls = new VerticalLayout(
                 targetForm,
                 new H4("Purchase policy"),
@@ -977,6 +990,9 @@ public class CompanyView extends VerticalLayout {
                 purchaseActions,
                 new H4("Discount policy"),
                 discountForm,
+                discountDraftActions,
+                discountDraftList,
+                discountComposition,
                 discountActions,
                 currentPolicyDisplay
         );
@@ -1053,6 +1069,8 @@ public class CompanyView extends VerticalLayout {
         clearSecondaryPurchaseGroup();
         discountType.setValue("No discount");
         discountComposition.setValue("Single discount");
+        discountDrafts.clear();
+        renderDiscountDrafts();
         clearDiscountFormAuxiliaryFields();
     }
 
@@ -1398,6 +1416,8 @@ public class CompanyView extends VerticalLayout {
         if (policy == null || policy instanceof NoDiscountPolicy) {
             discountType.setValue("No discount");
             discountComposition.setValue("Single discount");
+            discountDrafts.clear();
+            renderDiscountDrafts();
             clearDiscountFormAuxiliaryFields();
             return;
         }
@@ -1415,14 +1435,15 @@ public class CompanyView extends VerticalLayout {
     private void applyDiscountLeaves(List<IDiscountPolicy> policies, String composition) {
         discountComposition.setValue(composition);
         clearDiscountFormAuxiliaryFields();
+        discountDrafts.clear();
         if (policies.isEmpty()) {
             discountType.setValue("No discount");
+            renderDiscountDrafts();
             return;
         }
+        discountDrafts.addAll(policies);
         applyDiscountLeafPrimary(policies.getFirst());
-        for (int i = 1; i < policies.size(); i++) {
-            applyDiscountLeafPrimary(policies.get(i));
-        }
+        renderDiscountDrafts();
     }
 
     private void applyDiscountLeafPrimary(IDiscountPolicy leaf) {
@@ -1453,6 +1474,76 @@ public class CompanyView extends VerticalLayout {
                     conditionTo.setValue(LocalDateTime.ofInstant(range.getTo(), ZoneId.systemDefault()));
                 }
             }
+        }
+    }
+
+    private void addDiscountDraft() {
+        IDiscountPolicy policy = buildSingleDiscountPolicy();
+        if (policy == null) return;
+        if (policy instanceof NoDiscountPolicy) {
+            policyStatus.setText("Choose a discount type before adding a discount.");
+            UiMessages.error("Choose a discount type before adding a discount.");
+            return;
+        }
+        discountDrafts.add(policy);
+        if (discountDrafts.size() == 2 && "Single discount".equals(discountComposition.getValue())) {
+            discountComposition.setValue("SUM (stack all)");
+        }
+        renderDiscountDrafts();
+        policyStatus.setText("Discount added to the draft list.");
+    }
+
+    private void clearDiscountDrafts() {
+        discountDrafts.clear();
+        discountComposition.setValue("Single discount");
+        renderDiscountDrafts();
+    }
+
+    private void editDiscountDraft(int index) {
+        if (index < 0 || index >= discountDrafts.size()) {
+            return;
+        }
+        IDiscountPolicy policy = discountDrafts.remove(index);
+        applyDiscountLeafPrimary(policy);
+        if (discountDrafts.size() <= 1) {
+            discountComposition.setValue("Single discount");
+        }
+        renderDiscountDrafts();
+        policyStatus.setText("Discount loaded into the editor. Update it, then add it again.");
+    }
+
+    private void removeDiscountDraft(int index) {
+        if (index < 0 || index >= discountDrafts.size()) {
+            return;
+        }
+        discountDrafts.remove(index);
+        if (discountDrafts.size() <= 1) {
+            discountComposition.setValue("Single discount");
+        }
+        renderDiscountDrafts();
+    }
+
+    private void renderDiscountDrafts() {
+        discountDraftList.removeAll();
+        discountComposition.setVisible(discountDrafts.size() > 1);
+        clearDiscountDraftsButton.setEnabled(!discountDrafts.isEmpty());
+        if (discountDrafts.isEmpty()) {
+            Span empty = new Span("No discounts added. Add one discount, or leave the policy as no discount.");
+            empty.getStyle().set("color", "var(--lumo-secondary-text-color)");
+            discountDraftList.add(empty);
+            return;
+        }
+        for (int i = 0; i < discountDrafts.size(); i++) {
+            int index = i;
+            Span description = new Span((i + 1) + ". " + DiscountPolicyText.describeManagementDiscount(discountDrafts.get(i)));
+            description.getStyle().set("font-weight", "600");
+            Button edit = new Button("Edit", e -> editDiscountDraft(index));
+            Button remove = new Button("Remove", e -> removeDiscountDraft(index));
+            HorizontalLayout row = new HorizontalLayout(description, edit, remove);
+            row.setAlignItems(Alignment.BASELINE);
+            row.setWidthFull();
+            row.expand(description);
+            discountDraftList.add(row);
         }
     }
 
@@ -1593,16 +1684,21 @@ public class CompanyView extends VerticalLayout {
     }
 
     private IDiscountPolicy buildDiscountPolicy() {
-        IDiscountPolicy leaf = buildSingleDiscountPolicy();
-        if (leaf == null) return null;
+        if (discountDrafts.isEmpty()) {
+            return buildSingleDiscountPolicy();
+        }
+
+        List<IDiscountPolicy> policies = new ArrayList<>(discountDrafts);
+        if (policies.size() == 1) {
+            return policies.getFirst();
+        }
 
         String composition = discountComposition.getValue();
         if (composition == null || "Single discount".equals(composition)) {
-            return leaf;
+            policyStatus.setText("Choose SUM or MAX when multiple discounts are added.");
+            UiMessages.error("Choose SUM or MAX when multiple discounts are added.");
+            return null;
         }
-
-        List<IDiscountPolicy> policies = new ArrayList<>();
-        policies.add(leaf);
 
         if ("MAX (best discount wins)".equals(composition)) {
             return new MaxCompositeDiscount(policies);

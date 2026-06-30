@@ -29,6 +29,7 @@ import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.SimpleDiscount;
+import com.ticketing.domain.event.SumCompositeDiscount;
 
 @DisplayName("BuyerPolicyCatalog")
 class BuyerPolicyCatalogTest {
@@ -108,6 +109,23 @@ class BuyerPolicyCatalogTest {
         assertEquals(
                 "Purchase allowed when: ((minimum age 18 AND at most 2 tickets) OR (minimum age 11 AND at least 5 tickets))",
                 restrictions.get(0).detail());
+    }
+
+    @Test
+    void GivenStackedDiscountPolicy_WhenBuildingBadges_ThenCompositionIsDescribed() {
+        Event event = event(
+                new AlwaysAllowPolicy(),
+                new SumCompositeDiscount(List.of(
+                        new SimpleDiscount(new BigDecimal("10")),
+                        new ConditionalDiscount(new BigDecimal("5"), new MinQuantityCondition(3)))));
+
+        List<EventPolicyBadgeDTO> discounts = BuyerPolicyCatalog.visibleDiscounts(event);
+
+        assertEquals(1, discounts.size());
+        assertEquals("Stacked discounts", discounts.get(0).title());
+        assertEquals(
+                "stacked: (10% off all tickets AND 5% off when buying at least 3 tickets)",
+                discounts.get(0).detail());
     }
 
     private static Event event(

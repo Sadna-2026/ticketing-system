@@ -11,6 +11,7 @@ import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.CouponDiscount;
 import com.ticketing.domain.event.DateRangeCondition;
+import com.ticketing.domain.event.DiscountPolicyText;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IDiscountCondition;
 import com.ticketing.domain.event.IDiscountPolicy;
@@ -121,15 +122,22 @@ public final class BuyerPolicyCatalog {
             return;
         }
         if (policy instanceof MaxCompositeDiscount max) {
-            for (IDiscountPolicy child : max.getPolicies()) {
-                collectVisibleDiscounts(child, badges);
-            }
+            addCompositeDiscountBadge("Best available discount", max, badges);
             return;
         }
         if (policy instanceof SumCompositeDiscount sum) {
-            for (IDiscountPolicy child : sum.getPolicies()) {
-                collectVisibleDiscounts(child, badges);
-            }
+            addCompositeDiscountBadge("Stacked discounts", sum, badges);
+        }
+    }
+
+    private static void addCompositeDiscountBadge(
+            String title,
+            IDiscountPolicy policy,
+            List<EventPolicyBadgeDTO> badges
+    ) {
+        String description = DiscountPolicyText.describeVisibleDiscount(policy);
+        if (description != null && !description.isBlank()) {
+            badges.add(new EventPolicyBadgeDTO(Kind.DISCOUNT, title, description));
         }
     }
 

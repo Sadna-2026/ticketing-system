@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
@@ -17,14 +18,18 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.AndPolicy;
+import com.ticketing.domain.event.IDiscountPolicy;
 import com.ticketing.domain.event.IPurchasePolicy;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.SimpleDiscount;
+import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter;
 import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
 
 @DisplayName("CompanyView complex purchase policy editor")
@@ -103,6 +108,41 @@ class CompanyViewComplexPurchasePolicyTest {
         assertTrue(combo(view, "policyGroupComposition").isVisible());
     }
 
+    @Test
+    void GivenMultipleDiscountDrafts_WhenBuildDiscountPolicy_ThenCompositeDiscountIsCreated() throws Exception {
+        CompanyView view = newView();
+
+        combo(view, "discountType").setValue("Simple (flat %)");
+        decimal(view, "discountPercent").setValue(new BigDecimal("10"));
+        invokeNoArg(view, "addDiscountDraft");
+        decimal(view, "discountPercent").setValue(new BigDecimal("5"));
+        invokeNoArg(view, "addDiscountDraft");
+        combo(view, "discountComposition").setValue("SUM (stack all)");
+
+        IDiscountPolicy policy = invokeBuildDiscount(view);
+
+        SumCompositeDiscount sum = assertInstanceOf(SumCompositeDiscount.class, policy);
+        assertEquals(2, sum.getPolicies().size());
+        assertEquals(0, new BigDecimal("10").compareTo(
+                assertInstanceOf(SimpleDiscount.class, sum.getPolicies().get(0)).getPercentOff()));
+        assertEquals(0, new BigDecimal("5").compareTo(
+                assertInstanceOf(SimpleDiscount.class, sum.getPolicies().get(1)).getPercentOff()));
+    }
+
+    @Test
+    void GivenDiscountDraft_WhenEditClicked_ThenDraftIsLoadedBackIntoEditor() throws Exception {
+        CompanyView view = newView();
+
+        combo(view, "discountType").setValue("Simple (flat %)");
+        decimal(view, "discountPercent").setValue(new BigDecimal("15"));
+        invokeNoArg(view, "addDiscountDraft");
+
+        invokeInt(view, "editDiscountDraft", 0);
+
+        assertEquals(0, new BigDecimal("15").compareTo(decimal(view, "discountPercent").getValue()));
+        assertTrue(discountDrafts(view).isEmpty());
+    }
+
     private static CompanyView newView() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionState())
@@ -122,6 +162,24 @@ class CompanyViewComplexPurchasePolicyTest {
         method.invoke(view, policy);
     }
 
+    private static IDiscountPolicy invokeBuildDiscount(CompanyView view) throws Exception {
+        Method method = CompanyView.class.getDeclaredMethod("buildDiscountPolicy");
+        method.setAccessible(true);
+        return (IDiscountPolicy) method.invoke(view);
+    }
+
+    private static void invokeNoArg(CompanyView view, String methodName) throws Exception {
+        Method method = CompanyView.class.getDeclaredMethod(methodName);
+        method.setAccessible(true);
+        method.invoke(view);
+    }
+
+    private static void invokeInt(CompanyView view, String methodName, int value) throws Exception {
+        Method method = CompanyView.class.getDeclaredMethod(methodName, int.class);
+        method.setAccessible(true);
+        method.invoke(view, value);
+    }
+
     @SuppressWarnings("unchecked")
     private static CheckboxGroup<String> checkbox(CompanyView view, String name) throws Exception {
         return (CheckboxGroup<String>) field(view, name);
@@ -134,6 +192,15 @@ class CompanyViewComplexPurchasePolicyTest {
 
     private static IntegerField integer(CompanyView view, String name) throws Exception {
         return (IntegerField) field(view, name);
+    }
+
+    private static BigDecimalField decimal(CompanyView view, String name) throws Exception {
+        return (BigDecimalField) field(view, name);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<IDiscountPolicy> discountDrafts(CompanyView view) throws Exception {
+        return (List<IDiscountPolicy>) field(view, "discountDrafts");
     }
 
     private static Object field(CompanyView view, String name) throws Exception {
