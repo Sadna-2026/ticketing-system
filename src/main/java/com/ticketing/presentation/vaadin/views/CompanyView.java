@@ -10,8 +10,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.ticketing.application.dto.CompanyPublicDTO;
@@ -111,6 +113,10 @@ public class CompanyView extends VerticalLayout {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm")
             .withZone(ZoneId.systemDefault());
+    private static final String PURCHASE_RULE_AGE = "Age restriction";
+    private static final String PURCHASE_RULE_MAX = "Max quantity";
+    private static final String PURCHASE_RULE_MIN = "Min quantity";
+    private static final String PURCHASE_RULE_NO_ORPHAN = "No orphan seat";
 
     private final CompanyPresenter presenter;
 
@@ -198,11 +204,17 @@ public class CompanyView extends VerticalLayout {
 
     private final ComboBox<CompanySummaryDTO> policyCompanyName = new ComboBox<>("Policy company name");
     private final ComboBox<EventSummaryDTO> policyEventId = new ComboBox<>("Policy event");
-    private final ComboBox<String> purchasePolicyType = new ComboBox<>("Purchase rule type");
+    private final CheckboxGroup<String> purchaseRuleParts = new CheckboxGroup<>("Included purchase rules");
     private final IntegerField policyAge = new IntegerField("Min age");
     private final IntegerField policyMaxTickets = new IntegerField("Max tickets");
     private final IntegerField policyMinTickets = new IntegerField("Min tickets");
-    private final ComboBox<String> policyComposition = new ComboBox<>("Composition");
+    private final ComboBox<String> policyComposition = new ComboBox<>("Primary group match");
+    private final CheckboxGroup<String> secondaryPurchaseRuleParts = new CheckboxGroup<>("Optional second purchase-rule group");
+    private final IntegerField secondaryPolicyAge = new IntegerField("Second group min age");
+    private final IntegerField secondaryPolicyMaxTickets = new IntegerField("Second group max tickets");
+    private final IntegerField secondaryPolicyMinTickets = new IntegerField("Second group min tickets");
+    private final ComboBox<String> secondaryPolicyComposition = new ComboBox<>("Second group match");
+    private final ComboBox<String> policyGroupComposition = new ComboBox<>("Between groups");
     private final ComboBox<String> discountType = new ComboBox<>("Discount type");
     private final BigDecimalField discountPercent = new BigDecimalField("Discount %");
     private final TextField couponCodeField = new TextField("Coupon code");
@@ -889,16 +901,30 @@ public class CompanyView extends VerticalLayout {
     }
 
     private VerticalLayout policySection() {
-        purchasePolicyType.setItems("Allow all", "Age restriction", "Max quantity", "Min quantity", "No orphan seat");
-        purchasePolicyType.setValue("Allow all");
+        purchaseRuleParts.setItems(PURCHASE_RULE_AGE, PURCHASE_RULE_MAX, PURCHASE_RULE_MIN, PURCHASE_RULE_NO_ORPHAN);
+        purchaseRuleParts.setHelperText("Leave empty to allow all purchases.");
         policyAge.setMin(1);
         policyAge.setValue(18);
         policyMaxTickets.setMin(1);
         policyMaxTickets.setValue(5);
         policyMinTickets.setMin(1);
         policyMinTickets.setValue(2);
-        policyComposition.setItems("Single rule", "AND (all must pass)", "OR (any can pass)");
-        policyComposition.setValue("Single rule");
+        policyComposition.setItems("AND (all must pass)", "OR (any can pass)");
+        policyComposition.setValue("AND (all must pass)");
+        secondaryPurchaseRuleParts.setItems(PURCHASE_RULE_AGE, PURCHASE_RULE_MAX, PURCHASE_RULE_MIN, PURCHASE_RULE_NO_ORPHAN);
+        secondaryPurchaseRuleParts.setHelperText("Use for nested policies, for example: Age 18 OR (Age 40 AND min tickets 10).");
+        secondaryPolicyAge.setMin(1);
+        secondaryPolicyAge.setValue(40);
+        secondaryPolicyMaxTickets.setMin(1);
+        secondaryPolicyMaxTickets.setValue(5);
+        secondaryPolicyMinTickets.setMin(1);
+        secondaryPolicyMinTickets.setValue(10);
+        secondaryPolicyComposition.setItems("AND (all must pass)", "OR (any can pass)");
+        secondaryPolicyComposition.setValue("AND (all must pass)");
+        policyGroupComposition.setItems("OR between groups", "AND between groups");
+        policyGroupComposition.setValue("OR between groups");
+        purchaseRuleParts.addValueChangeListener(e -> updatePurchaseRuleVisibility());
+        secondaryPurchaseRuleParts.addValueChangeListener(e -> updatePurchaseRuleVisibility());
 
         discountType.setItems("No discount", "Simple (flat %)", "Conditional (% with condition)", "Coupon (% with code)");
         discountType.setValue("No discount");
@@ -921,8 +947,19 @@ public class CompanyView extends VerticalLayout {
         FormLayout targetForm = new FormLayout(policyCompanyName, policyEventId);
         targetForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 2));
 
-        FormLayout purchaseForm = new FormLayout(purchasePolicyType, policyAge, policyMaxTickets, policyMinTickets, policyComposition);
-        purchaseForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
+        FormLayout primaryPurchaseForm = new FormLayout(
+                purchaseRuleParts, policyAge, policyMaxTickets, policyMinTickets, policyComposition);
+        primaryPurchaseForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
+
+        FormLayout secondaryPurchaseForm = new FormLayout(
+                secondaryPurchaseRuleParts, secondaryPolicyAge, secondaryPolicyMaxTickets,
+                secondaryPolicyMinTickets, secondaryPolicyComposition, policyGroupComposition);
+        secondaryPurchaseForm.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("760px", 3));
+
+        VerticalLayout purchaseForm = new VerticalLayout(primaryPurchaseForm, secondaryPurchaseForm);
+        purchaseForm.setPadding(false);
+        purchaseForm.setSpacing(true);
+        updatePurchaseRuleVisibility();
 
         HorizontalLayout purchaseActions = new HorizontalLayout(setPurchasePolicyButton, removePurchasePolicyButton);
         purchaseActions.setAlignItems(Alignment.BASELINE);
@@ -1010,9 +1047,10 @@ public class CompanyView extends VerticalLayout {
     }
 
     private void resetPolicyFormToDefaults() {
-        purchasePolicyType.setValue("Allow all");
-        policyComposition.setValue("Single rule");
+        purchaseRuleParts.clear();
+        policyComposition.setValue("AND (all must pass)");
         clearPurchaseThresholdFields();
+        clearSecondaryPurchaseGroup();
         discountType.setValue("No discount");
         discountComposition.setValue("Single discount");
         clearDiscountFormAuxiliaryFields();
@@ -1022,6 +1060,43 @@ public class CompanyView extends VerticalLayout {
         policyAge.clear();
         policyMaxTickets.clear();
         policyMinTickets.clear();
+        updatePurchaseRuleVisibility();
+    }
+
+    private void clearSecondaryPurchaseGroup() {
+        secondaryPurchaseRuleParts.clear();
+        secondaryPolicyComposition.setValue("AND (all must pass)");
+        policyGroupComposition.setValue("OR between groups");
+        secondaryPolicyAge.clear();
+        secondaryPolicyMaxTickets.clear();
+        secondaryPolicyMinTickets.clear();
+        updatePurchaseRuleVisibility();
+    }
+
+    private void updatePurchaseRuleVisibility() {
+        updatePurchaseGroupVisibility(purchaseRuleParts.getValue(), policyAge, policyMaxTickets, policyMinTickets, policyComposition);
+        updatePurchaseGroupVisibility(secondaryPurchaseRuleParts.getValue(), secondaryPolicyAge,
+                secondaryPolicyMaxTickets, secondaryPolicyMinTickets, secondaryPolicyComposition);
+        policyGroupComposition.setVisible(hasSelectedPurchaseRules(purchaseRuleParts.getValue())
+                && hasSelectedPurchaseRules(secondaryPurchaseRuleParts.getValue()));
+    }
+
+    private static void updatePurchaseGroupVisibility(
+            Set<String> selectedRules,
+            IntegerField ageField,
+            IntegerField maxTicketsField,
+            IntegerField minTicketsField,
+            ComboBox<String> compositionField
+    ) {
+        Set<String> safeRules = selectedRules == null ? Set.of() : selectedRules;
+        ageField.setVisible(safeRules.contains(PURCHASE_RULE_AGE));
+        maxTicketsField.setVisible(safeRules.contains(PURCHASE_RULE_MAX));
+        minTicketsField.setVisible(safeRules.contains(PURCHASE_RULE_MIN));
+        compositionField.setVisible(safeRules.size() >= 2);
+    }
+
+    private static boolean hasSelectedPurchaseRules(Set<String> selectedRules) {
+        return selectedRules != null && !selectedRules.isEmpty();
     }
 
     private void clearDiscountFormAuxiliaryFields() {
@@ -1111,39 +1186,107 @@ public class CompanyView extends VerticalLayout {
 
     private void applyPurchasePolicyToForm(IPurchasePolicy policy) {
         if (policy == null || policy instanceof AlwaysAllowPolicy) {
-            purchasePolicyType.setValue("Allow all");
-            policyComposition.setValue("Single rule");
+            purchaseRuleParts.clear();
+            policyComposition.setValue("AND (all must pass)");
             clearPurchaseThresholdFields();
+            clearSecondaryPurchaseGroup();
             return;
         }
         if (policy instanceof AndPolicy and) {
-            applyPurchaseLeaves(and.getPolicies(), "AND (all must pass)");
+            applyPurchaseComposite(and.getPolicies(), "AND (all must pass)");
             return;
         }
         if (policy instanceof OrPolicy or) {
-            applyPurchaseLeaves(or.getPolicies(), "OR (any can pass)");
+            applyPurchaseComposite(or.getPolicies(), "OR (any can pass)");
             return;
         }
         applyPurchaseLeaves(List.of(policy), "Single rule");
     }
 
+    private void applyPurchaseComposite(List<IPurchasePolicy> policies, String composition) {
+        clearSecondaryPurchaseGroup();
+        if (policies.size() == 2 && (isCompositePurchasePolicy(policies.get(0)) || isCompositePurchasePolicy(policies.get(1)))) {
+            policyGroupComposition.setValue("AND (all must pass)".equals(composition)
+                    ? "AND between groups"
+                    : "OR between groups");
+            applyPurchaseGroupToFields(policies.get(0), purchaseRuleParts, policyAge, policyMaxTickets, policyMinTickets,
+                    policyComposition, compositionOf(policies.get(0)));
+            applyPurchaseGroupToFields(policies.get(1), secondaryPurchaseRuleParts, secondaryPolicyAge,
+                    secondaryPolicyMaxTickets, secondaryPolicyMinTickets, secondaryPolicyComposition,
+                    compositionOf(policies.get(1)));
+            return;
+        }
+        applyPurchaseLeaves(policies, composition);
+    }
+
+    private static boolean isCompositePurchasePolicy(IPurchasePolicy policy) {
+        return policy instanceof AndPolicy || policy instanceof OrPolicy;
+    }
+
+    private static String compositionOf(IPurchasePolicy policy) {
+        if (policy instanceof OrPolicy) {
+            return "OR (any can pass)";
+        }
+        return "AND (all must pass)";
+    }
+
     private void applyPurchaseLeaves(List<IPurchasePolicy> policies, String composition) {
-        policyComposition.setValue(composition);
-        clearPurchaseThresholdFields();
+        applyPurchaseLeavesToFields(policies, purchaseRuleParts, policyAge, policyMaxTickets, policyMinTickets,
+                policyComposition, "Single rule".equals(composition) ? "AND (all must pass)" : composition);
+        clearSecondaryPurchaseGroup();
+    }
+
+    private void applyPurchaseGroupToFields(
+            IPurchasePolicy policy,
+            CheckboxGroup<String> ruleParts,
+            IntegerField ageField,
+            IntegerField maxTicketsField,
+            IntegerField minTicketsField,
+            ComboBox<String> compositionField,
+            String composition
+    ) {
+        if (policy instanceof AndPolicy and) {
+            applyPurchaseLeavesToFields(and.getPolicies(), ruleParts, ageField, maxTicketsField, minTicketsField,
+                    compositionField, "AND (all must pass)");
+            return;
+        }
+        if (policy instanceof OrPolicy or) {
+            applyPurchaseLeavesToFields(or.getPolicies(), ruleParts, ageField, maxTicketsField, minTicketsField,
+                    compositionField, "OR (any can pass)");
+            return;
+        }
+        applyPurchaseLeavesToFields(List.of(policy), ruleParts, ageField, maxTicketsField, minTicketsField,
+                compositionField, composition);
+    }
+
+    private void applyPurchaseLeavesToFields(
+            List<IPurchasePolicy> policies,
+            CheckboxGroup<String> ruleParts,
+            IntegerField ageField,
+            IntegerField maxTicketsField,
+            IntegerField minTicketsField,
+            ComboBox<String> compositionField,
+            String composition
+    ) {
+        compositionField.setValue(composition);
+        ageField.clear();
+        maxTicketsField.clear();
+        minTicketsField.clear();
+        LinkedHashSet<String> selectedRules = new LinkedHashSet<>();
 
         List<IPurchasePolicy> leaves = new ArrayList<>();
         for (IPurchasePolicy child : policies) {
             leaves.addAll(flattenPurchaseLeaves(child));
         }
         if (leaves.isEmpty()) {
-            purchasePolicyType.setValue("Allow all");
+            ruleParts.clear();
             return;
         }
 
-        applyPurchaseLeafPrimary(leaves.getFirst());
-        for (int i = 1; i < leaves.size(); i++) {
-            applyPurchaseLeafAuxiliary(leaves.get(i));
+        for (IPurchasePolicy leaf : leaves) {
+            applyPurchaseLeaf(leaf, selectedRules, ageField, maxTicketsField, minTicketsField);
         }
+        ruleParts.setValue(selectedRules);
     }
 
     private static List<IPurchasePolicy> flattenPurchaseLeaves(IPurchasePolicy policy) {
@@ -1167,28 +1310,24 @@ public class CompanyView extends VerticalLayout {
         return List.of(policy);
     }
 
-    private void applyPurchaseLeafPrimary(IPurchasePolicy leaf) {
+    private void applyPurchaseLeaf(
+            IPurchasePolicy leaf,
+            Set<String> selectedRules,
+            IntegerField ageField,
+            IntegerField maxTicketsField,
+            IntegerField minTicketsField
+    ) {
         if (leaf instanceof AgeRestrictionPolicy age) {
-            purchasePolicyType.setValue("Age restriction");
-            policyAge.setValue(age.getMinimumAge());
+            selectedRules.add(PURCHASE_RULE_AGE);
+            ageField.setValue(age.getMinimumAge());
         } else if (leaf instanceof MaxQuantityPolicy max) {
-            purchasePolicyType.setValue("Max quantity");
-            policyMaxTickets.setValue(max.getMaxTickets());
+            selectedRules.add(PURCHASE_RULE_MAX);
+            maxTicketsField.setValue(max.getMaxTickets());
         } else if (leaf instanceof MinQuantityPolicy min) {
-            purchasePolicyType.setValue("Min quantity");
-            policyMinTickets.setValue(min.getMinTickets());
+            selectedRules.add(PURCHASE_RULE_MIN);
+            minTicketsField.setValue(min.getMinTickets());
         } else if (leaf instanceof NoOrphanSeatPolicy) {
-            purchasePolicyType.setValue("No orphan seat");
-        }
-    }
-
-    private void applyPurchaseLeafAuxiliary(IPurchasePolicy leaf) {
-        if (leaf instanceof AgeRestrictionPolicy age) {
-            policyAge.setValue(age.getMinimumAge());
-        } else if (leaf instanceof MaxQuantityPolicy max) {
-            policyMaxTickets.setValue(max.getMaxTickets());
-        } else if (leaf instanceof MinQuantityPolicy min) {
-            policyMinTickets.setValue(min.getMinTickets());
+            selectedRules.add(PURCHASE_RULE_NO_ORPHAN);
         }
     }
 
@@ -1363,72 +1502,82 @@ public class CompanyView extends VerticalLayout {
     }
 
     private IPurchasePolicy buildPurchasePolicyInternal() {
-        IPurchasePolicy leaf = buildSinglePurchaseRule();
-        if (leaf == null) return null;
-
-        String composition = policyComposition.getValue();
-        if (composition == null || "Single rule".equals(composition)) {
-            return leaf;
+        IPurchasePolicy primary = buildPurchaseGroup(
+                purchaseRuleParts.getValue(), policyAge, policyMaxTickets, policyMinTickets, policyComposition);
+        IPurchasePolicy secondary = buildPurchaseGroup(
+                secondaryPurchaseRuleParts.getValue(), secondaryPolicyAge, secondaryPolicyMaxTickets,
+                secondaryPolicyMinTickets, secondaryPolicyComposition);
+        if (primary == null && secondary == null) {
+            return new AlwaysAllowPolicy();
         }
+        if (primary == null) {
+            return secondary;
+        }
+        if (secondary == null) {
+            return primary;
+        }
+        if ("AND between groups".equals(policyGroupComposition.getValue())) {
+            return new AndPolicy(List.of(primary, secondary));
+        }
+        return new OrPolicy(List.of(primary, secondary));
+    }
 
+    private IPurchasePolicy buildPurchaseGroup(
+            Set<String> selectedRules,
+            IntegerField ageField,
+            IntegerField maxTicketsField,
+            IntegerField minTicketsField,
+            ComboBox<String> compositionField
+    ) {
+        if (selectedRules == null || selectedRules.isEmpty()) {
+            return null;
+        }
         List<IPurchasePolicy> rules = new ArrayList<>();
-        rules.add(leaf);
-        if ("Age restriction".equals(purchasePolicyType.getValue())) {
-            if (policyMaxTickets.getValue() != null && policyMaxTickets.getValue() > 0) {
-                rules.add(new MaxQuantityPolicy(policyMaxTickets.getValue()));
-            }
-            if (policyMinTickets.getValue() != null && policyMinTickets.getValue() >= 2) {
-                rules.add(new MinQuantityPolicy(policyMinTickets.getValue()));
-            }
-        } else if ("Max quantity".equals(purchasePolicyType.getValue())) {
-            if (policyAge.getValue() != null && policyAge.getValue() > 0) {
-                rules.add(new AgeRestrictionPolicy(policyAge.getValue()));
-            }
-            if (policyMinTickets.getValue() != null && policyMinTickets.getValue() >= 2) {
-                rules.add(new MinQuantityPolicy(policyMinTickets.getValue()));
-            }
-        } else {
-            if (policyAge.getValue() != null && policyAge.getValue() > 0) {
-                rules.add(new AgeRestrictionPolicy(policyAge.getValue()));
-            }
-            if (policyMaxTickets.getValue() != null && policyMaxTickets.getValue() > 0) {
-                rules.add(new MaxQuantityPolicy(policyMaxTickets.getValue()));
+        for (String rule : List.of(PURCHASE_RULE_AGE, PURCHASE_RULE_MAX, PURCHASE_RULE_MIN, PURCHASE_RULE_NO_ORPHAN)) {
+            if (selectedRules.contains(rule)) {
+                IPurchasePolicy builtRule = buildSelectedPurchaseRule(rule, ageField, maxTicketsField, minTicketsField);
+                if (builtRule == null) {
+                    throw new IllegalArgumentException(policyStatus.getText());
+                }
+                rules.add(builtRule);
             }
         }
 
-        if (rules.size() == 1) return leaf;
+        if (rules.size() == 1) return rules.getFirst();
 
-        if ("AND (all must pass)".equals(composition)) {
+        if ("AND (all must pass)".equals(compositionField.getValue())) {
             return new AndPolicy(rules);
         }
         return new OrPolicy(rules);
     }
 
-    private IPurchasePolicy buildSinglePurchaseRule() {
-        String type = purchasePolicyType.getValue();
+    private IPurchasePolicy buildSelectedPurchaseRule(
+            String type,
+            IntegerField ageField,
+            IntegerField maxTicketsField,
+            IntegerField minTicketsField
+    ) {
         try {
-            if ("Allow all".equals(type)) {
-                return new AlwaysAllowPolicy();
-            } else if ("Age restriction".equals(type)) {
-                Integer age = policyAge.getValue();
+            if (PURCHASE_RULE_AGE.equals(type)) {
+                Integer age = ageField.getValue();
                 if (age == null || age <= 0) {
                     policyStatus.setText("Min age must be positive.");
                     UiMessages.error("Min age must be positive.");
                     return null;
                 }
                 return new AgeRestrictionPolicy(age);
-            } else if ("Max quantity".equals(type)) {
-                Integer max = policyMaxTickets.getValue();
+            } else if (PURCHASE_RULE_MAX.equals(type)) {
+                Integer max = maxTicketsField.getValue();
                 if (max == null || max <= 0) {
                     policyStatus.setText("Max tickets must be positive.");
                     UiMessages.error("Max tickets must be positive.");
                     return null;
                 }
                 return new MaxQuantityPolicy(max);
-            } else if ("No orphan seat".equals(type)) {
+            } else if (PURCHASE_RULE_NO_ORPHAN.equals(type)) {
                 return new NoOrphanSeatPolicy();
             } else {
-                Integer min = policyMinTickets.getValue();
+                Integer min = minTicketsField.getValue();
                 if (min == null || min < 2) {
                     policyStatus.setText("Min tickets must be at least 2.");
                     UiMessages.error("Min tickets must be at least 2.");

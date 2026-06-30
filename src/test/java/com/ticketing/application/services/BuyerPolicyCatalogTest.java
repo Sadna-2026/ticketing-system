@@ -56,10 +56,10 @@ class BuyerPolicyCatalogTest {
                 new ConditionalDiscount(new BigDecimal("15"), new MinQuantityCondition(3)));
 
         List<EventPolicyBadgeDTO> restrictions = BuyerPolicyCatalog.purchaseRestrictions(event);
-        assertEquals(2, restrictions.size());
+        assertEquals(1, restrictions.size());
         assertEquals(Kind.RESTRICTION, restrictions.get(0).kind());
-        assertEquals("Age requirement", restrictions.get(0).title());
-        assertEquals("Ticket limit", restrictions.get(1).title());
+        assertEquals("AND purchase policy", restrictions.get(0).title());
+        assertTrue(restrictions.get(0).detail().contains("minimum age 18 AND at most 2 tickets"));
 
         List<EventPolicyBadgeDTO> discounts = BuyerPolicyCatalog.visibleDiscounts(event);
         assertEquals(1, discounts.size());
@@ -87,10 +87,27 @@ class BuyerPolicyCatalogTest {
 
         List<EventPolicyBadgeDTO> restrictions = BuyerPolicyCatalog.purchaseRestrictions(event);
         assertEquals(1, restrictions.size());
-        assertEquals("Flexible purchase rule", restrictions.get(0).title());
-        assertTrue(restrictions.get(0).detail().contains("Meet any one of"));
+        assertEquals("OR purchase policy", restrictions.get(0).title());
+        assertTrue(restrictions.get(0).detail().contains("at least 3 tickets OR minimum age 21"));
 
         assertEquals(1, BuyerPolicyCatalog.visibleDiscounts(event).size());
+    }
+
+    @Test
+    void GivenNestedOrAndPolicy_WhenBuildingBadges_ThenBooleanStructureIsShown() {
+        Event event = event(
+                new OrPolicy(List.of(
+                        new AndPolicy(List.of(new AgeRestrictionPolicy(18), new MaxQuantityPolicy(2))),
+                        new AndPolicy(List.of(new AgeRestrictionPolicy(11), new MinQuantityPolicy(5))))),
+                new NoDiscountPolicy());
+
+        List<EventPolicyBadgeDTO> restrictions = BuyerPolicyCatalog.purchaseRestrictions(event);
+
+        assertEquals(1, restrictions.size());
+        assertEquals("OR purchase policy", restrictions.get(0).title());
+        assertEquals(
+                "Purchase allowed when: ((minimum age 18 AND at most 2 tickets) OR (minimum age 11 AND at least 5 tickets))",
+                restrictions.get(0).detail());
     }
 
     private static Event event(

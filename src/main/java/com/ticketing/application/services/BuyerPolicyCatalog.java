@@ -23,6 +23,7 @@ import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.PurchasePolicyText;
 import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.SumCompositeDiscount;
 
@@ -86,26 +87,17 @@ public final class BuyerPolicyCatalog {
             return;
         }
         if (policy instanceof AndPolicy and) {
-            for (IPurchasePolicy child : and.getPolicies()) {
-                collectPurchaseRestrictions(child, badges);
-            }
+            badges.add(new EventPolicyBadgeDTO(
+                    Kind.RESTRICTION,
+                    "AND purchase policy",
+                    "Purchase allowed when: " + PurchasePolicyText.describeRequirement(and)));
             return;
         }
         if (policy instanceof OrPolicy or) {
-            List<String> options = new ArrayList<>();
-            for (IPurchasePolicy child : or.getPolicies()) {
-                List<EventPolicyBadgeDTO> childBadges = new ArrayList<>();
-                collectPurchaseRestrictions(child, childBadges);
-                for (EventPolicyBadgeDTO badge : childBadges) {
-                    options.add(badge.detail());
-                }
-            }
-            if (!options.isEmpty()) {
-                badges.add(new EventPolicyBadgeDTO(
-                        Kind.RESTRICTION,
-                        "Flexible purchase rule",
-                        "Meet any one of: " + String.join(" · ", options)));
-            }
+            badges.add(new EventPolicyBadgeDTO(
+                    Kind.RESTRICTION,
+                    "OR purchase policy",
+                    "Purchase allowed when: " + PurchasePolicyText.describeRequirement(or)));
         }
     }
 

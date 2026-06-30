@@ -54,8 +54,8 @@ public class OrPolicy extends AbstractPurchasePolicy {
                 return PolicyResult.success();
             }
         }
-        List<String> violations = branchViolations(context);
-        return PolicyResult.failure("ALL_OR_CONDITIONS_FAILED", String.join("\n", violations));
+        return PolicyResult.failure("ALL_OR_CONDITIONS_FAILED",
+                PurchasePolicyText.describeOrFailure(getPolicies(), context));
     }
 
     @Override
@@ -68,7 +68,7 @@ public class OrPolicy extends AbstractPurchasePolicy {
                 return List.of();
             }
         }
-        return branchViolations(context);
+        return List.of(PurchasePolicyText.describeOrFailure(getPolicies(), context));
     }
 
     /** When every OR branch fails, surface each branch's own violation text. */
