@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -70,20 +69,15 @@ class PolicyTextTest {
 
         @Test
         void GivenCompositeWithSkippableChildren_WhenDescribeRequirement_ThenFiltersAlwaysAllow() {
-            List<IPurchasePolicy> children = new ArrayList<>();
-            children.add(new AlwaysAllowPolicy());
-            children.add(null);
-            children.add(new MaxQuantityPolicy(4));
-            IPurchasePolicy composite = new AndPolicy(children);
+            IPurchasePolicy composite = new AndPolicy(List.of(
+                    new AlwaysAllowPolicy(),
+                    new MaxQuantityPolicy(4)));
             assertEquals("at most 4 tickets", PurchasePolicyText.describeRequirement(composite));
         }
 
         @Test
         void GivenCompositeWithOnlySkippableChildren_WhenDescribeRequirement_ThenNoRestrictions() {
-            List<IPurchasePolicy> children = new ArrayList<>();
-            children.add(new AlwaysAllowPolicy());
-            children.add(null);
-            IPurchasePolicy composite = new AndPolicy(children);
+            IPurchasePolicy composite = new AndPolicy(List.of(new AlwaysAllowPolicy()));
             assertEquals("no purchase restrictions", PurchasePolicyText.describeRequirement(composite));
         }
 
