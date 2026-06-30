@@ -11,6 +11,7 @@ import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.CouponDiscount;
 import com.ticketing.domain.event.DateRangeCondition;
+import com.ticketing.domain.event.DiscountPolicyText;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IDiscountCondition;
 import com.ticketing.domain.event.IDiscountPolicy;
@@ -23,6 +24,7 @@ import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.PurchasePolicyText;
 import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.SumCompositeDiscount;
 
@@ -86,26 +88,17 @@ public final class BuyerPolicyCatalog {
             return;
         }
         if (policy instanceof AndPolicy and) {
-            for (IPurchasePolicy child : and.getPolicies()) {
-                collectPurchaseRestrictions(child, badges);
-            }
+            badges.add(new EventPolicyBadgeDTO(
+                    Kind.RESTRICTION,
+                    "AND purchase policy",
+                    "Purchase allowed when: " + PurchasePolicyText.describeRequirement(and)));
             return;
         }
         if (policy instanceof OrPolicy or) {
-            List<String> options = new ArrayList<>();
-            for (IPurchasePolicy child : or.getPolicies()) {
-                List<EventPolicyBadgeDTO> childBadges = new ArrayList<>();
-                collectPurchaseRestrictions(child, childBadges);
-                for (EventPolicyBadgeDTO badge : childBadges) {
-                    options.add(badge.detail());
-                }
-            }
-            if (!options.isEmpty()) {
-                badges.add(new EventPolicyBadgeDTO(
-                        Kind.RESTRICTION,
-                        "Flexible purchase rule",
-                        "Meet any one of: " + String.join(" · ", options)));
-            }
+            badges.add(new EventPolicyBadgeDTO(
+                    Kind.RESTRICTION,
+                    "OR purchase policy",
+                    "Purchase allowed when: " + PurchasePolicyText.describeRequirement(or)));
         }
     }
 
@@ -129,15 +122,22 @@ public final class BuyerPolicyCatalog {
             return;
         }
         if (policy instanceof MaxCompositeDiscount max) {
-            for (IDiscountPolicy child : max.getPolicies()) {
-                collectVisibleDiscounts(child, badges);
-            }
+            addCompositeDiscountBadge("Best available discount", max, badges);
             return;
         }
         if (policy instanceof SumCompositeDiscount sum) {
-            for (IDiscountPolicy child : sum.getPolicies()) {
-                collectVisibleDiscounts(child, badges);
-            }
+            addCompositeDiscountBadge("Stacked discounts", sum, badges);
+        }
+    }
+
+    private static void addCompositeDiscountBadge(
+            String title,
+            IDiscountPolicy policy,
+            List<EventPolicyBadgeDTO> badges
+    ) {
+        String description = DiscountPolicyText.describeVisibleDiscount(policy);
+        if (description != null && !description.isBlank()) {
+            badges.add(new EventPolicyBadgeDTO(Kind.DISCOUNT, title, description));
         }
     }
 

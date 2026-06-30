@@ -152,20 +152,38 @@ class EventPolicyTest {
             PolicyResult result = bothFalse.isAllowed(dummyCtx());
             assertFalse(result.allowed());
             assertEquals("ALL_OR_CONDITIONS_FAILED", result.errorCode());
-            assertEquals("Failed\nFailed", result.reason());
+            assertTrue(result.reason().contains("Purchase policy requires one OR option to pass"));
         }
 
         @Test
-        void GivenOrPolicy_WhenAllBranchesFail_ThenCollectViolationsReturnsEachBranchReason() {
+        void GivenOrPolicy_WhenAllBranchesFail_ThenCollectViolationsReturnsGroupedOrMessage() {
             IPurchasePolicy orPolicy = new OrPolicy(List.of(
                     new MinQuantityPolicy(3),
                     new AgeRestrictionPolicy(21)));
 
             List<String> violations = orPolicy.collectViolations(ctxWithTickets(1));
 
-            assertEquals(2, violations.size());
-            assertTrue(violations.stream().anyMatch(v -> v.contains("at least 3 tickets")));
-            assertTrue(violations.stream().anyMatch(v -> v.contains("Date of birth is required")));
+            assertEquals(1, violations.size());
+            assertTrue(violations.getFirst().contains("OR option"));
+            assertTrue(violations.getFirst().contains("Option 1 (at least 3 tickets)"));
+            assertTrue(violations.getFirst().contains("Option 2 (minimum age 21)"));
+            assertTrue(violations.getFirst().contains("Date of birth is required"));
+        }
+
+        @Test
+        void GivenNestedOrAndPolicy_WhenAllBranchesFail_ThenMessageUsesAndAndOrLabels() {
+            IPurchasePolicy policy = new OrPolicy(List.of(
+                    new AndPolicy(List.of(new AgeRestrictionPolicy(18), new MaxQuantityPolicy(2))),
+                    new AndPolicy(List.of(new AgeRestrictionPolicy(11), new MinQuantityPolicy(5)))));
+
+            List<String> violations = policy.collectViolations(ctxWithAge(2, LocalDate.now().minusYears(16)));
+
+            assertEquals(1, violations.size());
+            assertTrue(violations.getFirst().contains("Option 1 ((minimum age 18 AND at most 2 tickets))"));
+            assertTrue(violations.getFirst().contains("Option 2 ((minimum age 11 AND at least 5 tickets))"));
+            assertTrue(violations.getFirst().contains("OR"));
+            assertTrue(violations.getFirst().contains("You must be at least 18 years old"));
+            assertTrue(violations.getFirst().contains("You must purchase at least 5 tickets"));
         }
     }
 
