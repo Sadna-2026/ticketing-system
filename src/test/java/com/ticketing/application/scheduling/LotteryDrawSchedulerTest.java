@@ -19,6 +19,7 @@ import java.util.concurrent.ScheduledFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.TaskScheduler;
 
 import com.ticketing.application.ISystemClock;
@@ -41,6 +42,7 @@ import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryLotteryRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
+import com.ticketing.infrastructure.persistence.DatabaseConnectivityProbe;
 
 @DisplayName("LotteryDrawScheduler")
 class LotteryDrawSchedulerTest {
@@ -75,7 +77,13 @@ class LotteryDrawSchedulerTest {
             return mock(ScheduledFuture.class);
         });
 
-        scheduler = new LotteryDrawScheduler(eventService, eventRepository, taskScheduler, clock);
+        DatabaseConnectivityProbe probe = mock(DatabaseConnectivityProbe.class);
+        when(probe.isReady()).thenReturn(true);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<DatabaseConnectivityProbe> probeProvider = mock(ObjectProvider.class);
+        when(probeProvider.getIfAvailable()).thenReturn(probe);
+
+        scheduler = new LotteryDrawScheduler(eventService, eventRepository, taskScheduler, clock, probeProvider);
 
         eventId = UUID.randomUUID();
         zoneId = UUID.randomUUID();
@@ -121,7 +129,7 @@ class LotteryDrawSchedulerTest {
         lotteryEvent(NOW.minusSeconds(3600), 10);
         register(2);
 
-        scheduler.rescheduleOnStartup();
+        scheduler.tryReschedulePendingStartup();
 
         assertEquals(2, orderRepository.findActiveByEventId(eventId).size());
     }

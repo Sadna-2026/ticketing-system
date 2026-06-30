@@ -7,7 +7,7 @@ import java.util.concurrent.ScheduledFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
@@ -16,6 +16,8 @@ import com.ticketing.application.ISystemClock;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.infrastructure.persistence.DatabaseConnectivityProbe;
+import com.ticketing.infrastructure.persistence.DbConnectivityFailures;
 
 /**
  * Fires the automatic purchase-right lottery draw (requirement §II.3.6) the moment an event's
@@ -23,12 +25,14 @@ import com.ticketing.domain.event.IEventRepository;
  * the old manual "Draw lottery" button.
  *
  * <p>Each lottery event gets a single one-shot task scheduled at its {@code registrationClose}
- * instant. On startup ({@link #rescheduleOnStartup}) every persisted lottery event is rearmed,
- * so the draw survives restarts (V3 §6 recovery / §7 persistence); a close time already in the
+ * instant. On startup ({@link #tryReschedulePendingStartup()}, via
+ * {@link com.ticketing.application.initialization.DeferredDatabaseStartupPoller}) every persisted
+ * lottery event is rearmed, so the draw survives restarts (V3 §6 recovery / §7 persistence); a close time already in the
  * past runs almost immediately. The draw itself ({@link EventService#drawLotteryAutomatically})
  * is idempotent, so a duplicate or replayed trigger is a harmless no-op.
  */
 @Component
+@org.springframework.context.annotation.Lazy
 public class LotteryDrawScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(LotteryDrawScheduler.class);
@@ -37,23 +41,43 @@ public class LotteryDrawScheduler {
     private final IEventRepository eventRepository;
     private final TaskScheduler taskScheduler;
     private final ISystemClock clock;
+    private final ObjectProvider<DatabaseConnectivityProbe> connectivityProbe;
 
     /** Tracks the live timer per event so an edited window cancels and replaces the old one. */
     private final ConcurrentHashMap<UUID, ScheduledFuture<?>> scheduled = new ConcurrentHashMap<>();
 
+    private volatile boolean startupRearmPending = true;
+
     public LotteryDrawScheduler(EventService eventService,
             IEventRepository eventRepository,
             TaskScheduler taskScheduler,
-            ISystemClock clock) {
+            ISystemClock clock,
+            ObjectProvider<DatabaseConnectivityProbe> connectivityProbe) {
         this.eventService = eventService;
         this.eventRepository = eventRepository;
         this.taskScheduler = taskScheduler;
         this.clock = clock;
+        this.connectivityProbe = connectivityProbe;
     }
 
-    /** Rearm draws for all persisted lottery events after the context is ready. */
-    @EventListener(ApplicationReadyEvent.class)
-    public void rescheduleOnStartup() {
+    private boolean isDatabaseReady() {
+        DatabaseConnectivityProbe probe = connectivityProbe.getIfAvailable();
+        return probe == null || probe.isReady();
+    }
+
+    /**
+     * Completes a startup rearm deferred because the database was unreachable (req 5).
+     * Safe to call repeatedly until the first successful rearm.
+     */
+    public void tryReschedulePendingStartup() {
+        if (!startupRearmPending) {
+            return;
+        }
+        if (!isDatabaseReady()) {
+            log.warn("Database unreachable — deferring lottery draw scheduler startup rearm");
+            return;
+        }
+        startupRearmPending = false;
         int armed = 0;
         for (Event event : eventRepository.findAll()) {
             if (scheduleDrawFor(event)) {
@@ -102,11 +126,19 @@ public class LotteryDrawScheduler {
 
     private void runDraw(UUID eventId) {
         scheduled.remove(eventId);
+        if (!isDatabaseReady()) {
+            log.debug("Automatic lottery draw skipped (database not ready): eventId={}", eventId);
+            return;
+        }
         try {
             int winners = eventService.drawLotteryAutomatically(eventId).size();
             log.info("Automatic lottery draw completed: eventId={}, winners={}", eventId, winners);
         } catch (RuntimeException ex) {
-            log.warn("Automatic lottery draw failed: eventId={}: {}", eventId, ex.getMessage());
+            if (DbConnectivityFailures.isDeferrableAtStartup(ex)) {
+                log.warn("Automatic lottery draw skipped: eventId={}: {}", eventId, ex.toString());
+            } else {
+                log.warn("Automatic lottery draw failed: eventId={}: {}", eventId, ex.getMessage());
+            }
         }
     }
 

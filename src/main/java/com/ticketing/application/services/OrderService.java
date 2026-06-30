@@ -53,6 +53,8 @@ import com.ticketing.domain.queue.QueueConfig;
 import com.ticketing.domain.queue.QueueEntry;
 import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.domain.services.OrderTimeDomainService;
+import com.ticketing.infrastructure.persistence.DatabaseConnectivityProbe;
+import com.ticketing.infrastructure.persistence.DbConnectivityFailures;
 
 /**
  * Application service for orders, checkout and the virtual queue.
@@ -66,6 +68,7 @@ import com.ticketing.domain.services.OrderTimeDomainService;
  * tests) the annotations are inert and behavior is unchanged.
  */
 @org.springframework.stereotype.Service
+@org.springframework.context.annotation.Lazy
 @Transactional(readOnly = true)
 public class OrderService {
 
@@ -91,6 +94,12 @@ public class OrderService {
     private int defaultQueueThreshold = 100;
     @org.springframework.beans.factory.annotation.Value("${ticketing.queue.flow-rate:10}")
     private int defaultQueueFlowRate = 10;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DatabaseConnectivityProbe databaseConnectivityProbe;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     public OrderService(ISessionTokenService sessionTokenService,
             IOrderRepository orderRepository,
@@ -138,6 +147,45 @@ public class OrderService {
         this.orderTimeDomainService = orderTimeDomainService;
         this.notificationService = notificationService;
         this.analyticsCollector = analyticsCollector;
+    }
+
+    private boolean isPersistenceDatabaseReady() {
+        return databaseConnectivityProbe == null || databaseConnectivityProbe.isReady();
+    }
+
+    private void runScheduledMaintenance(Runnable task) {
+        try {
+            if (transactionManager != null) {
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+                        .executeWithoutResult(status -> runScheduledMaintenanceBody(task));
+            } else {
+                runScheduledMaintenanceBody(task);
+            }
+        } catch (RuntimeException ex) {
+            if (logScheduledDatabaseSkip(ex)) {
+                return;
+            }
+            throw ex;
+        }
+    }
+
+    private void runScheduledMaintenanceBody(Runnable task) {
+        try {
+            task.run();
+        } catch (RuntimeException ex) {
+            if (logScheduledDatabaseSkip(ex)) {
+                return;
+            }
+            throw ex;
+        }
+    }
+
+    private boolean logScheduledDatabaseSkip(RuntimeException ex) {
+        if (!DbConnectivityFailures.isUnavailable(ex) && !DbConnectivityFailures.isDeferrableAtStartup(ex)) {
+            return false;
+        }
+        log.warn("Scheduled maintenance skipped: database unavailable ({})", ex.toString());
+        return true;
     }
 
     // ── Order creation & ticket reservation ─────────────────────────
@@ -798,17 +846,31 @@ public class OrderService {
     }
 
     @org.springframework.scheduling.annotation.Scheduled(fixedRate = 10_000)
-    @Transactional
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public void expireOrders() {
-        log.info("Order expiry job started");
-        if (orderTimeDomainService != null) {
-            orderTimeDomainService.expireOrders();
+        if (!isPersistenceDatabaseReady()) {
+            return;
         }
+        runScheduledMaintenance(() -> {
+            log.info("Order expiry job started");
+            if (orderTimeDomainService != null) {
+                orderTimeDomainService.expireOrders();
+            }
+        });
     }
 
     @org.springframework.scheduling.annotation.Scheduled(fixedRate = 60_000)
-    @Transactional
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public void retryPendingRefunds() {
+        if (!isPersistenceDatabaseReady()) {
+            return;
+        }
+        runScheduledMaintenance(this::retryPendingRefundsInTransaction);
+    }
+
+    private void retryPendingRefundsInTransaction() {
         List<com.ticketing.domain.order.FailedCheckoutRefund> pendingRefunds = orderRepository.findPendingRefunds();
         for (com.ticketing.domain.order.FailedCheckoutRefund pending : pendingRefunds) {
             log.info("Retrying pending refund for transaction {}", pending.getTransactionId());
