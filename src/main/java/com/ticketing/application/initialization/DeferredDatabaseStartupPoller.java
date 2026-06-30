@@ -19,7 +19,7 @@ import com.ticketing.infrastructure.persistence.DatabaseConnectivityProbe;
  */
 @Component
 @ConditionalOnProperty(name = "ticketing.persistence", havingValue = "jpa")
-@Lazy
+@Lazy(false)
 public class DeferredDatabaseStartupPoller {
 
     private static final Logger log = LoggerFactory.getLogger(DeferredDatabaseStartupPoller.class);

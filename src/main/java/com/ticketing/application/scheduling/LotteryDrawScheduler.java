@@ -32,7 +32,7 @@ import com.ticketing.infrastructure.persistence.DbConnectivityFailures;
  * is idempotent, so a duplicate or replayed trigger is a harmless no-op.
  */
 @Component
-@org.springframework.context.annotation.Lazy
+@org.springframework.context.annotation.Lazy(false)
 public class LotteryDrawScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(LotteryDrawScheduler.class);

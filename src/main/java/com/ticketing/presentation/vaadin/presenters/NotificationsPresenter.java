@@ -106,6 +106,9 @@ public class NotificationsPresenter {
     }
 
     public List<PendingRoleOfferOption> listPendingRoleOffers() {
+        if ("Admin".equals(SessionContext.getRole())) {
+            return List.of();
+        }
         String token = SessionContext.getSessionToken();
         if (token == null) {
             return List.of();
@@ -118,7 +121,7 @@ public class NotificationsPresenter {
                             offer.getRole()))
                     .toList();
         } catch (RuntimeException ex) {
-            logger.warn("Failed to load pending role offers", ex);
+            PresenterErrorClassifier.logFailure(logger, "Failed to load pending role offers", ex);
             return List.of();
         }
     }
