@@ -38,6 +38,42 @@ class DatabaseConnectivityPreflightTest {
     }
 
     @Test
+    void verifyHaltsWithFramedMessageWhenPostgresUrlIsUnreachable() {
+        // #530 DB-down-at-boot coverage: the existing "wrong driver" test below only
+        // exercises the JDBC "No suitable driver" exit path — the driver layer rejects
+        // the URL scheme before any network I/O happens. This test points at a real
+        // postgres:// URL on a port nothing is listening on (localhost:1), so the real
+        // postgres driver loads, attempts a TCP connect, and returns "Connection
+        // refused" — driving the actual network-failure branch of the preflight check.
+        // Together with the existing tests this proves a DB-down boot is handled
+        // gracefully with a framed, user-actionable halt rather than a raw stack trace.
+        MockEnvironment env = new MockEnvironment()
+                .withProperty("ticketing.persistence", "jpa")
+                .withProperty("ticketing.external.connect-timeout-ms", "2000")
+                .withProperty("spring.datasource.operational.url",
+                        "jdbc:postgresql://localhost:1/ticketing")
+                .withProperty("spring.datasource.operational.username", "ticketing")
+                .withProperty("spring.datasource.operational.password", "secret")
+                .withProperty("spring.datasource.config.url", "jdbc:h2:mem:ticketing_cfg");
+
+        StartupHaltException ex = assertThrows(
+                StartupHaltException.class,
+                () -> DatabaseConnectivityPreflight.verify(env));
+
+        // Framed halt: the user sees the header, the labelled database, the actual
+        // host:port being attempted, and the network-failure diagnosis with the
+        // standard "Authorized networks" remediation hint.
+        assertTrue(ex.getMessage().contains("DATABASE CONNECTION ERROR"),
+                "halt message must carry the framed header so it stands out in error.log");
+        assertTrue(ex.getMessage().contains("operational database"),
+                "message must name which datasource (operational vs config) failed");
+        assertTrue(ex.getMessage().contains("localhost:1"),
+                "message must show the host:port the driver tried, so the user can verify config");
+        assertTrue(ex.getMessage().contains("Authorized networks"),
+                "connection-refused / timeout cases should surface the standard remediation hint");
+    }
+
+    @Test
     void verifyHaltsWithHelpfulMessageWhenDriverDoesNotMatchUrl() {
         MockEnvironment env = new MockEnvironment()
                 .withProperty("ticketing.persistence", "jpa")
