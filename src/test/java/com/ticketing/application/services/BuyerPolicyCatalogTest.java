@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -19,20 +20,30 @@ import com.ticketing.domain.event.AlwaysAllowPolicy;
 import com.ticketing.domain.event.AndPolicy;
 import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.CouponDiscount;
+import com.ticketing.domain.event.DateRangeCondition;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventCategory;
 import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.MaxCompositeDiscount;
+import com.ticketing.domain.event.MaxQuantityCondition;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityCondition;
 import com.ticketing.domain.event.MinQuantityPolicy;
 import com.ticketing.domain.event.NoDiscountPolicy;
+import com.ticketing.domain.event.NoOrphanSeatPolicy;
 import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.SimpleDiscount;
 import com.ticketing.domain.event.SumCompositeDiscount;
 
 @DisplayName("BuyerPolicyCatalog")
 class BuyerPolicyCatalogTest {
+
+    @Test
+    void GivenNullEvent_WhenBuildingBadges_ThenListsAreEmpty() {
+        assertTrue(BuyerPolicyCatalog.purchaseRestrictions(null).isEmpty());
+        assertTrue(BuyerPolicyCatalog.visibleDiscounts(null).isEmpty());
+    }
 
     @Test
     void GivenAlwaysAllowAndNoDiscount_WhenBuildingBadges_ThenListsAreEmpty() {
@@ -109,6 +120,52 @@ class BuyerPolicyCatalogTest {
         assertEquals(
                 "Purchase allowed when: ((minimum age 18 AND at most 2 tickets) OR (minimum age 11 AND at least 5 tickets))",
                 restrictions.get(0).detail());
+    }
+
+    @Test
+    void GivenIndividualRestrictionPolicies_WhenBuildingBadges_ThenEachRuleIsSummarized() {
+        Event ageEvent = event(new AgeRestrictionPolicy(18), new NoDiscountPolicy());
+        assertEquals("Age requirement", BuyerPolicyCatalog.purchaseRestrictions(ageEvent).get(0).title());
+        assertTrue(BuyerPolicyCatalog.purchaseRestrictions(ageEvent).get(0).detail().contains("18"));
+
+        Event minEvent = event(new MinQuantityPolicy(3), new NoDiscountPolicy());
+        assertEquals("Minimum purchase", BuyerPolicyCatalog.purchaseRestrictions(minEvent).get(0).title());
+
+        Event maxEvent = event(new MaxQuantityPolicy(5), new NoDiscountPolicy());
+        assertEquals("Ticket limit", BuyerPolicyCatalog.purchaseRestrictions(maxEvent).get(0).title());
+
+        Event orphanEvent = event(new NoOrphanSeatPolicy(), new NoDiscountPolicy());
+        assertEquals("Seat selection rule", BuyerPolicyCatalog.purchaseRestrictions(orphanEvent).get(0).title());
+    }
+
+    @Test
+    void GivenMaxCompositeDiscount_WhenBuildingBadges_ThenBestDiscountIsDescribed() {
+        Event event = event(
+                new AlwaysAllowPolicy(),
+                new MaxCompositeDiscount(List.of(
+                        new SimpleDiscount(new BigDecimal("10")),
+                        new SimpleDiscount(new BigDecimal("20")))));
+
+        List<EventPolicyBadgeDTO> discounts = BuyerPolicyCatalog.visibleDiscounts(event);
+
+        assertEquals(1, discounts.size());
+        assertEquals("Best available discount", discounts.get(0).title());
+        assertTrue(discounts.get(0).detail().contains("best of"));
+    }
+
+    @Test
+    void GivenDateRangeAndMaxQuantityConditions_WhenBuildingBadges_ThenConditionWordingIsShown() {
+        Instant from = Instant.now().minus(1, ChronoUnit.DAYS);
+        Instant to = Instant.now().plus(1, ChronoUnit.DAYS);
+        Event dateEvent = event(
+                new AlwaysAllowPolicy(),
+                new ConditionalDiscount(new BigDecimal("12"), new DateRangeCondition(from, to)));
+        assertTrue(BuyerPolicyCatalog.visibleDiscounts(dateEvent).get(0).detail().contains("purchasing between"));
+
+        Event maxQtyEvent = event(
+                new AlwaysAllowPolicy(),
+                new ConditionalDiscount(new BigDecimal("8"), new MaxQuantityCondition(4)));
+        assertTrue(BuyerPolicyCatalog.visibleDiscounts(maxQtyEvent).get(0).detail().contains("up to 4"));
     }
 
     @Test
