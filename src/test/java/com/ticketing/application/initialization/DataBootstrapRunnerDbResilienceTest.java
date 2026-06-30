@@ -1,6 +1,7 @@
 package com.ticketing.application.initialization;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -62,6 +63,43 @@ class DataBootstrapRunnerDbResilienceTest {
 
         assertDoesNotThrow(runner::runAtStartup);
         assertTrue(runner.hasPendingWork());
+    }
+
+    @Test
+    @DisplayName("Unreachable database at boot defers startup without throwing")
+    void givenDbUnreachableAtBoot_whenRunAtStartup_thenPendingWorkRemains() {
+        DatabaseConnectivityProbe probe = mock(DatabaseConnectivityProbe.class);
+        when(probe.isReachable()).thenReturn(false);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<DatabaseConnectivityProbe> probeProvider = mock(ObjectProvider.class);
+        when(probeProvider.getIfAvailable()).thenReturn(probe);
+
+        DataBootstrapRunner runner = new DataBootstrapRunner(
+                true,
+                false,
+                "none",
+                false,
+                "",
+                mock(PlatformInitializationService.class),
+                mock(DevSeedDataInitializer.class),
+                mock(InitialStateExecutor.class),
+                mock(OperationalDataWiper.class),
+                probeProvider);
+
+        assertDoesNotThrow(runner::runAtStartup);
+        assertTrue(runner.hasPendingWork());
+    }
+
+    @Test
+    @DisplayName("Deferred startup completes when database becomes reachable")
+    void givenPendingPlatformInit_whenRetryAfterDbReturns_thenPendingWorkClears() {
+        PlatformInitializationService platformInit = mock(PlatformInitializationService.class);
+        when(platformInit.initialize()).thenReturn(PlatformInitializationService.InitializationResult.success("ok"));
+
+        DataBootstrapRunner runner = newRunner(true, false, "none", platformInit, mock(OperationalDataWiper.class));
+
+        assertDoesNotThrow(runner::retryWhenDatabaseAvailable);
+        assertFalse(runner.hasPendingWork());
     }
 
     private static DataBootstrapRunner newRunner(
