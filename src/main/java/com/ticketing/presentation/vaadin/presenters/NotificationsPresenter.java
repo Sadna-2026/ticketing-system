@@ -14,6 +14,7 @@ import com.ticketing.infrastructure.notification.NotificationListener;
 import com.ticketing.infrastructure.notification.WebSocketNotificationService;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResult;
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.PendingRoleOfferOption;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -59,8 +60,7 @@ public class NotificationsPresenter {
             }
             return NotificationResult.success("Loaded " + notifications.size() + " notification(s).", notifications);
         } catch (RuntimeException ex) {
-            logger.warn(LOAD_FAILURE_MESSAGE, ex);
-            return NotificationResult.failure(LOAD_FAILURE_MESSAGE);
+            return NotificationResult.failure(userMessage(ex, LOAD_FAILURE_MESSAGE));
         }
     }
 
@@ -74,8 +74,7 @@ public class NotificationsPresenter {
             notificationQueryService.clearPendingNotifications(memberId);
             return NotificationResult.success("Notifications cleared.", List.of());
         } catch (RuntimeException ex) {
-            logger.warn(CLEAR_FAILURE_MESSAGE, ex);
-            return NotificationResult.failure(CLEAR_FAILURE_MESSAGE);
+            return NotificationResult.failure(userMessage(ex, CLEAR_FAILURE_MESSAGE));
         }
     }
 
@@ -89,8 +88,7 @@ public class NotificationsPresenter {
             String registrationId = realtimeNotificationService.registerListener(memberId, listener);
             return RegistrationResult.success(memberId, registrationId);
         } catch (RuntimeException ex) {
-            logger.warn(REALTIME_FAILURE_MESSAGE, ex);
-            return RegistrationResult.failure(REALTIME_FAILURE_MESSAGE, memberId, null);
+            return RegistrationResult.failure(userMessage(ex, REALTIME_FAILURE_MESSAGE), memberId, null);
         }
     }
 
@@ -137,9 +135,13 @@ public class NotificationsPresenter {
             companyService.respondToRoleAppointment(token, offerId, accepted);
             return ActionResult.success(accepted ? "Role offer accepted." : "Role offer rejected.");
         } catch (RuntimeException ex) {
-            logger.warn("Failed to respond to role offer", ex);
-            return ActionResult.failure("Could not respond to role offer. Please try again.");
+            return ActionResult.failure(userMessage(ex, "Could not respond to role offer. Please try again."));
         }
+    }
+
+    private String userMessage(RuntimeException ex, String fallback) {
+        PresenterErrorClassifier.logFailure(logger, fallback, ex);
+        return PresenterErrorClassifier.resolveUserMessage(ex, fallback);
     }
 
     public record NotificationResult(boolean success, String message, List<String> notifications) {

@@ -129,4 +129,23 @@ class PresenterErrorClassifierTest {
             assertThat(PresenterErrorClassifier.userFacingMessage(Category.NONE)).isNull();
         }
     }
+
+    @Nested
+    @DisplayName("resolveUserMessage(...)")
+    class ResolveUserMessage {
+
+        @Test
+        void dbFailure_returnsDbUnavailableMessage() {
+            Throwable ex = new DataAccessResourceFailureException("db gone");
+            assertThat(PresenterErrorClassifier.resolveUserMessage(ex, "Login failed. Please try again."))
+                    .isEqualTo(PresenterErrorClassifier.DB_UNAVAILABLE_MESSAGE);
+        }
+
+        @Test
+        void domainError_returnsFallback() {
+            assertThat(PresenterErrorClassifier.resolveUserMessage(
+                    new RuntimeException("internal"), "Could not search events. Please try again."))
+                    .isEqualTo("Could not search events. Please try again.");
+        }
+    }
 }

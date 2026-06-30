@@ -18,6 +18,7 @@ import com.ticketing.domain.member.request.RegisterRequest;
 import com.ticketing.domain.member.response.LoginResponse;
 import com.ticketing.domain.member.response.LogoutResponse;
 import com.ticketing.domain.member.response.RegisterResponse;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -359,8 +360,8 @@ public class AuthPresenter {
     }
 
     private AuthResult safeFailure(String message, RuntimeException ex) {
-        logger.warn(message, ex);
-        return AuthResult.failure(message);
+        PresenterErrorClassifier.logFailure(logger, message, ex);
+        return AuthResult.failure(PresenterErrorClassifier.resolveUserMessage(ex, message));
     }
 
     public record AuthResult(boolean success, String message) {

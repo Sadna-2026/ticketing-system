@@ -21,6 +21,7 @@ import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -83,8 +84,7 @@ public class EventsPresenter {
         } catch (IllegalArgumentException ex) {
             return SearchResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
-            logger.warn(SEARCH_FAILURE_MESSAGE, ex);
-            return SearchResult.failure(SEARCH_FAILURE_MESSAGE);
+            return SearchResult.failure(userMessage(ex, SEARCH_FAILURE_MESSAGE));
         }
     }
 
@@ -98,8 +98,7 @@ public class EventsPresenter {
                     .map(eventMap -> MapResult.success("Event map loaded.", eventMap))
                     .orElseGet(() -> MapResult.failure(MAP_NOT_FOUND_MESSAGE));
         } catch (RuntimeException ex) {
-            logger.warn(MAP_FAILURE_MESSAGE, ex);
-            return MapResult.failure(MAP_FAILURE_MESSAGE);
+            return MapResult.failure(userMessage(ex, MAP_FAILURE_MESSAGE));
         }
     }
 
@@ -143,25 +142,8 @@ public class EventsPresenter {
     }
 
     private String userMessage(RuntimeException ex, String fallback) {
-        // #516: classify infrastructure failures first so the user sees a specific,
-        // actionable message instead of the generic fallback.
-        var category = com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.classify(ex);
-        if (category != com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.Category.NONE) {
-            logger.warn("Events action failed ({}): {}", category, ex.toString());
-            return com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.userFacingMessage(category);
-        }
-
-        if (ex instanceof IllegalArgumentException
-                || ex instanceof IllegalStateException
-                || ex instanceof SecurityException) {
-            String message = ex.getMessage();
-            if (message != null && !message.isBlank()) {
-                return message;
-            }
-        }
-
-        logger.warn(fallback, ex);
-        return fallback;
+        PresenterErrorClassifier.logFailure(logger, fallback, ex);
+        return PresenterErrorClassifier.resolveUserMessage(ex, fallback);
     }
 
     private static String blankToNull(String value) {
