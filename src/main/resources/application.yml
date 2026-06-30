@@ -3,6 +3,8 @@
 # PostgreSQL is config-only (the postgresql driver is already on the classpath) â€”
 # see README "Database configuration". Do NOT hard-code real credentials here.
 spring:
+  main:
+    lazy-initialization: ${SPRING_LAZY_INIT:true}
   datasource:
     operational:
       url: ${DB_URL_OPERATIONAL:${DB_URL:jdbc:h2:mem:ticketing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}}
@@ -14,17 +16,34 @@ spring:
         max-lifetime: 600000
         keepalive-time: 30000
         validation-timeout: 3000
+        # Req 5: allow the pool to start when the DB is temporarily down at boot.
+        initialization-fail-timeout: -1
+        minimum-idle: 0
     config:
       url: ${DB_URL_CONFIG:${DB_URL:jdbc:h2:mem:ticketing_cfg;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}}
       driver-class-name: ${DB_DRIVER:org.h2.Driver}
       username: ${DB_USERNAME:sa}
       password: ${DB_PASSWORD:}
+      hikari:
+        connection-timeout: 5000
+        max-lifetime: 600000
+        keepalive-time: 30000
+        validation-timeout: 3000
+        # Req 5: allow the pool to start when the DB is temporarily down at boot.
+        initialization-fail-timeout: -1
+        minimum-idle: 0
   jpa:
     database-platform: ${DB_DIALECT:org.hibernate.dialect.H2Dialect}
     hibernate:
       ddl-auto: ${DB_DDL_AUTO:none}
     open-in-view: false
     show-sql: ${DB_SHOW_SQL:false}
+  data:
+    jpa:
+      repositories:
+        # Req 5: defer repository/EMF bootstrap until first DB access so the app can start
+        # when the database is temporarily unreachable.
+        bootstrap-mode: lazy
   h2:
     console:
       enabled: ${H2_CONSOLE_ENABLED:true}
@@ -49,6 +68,8 @@ ticketing:
     flow-rate: ${TICKETING_QUEUE_FLOW_RATE:10}
   startup:
     initialize-platform: true
+    # Req 5: when startup steps were deferred due to DB outage, poll this often (ms).
+    db-recovery-poll-ms: ${TICKETING_STARTUP_DB_RECOVERY_POLL_MS:5000}
   bootstrap:
     # dev-seed | initial-state-file | none â€” explicit choice; when unset, legacy rules apply:
     # seed.enabled=true => dev-seed; else initial-state.file set => initial-state-file; else none.
@@ -69,7 +90,7 @@ ticketing:
   # halts on failure. Unset (default) => no handshake; local dev, the stub gateways and tests are
   # unaffected. See README "External systems".
   external:
-    base-url: ${TICKETING_EXTERNAL_BASE_URL:https://damp-lynna-wsep-1984852e.koyeb.app/}
+    base-url: ${TICKETING_EXTERNAL_BASE_URL:}
     connect-timeout-ms: ${TICKETING_EXTERNAL_CONNECT_TIMEOUT_MS:5000}
     read-timeout-ms: ${TICKETING_EXTERNAL_READ_TIMEOUT_MS:5000}
     # Payment gateway (V3-17): when base-url is set, HttpPaymentGateway replaces StubPaymentGateway
@@ -88,3 +109,8 @@ ticketing:
   admin:
     username: ${TICKETING_ADMIN_USERNAME:admin}
     password: ${TICKETING_ADMIN_PASSWORD:admin123}
+
+# Vaadin dev tools: Copilot phones home to copilot.vaadin.com — disable for offline dev (no ERROR spam).
+vaadin:
+  copilot:
+    enable: ${VAADIN_COPILOT_ENABLE:false}

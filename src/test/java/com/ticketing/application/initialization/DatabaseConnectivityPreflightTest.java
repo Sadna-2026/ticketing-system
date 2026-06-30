@@ -2,6 +2,7 @@ package com.ticketing.application.initialization;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -148,6 +149,23 @@ class DatabaseConnectivityPreflightTest {
                 "connection failure");
 
         assertTrue(result.contains("Authorized networks"));
+    }
+
+    @Test
+    void isDeferrableOnNetworkFailures() {
+        assertTrue(DatabaseConnectivityPreflight.isDeferrableConnectionFailure("08001", "could not connect"));
+        assertTrue(DatabaseConnectivityPreflight.isDeferrableConnectionFailure(null, "Connection timed out"));
+        assertTrue(DatabaseConnectivityPreflight.isDeferrableConnectionFailure("99999", "some unknown problem"));
+    }
+
+    @Test
+    void isNotDeferrableOnPermanentMisconfiguration() {
+        assertFalse(DatabaseConnectivityPreflight.isDeferrableConnectionFailure(
+                "28P01", "password authentication failed"));
+        assertFalse(DatabaseConnectivityPreflight.isDeferrableConnectionFailure(
+                "3D000", "database \"ticketing\" does not exist"));
+        assertFalse(DatabaseConnectivityPreflight.isDeferrableConnectionFailure(
+                null, "No suitable driver found for jdbc:postgresql://host:5432/ticketing"));
     }
 
     @Test

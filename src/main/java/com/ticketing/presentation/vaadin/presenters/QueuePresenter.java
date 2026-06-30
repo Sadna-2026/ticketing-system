@@ -10,6 +10,7 @@ import com.ticketing.application.dto.QueueEntryDto;
 import com.ticketing.application.dto.VirtualQueueDto;
 import com.ticketing.application.services.EventService;
 import com.ticketing.application.services.OrderService;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -57,8 +58,7 @@ public class QueuePresenter {
         } catch (IllegalArgumentException | IllegalStateException ex) {
             return QueueResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
-            logger.warn(JOIN_FAILURE_MESSAGE, ex);
-            return QueueResult.failure(JOIN_FAILURE_MESSAGE);
+            return QueueResult.failure(userMessage(ex, JOIN_FAILURE_MESSAGE));
         }
     }
 
@@ -170,8 +170,7 @@ public class QueuePresenter {
         } catch (IllegalStateException ex) {
             return QueueStatusResult.notInQueue("No active queue for this event.");
         } catch (RuntimeException ex) {
-            logger.warn(STATUS_FAILURE_MESSAGE, ex);
-            return QueueStatusResult.failure(STATUS_FAILURE_MESSAGE);
+            return QueueStatusResult.failure(userMessage(ex, STATUS_FAILURE_MESSAGE));
         }
     }
 
@@ -196,6 +195,11 @@ public class QueuePresenter {
 
     public SessionContext.UiState currentSessionState() {
         return SessionContext.currentUiState();
+    }
+
+    private String userMessage(RuntimeException ex, String fallback) {
+        PresenterErrorClassifier.logFailure(logger, fallback, ex);
+        return PresenterErrorClassifier.resolveUserMessage(ex, fallback);
     }
 
     public record QueueResult(boolean success, boolean queued, String message, QueueEntryDto entry) {

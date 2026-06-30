@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.SystemAnalyticsCollector;
@@ -207,6 +208,7 @@ public class DevSeedDataInitializer {
         this.analyticsCollector = analyticsCollector;
     }
 
+    @Transactional
     public void runSeed() {
         seedMembersAndAdmin();
         seedCompanies();

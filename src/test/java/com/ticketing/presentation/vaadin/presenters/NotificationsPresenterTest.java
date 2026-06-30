@@ -48,6 +48,16 @@ class NotificationsPresenterTest {
     }
 
     @Test
+    void GivenAdminSession_WhenListingPendingRoleOffers_ThenEmptyWithoutCallingMemberService() {
+        SessionContext.setMemberId(UUID.randomUUID());
+        SessionContext.setRole("Admin");
+        SessionContext.setSessionToken("admin-token");
+
+        assertTrue(presenter.listPendingRoleOffers().isEmpty());
+        verifyNoInteractions(memberService);
+    }
+
+    @Test
     void GivenNoMemberSession_WhenLoadingNotifications_ThenLoginRequiredMessageIsReturned() {
         NotificationResult result = presenter.loadPendingNotifications();
 

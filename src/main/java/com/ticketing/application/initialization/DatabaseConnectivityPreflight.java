@@ -7,6 +7,8 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 
 /**
@@ -22,6 +24,8 @@ import org.springframework.core.env.Environment;
  * test suite (memory mode, or JPA-on-H2) skips this entirely.
  */
 final class DatabaseConnectivityPreflight {
+
+    private static final Logger log = LoggerFactory.getLogger(DatabaseConnectivityPreflight.class);
 
     private static final String BORDER =
             "*************************************************************";
@@ -62,8 +66,31 @@ final class DatabaseConnectivityPreflight {
         try (Connection ignored = DriverManager.getConnection(url, props)) {
             // reachable - nothing to do
         } catch (SQLException ex) {
-            throw new StartupHaltException(framed(buildDetail(label, url, ex)));
+            if (isDeferrableConnectionFailure(ex.getSQLState(), ex.getMessage())) {
+                log.warn(framedDeferred(buildDetail(label, url, ex)));
+                return;
+            }
+            throw new StartupHaltException(framedHalt(buildDetail(label, url, ex)));
         }
+    }
+
+    /**
+     * Req 5: transient network outages defer startup; permanent misconfiguration still halts
+     * with the partner's framed DATABASE CONNECTION ERROR message.
+     */
+    static boolean isDeferrableConnectionFailure(String sqlState, String message) {
+        String m = message == null ? "" : message.toLowerCase();
+
+        if ("28P01".equalsIgnoreCase(sqlState) || m.contains("password authentication failed")) {
+            return false;
+        }
+        if ("3D000".equalsIgnoreCase(sqlState) || m.contains("does not exist")) {
+            return false;
+        }
+        if (m.contains("no suitable driver")) {
+            return false;
+        }
+        return true;
     }
 
     private static String buildDetail(String label, String url, SQLException ex) {
@@ -114,11 +141,21 @@ final class DatabaseConnectivityPreflight {
         return message == null ? "(no message)" : message.replaceAll("\\s+", " ").trim();
     }
 
-    private static String framed(String detail) {
+    private static String framedHalt(String detail) {
         return """
 
                 %s
-                  APPLICATION STARTUP HALTED - DATABASE CONNECTION ERROR
+                  APPLICATION STARTUP HALTED — DATABASE CONNECTION ERROR
+                  %s
+                %s
+                """.formatted(BORDER, detail, BORDER);
+    }
+
+    private static String framedDeferred(String detail) {
+        return """
+
+                %s
+                  DATABASE UNAVAILABLE AT STARTUP — DEFERRING INITIALIZATION
                   %s
                 %s
                 """.formatted(BORDER, detail, BORDER);

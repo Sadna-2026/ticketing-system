@@ -1,4 +1,7 @@
 <configuration>
+    <conversionRule conversionWord="friendlyEx"
+                    converterClass="com.ticketing.infrastructure.logging.FriendlyThrowableProxyConverter" />
+
     <appender name="EVENT_FILE" class="ch.qos.logback.core.FileAppender">
         <file>logs/event.log</file>
         <append>true</append>
@@ -20,8 +23,9 @@
     <appender name="ERROR_FILE" class="ch.qos.logback.core.FileAppender">
         <file>logs/error.log</file>
         <append>true</append>
+        <filter class="com.ticketing.infrastructure.logging.SuppressBenignInfrastructureErrorsFilter" />
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n%friendlyEx</pattern>
         </encoder>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <level>ERROR</level>
@@ -32,7 +36,7 @@
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n%friendlyEx</pattern>
         </encoder>
     </appender>
 
@@ -41,4 +45,17 @@
         <appender-ref ref="EVENT_FILE" />
         <appender-ref ref="ERROR_FILE" />
     </root>
+
+    <!-- Vaadin Copilot / Reactor: suppress noisy onErrorDropped DNS traces when offline -->
+    <logger name="reactor.core.publisher.Operators" level="OFF" />
+    <!-- Hibernate metadata probe when DB is down: avoid multi-line NPE stacks (req 5) -->
+    <logger name="org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator" level="ERROR" />
+    <!-- Connection failures are summarized by application code; avoid duplicate ERROR lines -->
+    <logger name="org.hibernate.engine.jdbc.spi.SqlExceptionHelper" level="WARN" />
+    <!-- Benign when Wi-Fi drops mid-page-load; details go to event.log at WARN if needed -->
+    <logger name="com.vaadin.flow.server.communication.IndexHtmlRequestHandler" level="WARN" />
+    <logger name="com.vaadin.flow.server.DefaultErrorHandler" level="WARN" />
+    <!-- Expected when DB is down at boot or during shutdown with create-drop -->
+    <logger name="org.hibernate.tool.schema.internal.SchemaDropperImpl" level="WARN" />
+    <logger name="org.hibernate.tool.schema.internal.SchemaDropperImpl$DelayedDropActionImpl" level="WARN" />
 </configuration>

@@ -16,9 +16,9 @@ import com.ticketing.domain.gateway.IExternalSystemsClient;
  * issuance connection must exist after initialization).
  *
  * <p>Gated on {@code ticketing.external.base-url}: when it is blank (the default), the handshake is
- * skipped so local dev, the existing stub gateways and the test suite are unaffected. When the URL
- * is configured, a failed handshake halts startup with a clear message. Runs early ({@link Order})
- * so connectivity is verified before platform initialization / seeding.
+ * skipped so local dev, stub gateways and the test suite are unaffected. When the URL is configured,
+ * a failed handshake halts startup with a clear message. Runs early ({@link Order}) before platform
+ * initialization / seeding.
  */
 @Component
 @Order(0)
@@ -50,7 +50,7 @@ public class ExternalSystemsHandshakeRunner implements ApplicationRunner {
                             + "Because ticketing.external.base-url is set, startup sends a handshake "
                             + "(POST with action_type=handshake) to verify checkout and ticket delivery will work. "
                             + "Ensure that service is running and the URL is correct, or leave "
-                            + "ticketing.external.base-url empty to skip this check in local dev.");
+                            + "ticketing.external.base-url empty to use stub gateways in local dev.");
         }
         log.info("External systems handshake OK.");
     }

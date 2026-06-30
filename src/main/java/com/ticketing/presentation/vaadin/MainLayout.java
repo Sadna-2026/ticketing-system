@@ -6,10 +6,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.ObjectProvider;
+
 import com.ticketing.infrastructure.notification.NotificationListener;
+import com.ticketing.infrastructure.persistence.DatabaseConnectivityProbe;
 import com.ticketing.presentation.vaadin.presenters.AuthPresenter;
 import com.ticketing.presentation.vaadin.presenters.NotificationsPresenter;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.SessionContext;
+import com.ticketing.presentation.vaadin.util.StatusBanner;
 import com.ticketing.presentation.vaadin.util.UiMessages;
 import com.ticketing.presentation.vaadin.views.AdminView;
 import com.ticketing.presentation.vaadin.views.AuthView;
@@ -37,6 +42,7 @@ import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.RouterLink;
+import com.vaadin.flow.shared.Registration;
 import com.vaadin.flow.spring.annotation.SpringComponent;
 import com.vaadin.flow.spring.annotation.UIScope;
 
@@ -44,16 +50,27 @@ import com.vaadin.flow.spring.annotation.UIScope;
 @UIScope
 public class MainLayout extends AppLayout implements AfterNavigationObserver, BeforeEnterObserver {
 
+    private static final int CONNECTIVITY_POLL_MILLIS = 5_000;
+
     private final Tabs navigation = new Tabs();
     private final Map<Class<? extends Component>, Tab> tabsByTarget = new HashMap<>();
 
     // Delivers real-time notifications as toasts for the whole session, on every route (#490).
     private final RealtimeNotificationBinder realtimeNotifications;
     private final AuthPresenter authPresenter;
+    private final ObjectProvider<DatabaseConnectivityProbe> connectivityProbe;
 
-    public MainLayout(NotificationsPresenter notificationsPresenter, AuthPresenter authPresenter) {
+    private final StatusBanner connectivityBanner = new StatusBanner();
+    private Registration connectivityPollListener;
+    private Boolean lastDbReachable;
+
+    public MainLayout(
+            NotificationsPresenter notificationsPresenter,
+            AuthPresenter authPresenter,
+            ObjectProvider<DatabaseConnectivityProbe> connectivityProbe) {
         this.realtimeNotifications = new RealtimeNotificationBinder(notificationsPresenter);
         this.authPresenter = authPresenter;
+        this.connectivityProbe = connectivityProbe;
 
         // Branded wordmark: an EQ-bar mark (cyan -> magenta) + the product name in Sora.
         Html wordmark = new Html(
@@ -98,12 +115,84 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver, Be
         // Connect real-time notifications for the whole session at app-shell level, so toasts
         // arrive on every route — not only while the Notifications tab is open (#490).
         syncRealtimeListener();
+        startConnectivityMonitoring(attachEvent.getUI());
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
+        stopConnectivityMonitoring();
         realtimeNotifications.unbind();
+        detachEvent.getUI().remove(connectivityBanner);
         super.onDetach(detachEvent);
+    }
+
+    private void startConnectivityMonitoring(UI ui) {
+        if (connectivityProbe.getIfAvailable() == null || connectivityPollListener != null) {
+            return;
+        }
+        ui.add(connectivityBanner);
+        ui.setPollInterval(CONNECTIVITY_POLL_MILLIS);
+        connectivityPollListener = ui.addPollListener(event -> pollDatabaseConnectivity(ui));
+        pollDatabaseConnectivity(ui);
+    }
+
+    private void stopConnectivityMonitoring() {
+        if (connectivityPollListener != null) {
+            connectivityPollListener.remove();
+            connectivityPollListener = null;
+        }
+        UI ui = UI.getCurrent();
+        if (ui != null) {
+            ui.setPollInterval(-1);
+        }
+    }
+
+    private void pollDatabaseConnectivity(UI ui) {
+        try {
+            DatabaseConnectivityProbe probe = connectivityProbe.getIfAvailable();
+            if (probe == null) {
+                return;
+            }
+            boolean reachable = probe.isReachable();
+            if (lastDbReachable == null) {
+                lastDbReachable = reachable;
+                if (!reachable) {
+                    ui.access(() -> connectivityBanner.showError(PresenterErrorClassifier.DB_UNAVAILABLE_MESSAGE));
+                }
+                return;
+            }
+            if (!lastDbReachable && reachable) {
+                ui.access(() -> {
+                    connectivityBanner.hide();
+                    UiMessages.success(PresenterErrorClassifier.DB_RECOVERED_MESSAGE);
+                });
+            } else if (lastDbReachable && !reachable) {
+                ui.access(() -> connectivityBanner.showError(PresenterErrorClassifier.DB_UNAVAILABLE_MESSAGE));
+            }
+            lastDbReachable = reachable;
+        } catch (RuntimeException ex) {
+            if (isConnectivityPollSuppressed(ex)) {
+                stopConnectivityMonitoring();
+                return;
+            }
+            throw ex;
+        }
+    }
+
+    private static boolean isConnectivityPollSuppressed(Throwable ex) {
+        Throwable cursor = ex;
+        int hops = 0;
+        while (cursor != null && hops++ < 8) {
+            if (cursor instanceof org.springframework.beans.factory.BeanCreationNotAllowedException) {
+                return true;
+            }
+            String message = cursor.getMessage();
+            if (message != null && message.contains("singletons of this factory are in destruction")) {
+                return true;
+            }
+            cursor = cursor.getCause();
+        }
+        return false;
     }
 
     /**

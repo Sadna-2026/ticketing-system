@@ -1,12 +1,10 @@
 package com.ticketing.presentation.vaadin.util;
 
-import java.sql.SQLTransientConnectionException;
-
-import org.hibernate.exception.JDBCConnectionException;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.transaction.CannotCreateTransactionException;
+import org.slf4j.Logger;
 
 import com.ticketing.domain.gateway.ExternalSystemsUnavailableException;
+import com.ticketing.infrastructure.logging.InfrastructureErrorMessages;
+import com.ticketing.infrastructure.persistence.DbConnectivityFailures;
 
 /**
  * Classifies infrastructure failures that bubble up to the Vaadin presenters into a
@@ -35,8 +33,10 @@ public final class PresenterErrorClassifier {
         NONE
     }
 
-    private static final String DB_UNAVAILABLE_MESSAGE =
+    public static final String DB_UNAVAILABLE_MESSAGE =
             "The database is temporarily unavailable. Your work hasn't been lost — please retry in a moment.";
+    public static final String DB_RECOVERED_MESSAGE =
+            "Database connection restored. You can retry any action that failed while offline.";
     private static final String EXTERNAL_SYSTEM_UNAVAILABLE_MESSAGE =
             "An external service (payment or ticket issuance) is temporarily unreachable. Please retry in a moment.";
 
@@ -59,17 +59,7 @@ public final class PresenterErrorClassifier {
             if (cursor instanceof ExternalSystemsUnavailableException) {
                 return Category.EXTERNAL_SYSTEM_UNAVAILABLE;
             }
-            if (cursor instanceof DataAccessResourceFailureException
-                    || cursor instanceof CannotCreateTransactionException
-                    || cursor instanceof JDBCConnectionException
-                    || cursor instanceof SQLTransientConnectionException) {
-                return Category.DB_UNAVAILABLE;
-            }
-            // Match the H2-specific connection error by class-name to avoid pulling
-            // h2's JDBC types into compile-time deps of this presentation utility.
-            String className = cursor.getClass().getName();
-            if (className.equals("org.h2.jdbc.JdbcSQLNonTransientConnectionException")
-                    || className.equals("org.h2.jdbc.JdbcSQLTransientConnectionException")) {
+            if (DbConnectivityFailures.isUnavailable(cursor)) {
                 return Category.DB_UNAVAILABLE;
             }
             cursor = cursor.getCause();
@@ -87,5 +77,36 @@ public final class PresenterErrorClassifier {
             case EXTERNAL_SYSTEM_UNAVAILABLE -> EXTERNAL_SYSTEM_UNAVAILABLE_MESSAGE;
             case NONE -> null;
         };
+    }
+
+    /**
+     * Maps an exception to a user-facing message: infrastructure failures first, then
+     * domain exceptions with a message, then the caller's fallback.
+     */
+    public static String resolveUserMessage(Throwable ex, String fallback) {
+        Category category = classify(ex);
+        if (category != Category.NONE) {
+            return userFacingMessage(category);
+        }
+        if (ex instanceof IllegalArgumentException
+                || ex instanceof SecurityException) {
+            String message = ex.getMessage();
+            if (message != null && !message.isBlank()) {
+                return message;
+            }
+        }
+        return fallback;
+    }
+
+    /**
+     * Logs infrastructure failures with a one-line summary; other failures keep the full stack.
+     */
+    public static void logFailure(Logger logger, String context, Throwable ex) {
+        Category category = classify(ex);
+        if (category != Category.NONE) {
+            logger.warn("{} ({})", context, ex.toString());
+        } else {
+            logger.warn("{} — {}", context, InfrastructureErrorMessages.formatLogThrowable(ex).strip());
+        }
     }
 }
