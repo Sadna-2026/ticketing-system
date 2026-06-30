@@ -3,6 +3,7 @@ package com.ticketing.application.initialization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.domain.company.ICompanyRepository;
 import com.ticketing.domain.event.IEventRepository;
@@ -43,6 +44,7 @@ public class OperationalDataWiper {
         this.queueRepository = queueRepository;
     }
 
+    @Transactional
     public void wipeAll() {
         log.warn("Wiping all operational data...");
         try {
