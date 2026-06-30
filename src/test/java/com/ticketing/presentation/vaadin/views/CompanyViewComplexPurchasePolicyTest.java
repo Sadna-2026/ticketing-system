@@ -29,8 +29,10 @@ import com.ticketing.presentation.vaadin.testsupport.VaadinSessionExtension;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 import com.vaadin.flow.component.checkbox.CheckboxGroup;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.textfield.TextField;
 
 @DisplayName("CompanyView complex purchase policy editor")
 @ExtendWith(VaadinSessionExtension.class)
@@ -143,6 +145,40 @@ class CompanyViewComplexPurchasePolicyTest {
         assertTrue(discountDrafts(view).isEmpty());
     }
 
+    @Test
+    void GivenDiscountTypeChanges_WhenFormUpdates_ThenOnlyRelevantInputsAreVisible() throws Exception {
+        CompanyView view = newView();
+
+        assertTrue(!decimal(view, "discountPercent").isVisible());
+        assertTrue(!text(view, "couponCodeField").isVisible());
+        assertTrue(!dateTime(view, "couponExpiry").isVisible());
+        assertTrue(!combo(view, "discountConditionType").isVisible());
+
+        combo(view, "discountType").setValue("Simple (flat %)");
+        assertTrue(decimal(view, "discountPercent").isVisible());
+        assertTrue(!text(view, "couponCodeField").isVisible());
+        assertTrue(!combo(view, "discountConditionType").isVisible());
+
+        combo(view, "discountType").setValue("Coupon (% with code)");
+        assertTrue(decimal(view, "discountPercent").isVisible());
+        assertTrue(text(view, "couponCodeField").isVisible());
+        assertTrue(dateTime(view, "couponExpiry").isVisible());
+        assertTrue(!combo(view, "discountConditionType").isVisible());
+
+        combo(view, "discountType").setValue("Conditional (% with condition)");
+        combo(view, "discountConditionType").setValue("Min tickets");
+        assertTrue(decimal(view, "discountPercent").isVisible());
+        assertTrue(combo(view, "discountConditionType").isVisible());
+        assertTrue(integer(view, "conditionMinTickets").isVisible());
+        assertTrue(!integer(view, "conditionMaxTickets").isVisible());
+        assertTrue(!dateTime(view, "conditionFrom").isVisible());
+
+        combo(view, "discountConditionType").setValue("Date range");
+        assertTrue(!integer(view, "conditionMinTickets").isVisible());
+        assertTrue(dateTime(view, "conditionFrom").isVisible());
+        assertTrue(dateTime(view, "conditionTo").isVisible());
+    }
+
     private static CompanyView newView() {
         CompanyPresenter presenter = mock(CompanyPresenter.class);
         when(presenter.currentSessionState())
@@ -196,6 +232,14 @@ class CompanyViewComplexPurchasePolicyTest {
 
     private static BigDecimalField decimal(CompanyView view, String name) throws Exception {
         return (BigDecimalField) field(view, name);
+    }
+
+    private static TextField text(CompanyView view, String name) throws Exception {
+        return (TextField) field(view, name);
+    }
+
+    private static DateTimePicker dateTime(CompanyView view, String name) throws Exception {
+        return (DateTimePicker) field(view, name);
     }
 
     @SuppressWarnings("unchecked")

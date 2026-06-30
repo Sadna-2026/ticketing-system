@@ -933,10 +933,12 @@ public class CompanyView extends VerticalLayout {
 
         discountType.setItems("No discount", "Simple (flat %)", "Conditional (% with condition)", "Coupon (% with code)");
         discountType.setValue("No discount");
+        discountType.addValueChangeListener(e -> updateDiscountFieldVisibility());
         discountPercent.setValue(BigDecimal.TEN);
         couponCodeField.setPlaceholder("e.g. EARLY20");
         discountConditionType.setItems("Min tickets", "Max tickets", "Date range");
         discountConditionType.setValue("Min tickets");
+        discountConditionType.addValueChangeListener(e -> updateDiscountFieldVisibility());
         conditionMinTickets.setMin(1);
         conditionMinTickets.setValue(2);
         conditionMaxTickets.setMin(1);
@@ -982,6 +984,7 @@ public class CompanyView extends VerticalLayout {
         discountDraftActions.setAlignItems(Alignment.BASELINE);
         HorizontalLayout discountActions = new HorizontalLayout(setDiscountPolicyButton, removeDiscountPolicyButton);
         discountActions.setAlignItems(Alignment.BASELINE);
+        updateDiscountFieldVisibility();
         renderDiscountDrafts();
         policyControls = new VerticalLayout(
                 targetForm,
@@ -1126,6 +1129,26 @@ public class CompanyView extends VerticalLayout {
         conditionMaxTickets.clear();
         conditionFrom.clear();
         conditionTo.clear();
+        updateDiscountFieldVisibility();
+    }
+
+    private void updateDiscountFieldVisibility() {
+        String type = discountType.getValue();
+        boolean noDiscount = type == null || "No discount".equals(type);
+        boolean coupon = "Coupon (% with code)".equals(type);
+        boolean conditional = "Conditional (% with condition)".equals(type);
+        boolean percentBased = !noDiscount;
+
+        discountPercent.setVisible(percentBased);
+        couponCodeField.setVisible(coupon);
+        couponExpiry.setVisible(coupon);
+        discountConditionType.setVisible(conditional);
+
+        String conditionType = discountConditionType.getValue();
+        conditionMinTickets.setVisible(conditional && "Min tickets".equals(conditionType));
+        conditionMaxTickets.setVisible(conditional && "Max tickets".equals(conditionType));
+        conditionFrom.setVisible(conditional && "Date range".equals(conditionType));
+        conditionTo.setVisible(conditional && "Date range".equals(conditionType));
     }
 
     private static String formatPurchasePolicyLine(PolicyViewResult purchase, boolean eventScope) {
