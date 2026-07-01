@@ -1,5 +1,6 @@
 package com.ticketing.domain.event;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -31,6 +32,14 @@ public class LotteryWindow {
     /** Hours that winners have to purchase before tickets open to all. Default 48. */
     @Column(name = "lottery_purchase_window_hours", columnDefinition = "INT DEFAULT 48")
     private Integer purchaseWindowHours;
+    /**
+     * Optional finer-grained override of {@link #purchaseWindowHours}: when set, winners
+     * have exactly this many minutes to purchase (minimum 1). Null means fall back to the
+     * hour value. Lets a manager configure very short windows (e.g. 1 minute) — useful for
+     * exercising the winner-window-expiry flow without waiting whole hours.
+     */
+    @Column(name = "lottery_purchase_window_minutes")
+    private Integer purchaseWindowMinutes;
 
     // Required by JPA; do not use directly.
     protected LotteryWindow() {
@@ -50,6 +59,20 @@ public class LotteryWindow {
         this.purchaseWindowHours = purchaseWindowHours;
     }
 
+    /**
+     * As the hours-based constructor, but with an optional minute-level override for the
+     * winner purchase window. Pass {@code null} for {@code purchaseWindowMinutes} to keep
+     * the hour-based window.
+     */
+    public LotteryWindow(Instant registrationOpen, Instant registrationClose, int maxWinners,
+                         int purchaseWindowHours, Integer purchaseWindowMinutes) {
+        this(registrationOpen, registrationClose, maxWinners, purchaseWindowHours);
+        if (purchaseWindowMinutes != null && purchaseWindowMinutes < 1) {
+            throw new IllegalArgumentException("purchaseWindowMinutes must be at least 1");
+        }
+        this.purchaseWindowMinutes = purchaseWindowMinutes;
+    }
+
     /** Backward-compatible constructor — defaults to 50 winners and 48-hour purchase window. */
     public LotteryWindow(Instant registrationOpen, Instant registrationClose) {
         this(registrationOpen, registrationClose, 50, 48);
@@ -59,6 +82,19 @@ public class LotteryWindow {
     public Instant registrationClose() { return registrationClose; }
     public int maxWinners() { return maxWinners != null ? maxWinners : 50; }
     public int purchaseWindowHours() { return purchaseWindowHours != null ? purchaseWindowHours : 48; }
+    /** The minute-level override, or {@code null} when the window is hour-based. */
+    public Integer purchaseWindowMinutes() { return purchaseWindowMinutes; }
+
+    /**
+     * The effective winner purchase window as a {@link Duration}: the minute override when
+     * present, otherwise the hour value. This is the single source of truth callers should
+     * use when computing a winner's deadline.
+     */
+    public Duration purchaseWindowDuration() {
+        return purchaseWindowMinutes != null
+                ? Duration.ofMinutes(purchaseWindowMinutes)
+                : Duration.ofHours(purchaseWindowHours());
+    }
 
     /**
      * Returns true when {@code now} falls within [registrationOpen, registrationClose).
@@ -76,12 +112,14 @@ public class LotteryWindow {
         return Objects.equals(registrationOpen, that.registrationOpen)
                 && Objects.equals(registrationClose, that.registrationClose)
                 && Objects.equals(maxWinners, that.maxWinners)
-                && Objects.equals(purchaseWindowHours, that.purchaseWindowHours);
+                && Objects.equals(purchaseWindowHours, that.purchaseWindowHours)
+                && Objects.equals(purchaseWindowMinutes, that.purchaseWindowMinutes);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(registrationOpen, registrationClose, maxWinners, purchaseWindowHours);
+        return Objects.hash(registrationOpen, registrationClose, maxWinners, purchaseWindowHours,
+                purchaseWindowMinutes);
     }
 
     @Override
@@ -89,6 +127,7 @@ public class LotteryWindow {
         return "LotteryWindow[registrationOpen=" + registrationOpen
                 + ", registrationClose=" + registrationClose
                 + ", maxWinners=" + maxWinners
-                + ", purchaseWindowHours=" + purchaseWindowHours + "]";
+                + ", purchaseWindowHours=" + purchaseWindowHours
+                + ", purchaseWindowMinutes=" + purchaseWindowMinutes + "]";
     }
 }

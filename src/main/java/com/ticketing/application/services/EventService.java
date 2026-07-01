@@ -632,8 +632,10 @@ public class EventService implements ApplicationEventPublisherAware {
             return new ArrayList<>();
         }
 
-        int purchaseHours = (event.getLotteryWindow() != null) ? event.getLotteryWindow().purchaseWindowHours() : 48;
-        Instant purchaseWindowDeadline = systemClock.now().plus(Duration.ofHours(purchaseHours));
+        Duration purchaseWindow = (event.getLotteryWindow() != null)
+                ? event.getLotteryWindow().purchaseWindowDuration()
+                : Duration.ofHours(48);
+        Instant purchaseWindowDeadline = systemClock.now().plus(purchaseWindow);
         List<ActiveOrder> createdOrders = new ArrayList<>();
 
         for (LotteryEntry winner : winners) {
@@ -656,7 +658,8 @@ public class EventService implements ApplicationEventPublisherAware {
                 if (order.getMemberId() != null) {
                     winnerMemberIds.add(order.getMemberId());
                     notificationService.notify(order.getMemberId().toString(),
-                            "You have won the lottery! You have 48 hours to choose and purchase your tickets. Go to the Events page to select your tickets.");
+                            "You have won the lottery! You have " + describePurchaseWindow(purchaseWindow)
+                                    + " to choose and purchase your tickets. Go to the Events page to select your tickets.");
                 }
             }
             for (LotteryEntry entry : allEntries) {
@@ -667,6 +670,17 @@ public class EventService implements ApplicationEventPublisherAware {
             }
         }
         return createdOrders;
+    }
+
+    // Human-readable purchase window for winner notifications: whole hours when the window
+    // divides evenly into hours (e.g. "48 hours"), otherwise minutes (e.g. "1 minute").
+    private static String describePurchaseWindow(Duration window) {
+        long totalMinutes = window.toMinutes();
+        if (totalMinutes >= 60 && totalMinutes % 60 == 0) {
+            long hours = totalMinutes / 60;
+            return hours + (hours == 1 ? " hour" : " hours");
+        }
+        return totalMinutes + (totalMinutes == 1 ? " minute" : " minutes");
     }
 
     // Winner count is capacity-bounded: a uniformly random sample of up to `capacity` entries.

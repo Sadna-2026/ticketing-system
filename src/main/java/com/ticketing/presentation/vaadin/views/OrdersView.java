@@ -258,10 +258,38 @@ public class OrdersView extends VerticalLayout {
         
         CheckoutQuoteResult quote = presenter.quoteCheckout();
         if (!quote.success()) {
-            // Already handled below in some cases, or we just pass a failed quote
+            // The order can no longer be quoted — almost always because the reservation
+            // hold expired (the background job released the seats and cleared the order)
+            // while the buyer sat on this page. Report a clear reason and drop the now-stale
+            // cart, instead of opening a payment dialog whose amount is null (which used to
+            // NPE into the generic "something went wrong" error handler).
+            handleUnavailableOrderAtCheckout(quote.message());
+            return;
         }
-        
+
         buildCheckoutDialog(quote).open();
+    }
+
+    private void handleUnavailableOrderAtCheckout(String quoteMessage) {
+        boolean lotteryWin = currentOrder != null && currentOrder.isLotteryWin();
+        boolean hadItems = currentOrder != null
+                && currentOrder.getItems() != null
+                && !currentOrder.getItems().isEmpty();
+        String message;
+        if (lotteryWin) {
+            message = "The lottery has ended — buying tickets is no longer available.";
+        } else if (hadItems) {
+            message = "Your order has expired and the reserved tickets have been released.";
+        } else {
+            message = quoteMessage == null || quoteMessage.isBlank()
+                    ? "Your order is no longer available." : quoteMessage;
+        }
+        currentOrder = null;
+        selectedOrderItem = null;
+        refreshOrderDisplay();
+        checkoutStatus.setText(message);
+        orderActionStatus.setText(message);
+        UiMessages.error(message);
     }
 
     /**
@@ -305,16 +333,25 @@ public class OrdersView extends VerticalLayout {
 
         CheckoutResult result = presenter.checkout(card);
         if (!result.success()) {
-            checkoutStatus.setText(result.message());
-            orderActionStatus.setText(result.message());
-            // UiMessages.error(result.message()); // Removed: relying on domain-layer websocket notification
             if (isAccountSuspensionMessage(result.message())) {
                 dialog.close();
                 String suspensionMessage = result.message();
                 loadActiveOrder(false);
                 checkoutStatus.setText(suspensionMessage);
                 orderActionStatus.setText(suspensionMessage);
+                return;
             }
+            // The order can no longer be paid — typically the reservation hold expired
+            // between opening this dialog and pressing Pay. Close the dialog and drop the
+            // stale cart instead of leaving the buyer on a dead payment form.
+            if (isOrderNoLongerAvailable(result.message())) {
+                dialog.close();
+                handleUnavailableOrderAtCheckout(result.message());
+                return;
+            }
+            // Recoverable failure (e.g. payment declined): keep the dialog open to retry.
+            checkoutStatus.setText(result.message());
+            orderActionStatus.setText(result.message());
             return;
         }
 
@@ -337,6 +374,24 @@ public class OrdersView extends VerticalLayout {
             return false;
         }
         return message.contains("Account is suspended") || message.contains("permanently suspended");
+    }
+
+    /**
+     * True when checkout failed because the active order is gone rather than because of a
+     * retryable payment problem — an expired reservation hold, a cancelled event, or an
+     * emptied/missing order. These are terminal for this cart, so the dialog should close.
+     */
+    private static boolean isOrderNoLongerAvailable(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String lower = message.toLowerCase();
+        return lower.contains("no active order")
+                || lower.contains("has expired")
+                || lower.contains("empty order")
+                || lower.contains("has been cancelled")
+                || lower.contains("lottery has ended")
+                || lower.contains("no longer available");
     }
 
     private boolean canCheckout() {
