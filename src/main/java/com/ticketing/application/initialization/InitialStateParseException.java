@@ -12,4 +12,9 @@ public class InitialStateParseException extends RuntimeException {
     public InitialStateParseException(String message) {
         super(message);
     }
+
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+        return this;
+    }
 }

@@ -28,6 +28,7 @@ import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
  * <p>Seeding and platform initialization are disabled to keep the context lean; they are orthogonal
  * to the isolation guarantees asserted here.
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
         "ticketing.seed.enabled=false",
         "ticketing.startup.initialize-platform=false"

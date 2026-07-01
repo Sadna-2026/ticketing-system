@@ -35,6 +35,7 @@ class InitializationStartupFailureTest {
                 "--server.port=0",
                 "--spring.profiles.active=test",
                 "--ticketing.seed.enabled=false",
+                "--ticketing.bootstrap.dataset=initial-state-file",
                 "--ticketing.startup.initialize-platform=false",
                 "--ticketing.initial-state.file=" + initialStateFilePath);
     }
@@ -51,7 +52,7 @@ class InitializationStartupFailureTest {
     void GivenIllegalStateStep_WhenAppBoots_ThenStartupFails() throws IOException {
         Path file = tempStateFile("login(ghost, secret1);\n");
         assertThatThrownBy(() -> boot(file.toString()).close())
-                .hasStackTraceContaining("login for 'ghost'");
+                .hasMessageContaining("login for 'ghost'");
     }
 
     @Test
@@ -60,14 +61,14 @@ class InitializationStartupFailureTest {
         // Missing the terminating ';'.
         Path file = tempStateFile("guest-registration(rina, rina@example.com, secret1)\n");
         assertThatThrownBy(() -> boot(file.toString()).close())
-                .hasStackTraceContaining("Initial-state parse error at line")
-                .hasStackTraceContaining("missing ';'");
+                .hasMessageContaining("[PARSE ERROR]")
+                .hasMessageContaining("missing ';'");
     }
 
     @Test
     @DisplayName("Non-readable configured initial-state file halts startup")
     void GivenUnreadableFile_WhenAppBoots_ThenStartupFails() {
         assertThatThrownBy(() -> boot("/nonexistent-dir-v3-24/missing-initial-state.txt").close())
-                .hasStackTraceContaining("not readable");
+                .hasMessageContaining("not readable");
     }
 }

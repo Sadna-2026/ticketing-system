@@ -18,4 +18,9 @@ public class InitialStateExecutionException extends RuntimeException {
     public InitialStateExecutionException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+        return this;
+    }
 }

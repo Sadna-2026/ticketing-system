@@ -14,8 +14,10 @@ import java.util.List;
  * @param args the arguments in order; quoted arguments have had their surrounding
  *             double quotes stripped, unquoted arguments are trimmed. Never {@code null};
  *             empty for a zero-arg call. The list is unmodifiable.
+ * @param line the 1-based line number in the source file where this operation started
+ * @param sourceFile the path/name of the source file, for diagnostics
  */
-public record InitialStateOperation(String name, List<String> args) {
+public record InitialStateOperation(String name, List<String> args, int line, String sourceFile) {
 
     public InitialStateOperation {
         if (name == null || name.isBlank()) {

@@ -1,24 +1,49 @@
 # Database connection is fully externalized (V3-12): every setting is read from an
 # environment variable, with H2 in-memory defaults for local dev. Switching to
-# PostgreSQL is config-only (the postgresql driver is already on the classpath) —
+# PostgreSQL is config-only (the postgresql driver is already on the classpath) â€”
 # see README "Database configuration". Do NOT hard-code real credentials here.
 spring:
+  main:
+    lazy-initialization: ${SPRING_LAZY_INIT:true}
   datasource:
-    url: ${DB_URL:jdbc:h2:mem:ticketing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}
-    driver-class-name: ${DB_DRIVER:org.h2.Driver}
-    username: ${DB_USERNAME:sa}
-    password: ${DB_PASSWORD:}
-    hikari:
-      connection-timeout: 5000
-      max-lifetime: 600000
-      keepalive-time: 30000
-      validation-timeout: 3000
+    operational:
+      url: ${DB_URL_OPERATIONAL:${DB_URL:jdbc:h2:mem:ticketing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}}
+      driver-class-name: ${DB_DRIVER:org.h2.Driver}
+      username: ${DB_USERNAME:sa}
+      password: ${DB_PASSWORD:}
+      hikari:
+        connection-timeout: 5000
+        max-lifetime: 600000
+        keepalive-time: 30000
+        validation-timeout: 3000
+        # Req 5: allow the pool to start when the DB is temporarily down at boot.
+        initialization-fail-timeout: -1
+        minimum-idle: 0
+    config:
+      url: ${DB_URL_CONFIG:${DB_URL:jdbc:h2:mem:ticketing_cfg;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false}}
+      driver-class-name: ${DB_DRIVER:org.h2.Driver}
+      username: ${DB_USERNAME:sa}
+      password: ${DB_PASSWORD:}
+      hikari:
+        connection-timeout: 5000
+        max-lifetime: 600000
+        keepalive-time: 30000
+        validation-timeout: 3000
+        # Req 5: allow the pool to start when the DB is temporarily down at boot.
+        initialization-fail-timeout: -1
+        minimum-idle: 0
   jpa:
     database-platform: ${DB_DIALECT:org.hibernate.dialect.H2Dialect}
     hibernate:
       ddl-auto: ${DB_DDL_AUTO:none}
     open-in-view: false
     show-sql: ${DB_SHOW_SQL:false}
+  data:
+    jpa:
+      repositories:
+        # Req 5: defer repository/EMF bootstrap until first DB access so the app can start
+        # when the database is temporarily unreachable.
+        bootstrap-mode: lazy
   h2:
     console:
       enabled: ${H2_CONSOLE_ENABLED:true}
@@ -43,16 +68,26 @@ ticketing:
     flow-rate: ${TICKETING_QUEUE_FLOW_RATE:10}
   startup:
     initialize-platform: true
+    # Req 5: when startup steps were deferred due to DB outage, poll this often (ms).
+    db-recovery-poll-ms: ${TICKETING_STARTUP_DB_RECOVERY_POLL_MS:5000}
   bootstrap:
-    # dev-seed | initial-state-file | none — explicit choice; when unset, legacy rules apply:
+    # dev-seed | initial-state-file | none â€” explicit choice; when unset, legacy rules apply:
     # seed.enabled=true => dev-seed; else initial-state.file set => initial-state-file; else none.
     dataset: ${TICKETING_BOOTSTRAP_DATASET:}
+    # When true, wipe operational aggregates (members, companies, events, orders, â€¦) after platform
+    # init and before data bootstrap. Config DB (system admin) is untouched. Default false preserves
+    # existing data for gradual demo fill; set true at meeting start for an empty operational DB.
+    clear-db-on-start: ${TICKETING_BOOTSTRAP_CLEAR_DB_ON_START:false}
   seed:
     enabled: true
-  # Initial-state file (V3-15 / #415): used when bootstrap.dataset=initial-state-file, or when
-  # seed.enabled=false and this path is set. Supports filesystem paths and classpath: resources.
+  # Initial-state file (V3-15 / #415, final scenario #561): used when
+  # bootstrap.dataset=initial-state-file, or when seed.enabled=false and this path is set.
+  # Supports filesystem paths and classpath: resources. The default points at the FINAL
+  # V3 checking scenario; the older staff demo is classpath:initial-state/staff-demo-v3.txt.
+  # (dev-seed remains the default dataset via seed.enabled=true, so normal runs are unaffected
+  # until you select bootstrap.dataset=initial-state-file.)
   initial-state:
-    file: ${TICKETING_INITIAL_STATE_FILE:}
+    file: ${TICKETING_INITIAL_STATE_FILE:classpath:initial-state/final-v3-scenario.txt}
   # External systems integration (V3-16): the WSEP payment + ticket endpoint is a single HTTP
   # POST endpoint keyed by action_type ("handshake" returns "OK"). The base URL is config-driven;
   # when set, ExternalSystemsHandshakeRunner verifies connectivity at startup (integrity rule) and
@@ -75,3 +110,11 @@ ticketing:
       card-holder: ${TICKETING_EXTERNAL_PAYMENT_CARD_HOLDER:Ticketing System}
       card-cvv: ${TICKETING_EXTERNAL_PAYMENT_CARD_CVV:123}
       card-id: ${TICKETING_EXTERNAL_PAYMENT_CARD_ID:000000000}
+  admin:
+    username: ${TICKETING_ADMIN_USERNAME:admin}
+    password: ${TICKETING_ADMIN_PASSWORD:admin123}
+
+# Vaadin dev tools: Copilot phones home to copilot.vaadin.com — disable for offline dev (no ERROR spam).
+vaadin:
+  copilot:
+    enable: ${VAADIN_COPILOT_ENABLE:false}

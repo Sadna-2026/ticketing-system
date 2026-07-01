@@ -47,17 +47,24 @@ public class PlatformInitializationService {
     @Transactional
     public synchronized InitializationResult initialize() {
         recordEvent("Platform initialization started");
+        log.info("Platform initialization requested");
 
         InitializationResult validation = validateStartupConfiguration();
         if (!validation.success()) {
             return halt(validation.message());
         }
 
-        if (!startupConfiguration.clearingServiceConfigured() || !isPaymentGatewayReachable()) {
+        if (!startupConfiguration.clearingServiceConfigured()) {
+            return halt("ticketing.external.base-url is not configured");
+        }
+        if (!isPaymentGatewayReachable()) {
             return halt("Unable to connect to clearing service");
         }
 
-        if (!startupConfiguration.supplyServiceConfigured() || !isSupplyGatewayReachable()) {
+        if (!startupConfiguration.supplyServiceConfigured()) {
+            return halt("ticketing.external.base-url is not configured");
+        }
+        if (!isSupplyGatewayReachable()) {
             return halt("Unable to connect to supply service");
         }
 
@@ -82,15 +89,15 @@ public class PlatformInitializationService {
 
     private InitializationResult validateStartupConfiguration() {
         if (startupConfiguration.adminUsername() == null || startupConfiguration.adminUsername().isBlank()) {
-            return InitializationResult.failure("Invalid admin credentials");
+            return InitializationResult.failure("ticketing.admin.username is blank");
         }
         if (startupConfiguration.adminEmail() == null
                 || startupConfiguration.adminEmail().isBlank()
                 || !startupConfiguration.adminEmail().contains("@")) {
-            return InitializationResult.failure("Invalid admin credentials");
+            return InitializationResult.failure("ticketing.admin.email is missing or invalid");
         }
         if (startupConfiguration.adminPassword() == null || startupConfiguration.adminPassword().length() < 6) {
-            return InitializationResult.failure("Invalid admin credentials");
+            return InitializationResult.failure("ticketing.admin.password is shorter than 6 characters");
         }
         return InitializationResult.success("Startup configuration valid");
     }
@@ -127,7 +134,6 @@ public class PlatformInitializationService {
 
     private InitializationResult halt(String message) {
         recordEvent("Platform initialization failed: " + message);
-        log.error("Platform initialization failed: {}", message);
         return InitializationResult.failure(message);
     }
 

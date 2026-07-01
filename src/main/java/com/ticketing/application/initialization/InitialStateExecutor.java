@@ -49,6 +49,7 @@ import com.ticketing.domain.member.response.RegisterResponse;
  * application layer.
  */
 @Service
+@org.springframework.context.annotation.Lazy
 public class InitialStateExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(InitialStateExecutor.class);
@@ -96,9 +97,10 @@ public class InitialStateExecutor {
             try {
                 executeOne(op, boundTokens);
             } catch (RuntimeException ex) {
-                throw new InitialStateExecutionException(
-                        "Initial-state operation #" + index + " '" + op.name() + "' failed: "
-                                + ex.getMessage(), ex);
+                String file = op.sourceFile() != null ? op.sourceFile() : "unknown";
+                String detail = "[EXECUTION ERROR] " + file + ":" + op.line() + ": " + op.name() + ": "
+                        + ex.getMessage();
+                throw new InitialStateExecutionException(StartupHaltException.framedInitializationMessage(detail), ex);
             }
         }
 
@@ -116,6 +118,7 @@ public class InitialStateExecutor {
             case "appoint-owner", "offer-owner-role" -> appointOwner(args, boundTokens);
             case "accept-role-offer", "respond-role-offer" -> acceptRoleOffer(args, boundTokens);
             case "create-event" -> createEvent(args, boundTokens);
+            case "publish-event" -> publishEvent(args, boundTokens);
             case "set-event-seating-layout" -> setEventSeatingLayout(args, boundTokens);
             case "set-company-coupon-discount" -> setCompanyCouponDiscount(args, boundTokens);
             case "logout" -> logout(args, boundTokens);
@@ -252,6 +255,16 @@ public class InitialStateExecutor {
         eventService.createEvent(token, request);
     }
 
+    private void publishEvent(List<String> args, Map<String, String> boundTokens) {
+        requireArity("publish-event", args, 3, 3);
+        String token = resolveToken(args.get(0), boundTokens);
+        String companyName = args.get(1);
+        String eventName = args.get(2);
+
+        Event event = findEvent(companyName, eventName);
+        eventService.publishEvent(token, event.getId());
+    }
+
     private void setEventSeatingLayout(List<String> args, Map<String, String> boundTokens) {
         requireArity("set-event-seating-layout", args, 6, 6);
         String token = resolveToken(args.get(0), boundTokens);
@@ -288,7 +301,25 @@ public class InitialStateExecutor {
             }
         }
 
-        eventService.setEventLayout(token, event.getId(), new VenueLayout(gridRows, gridCols, cells));
+        // Place each general-admission zone as a cell in an extra row so the buyer's venue map
+        // exposes a purchasable GA area. Without this, a mixed GA + assigned event shows the GA
+        // zone only in the legend with no way to add GA tickets (the map is built from cells).
+        List<InventoryZone> gaZones = event.getZones().stream()
+                .filter(z -> !z.isAssigned())
+                .toList();
+        int layoutRows = gridRows;
+        int layoutCols = gridCols;
+        if (!gaZones.isEmpty()) {
+            int gaRow = gridRows;
+            int gaCol = 0;
+            for (InventoryZone gaZone : gaZones) {
+                cells.add(LayoutCell.ga(gaRow, gaCol++, gaZone.getId(), gaZone.getName()));
+            }
+            layoutRows = gridRows + 1;
+            layoutCols = Math.max(gridCols, gaZones.size());
+        }
+
+        eventService.setEventLayout(token, event.getId(), new VenueLayout(layoutRows, layoutCols, cells));
     }
 
     private void setCompanyCouponDiscount(List<String> args, Map<String, String> boundTokens) {

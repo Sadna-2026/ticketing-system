@@ -36,7 +36,6 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.spring.annotation.SpringComponent;
@@ -68,6 +67,7 @@ public class OrdersView extends VerticalLayout {
     private final Span policyComplianceStatus = new Span();
     private final Span checkoutStatus = new Span("Checkout is available once the active order has tickets.");
     private Button checkoutButton;
+    private Button removeCouponButton;
     private final Span historyStatus = new Span("Members can load purchase history.");
     private final Paragraph memberOnlyHistoryHint = new Paragraph("Log in as a member to view purchase history.");
     private final Grid<PurchaseRecordDTO> historyGrid = new Grid<>(PurchaseRecordDTO.class, false);
@@ -115,8 +115,6 @@ public class OrdersView extends VerticalLayout {
         orderActionStatus.getStyle().set("white-space", "pre-line");
         policyComplianceStatus.getStyle().set("white-space", "pre-line");
         couponCode.setPlaceholder("Optional");
-        couponCode.setValueChangeMode(ValueChangeMode.EAGER);
-        couponCode.addValueChangeListener(event -> refreshCheckoutState());
         newGAQuantity.setMin(1);
         newGAQuantity.setValue(1);
 
@@ -145,7 +143,8 @@ public class OrdersView extends VerticalLayout {
         orderItemsGrid.addColumn(item -> formatPrice(item.getPricePerTicket())).setHeader("Price").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> formatPrice(item.getTotalPrice())).setHeader("Line total").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> item.isAssignedSeat() ? "Assigned seat" : "GA").setHeader("Type").setAutoWidth(true);
-        orderItemsGrid.setAllRowsVisible(true);
+        orderItemsGrid.setPageSize(100);
+        orderItemsGrid.setHeight("420px");
         orderItemsGrid.asSingleSelect().addValueChangeListener(event -> {
             selectedOrderItem = event.getValue();
             refreshItemActionState();
@@ -181,17 +180,36 @@ public class OrdersView extends VerticalLayout {
     }
 
     private VerticalLayout checkoutSection() {
+        Button applyCouponButton = new Button("Apply Coupon", event -> {
+            if (currentOrder != null) {
+                handleMutationResult(presenter.applyCoupon(couponCode.getValue()));
+            }
+        });
+        Button removeCouponButton = new Button("Remove coupon", event -> {
+            if (currentOrder != null) {
+                handleMutationResult(presenter.applyCoupon(""));
+            }
+        });
+        removeCouponButton.setId("remove-coupon-button");
+        removeCouponButton.setEnabled(false); // enabled only when a coupon is applied
+        HorizontalLayout couponForm = new HorizontalLayout(couponCode, applyCouponButton, removeCouponButton);
+        couponForm.setAlignItems(Alignment.BASELINE);
+
         checkoutButton = new Button("Checkout", event -> checkout());
         checkoutButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        HorizontalLayout form = new HorizontalLayout(couponCode, checkoutButton);
+        HorizontalLayout form = new HorizontalLayout(checkoutButton);
         form.setAlignItems(Alignment.BASELINE);
 
-        VerticalLayout section = new VerticalLayout(new H3("Checkout"), form, policyComplianceStatus, checkoutStatus);
+        // Store reference so refreshOrderDisplay() can toggle the enabled state.
+        this.removeCouponButton = removeCouponButton;
+
+        VerticalLayout section = new VerticalLayout(new H3("Checkout"), couponForm, form, policyComplianceStatus, checkoutStatus);
         section.setPadding(false);
         section.setWidthFull();
         section.addClassName("app-card");
         return section;
     }
+
 
     private VerticalLayout historySection() {
         Button loadHistory = new Button("Load purchase history", event -> loadPurchaseHistory());
@@ -237,21 +255,52 @@ public class OrdersView extends VerticalLayout {
             UiMessages.info(NO_TICKETS_CHECKOUT_MESSAGE);
             return;
         }
-        buildCheckoutDialog().open();
+        
+        CheckoutQuoteResult quote = presenter.quoteCheckout();
+        if (!quote.success()) {
+            // The order can no longer be quoted — almost always because the reservation
+            // hold expired (the background job released the seats and cleared the order)
+            // while the buyer sat on this page. Report a clear reason and drop the now-stale
+            // cart, instead of opening a payment dialog whose amount is null (which used to
+            // NPE into the generic "something went wrong" error handler).
+            handleUnavailableOrderAtCheckout(quote.message());
+            return;
+        }
+
+        buildCheckoutDialog(quote).open();
+    }
+
+    private void handleUnavailableOrderAtCheckout(String quoteMessage) {
+        boolean lotteryWin = currentOrder != null && currentOrder.isLotteryWin();
+        boolean hadItems = currentOrder != null
+                && currentOrder.getItems() != null
+                && !currentOrder.getItems().isEmpty();
+        String message;
+        if (lotteryWin) {
+            message = "The lottery has ended — buying tickets is no longer available.";
+        } else if (hadItems) {
+            message = "Your order has expired and the reserved tickets have been released.";
+        } else {
+            message = quoteMessage == null || quoteMessage.isBlank()
+                    ? "Your order is no longer available." : quoteMessage;
+        }
+        currentOrder = null;
+        selectedOrderItem = null;
+        refreshOrderDisplay();
+        checkoutStatus.setText(message);
+        orderActionStatus.setText(message);
+        UiMessages.error(message);
     }
 
     /**
      * Payment dialog that collects the buyer's card details for the WSEP {@code pay} action.
      * Package-private so view-layer tests can drive it without opening an overlay.
      */
-    Dialog buildCheckoutDialog() {
+    Dialog buildCheckoutDialog(CheckoutQuoteResult quote) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Payment");
 
-        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
-        Span amount = new Span(quote.success() && quote.total() != null
-                ? "Amount due: " + quote.total().toPlainString()
-                : "Amount due at checkout.");
+        Span amount = new Span("Amount due: " + quote.total().toPlainString());
 
         TextField currency = new TextField("Currency");
         currency.setValue("USD");
@@ -262,8 +311,7 @@ public class OrdersView extends VerticalLayout {
         TextField cvv = new TextField("CVV");
         TextField cardId = new TextField("ID");
 
-        Span dialogStatus = new Span();
-        Button pay = new Button("Pay", e -> submitPayment(dialog, dialogStatus, new CardPaymentInfo(
+        Button pay = new Button("Pay", e -> submitPayment(dialog, new CardPaymentInfo(
                 currency.getValue(), cardNumber.getValue(), month.getValue(), year.getValue(),
                 holder.getValue(), cvv.getValue(), cardId.getValue())));
         pay.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -272,24 +320,38 @@ public class OrdersView extends VerticalLayout {
         dialog.add(new VerticalLayout(
                 new H4("Card details"), amount,
                 currency, cardNumber, month, year, holder, cvv, cardId,
-                new HorizontalLayout(pay, cancel), dialogStatus));
+                new HorizontalLayout(pay, cancel)));
         return dialog;
     }
 
-    private void submitPayment(Dialog dialog, Span dialogStatus, CardPaymentInfo card) {
+    private void submitPayment(Dialog dialog, CardPaymentInfo card) {
         if (isBlank(card.cardNumber()) || isBlank(card.holder()) || isBlank(card.cvv())
                 || isBlank(card.month()) || isBlank(card.year()) || isBlank(card.cardId())) {
-            dialogStatus.setText("All card fields are required.");
             UiMessages.error("All card fields are required.");
             return;
         }
 
-        CheckoutResult result = presenter.checkout(couponCode.getValue(), card);
+        CheckoutResult result = presenter.checkout(card);
         if (!result.success()) {
-            dialogStatus.setText(result.message());
+            if (isAccountSuspensionMessage(result.message())) {
+                dialog.close();
+                String suspensionMessage = result.message();
+                loadActiveOrder(false);
+                checkoutStatus.setText(suspensionMessage);
+                orderActionStatus.setText(suspensionMessage);
+                return;
+            }
+            // The order can no longer be paid — typically the reservation hold expired
+            // between opening this dialog and pressing Pay. Close the dialog and drop the
+            // stale cart instead of leaving the buyer on a dead payment form.
+            if (isOrderNoLongerAvailable(result.message())) {
+                dialog.close();
+                handleUnavailableOrderAtCheckout(result.message());
+                return;
+            }
+            // Recoverable failure (e.g. payment declined): keep the dialog open to retry.
             checkoutStatus.setText(result.message());
             orderActionStatus.setText(result.message());
-            UiMessages.error(result.message());
             return;
         }
 
@@ -305,6 +367,31 @@ public class OrdersView extends VerticalLayout {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean isAccountSuspensionMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        return message.contains("Account is suspended") || message.contains("permanently suspended");
+    }
+
+    /**
+     * True when checkout failed because the active order is gone rather than because of a
+     * retryable payment problem — an expired reservation hold, a cancelled event, or an
+     * emptied/missing order. These are terminal for this cart, so the dialog should close.
+     */
+    private static boolean isOrderNoLongerAvailable(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String lower = message.toLowerCase();
+        return lower.contains("no active order")
+                || lower.contains("has expired")
+                || lower.contains("empty order")
+                || lower.contains("has been cancelled")
+                || lower.contains("lottery has ended")
+                || lower.contains("no longer available");
     }
 
     private boolean canCheckout() {
@@ -340,11 +427,9 @@ public class OrdersView extends VerticalLayout {
         checkoutButton.setEnabled(true);
         policyComplianceStatus.setText(compliance.message());
 
-        CheckoutQuoteResult quote = presenter.quoteCheckout(couponCode.getValue());
+        CheckoutQuoteResult quote = presenter.quoteCheckout();
         if (!quote.success()) {
-            checkoutStatus.setText(quote.message().isBlank()
-                    ? "Enter an optional coupon code, then checkout."
-                    : quote.message());
+            checkoutStatus.setText(quote.message());
             return;
         }
         checkoutStatus.setText(formatCheckoutQuote(quote));
@@ -449,11 +534,29 @@ public class OrdersView extends VerticalLayout {
         }
 
         int ticketCount = items.stream().mapToInt(OrderItemDto::getQuantity).sum();
+        
+        String couponStr = currentOrder.getCouponCode();
+        if (couponStr != null && !couponStr.isBlank()) {
+            couponCode.setValue(couponStr);
+        } else {
+            couponCode.clear();
+        }
+        if (removeCouponButton != null) {
+            removeCouponButton.setEnabled(couponStr != null && !couponStr.isBlank());
+        }
+
+        String totalText = "subtotal " + formatPrice(currentOrder.getSubtotal())
+                + " | total " + formatPrice(currentOrder.getTotalPrice());
+        
+        if (couponStr != null && !couponStr.isBlank()) {
+            totalText += " (Coupon applied)";
+        }
+
         orderStatus.setText("Order " + currentOrder.getId()
                 + " | event " + formatEventLabel(currentOrder)
                 + " | status " + currentOrder.getStatus()
                 + " | tickets " + ticketCount
-                + " | total " + formatPrice(currentOrder.getTotalPrice()));
+                + " | " + totalText);
     }
 
     private String formatEventLabel(ActiveOrderDto order) {
@@ -522,7 +625,7 @@ public class OrdersView extends VerticalLayout {
         }
         return "Subtotal " + formatPrice(quote.subtotal())
                 + " | Amount due: " + formatPrice(quote.total())
-                + ". Enter an optional coupon code, then checkout.";
+                + ". Coupon applied!";
     }
 
     private String formatCheckoutSuccess(CheckoutResult result) {

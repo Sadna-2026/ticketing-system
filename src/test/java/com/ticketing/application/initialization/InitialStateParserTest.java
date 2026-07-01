@@ -7,7 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+@ExtendWith(OutputCaptureExtension.class)
 public class InitialStateParserTest {
 
     private final InitialStateParser parser = new InitialStateParser();
@@ -19,10 +22,12 @@ public class InitialStateParserTest {
                 open-production-company(rina_token, "Demo Co", "A demo company");
                 """;
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(2, ops.size());
         assertEquals("login", ops.get(0).name());
+        assertEquals(1, ops.get(0).line());
+        assertEquals("test.txt", ops.get(0).sourceFile());
         assertEquals(List.of("rina", "pw"), ops.get(0).args());
         assertEquals("open-production-company", ops.get(1).name());
         assertEquals(List.of("rina_token", "Demo Co", "A demo company"), ops.get(1).args());
@@ -32,7 +37,7 @@ public class InitialStateParserTest {
     public void givenQuotedArgWithCommaAndSpaces_whenParse_thenOneArgWithQuotesStripped() {
         String content = "create(\"Hello, world; and more\");";
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(1, ops.size());
         assertEquals(List.of("Hello, world; and more"), ops.get(0).args());
@@ -42,7 +47,7 @@ public class InitialStateParserTest {
     public void givenUnquotedArgs_whenParse_thenTrimmed() {
         String content = "op(  a  ,   b  );";
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(List.of("a", "b"), ops.get(0).args());
     }
@@ -58,7 +63,7 @@ public class InitialStateParserTest {
                 logout(rina_token);
                 """;
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(2, ops.size());
         assertEquals("login", ops.get(0).name());
@@ -69,7 +74,7 @@ public class InitialStateParserTest {
     public void givenZeroArgCall_whenParse_thenEmptyArgList() {
         String content = "refresh();";
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(1, ops.size());
         assertEquals("refresh", ops.get(0).name());
@@ -86,7 +91,7 @@ public class InitialStateParserTest {
                 );
                 """;
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(1, ops.size());
         assertEquals("open-production-company", ops.get(0).name());
@@ -97,19 +102,19 @@ public class InitialStateParserTest {
     public void givenQuotedArgWithEscapedQuote_whenParse_thenEscapesResolved() {
         String content = "create(\"a \\\"quoted\\\" name\");";
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(List.of("a \"quoted\" name"), ops.get(0).args());
     }
 
     @Test
     public void givenEmptyContent_whenParse_thenEmptyList() {
-        assertTrue(parser.parse("").isEmpty());
+        assertTrue(parser.parse("", "test.txt").isEmpty());
     }
 
     @Test
     public void givenNullContent_whenParse_thenEmptyList() {
-        assertTrue(parser.parse((String) null).isEmpty());
+        assertTrue(parser.parse((String) null, "test.txt").isEmpty());
     }
 
     @Test
@@ -121,7 +126,7 @@ public class InitialStateParserTest {
 
                 """;
 
-        assertTrue(parser.parse(content).isEmpty());
+        assertTrue(parser.parse(content, "test.txt").isEmpty());
     }
 
     @Test
@@ -129,15 +134,18 @@ public class InitialStateParserTest {
         String content = "login(rina, pw)";
 
         InitialStateParseException ex =
-                assertThrows(InitialStateParseException.class, () -> parser.parse(content));
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
         assertTrue(ex.getMessage().contains("';'"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: missing ';'"));
     }
 
     @Test
     public void givenMissingClosingParen_whenParse_thenThrows() {
         String content = "login(rina, pw;";
 
-        assertThrows(InitialStateParseException.class, () -> parser.parse(content));
+        InitialStateParseException ex =
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: unterminated operation (missing ')')"));
     }
 
     @Test
@@ -145,22 +153,27 @@ public class InitialStateParserTest {
         String content = "login;";
 
         InitialStateParseException ex =
-                assertThrows(InitialStateParseException.class, () -> parser.parse(content));
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
         assertTrue(ex.getMessage().contains("'('"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: missing '('"));
     }
 
     @Test
     public void givenUnbalancedQuote_whenParse_thenThrows() {
         String content = "login(\"rina, pw);";
 
-        assertThrows(InitialStateParseException.class, () -> parser.parse(content));
+        InitialStateParseException ex =
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: unbalanced quote"));
     }
 
     @Test
     public void givenMissingOperationName_whenParse_thenThrows() {
         String content = "(rina);";
 
-        assertThrows(InitialStateParseException.class, () -> parser.parse(content));
+        InitialStateParseException ex =
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:1: missing operation name"));
     }
 
     @Test
@@ -170,16 +183,17 @@ public class InitialStateParserTest {
                 open(broken""";
 
         InitialStateParseException ex =
-                assertThrows(InitialStateParseException.class, () -> parser.parse(content));
-        assertTrue(ex.getMessage().contains("line 2"),
+                assertThrows(InitialStateParseException.class, () -> parser.parse(content, "test.txt"));
+        assertTrue(ex.getMessage().contains("test.txt:2"),
                 "expected line number in message but was: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[PARSE ERROR] test.txt:2: unterminated operation"));
     }
 
     @Test
     public void givenQuotedArgContainingSlashSlash_whenParse_thenNotTreatedAsComment() {
         String content = "navigate(\"https://example.com/path\");";
 
-        List<InitialStateOperation> ops = parser.parse(content);
+        List<InitialStateOperation> ops = parser.parse(content, "test.txt");
 
         assertEquals(List.of("https://example.com/path"), ops.get(0).args());
     }

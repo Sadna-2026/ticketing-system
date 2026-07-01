@@ -8,6 +8,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.application.initialization.StartupHaltException;
 import com.ticketing.domain.gateway.IExternalSystemsClient;
 
 /**
@@ -15,9 +16,9 @@ import com.ticketing.domain.gateway.IExternalSystemsClient;
  * issuance connection must exist after initialization).
  *
  * <p>Gated on {@code ticketing.external.base-url}: when it is blank (the default), the handshake is
- * skipped so local dev, the existing stub gateways and the test suite are unaffected. When the URL
- * is configured, a failed handshake halts startup with a clear message. Runs early ({@link Order})
- * so connectivity is verified before platform initialization / seeding.
+ * skipped so local dev, stub gateways and the test suite are unaffected. When the URL is configured,
+ * a failed handshake halts startup with a clear message. Runs early ({@link Order}) before platform
+ * initialization / seeding.
  */
 @Component
 @Order(0)
@@ -44,9 +45,12 @@ public class ExternalSystemsHandshakeRunner implements ApplicationRunner {
         }
         log.info("Performing external systems startup handshake against {} ...", baseUrl);
         if (!externalSystemsClient.handshake()) {
-            throw new IllegalStateException(
-                    "External systems handshake failed at startup. Verify ticketing.external.base-url ("
-                    + baseUrl + ") and that the external payment/ticket endpoint is reachable.");
+            StartupHaltException.failInitialization(
+                    "Cannot reach the external payment and ticket-issuance service at " + baseUrl + ". "
+                            + "Because ticketing.external.base-url is set, startup sends a handshake "
+                            + "(POST with action_type=handshake) to verify checkout and ticket delivery will work. "
+                            + "Ensure that service is running and the URL is correct, or leave "
+                            + "ticketing.external.base-url empty to use stub gateways in local dev.");
         }
         log.info("External systems handshake OK.");
     }

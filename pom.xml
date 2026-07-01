@@ -18,6 +18,11 @@
     <vaadin.version>24.6.1</vaadin.version>
 
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
+
+    <!-- JUnit tags excluded from the default `mvn test` run. `slow` covers the @SpringBootTest
+         classes (full Spring context boots). Run them with `mvn test -Dtest.excludedGroups=`
+         (empty) or the `all-tests` profile. -->
+    <test.excludedGroups>slow</test.excludedGroups>
     <mockito.version>5.11.0</mockito.version>
   </properties>
 
@@ -163,6 +168,14 @@
         <version>3.2.5</version>
         <configuration>
           <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+          <!-- Run test classes in parallel: one reusable JVM fork per two CPU cores. Each fork is an
+               isolated JVM (separate in-memory H2), so Spring contexts and static state don't clash.
+               Held at 0.5C (not 1C) so cores stay free for the async notification executor threads —
+               at full saturation their short Thread.sleep/latch waits time out and flake. -->
+          <forkCount>0.5C</forkCount>
+          <reuseForks>true</reuseForks>
+          <!-- Skip @Tag("slow") (the @SpringBootTest context boots) on the default run. -->
+          <excludedGroups>${test.excludedGroups}</excludedGroups>
           <!-- V3-25: isolated test configuration. Activate the `test` profile
                (src/test/resources/application-test.yml) for every test run, and pin the datasource +
                external endpoint as system properties. System properties outrank OS environment
@@ -172,6 +185,16 @@
                empty everywhere (handshake skipped, stub gateways active). -->
           <systemPropertyVariables>
             <spring.profiles.active>test</spring.profiles.active>
+            <DB_URL_OPERATIONAL>jdbc:h2:mem:ticketing-test-op;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</DB_URL_OPERATIONAL>
+            <DB_URL_CONFIG>jdbc:h2:mem:ticketing-test-cfg;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</DB_URL_CONFIG>
+            <DB_DRIVER>org.h2.Driver</DB_DRIVER>
+            <DB_DIALECT>org.hibernate.dialect.H2Dialect</DB_DIALECT>
+            <DB_DDL_AUTO>create-drop</DB_DDL_AUTO>
+            <DB_USERNAME>sa</DB_USERNAME>
+            <DB_PASSWORD></DB_PASSWORD>
+            <TICKETING_PERSISTENCE>memory</TICKETING_PERSISTENCE>
+            <TICKETING_BOOTSTRAP_DATASET>none</TICKETING_BOOTSTRAP_DATASET>
+            <TICKETING_BOOTSTRAP_CLEAR_DB_ON_START>false</TICKETING_BOOTSTRAP_CLEAR_DB_ON_START>
             <spring.datasource.url>jdbc:h2:mem:ticketing-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_UPPER=false</spring.datasource.url>
             <spring.datasource.driver-class-name>org.h2.Driver</spring.datasource.driver-class-name>
             <spring.datasource.username>sa</spring.datasource.username>
@@ -263,5 +286,16 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- `mvn test -Pall-tests` (or `mvn verify -Pall-tests`) also runs the @Tag("slow")
+         @SpringBootTest classes that the default build skips. CI should use this profile. -->
+    <profile>
+      <id>all-tests</id>
+      <properties>
+        <test.excludedGroups></test.excludedGroups>
+      </properties>
+    </profile>
+  </profiles>
 
 </project>

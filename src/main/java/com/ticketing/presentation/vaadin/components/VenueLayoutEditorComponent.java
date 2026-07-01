@@ -14,6 +14,7 @@ import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.LayoutCellType;
 import com.ticketing.domain.event.ZoneType;
 import com.ticketing.presentation.vaadin.util.UiMessages;
+import com.ticketing.presentation.vaadin.util.VenueGridDragPainter;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -84,6 +85,7 @@ public class VenueLayoutEditorComponent extends VerticalLayout {
     private ZoneOption activeZone;
     private StructuralTool activeStructural;
     private boolean eraseMode;
+    private final VenueGridDragPainter gridDragPainter = new VenueGridDragPainter(this::paint);
 
     private EventMapDTO.LayoutInfo savedLayout;
     private EventStatus status = EventStatus.DRAFT;
@@ -269,13 +271,14 @@ public class VenueLayoutEditorComponent extends VerticalLayout {
         int rows = valueOr(rowsField, 5);
         int cols = valueOr(colsField, 8);
         rebuildGrid(rows, cols);
-        UiMessages.info("Grid " + rows + "×" + cols + " ready. Select a zone or tool and click cells.");
+        UiMessages.info("Grid " + rows + "×" + cols + " ready. Select a zone or tool and click or drag across cells.");
     }
 
     private void rebuildGrid(int rows, int cols) {
         cellStates = new CellState[rows][cols];
         cellButtons = new Button[rows][cols];
         grid.removeAll();
+        gridDragPainter.reset();
         grid.getStyle()
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(" + cols + ", 30px)")
@@ -288,7 +291,7 @@ public class VenueLayoutEditorComponent extends VerticalLayout {
                         .set("padding", "0").set("border", "1px solid var(--lumo-contrast-30pct)")
                         .set("background", EMPTY_BG).set("font-size", "10px");
                 final int rr = r, cc = c;
-                cell.addClickListener(e -> paint(rr, cc));
+                gridDragPainter.wireCell(cell, rr, cc);
                 cellButtons[r][c] = cell;
                 grid.add(cell);
             }

@@ -21,6 +21,7 @@ import com.ticketing.application.dto.LotteryRegistrationResponse;
 import com.ticketing.application.services.CompanyService;
 import com.ticketing.application.services.EventService;
 import com.ticketing.domain.event.EventCategory;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -32,6 +33,8 @@ public class EventsPresenter {
     private static final String SEARCH_FAILURE_MESSAGE = "Could not search events. Please try again.";
     private static final String MAP_NOT_FOUND_MESSAGE = "Event map not found.";
     private static final String MAP_FAILURE_MESSAGE = "Could not load event map. Please try again.";
+    private static final String LOTTERY_REGISTRATION_FAILURE_MESSAGE =
+            "Could not register for the lottery. Please try again.";
 
     private final EventService eventService;
     private final CompanyService companyService;
@@ -81,8 +84,7 @@ public class EventsPresenter {
         } catch (IllegalArgumentException ex) {
             return SearchResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
-            logger.warn(SEARCH_FAILURE_MESSAGE, ex);
-            return SearchResult.failure(SEARCH_FAILURE_MESSAGE);
+            return SearchResult.failure(userMessage(ex, SEARCH_FAILURE_MESSAGE));
         }
     }
 
@@ -96,8 +98,7 @@ public class EventsPresenter {
                     .map(eventMap -> MapResult.success("Event map loaded.", eventMap))
                     .orElseGet(() -> MapResult.failure(MAP_NOT_FOUND_MESSAGE));
         } catch (RuntimeException ex) {
-            logger.warn(MAP_FAILURE_MESSAGE, ex);
-            return MapResult.failure(MAP_FAILURE_MESSAGE);
+            return MapResult.failure(userMessage(ex, MAP_FAILURE_MESSAGE));
         }
     }
 
@@ -123,11 +124,8 @@ public class EventsPresenter {
                 return LotteryRegistrationResult.success(response.message(), response.lotteryEntryId(), response.registeredAt());
             }
             return LotteryRegistrationResult.failure(response.message());
-        } catch (IllegalArgumentException ex) {
-            return LotteryRegistrationResult.failure(ex.getMessage());
         } catch (RuntimeException ex) {
-            logger.warn("Lottery registration failed unexpectedly", ex);
-            return LotteryRegistrationResult.failure("Could not register for the lottery. Please try again.");
+            return LotteryRegistrationResult.failure(userMessage(ex, LOTTERY_REGISTRATION_FAILURE_MESSAGE));
         }
     }
 
@@ -141,6 +139,11 @@ public class EventsPresenter {
             logger.warn("Failed to get lottery status for eventId={}", eventId, ex);
             return Optional.empty();
         }
+    }
+
+    private String userMessage(RuntimeException ex, String fallback) {
+        PresenterErrorClassifier.logFailure(logger, fallback, ex);
+        return PresenterErrorClassifier.resolveUserMessage(ex, fallback);
     }
 
     private static String blankToNull(String value) {

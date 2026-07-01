@@ -49,7 +49,8 @@ then `mvn spring-boot:run`. Full GCP provisioning: [docs/deploy-cloud-sql.md](do
 
 1. Optional **external-systems handshake** when `TICKETING_EXTERNAL_BASE_URL` is set (V3-16).
 2. **Platform initialization** — register system admin, mark platform active (`ticketing.startup.initialize-platform`, default `true`).
-3. **Data bootstrap** — exactly one of: dev seed (default), initial-state file replay, or none.
+3. **Optional operational DB wipe** — when `ticketing.bootstrap.clear-db-on-start=true`, clear durable application data (members, companies, events, orders, …) before bootstrap; config DB (system admin) is preserved.
+4. **Data bootstrap** — exactly one of: dev seed (default), initial-state file replay, or none.
 
 Invalid initialization (e.g. malformed state file) **aborts startup** (V3-24). The test suite uses an
 isolated profile and never touches the remote DB or live externals (V3-25) — see [Testing](#testing).
@@ -76,6 +77,7 @@ Spring maps env vars to `application.yml` keys (e.g. `TICKETING_QUEUE_THRESHOLD`
 | `TICKETING_QUEUE_FLOW_RATE` | `ticketing.queue.flow-rate` | `10` | Users admitted per queue batch |
 | `TICKETING_STARTUP_INITIALIZE_PLATFORM` | `ticketing.startup.initialize-platform` | `true` | Run platform init at boot |
 | `TICKETING_BOOTSTRAP_DATASET` | `ticketing.bootstrap.dataset` | *(unset)* | `dev-seed`, `initial-state-file`, or `none` |
+| `TICKETING_BOOTSTRAP_CLEAR_DB_ON_START` | `ticketing.bootstrap.clear-db-on-start` | `false` | `true` = wipe operational DB after platform init, before bootstrap; `false` = keep existing data |
 | `TICKETING_SEED_ENABLED` | `ticketing.seed.enabled` | `true` | Legacy: `true` ⇒ dev seed when dataset unset |
 | `TICKETING_INITIAL_STATE_FILE` | `ticketing.initial-state.file` | *(empty)* | Path to state file (`classpath:...` or filesystem) |
 
@@ -90,6 +92,12 @@ and [External systems](#external-systems) below.
 
 Choose **one** dataset explicitly for meetings: `dev-seed` for local QA, `initial-state-file` for the
 staff script, `none` for an empty system.
+
+**Meeting / grader workflow (empty DB, gradual fill):** set `TICKETING_BOOTSTRAP_CLEAR_DB_ON_START=true`
+and `TICKETING_BOOTSTRAP_DATASET=none` (and `TICKETING_SEED_ENABLED=false`) at the start of the
+session to wipe operational data without loading seed or a state file. Load data later via the
+initial-state file or the UI. Leave `clear-db-on-start=false` on subsequent restarts to preserve
+what was already created.
 
 > **Transient state (V3-9):** virtual purchase **queues** are **not** persisted — they stay in memory
 > even when `ticketing.persistence=jpa`. Only durable aggregates (member, company, event, order, lottery,
@@ -320,6 +328,7 @@ So `login(rina, pw)` makes `rina_token` usable by `open-production-company(rina_
 | `appoint-owner` (`offer-owner-role`) | `token, companyName, targetUsername` | `CompanyService.offerRoleAppointment` (OWNER role) |
 | `accept-role-offer` (`respond-role-offer`) | `token, companyName, ROLE` | `CompanyService.respondToRoleAppointment` (accepts the pending offer matching company + role) |
 | `create-event` | `token, company, eventName, description, CATEGORY, standingZone, standingCap, standingPrice, seatingZone, seatRows, seatCols, seatingPrice` | `EventService.createEvent` (GA standing zone + assigned seating grid) |
+| `publish-event` | `token, company, eventName` | `EventService.publishEvent` (DRAFT → PUBLISHED so the event is visible in listings) |
 | `set-event-seating-layout` | `token, company, eventName, seatingZone, gridRows, gridCols` | `EventService.setEventLayout` (10×10 seat grid for the assigned zone) |
 | `set-company-coupon-discount` | `token, company, percent, code[, expiryDays]` | `CompanyService.setCompanyDiscountPolicy` (`CouponDiscount`) |
 | `logout` | `token` | `MemberService.logout` |
@@ -334,7 +343,16 @@ Choose **one** data bootstrap via `ticketing.bootstrap.dataset`:
 | `initial-state-file` | Replay an external script via `InitialStateExecutor` |
 | `none` | Empty application data (platform init only) |
 
-**Staff demo scenario (#415)** — empty DB + file bootstrap:
+**Final V3 checking scenario (#561)** — empty DB + file bootstrap (this is the file the final
+checking run should use; it is the **default** `initial-state.file`):
+
+```
+--ticketing.bootstrap.dataset=initial-state-file
+--ticketing.seed.enabled=false
+--ticketing.initial-state.file=classpath:initial-state/final-v3-scenario.txt
+```
+
+**Staff demo scenario (#415)** — the older/demo scenario, still available:
 
 ```
 --ticketing.bootstrap.dataset=initial-state-file
@@ -344,7 +362,9 @@ Choose **one** data bootstrap via `ticketing.bootstrap.dataset`:
 
 For a filesystem path, set `ticketing.initial-state.file` to a readable path. Classpath resources
 use the `classpath:` prefix. When `bootstrap.dataset` is unset, legacy rules apply:
-`seed.enabled=true` selects dev seed; otherwise a configured `initial-state.file` selects file bootstrap.
+`seed.enabled=true` selects dev seed; otherwise a configured `initial-state.file` selects file
+bootstrap. The default `initial-state.file` is `classpath:initial-state/final-v3-scenario.txt`, so
+selecting `bootstrap.dataset=initial-state-file` without an explicit file replays the final scenario.
 
 `DataBootstrapRunner` initializes the platform, then loads, parses and executes the file
 (all-or-nothing).
@@ -367,3 +387,43 @@ needed. As defence-in-depth, Surefire also pins `spring.datasource.url` and
 (`DB_URL` / `TICKETING_EXTERNAL_BASE_URL`), so isolation holds even when those are exported locally.
 A test that legitimately needs a different datasource (e.g. the DB connection-recovery test) overrides
 `spring.datasource.url` via `@DynamicPropertySource`, which outranks both.
+
+
+
+## V3 Review / Verification Guide
+
+The full V3 review response is documented in:
+
+- `docs/V3-REVIEW-RESPONSE.md`
+
+That document maps every V3 review comment to:
+
+- the production classes that implement it,
+- the test classes that verify it,
+- the exact command or UI step to run,
+- the dataset/run-mode differences such as `manager` vs `u1`,
+- the Cloud SQL / PostgreSQL run modes.
+
+Quick commands:
+
+```bash
+# Full build + tests + coverage gate
+mvn clean verify
+
+# Default local run: memory/H2 + dev-seed users
+mvn spring-boot:run
+
+# JPA run with the same dev-seed users
+TICKETING_PERSISTENCE=jpa mvn spring-boot:run
+
+# Interactive run chooser: local / Cloud SQL / split Cloud SQL
+./scripts/run.ps1
+
+# Cloud SQL first run: create/update schema
+./scripts/run.ps1 -Target cloud-split -Mode first
+
+# Cloud SQL normal run: validate schema
+./scripts/run.ps1 -Target cloud-split -Mode normal
+
+# Cloud SQL initial-state run: wipe + load staff-demo-v3.txt
+./scripts/run.ps1 -Target cloud-split -Mode initial

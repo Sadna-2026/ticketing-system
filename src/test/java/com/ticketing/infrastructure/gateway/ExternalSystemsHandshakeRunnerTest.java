@@ -64,7 +64,7 @@ class ExternalSystemsHandshakeRunnerTest {
 
         assertThatThrownBy(() -> runner.run(null))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("handshake failed");
+                .hasMessageContaining("payment and ticket-issuance");
         assertThat(client.handshakeCalled).isTrue();
     }
 }

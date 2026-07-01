@@ -2,6 +2,7 @@ package com.ticketing.application;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -36,8 +37,10 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.application.auth.SessionTokenData;
 import com.ticketing.application.auth.SessionTokenService;
 import com.ticketing.application.dto.PurchaseRecordDTO;
+import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.INotificationService;
 import com.ticketing.application.services.OrderService;
+import com.ticketing.domain.admin.Admin;
 import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.AgeRestrictionPolicy;
 import com.ticketing.domain.event.AlwaysAllowPolicy;
@@ -48,11 +51,14 @@ import com.ticketing.domain.event.EventSchedule;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
+import com.ticketing.domain.event.MaxCompositeDiscount;
 import com.ticketing.domain.event.MaxQuantityPolicy;
 import com.ticketing.domain.event.MinQuantityPolicy;
+import com.ticketing.domain.event.NoDiscountPolicy;
 import com.ticketing.domain.event.NoOrphanSeatPolicy;
-import com.ticketing.domain.event.PolicyResult;
 import com.ticketing.domain.event.Seat;
+import com.ticketing.domain.event.SimpleDiscount;
+import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.gateway.CancelResult;
 import com.ticketing.domain.gateway.CustomerInfo;
@@ -71,11 +77,13 @@ import com.ticketing.domain.order.CompletedPurchase;
 import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.order.RefundStatus;
 import com.ticketing.domain.services.OrderTimeDomainService;
+import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
 import com.ticketing.infrastructure.InMemorySessionTokenRepository;
+import com.ticketing.testsupport.RejectAllPurchasePolicy;
 
 public class OrderServiceTest {
 
@@ -229,7 +237,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
         orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
-        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         ActiveOrder order = orderRepo.findById(orderId).orElseThrow();
         assertEquals(OrderStatus.COMPLETED, order.getStatus());
@@ -261,7 +269,7 @@ public class OrderServiceTest {
 
         UUID orderId = orderService.createOrder(guestToken, soldOutEventId);
         orderService.addGATicketsToOrder(guestToken, soldOutEventId, singleZoneId, 1);
-        orderService.checkout(guestToken, null);
+        orderService.checkout(guestToken);
 
         assertEquals(EventStatus.SOLD_OUT, eventRepo.findById(soldOutEventId).orElseThrow().getStatus());
     }
@@ -273,7 +281,7 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
 
         assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
         Event event = eventRepo.findById(eventId).orElseThrow();
@@ -290,14 +298,81 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
 
-        assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
         Event event = eventRepo.findById(eventId).orElseThrow();
-        assertEquals(100, event.findZone(gaZoneId).getAvailableCount());
-        assertEquals(0, event.findZone(gaZoneId).getLockedCount());
+        assertEquals(98, event.findZone(gaZoneId).getAvailableCount());
+        assertEquals(2, event.findZone(gaZoneId).getLockedCount());
         assertEquals(1, paymentGateway.refundCalls);
         assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+    }
+
+    // ── #495 purchase integrity: a company is paid only on a fully successful purchase,
+    //    and is never charged more than the declared amount. ──────────────────────────
+
+    @Test
+    void GivenPaymentAndSupplyConfirm_WhenCheckout_ThenOrderCompleteReceiptIssuedAndChargedExactlyDeclaredAmount() {
+        // Given: an order whose declared total is 3 GA @ 50.00 + 1 seat @ 150.00 = 300.00
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 3);
+        orderService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
+        BigDecimal declaredAmount = new BigDecimal("300.00");
+
+        // When: both payment and supply confirm
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
+
+        // Then: the order completes and a receipt is issued for the declared amount
+        assertEquals(OrderStatus.COMPLETED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        CompletedPurchase receipt = orderRepo.findCompletedById(purchaseId).orElseThrow();
+        assertEquals(declaredAmount, receipt.amount());
+
+        // And: the company is credited exactly the declared amount — no overcharge, no refund
+        assertEquals(1, paymentGateway.chargeCalls);
+        assertEquals(declaredAmount, paymentGateway.chargedAmount);
+        assertEquals(0, paymentGateway.refundCalls);
+        assertEquals(1, ticketSupplyGateway.issueCalls);
+    }
+
+    @Test
+    void GivenPaymentFails_WhenCheckout_ThenOrderNotCompletedSupplyNotAttemptedAndBuyerNotCharged() {
+        // Given: the payment gateway declines every charge
+        paymentGateway.failCharges = true;
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+
+        // When: checkout is attempted
+        assertThrows(IllegalStateException.class,
+                () -> orderService.checkout(guestToken));
+
+        // Then: the order is not completed and no receipt is written
+        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+
+        // And: supply is never attempted and the buyer is never charged (no successful capture)
+        assertEquals(0, ticketSupplyGateway.issueCalls);
+        assertEquals(0, paymentGateway.refundCalls);
+    }
+
+    @Test
+    void GivenSupplyFails_WhenCheckout_ThenOrderNotCompletedAndBuyerNetChargeIsZero() {
+        // Given: payment confirms but ticket supply fails
+        ticketSupplyGateway.failIssue = true;
+        UUID orderId = orderService.createOrder(guestToken, eventId);
+        orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
+
+        // When: checkout is attempted
+        assertThrows(IllegalStateException.class,
+                () -> orderService.checkout(guestToken));
+
+        // Then: the order is not completed and no receipt is written
+        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
+
+        // And: the charge was fully reversed — the buyer's net charge is zero
+        assertEquals(1, paymentGateway.chargeCalls);
+        assertEquals(1, paymentGateway.refundCalls);
+        assertEquals(paymentGateway.chargedAmount.doubleValue(), paymentGateway.refundedAmount);
     }
 
     @Test
@@ -306,8 +381,8 @@ public class OrderServiceTest {
         UUID policyZoneId = UUID.randomUUID();
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (ctx) -> PolicyResult.failure("DENIED", "No tickets for you"),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new RejectAllPurchasePolicy("DENIED", "No tickets for you"),
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
@@ -328,7 +403,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Policy Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new AgeRestrictionPolicy(18),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 5));
         event.publish();
         eventRepo.save(event);
@@ -352,15 +427,16 @@ public class OrderServiceTest {
         UUID discountZoneId = UUID.randomUUID();
         Event event = new Event(discountEventId, companyName, "Discount Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
-                (ctx) -> PolicyResult.success(),
-                (order, coupon, now) -> order.getTotalPrice().subtract(new BigDecimal("20.00")).max(BigDecimal.ZERO));
+                new AlwaysAllowPolicy(),
+                new SimpleDiscount(new BigDecimal("20")));
         event.addZone(InventoryZone.createGA(discountZoneId, "Floor", new BigDecimal("50.00"), 10));
         event.publish();
         eventRepo.save(event);
 
         UUID orderId = orderService.createOrder(guestToken, discountEventId);
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, "SAVE20").purchaseId();
+        orderService.applyCoupon(guestToken, "SAVE20");
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         assertEquals(new BigDecimal("80.00"), paymentGateway.chargedAmount);
         assertEquals(new BigDecimal("80.00"), orderRepo.findCompletedById(purchaseId).orElseThrow().amount());
@@ -384,7 +460,7 @@ public class OrderServiceTest {
 
         notifyingService.createOrder(memberToken, eventId);
         notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        OrderService.CheckoutCompletion completion = notifyingService.checkout(memberToken, null);
+        OrderService.CheckoutCompletion completion = notifyingService.checkout(memberToken);
 
         assertNotNull(completion.purchaseId());
         assertEquals(new BigDecimal("50.00"), completion.chargedAmount());
@@ -409,7 +485,7 @@ public class OrderServiceTest {
 
         notifyingService.createOrder(memberToken, eventId);
         notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        notifyingService.checkout(memberToken, null);
+        notifyingService.checkout(memberToken);
 
         notifyingService.cancelOrdersAndRefund(eventId, "Demo Event");
 
@@ -441,7 +517,7 @@ public class OrderServiceTest {
         notifyingService.createOrder(memberToken, eventId);
         notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
 
-        assertThrows(IllegalStateException.class, () -> notifyingService.checkout(memberToken, null));
+        assertThrows(IllegalStateException.class, () -> notifyingService.checkout(memberToken));
         verify(notificationService).notify(eq(memberId.toString()), contains("Checkout failed"));
     }
 
@@ -461,7 +537,8 @@ public class OrderServiceTest {
         orderService.createOrder(guestToken, discountEventId);
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
 
-        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken, " SAVE20 ");
+        orderService.applyCoupon(guestToken, " SAVE20 ");
+        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken);
 
         assertEquals(new BigDecimal("100.00"), quote.subtotal());
         assertEquals(new BigDecimal("80.00"), quote.total());
@@ -469,7 +546,7 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenCouponDiscount_WhenQuotingCheckoutWithWrongOrBlankCoupon_ThenFullPriceReturned() {
+    void GivenCouponDiscount_WhenQuotingCheckoutWithWrongOrBlankCoupon_ThenExceptionOrFullPriceReturned() {
         UUID discountEventId = UUID.randomUUID();
         UUID discountZoneId = UUID.randomUUID();
         Instant expiry = clock.now().plus(Duration.ofDays(30));
@@ -484,10 +561,11 @@ public class OrderServiceTest {
         orderService.createOrder(guestToken, discountEventId);
         orderService.addGATicketsToOrder(guestToken, discountEventId, discountZoneId, 2);
 
-        OrderService.CheckoutQuote wrongCode = orderService.quoteCheckout(guestToken, "WRONG");
-        OrderService.CheckoutQuote blankCode = orderService.quoteCheckout(guestToken, "   ");
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "WRONG"));
 
-        assertEquals(new BigDecimal("100.00"), wrongCode.total());
+        orderService.applyCoupon(guestToken, "   ");
+        OrderService.CheckoutQuote blankCode = orderService.quoteCheckout(guestToken);
         assertEquals(new BigDecimal("100.00"), blankCode.total());
     }
 
@@ -496,8 +574,306 @@ public class OrderServiceTest {
         orderService.createOrder(guestToken, eventId);
 
         assertThrows(IllegalArgumentException.class,
-                () -> orderService.quoteCheckout(guestToken, null));
+                () -> orderService.quoteCheckout(guestToken));
     }
+
+    // ── Coupon edge cases ─────────────────────────────────────────────────
+
+    /**
+     * #536 / EC-1: An expired coupon must be rejected with a message that clearly
+     * says "expired", and the order price must stay at the full amount.
+     */
+    @Test
+    void GivenExpiredCoupon_WhenApplyCoupon_ThenRejectedWithExpiredMessageAndPriceUnchanged() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        // Coupon expired yesterday.
+        Instant expiredAt = clock.now().minus(Duration.ofDays(1));
+        Event event = new Event(evId, companyName, "Expired Coupon Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("20"), "SAVE20", expiredAt));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "SAVE20"));
+
+        // Message must specifically mention the coupon is expired, not just "invalid".
+        assertTrue(ex.getMessage().toLowerCase().contains("expired"),
+                "Expected message to mention 'expired', got: " + ex.getMessage());
+
+        // The coupon must NOT be stored — full price still applies.
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("100.00"), quote.total());
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+    /**
+     * #536 / EC-2a: An unknown coupon code must be rejected with a message that says
+     * "invalid" (not "expired"), and the order price must stay at the full amount.
+     */
+    @Test
+    void GivenUnknownCouponCode_WhenApplyCoupon_ThenRejectedWithInvalidMessageAndFullPriceKept() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Code Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("15"), "CORRECT15", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "BOGUS"));
+
+        // Message must say "invalid", and must NOT say "expired".
+        String msg = ex.getMessage().toLowerCase();
+        assertTrue(msg.contains("invalid"),
+                "Expected message to mention 'invalid', got: " + ex.getMessage());
+        assertFalse(msg.contains("expired"),
+                "Wrong-code error should not say 'expired', got: " + ex.getMessage());
+
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        assertEquals(new BigDecimal("100.00"), orderService.quoteCheckout(guestToken).total());
+    }
+
+    /**
+     * #536 / EC-2b: A garbled / malformed code must also be rejected cleanly.
+     */
+    @Test
+    void GivenMalformedCouponCode_WhenApplyCoupon_ThenRejectedAndFullPriceKept() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Malformed Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("10"), "CLEAN10", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "##!@INVALID_\t\n"));
+
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        assertEquals(new BigDecimal("100.00"), orderService.quoteCheckout(guestToken).total());
+    }
+
+    /**
+     * #536 / EC-3a: A 100% coupon makes the total $0.  The purchase must still
+     * complete (payment gateway is charged $0) and the CompletedPurchase must record
+     * amount = $0.
+     */
+    @Test
+    void Given100PercentCoupon_WhenCheckout_ThenTotalIsZeroAndPurchaseCompletes() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Free Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("100"), "FREE", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 1); // subtotal $50
+
+        orderService.applyCoupon(guestToken, "FREE");
+        OrderService.CheckoutQuote quote = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("50.00"), quote.subtotal());
+        assertEquals(new BigDecimal("0.00"), quote.total());
+
+        // Checkout must succeed: gateway is charged $0, purchase is recorded.
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
+        assertEquals(new BigDecimal("0.00"), paymentGateway.chargedAmount);
+        assertEquals(new BigDecimal("0.00"),
+                orderRepo.findCompletedById(purchaseId).orElseThrow().amount());
+    }
+
+    /**
+     * #536 / EC-3b: Constructing a CouponDiscount with 0% must be rejected
+     * immediately by the constructor (boundary guard).
+     */
+    @Test
+    void GivenZeroPercentCouponValue_WhenConstructed_ThenIllegalArgumentThrown() {
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CouponDiscount(BigDecimal.ZERO, "ZERO", futureExpiry));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CouponDiscount(new BigDecimal("-5"), "NEG", futureExpiry));
+    }
+
+    /**
+     * #536 / EC-4: Applying a coupon then "removing" it via a blank apply restores
+     * the original price.  This is the mechanism behind the UI's "Remove" button.
+     */
+    @Test
+    void GivenCouponAppliedThenRemovedViaBlankApply_WhenQuoteCheckout_ThenPriceReturnsToOriginal() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+        Event event = new Event(evId, companyName, "Remove Coupon Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("25"), "QUARTER", futureExpiry));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("40.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $80
+
+        // Apply the coupon → 25% off = $60.
+        orderService.applyCoupon(guestToken, "QUARTER");
+        assertEquals(new BigDecimal("60.00"), orderService.quoteCheckout(guestToken).total());
+        assertEquals("QUARTER", orderService.getActiveOrder(guestToken).getCouponCode());
+
+        // Remove by passing blank → coupon cleared, full price restored.
+        orderService.applyCoupon(guestToken, "   "); // blank normalises to null
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+        assertEquals(new BigDecimal("80.00"), orderService.quoteCheckout(guestToken).total());
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+    /**
+     * #536 / EC-5: Coupons are event-scoped.  Applying event-A's code to a cart
+     * for event-B must be rejected; the same code applied to event-A's cart succeeds.
+     */
+    @Test
+    void GivenEventSpecificCoupon_WhenAppliedToWrongEvent_ThenRejected() {
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+
+        // Event A with code "EVENTA10"
+        UUID evIdA = UUID.randomUUID();
+        UUID zoneIdA = UUID.randomUUID();
+        Event eventA = new Event(evIdA, companyName, "Event A", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("10"), "EVENTA10", futureExpiry));
+        eventA.addZone(InventoryZone.createGA(zoneIdA, "Floor", new BigDecimal("50.00"), 10));
+        eventA.publish();
+        eventRepo.save(eventA);
+
+        // Event B with a different code "EVENTB20"
+        UUID evIdB = UUID.randomUUID();
+        UUID zoneIdB = UUID.randomUUID();
+        Event eventB = new Event(evIdB, companyName, "Event B", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("20"), "EVENTB20", futureExpiry));
+        eventB.addZone(InventoryZone.createGA(zoneIdB, "Floor", new BigDecimal("50.00"), 10));
+        eventB.publish();
+        eventRepo.save(eventB);
+
+        // Cart for event B — event-A's code must be rejected.
+        orderService.createOrder(guestToken, evIdB);
+        orderService.addGATicketsToOrder(guestToken, evIdB, zoneIdB, 2); // $100
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> orderService.applyCoupon(guestToken, "EVENTA10"));
+        assertTrue(ex.getMessage().toLowerCase().contains("invalid"),
+                "Expected 'invalid' in message, got: " + ex.getMessage());
+        assertNull(orderService.getActiveOrder(guestToken).getCouponCode());
+
+        // Event-B's own code must be accepted.
+        orderService.applyCoupon(guestToken, "EVENTB20");
+        assertEquals(new BigDecimal("80.00"), orderService.quoteCheckout(guestToken).total());
+    }
+
+    /**
+     * #536 / EC-6a: SumCompositeDiscount stacks a SimpleDiscount (always applied)
+     * and a CouponDiscount additively.
+     * Without coupon: 10% off.  With coupon: 10% + 20% = 30% off.
+     */
+    @Test
+    void GivenSumCompositePolicyCoupon_WhenApplied_ThenDiscountsStack() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+
+        Event event = new Event(evId, companyName, "Stack Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new SumCompositeDiscount(List.of(
+                        new SimpleDiscount(new BigDecimal("10")),
+                        new CouponDiscount(new BigDecimal("20"), "EXTRA", futureExpiry))));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        // Without coupon: only the SimpleDiscount fires → 10% off = $90.
+        OrderService.CheckoutQuote noCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("100.00"), noCode.subtotal());
+        assertEquals(new BigDecimal("90.00"), noCode.total());
+
+        // With coupon: both discounts fire → 10% + 20% = 30% off = $70.
+        orderService.applyCoupon(guestToken, "EXTRA");
+        OrderService.CheckoutQuote withCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("70.00"), withCode.total(),
+                "SumComposite must stack both discounts: expected $70");
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+    /**
+     * #536 / EC-6b: MaxCompositeDiscount does NOT stack — it applies only the best
+     * (largest) single discount.
+     * Without coupon: 10% off.  With coupon: max(10%, 20%) = 20% off only (not 30%).
+     */
+    @Test
+    void GivenMaxCompositePolicyCoupon_WhenApplied_ThenOnlyBestDiscountApplied() {
+        UUID evId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        Instant futureExpiry = clock.now().plus(Duration.ofDays(30));
+
+        Event event = new Event(evId, companyName, "No-Stack Show", "desc", EventCategory.CONCERT,
+                defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new MaxCompositeDiscount(List.of(
+                        new SimpleDiscount(new BigDecimal("10")),
+                        new CouponDiscount(new BigDecimal("20"), "SAVE20", futureExpiry))));
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 10));
+        event.publish();
+        eventRepo.save(event);
+
+        orderService.createOrder(guestToken, evId);
+        orderService.addGATicketsToOrder(guestToken, evId, zoneId, 2); // subtotal $100
+
+        // Without coupon: CouponDiscount returns full price (no matching code) →
+        // Max picks SimpleDiscount's 10% off = $90.
+        OrderService.CheckoutQuote noCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("90.00"), noCode.total(),
+                "Without coupon, MaxComposite should apply the 10% SimpleDiscount");
+
+        // With coupon: CouponDiscount yields 20% off ($80), SimpleDiscount yields 10% off ($90).
+        // MaxComposite picks the better deal → $80 (NOT the stacked $70).
+        orderService.applyCoupon(guestToken, "SAVE20");
+        OrderService.CheckoutQuote withCode = orderService.quoteCheckout(guestToken);
+        assertEquals(new BigDecimal("80.00"), withCode.total(),
+                "MaxComposite must apply only the best (20%) discount, not stack them");
+        assertEquals(0, paymentGateway.chargeCalls);
+    }
+
+
 
     @Test
     void GivenOrderWithItems_WhenAddingTicketsFailsMaxQuantityPolicy_ThenOrderRemainsActiveWithExistingItems() {
@@ -506,7 +882,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Max Qty Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new MaxQuantityPolicy(3),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -530,7 +906,7 @@ public class OrderServiceTest {
         Event event = new Event(policyEventId, companyName, "Min Qty Show", "desc", EventCategory.CONCERT,
                 defaultSchedule(), new LockTimerDuration(Duration.ofMinutes(15)),
                 new MinQuantityPolicy(2),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         event.addZone(InventoryZone.createGA(policyZoneId, "Floor", new BigDecimal("20.00"), 10));
         event.publish();
         eventRepo.save(event);
@@ -566,7 +942,7 @@ public class OrderServiceTest {
 
         UUID orderId = orderService.createOrder(memberToken, eventId);
         orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(memberToken).purchaseId();
 
         assertEquals(memberId, orderRepo.findCompletedById(purchaseId).orElseThrow().memberId());
         assertEquals(memberId, paymentGateway.lastDetails.memberId());
@@ -591,7 +967,7 @@ public class OrderServiceTest {
         orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId);
 
         // When: the order is checked out successfully
-        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(memberToken).purchaseId();
 
         // Then: the receipt is persisted in the history repository, keyed by its id
         CompletedPurchase receipt = orderRepo.findCompletedById(purchaseId).orElseThrow();
@@ -654,7 +1030,12 @@ public class OrderServiceTest {
     }
 
     @Test
-    void GivenMemberSuspendedAfterCartBuilt_WhenMutatingCart_ThenRejectedAndReadOnlyCartStillVisible() {
+    void GivenActiveCart_WhenAdminSuspendsMember_ThenOrderCancelledAndInventoryReleased() {
+        InMemoryAdminRepository adminRepo = new InMemoryAdminRepository();
+        UUID adminId = UUID.randomUUID();
+        adminRepo.save(new Admin(adminId, "admin", "admin@test.com", "pw"));
+        String adminToken = sessionService.generateMemberToken(UUID.randomUUID(), adminId, Set.of("SYSTEM_ADMIN"));
+
         UUID memberId = UUID.randomUUID();
         Member member = new Member(memberId, "cartUser", "cart@example.com", "pw",
                 "050-1111111", LocalDate.of(1990, 1, 1));
@@ -662,36 +1043,22 @@ public class OrderServiceTest {
         String memberToken = sessionService.generateMemberToken(new SessionTokenData(
                 UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
 
+        Event eventBefore = eventRepo.findById(eventId).orElseThrow();
+        int availableBefore = eventBefore.findZone(gaZoneId).getAvailableCount();
+
         UUID orderId = orderService.createOrder(memberToken, eventId);
-        UUID itemId = orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 2);
+        assertEquals(availableBefore - 2, eventRepo.findById(eventId).orElseThrow().findZone(gaZoneId).getAvailableCount());
 
-        member.addSuspension(new Suspension(UUID.randomUUID(), clock.now(), Duration.ofDays(7), "fraud"));
-        memberRepo.save(member);
+        AdminService adminService = new AdminService(memberRepo, new InMemoryCompanyRepository(), sessionService,
+                adminRepo, orderRepo, null, null,
+                new OrderTimeDomainService(orderRepo, eventRepo, clock));
+        adminService.suspendUser(adminToken, memberId, Duration.ofDays(7), "fraud");
 
-        assertDoesNotThrow(() -> orderService.getActiveOrder(memberToken));
-        assertEquals(orderId, orderService.getActiveOrder(memberToken).getId());
-
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.addSelectionToOrder(memberToken, new SelectionRequest(eventId,
-                        List.of(new SelectionRequest.SeatPick(assignedZoneId, seatId)),
-                        List.of(new SelectionRequest.GAPick(gaZoneId, 1)))));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.updateGAQuantity(memberToken, gaZoneId, 2));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.removeItemFromOrder(memberToken, itemId));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.cancelOrder(memberToken));
-        assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(memberToken, null));
-
+        assertNull(orderService.getActiveOrder(memberToken));
+        assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertEquals(availableBefore, eventRepo.findById(eventId).orElseThrow().findZone(gaZoneId).getAvailableCount());
         assertEquals(0, paymentGateway.chargeCalls);
-        assertEquals(0, ticketSupplyGateway.issueCalls);
-        assertEquals(OrderStatus.ACTIVE, orderRepo.findById(orderId).orElseThrow().getStatus());
-        assertTrue(orderRepo.findCompletedByEventId(eventId).isEmpty());
     }
 
     @Test
@@ -718,7 +1085,7 @@ public class OrderServiceTest {
         racingRepo.arm();
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> racingService.checkout(memberToken, null));
+                () -> racingService.checkout(memberToken));
         assertTrue(ex.getMessage().contains("suspended"));
 
         // The mid-checkout re-check fired before any payment/issuance side effect.
@@ -821,6 +1188,7 @@ public class OrderServiceTest {
         @Override public long count() { return delegate.count(); }
         @Override public List<Member> findByCompanyAppointment(String companyName) { return delegate.findByCompanyAppointment(companyName); }
         @Override public void delete(Member member) { delegate.delete(member); }
+        @Override public void deleteAll() { delegate.deleteAll(); }
         @Override public List<Member> findAll() { return delegate.findAll(); }
     }
 
@@ -830,7 +1198,10 @@ public class OrderServiceTest {
         int chargeCalls;
         int refundCalls;
         BigDecimal chargedAmount;
+        double refundedAmount;
         PaymentDetails lastDetails;
+        // Transaction ids whose refund should fail, leaving only some purchases pending in a batch.
+        final java.util.Set<String> failRefundForTransactionIds = new java.util.HashSet<>();
 
         @Override
         public PaymentResult charge(BigDecimal finalAmount, PaymentDetails details) {
@@ -846,7 +1217,8 @@ public class OrderServiceTest {
         @Override
         public RefundResult refund(String transactionId, double amount) {
             refundCalls++;
-            if (failRefunds) {
+            refundedAmount = amount;
+            if (failRefunds || failRefundForTransactionIds.contains(transactionId)) {
                 return RefundResult.failed("refund failed");
             }
             return RefundResult.successful("refund-" + refundCalls);
@@ -983,7 +1355,7 @@ public class OrderServiceTest {
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
 
-        UUID purchaseId = failoverService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = failoverService.checkout(guestToken).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryGateway.issueCalls);
@@ -1006,7 +1378,7 @@ public class OrderServiceTest {
         failoverService.addSeatToOrder(guestToken, eventId, assignedZoneId, seatId);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> failoverService.checkout(guestToken, null));
+                () -> failoverService.checkout(guestToken));
         
         assertTrue(ex.getMessage().contains("Ticket generation failed"));
         assertEquals(1, primaryGateway.issueCalls);
@@ -1014,8 +1386,8 @@ public class OrderServiceTest {
         assertEquals(1, paymentGateway.refundCalls); // Refunded
 
         ActiveOrder cancelled = orderRepo.findById(orderId).get();
-        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
-        assertTrue(eventRepo.findById(eventId).get().findZone(assignedZoneId).findSeat(seatId).isAvailable()); // Inventory released
+        assertEquals(OrderStatus.ACTIVE, cancelled.getStatus());
+        assertFalse(eventRepo.findById(eventId).get().findZone(assignedZoneId).findSeat(seatId).isAvailable()); // Inventory kept
     }
 
     @Test
@@ -1029,7 +1401,7 @@ public class OrderServiceTest {
         partialService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> partialService.checkout(guestToken, null));
+                () -> partialService.checkout(guestToken));
         
         assertEquals(1, primaryGateway.issueCalls);
         assertEquals(1, primaryGateway.cancelCalls);
@@ -1038,7 +1410,7 @@ public class OrderServiceTest {
         assertEquals(1, paymentGateway.refundCalls); // Payment refunded
         
         ActiveOrder cancelled = orderRepo.findById(orderId).get();
-        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertEquals(OrderStatus.ACTIVE, cancelled.getStatus());
     }
 
     @Test
@@ -1050,14 +1422,14 @@ public class OrderServiceTest {
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> orderService.checkout(guestToken, null));
+                () -> orderService.checkout(guestToken));
         
         assertEquals(1, ticketSupplyGateway.issueCalls);
         assertEquals(1, paymentGateway.refundCalls); // tried to refund
         // Since we can't easily capture the log without extensive mock setup, 
         // we at least ensure the flow acts correctly and does not throw UNHANDLED exceptions.
         ActiveOrder cancelled = orderRepo.findById(orderId).get();
-        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertEquals(OrderStatus.ACTIVE, cancelled.getStatus());
     }
 
     @Test
@@ -1076,7 +1448,7 @@ public class OrderServiceTest {
         // Make a purchase
         UUID orderId = orderService.createOrder(memberToken, eventId);
         orderService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
-        UUID purchaseId = orderService.checkout(memberToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(memberToken).purchaseId();
 
         // Fetch history
         List<PurchaseRecordDTO> history2 = orderService.getPurchaseHistory(memberToken);
@@ -1106,6 +1478,8 @@ public class OrderServiceTest {
     void GivenGuestToken_WhenGetPurchaseHistory_ThenThrowsSecurityException() {
         assertThrows(SecurityException.class, () -> orderService.getPurchaseHistory(guestToken));
     }
+
+    @Test
     void GivenPrimaryPaymentFails_WhenCheckout_ThenFailsOverToSecondary() {
         TestPaymentGateway primaryPayment = new TestPaymentGateway();
         primaryPayment.failCharges = true;
@@ -1115,7 +1489,7 @@ public class OrderServiceTest {
 
         UUID orderId = failoverService.createOrder(guestToken, eventId);
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
-        UUID purchaseId = failoverService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = failoverService.checkout(guestToken).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(1, primaryPayment.chargeCalls);
@@ -1137,7 +1511,7 @@ public class OrderServiceTest {
         failoverService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
 
         assertThrows(IllegalStateException.class,
-                () -> failoverService.checkout(guestToken, null));
+                () -> failoverService.checkout(guestToken));
         
         assertEquals(1, primaryPayment.chargeCalls);
         assertEquals(1, secondaryPayment.chargeCalls);
@@ -1147,10 +1521,41 @@ public class OrderServiceTest {
     }
 
     @Test
+    void GivenTwoPaymentAndTwoSupplyProviders_WhenPrimariesFail_ThenCheckoutCompletesViaSecondaries() {
+        // reqs I.3/I.4: with more than one payment AND more than one supply provider registered,
+        // a failure of the first of each falls over to the second, on both axes in a single checkout.
+        TestPaymentGateway primaryPayment = new TestPaymentGateway();
+        primaryPayment.failCharges = true;
+        TestPaymentGateway secondaryPayment = new TestPaymentGateway();
+        TestTicketSupplyGateway primarySupply = new TestTicketSupplyGateway();
+        primarySupply.failIssue = true;
+        TestTicketSupplyGateway secondarySupply = new TestTicketSupplyGateway();
+
+        OrderService multiProviderService = new OrderService(
+                sessionService, orderRepo, eventRepo, memberRepo,
+                List.of(primaryPayment, secondaryPayment),
+                List.of(primarySupply, secondarySupply),
+                clock, null, null, null);
+
+        UUID orderId = multiProviderService.createOrder(guestToken, eventId);
+        multiProviderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 1);
+
+        UUID purchaseId = multiProviderService.checkout(guestToken).purchaseId();
+
+        // Both first providers were tried and failed; both second providers were used and succeeded.
+        assertEquals(1, primaryPayment.chargeCalls);
+        assertEquals(1, secondaryPayment.chargeCalls);
+        assertEquals(1, primarySupply.issueCalls);
+        assertEquals(1, secondarySupply.issueCalls);
+        assertEquals(OrderStatus.COMPLETED, orderRepo.findById(orderId).orElseThrow().getStatus());
+        assertNotNull(orderRepo.findCompletedById(purchaseId).orElseThrow());
+    }
+
+    @Test
     void GivenEventWithCompletedPurchases_WhenCancelOrdersAndRefund_ThenAllPurchasesRefundedWithReference() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         assertNotNull(purchaseId);
         assertEquals(0, paymentGateway.refundCalls);
@@ -1173,7 +1578,7 @@ public class OrderServiceTest {
     void GivenAlreadyRefundedPurchase_WhenCancelOrdersAndRefundAgain_ThenNoDuplicateRefund() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
-        orderService.checkout(guestToken, null);
+        orderService.checkout(guestToken);
 
         orderService.cancelOrdersAndRefund(eventId, "Demo Event");
         assertEquals(1, paymentGateway.refundCalls);
@@ -1191,7 +1596,7 @@ public class OrderServiceTest {
     void GivenRefundFailsThenRecovers_WhenRetried_ThenOnlyUnfinishedRefundIsProcessed() {
         UUID orderId = orderService.createOrder(guestToken, eventId);
         orderService.addGATicketsToOrder(guestToken, eventId, gaZoneId, 2);
-        UUID purchaseId = orderService.checkout(guestToken, null).purchaseId();
+        UUID purchaseId = orderService.checkout(guestToken).purchaseId();
 
         // Payment service unavailable: refund cannot settle yet.
         paymentGateway.failRefunds = true;
@@ -1210,6 +1615,149 @@ public class OrderServiceTest {
         assertEquals(1, retry.refundsSucceeded());
         assertEquals(0, retry.refundsPending());
         assertTrue(orderRepo.findCompletedById(purchaseId).orElseThrow().isRefunded());
+    }
+
+    // ── #539 event cancellation: bulk auto-refund (idempotent, partial-failure safe) and notify ──
+
+    @Test
+    void GivenMultipleCompletedPurchases_WhenCancelOrdersAndRefund_ThenAllRefundedExactlyOnce() {
+        int buyers = 3;
+        List<UUID> purchaseIds = new ArrayList<>();
+        for (int i = 0; i < buyers; i++) {
+            String token = sessionService.generateGuestToken();
+            orderService.createOrder(token, eventId);
+            orderService.addGATicketsToOrder(token, eventId, gaZoneId, 1);
+            purchaseIds.add(orderService.checkout(token).purchaseId());
+        }
+
+        OrderService.EventCancellationOutcome outcome =
+                orderService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        assertEquals(buyers, outcome.purchasesFound());
+        assertEquals(buyers, outcome.refundsSucceeded());
+        assertEquals(0, outcome.refundsPending());
+        assertEquals(0, outcome.refundsFailed());
+        assertEquals(buyers, paymentGateway.refundCalls); // each purchase refunded exactly once
+        for (UUID id : purchaseIds) {
+            assertTrue(orderRepo.findCompletedById(id).orElseThrow().isRefunded());
+        }
+    }
+
+    @Test
+    void GivenSomeRefundsFail_WhenCancelOrdersAndRefund_ThenOthersSucceedFailedLeftPendingAndRetrySettles() {
+        String tokenA = sessionService.generateGuestToken();
+        orderService.createOrder(tokenA, eventId);
+        orderService.addGATicketsToOrder(tokenA, eventId, gaZoneId, 1);
+        UUID purchaseA = orderService.checkout(tokenA).purchaseId();
+
+        String tokenB = sessionService.generateGuestToken();
+        orderService.createOrder(tokenB, eventId);
+        orderService.addGATicketsToOrder(tokenB, eventId, gaZoneId, 1);
+        UUID purchaseB = orderService.checkout(tokenB).purchaseId();
+
+        // The payment service rejects only B's refund: B is left pending, A succeeds, in one batch.
+        String txnB = orderRepo.findCompletedById(purchaseB).orElseThrow().transactionId();
+        paymentGateway.failRefundForTransactionIds.add(txnB);
+
+        OrderService.EventCancellationOutcome first =
+                orderService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        assertEquals(2, first.purchasesFound());
+        assertEquals(1, first.refundsSucceeded());
+        assertEquals(1, first.refundsPending());
+        assertTrue(orderRepo.findCompletedById(purchaseA).orElseThrow().isRefunded());
+        assertEquals(RefundStatus.PENDING,
+                orderRepo.findCompletedById(purchaseB).orElseThrow().getRefundStatus());
+
+        // Payment service recovers; retry settles only the still-pending B (A is skipped, not re-refunded).
+        paymentGateway.failRefundForTransactionIds.clear();
+        OrderService.EventCancellationOutcome retry =
+                orderService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        assertEquals(2, retry.refundsSucceeded()); // A already-refunded (skipped) + B now settled
+        assertEquals(0, retry.refundsPending());
+        assertTrue(orderRepo.findCompletedById(purchaseB).orElseThrow().isRefunded());
+        assertEquals(3, paymentGateway.refundCalls); // A x1 + B x2 (one failed, one settled); A never retried
+    }
+
+    @Test
+    void GivenActiveOrdersForEvent_WhenCancelOrdersAndRefund_ThenOrdersCancelledSeatsReleasedAndBuyerNotified() {
+        INotificationService notificationService = mock(INotificationService.class);
+        OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
+        OrderService notifyingService = new OrderService(
+                sessionService, orderRepo, eventRepo, memberRepo,
+                List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null,
+                orderTimeDomainService, notificationService);
+
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "reserver", "reserver@example.com", "pw",
+                "050-5555555", LocalDate.of(1990, 1, 1));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        UUID orderId = notifyingService.createOrder(memberToken, eventId);
+        notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 2);
+        notifyingService.addSeatToOrder(memberToken, eventId, assignedZoneId, seatId);
+
+        // Inventory is locked before cancellation.
+        Event before = eventRepo.findById(eventId).orElseThrow();
+        assertEquals(2, before.findZone(gaZoneId).getLockedCount());
+        assertTrue(before.findZone(assignedZoneId).findSeat(seatId).isLocked());
+
+        OrderService.EventCancellationOutcome outcome =
+                notifyingService.cancelOrdersAndRefund(eventId, "Demo Event");
+
+        // The active (not-yet-completed) order is cancelled; no purchase to refund.
+        assertEquals(1, outcome.activeOrdersCancelled());
+        assertEquals(0, outcome.purchasesFound());
+        assertEquals(0, paymentGateway.refundCalls);
+        assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
+
+        // All of its inventory (GA + assigned seat) is released back to available.
+        Event after = eventRepo.findById(eventId).orElseThrow();
+        assertEquals(0, after.findZone(gaZoneId).getLockedCount());
+        assertEquals(100, after.findZone(gaZoneId).getAvailableCount());
+        assertFalse(after.findZone(assignedZoneId).findSeat(seatId).isLocked());
+
+        // The reserver is notified that the event was cancelled and their cart cleared.
+        verify(notificationService).notify(eq(memberId.toString()),
+                argThat(msg -> msg.contains("cancelled") && msg.contains("cart")));
+    }
+
+    @Test
+    void GivenNotificationDeliveryFails_WhenCancelOrdersAndRefund_ThenRefundStillSucceedsAndIsNotRetried() {
+        INotificationService notificationService = mock(INotificationService.class);
+        OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
+        OrderService notifyingService = new OrderService(
+                sessionService, orderRepo, eventRepo, memberRepo,
+                List.of(paymentGateway), List.of(ticketSupplyGateway), clock, null,
+                orderTimeDomainService, notificationService);
+
+        UUID memberId = UUID.randomUUID();
+        Member member = new Member(memberId, "offlineBuyer", "offline@example.com", "pw",
+                "050-6666666", LocalDate.of(1990, 1, 1));
+        memberRepo.save(member);
+        String memberToken = sessionService.generateMemberToken(new SessionTokenData(
+                UUID.randomUUID(), memberId, Set.of(), member.getUsername(), member.getEmail(), "MEMBER"));
+
+        notifyingService.createOrder(memberToken, eventId);
+        notifyingService.addGATicketsToOrder(memberToken, eventId, gaZoneId, 1);
+        UUID purchaseId = notifyingService.checkout(memberToken).purchaseId();
+
+        // Now the buyer goes offline: every notification delivery throws. The refund must still
+        // complete (notification failure is deferred/swallowed) and must not be retried.
+        org.mockito.Mockito.doThrow(new RuntimeException("buyer offline"))
+                .when(notificationService).notify(org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
+
+        OrderService.EventCancellationOutcome outcome = assertDoesNotThrow(
+                () -> notifyingService.cancelOrdersAndRefund(eventId, "Demo Event"));
+
+        assertEquals(1, outcome.refundsSucceeded());
+        assertEquals(0, outcome.refundsPending());
+        assertTrue(orderRepo.findCompletedById(purchaseId).orElseThrow().isRefunded());
+        assertEquals(1, paymentGateway.refundCalls); // refund attempted exactly once, not retried
     }
 
     // ── Suspension checks ──────────────────────────────────────
@@ -1286,7 +1834,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1313,7 +1861,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1349,7 +1897,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "B", "1"));
         zone.addSeat(new Seat(seat2, "B", "2"));
@@ -1385,7 +1933,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1416,7 +1964,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1459,7 +2007,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));
@@ -1496,7 +2044,7 @@ public class OrderServiceTest {
                 EventCategory.CONCERT, defaultSchedule(),
                 new LockTimerDuration(Duration.ofMinutes(15)),
                 new NoOrphanSeatPolicy(),
-                (order, coupon, now) -> order.getTotalPrice().max(BigDecimal.ZERO));
+                new NoDiscountPolicy());
         InventoryZone zone = InventoryZone.createAssigned(orphanZoneId, "VIP", new BigDecimal("100.00"));
         zone.addSeat(new Seat(seat1, "A", "1"));
         zone.addSeat(new Seat(seat2, "A", "2"));

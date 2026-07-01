@@ -19,6 +19,7 @@ import java.util.concurrent.ScheduledFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.TaskScheduler;
 
 import com.ticketing.application.ISystemClock;
@@ -41,6 +42,7 @@ import com.ticketing.infrastructure.InMemoryEventRepository;
 import com.ticketing.infrastructure.InMemoryLotteryRepository;
 import com.ticketing.infrastructure.InMemoryMemberRepository;
 import com.ticketing.infrastructure.InMemoryOrderRepository;
+import com.ticketing.infrastructure.persistence.DatabaseConnectivityProbe;
 
 @DisplayName("LotteryDrawScheduler")
 class LotteryDrawSchedulerTest {
@@ -54,6 +56,7 @@ class LotteryDrawSchedulerTest {
     private EventService eventService;
     private TaskScheduler taskScheduler;
     private LotteryDrawScheduler scheduler;
+    private DatabaseConnectivityProbe probe;
     private UUID eventId;
     private UUID zoneId;
 
@@ -75,7 +78,13 @@ class LotteryDrawSchedulerTest {
             return mock(ScheduledFuture.class);
         });
 
-        scheduler = new LotteryDrawScheduler(eventService, eventRepository, taskScheduler, clock);
+        probe = mock(DatabaseConnectivityProbe.class);
+        when(probe.isReady()).thenReturn(true);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<DatabaseConnectivityProbe> probeProvider = mock(ObjectProvider.class);
+        when(probeProvider.getIfAvailable()).thenReturn(probe);
+
+        scheduler = new LotteryDrawScheduler(eventService, eventRepository, taskScheduler, clock, probeProvider);
 
         eventId = UUID.randomUUID();
         zoneId = UUID.randomUUID();
@@ -121,7 +130,7 @@ class LotteryDrawSchedulerTest {
         lotteryEvent(NOW.minusSeconds(3600), 10);
         register(2);
 
-        scheduler.rescheduleOnStartup();
+        scheduler.tryReschedulePendingStartup();
 
         assertEquals(2, orderRepository.findActiveByEventId(eventId).size());
     }
@@ -139,6 +148,18 @@ class LotteryDrawSchedulerTest {
         boolean scheduled = scheduler.scheduleDrawFor(regular);
 
         org.junit.jupiter.api.Assertions.assertFalse(scheduled);
+        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("Startup rearm is deferred when the database is not ready")
+    void GivenDatabaseNotReady_WhenRescheduleOnStartup_ThenDrawIsSkipped() {
+        when(probe.isReady()).thenReturn(false);
+
+        scheduler.tryReschedulePendingStartup();
+
+        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
+        scheduler.tryReschedulePendingStartup();
         verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
     }
 }

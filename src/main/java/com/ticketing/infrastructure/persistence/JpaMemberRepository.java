@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ import jakarta.persistence.PersistenceContext;
  * </ul>
  */
 @Repository
+@Lazy
 @ConditionalOnProperty(name = "ticketing.persistence", havingValue = "jpa")
 public class JpaMemberRepository implements IMemberRepository {
 
@@ -184,6 +186,12 @@ public class JpaMemberRepository implements IMemberRepository {
             return;
         }
         delegate.findById(member.getId()).ifPresent(delegate::delete);
+    }
+
+    @Override
+    @Transactional
+    public void deleteAll() {
+        delegate.deleteAll();
     }
 
     /**

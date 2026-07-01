@@ -249,14 +249,29 @@ public class OrdersPresenter {
         }
     }
 
-    public CheckoutQuoteResult quoteCheckout(String couponCode) {
+    public OrderMutationResult applyCoupon(String couponCode) {
+        String token = sessionToken();
+        if (token == null) {
+            return OrderMutationResult.failure(NO_SESSION_MESSAGE);
+        }
+
+        try {
+            orderService.applyCoupon(token, blankToNull(couponCode));
+            ActiveOrderDto order = enrichOrder(orderService.getActiveOrder(token));
+            return OrderMutationResult.success("Coupon applied.", null, order);
+        } catch (RuntimeException ex) {
+            return OrderMutationResult.failure(userMessage(ex, "Could not apply coupon."));
+        }
+    }
+
+    public CheckoutQuoteResult quoteCheckout() {
         String token = sessionToken();
         if (token == null) {
             return CheckoutQuoteResult.failure(NO_SESSION_MESSAGE);
         }
 
         try {
-            OrderService.CheckoutQuote quote = orderService.quoteCheckout(token, blankToNull(couponCode));
+            OrderService.CheckoutQuote quote = orderService.quoteCheckout(token);
             return CheckoutQuoteResult.success(quote.subtotal(), quote.total());
         } catch (RuntimeException ex) {
             return CheckoutQuoteResult.failure(userMessage(ex, CHECKOUT_FAILURE_MESSAGE));
@@ -280,18 +295,18 @@ public class OrdersPresenter {
         }
     }
 
-    public CheckoutResult checkout(String couponCode) {
-        return checkout(couponCode, null);
+    public CheckoutResult checkout() {
+        return checkout(null);
     }
 
-    public CheckoutResult checkout(String couponCode, CardPaymentInfo card) {
+    public CheckoutResult checkout(CardPaymentInfo card) {
         String token = sessionToken();
         if (token == null) {
             return CheckoutResult.failure(NO_SESSION_MESSAGE);
         }
 
         try {
-            OrderService.CheckoutCompletion completion = orderService.checkout(token, blankToNull(couponCode), card);
+            OrderService.CheckoutCompletion completion = orderService.checkout(token, card);
             return CheckoutResult.success(
                     "Checkout complete.", completion.purchaseId(), completion.chargedAmount());
         } catch (RuntimeException ex) {
@@ -349,10 +364,12 @@ public class OrdersPresenter {
                             order.getCreatedAt(),
                             order.getStatus(),
                             order.getItems(),
+                            order.getSubtotal(),
                             order.getTotalPrice(),
                             map.eventName(),
                             order.isLotteryWin(),
-                            order.getPurchaseWindowDeadline()))
+                            order.getPurchaseWindowDeadline(),
+                            order.getCouponCode()))
                     .orElse(order);
         } catch (RuntimeException ex) {
             logger.warn("Could not resolve event name for active order {}", order.getId(), ex);
@@ -361,6 +378,14 @@ public class OrdersPresenter {
     }
 
     private String userMessage(RuntimeException ex, String fallback) {
+        // #516: classify infrastructure failures first so the user sees a specific,
+        // actionable message instead of the generic fallback.
+        var category = com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.classify(ex);
+        if (category != com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.Category.NONE) {
+            logger.warn("Orders action failed ({}): {}", category, ex.toString());
+            return com.ticketing.presentation.vaadin.util.PresenterErrorClassifier.userFacingMessage(category);
+        }
+
         if (ex instanceof IllegalArgumentException
                 || ex instanceof IllegalStateException
                 || ex instanceof SecurityException) {

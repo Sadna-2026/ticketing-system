@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +45,7 @@ import jakarta.persistence.PersistenceContext;
  * already-consistent names, so this matches in practice.
  */
 @Repository
+@Lazy
 @ConditionalOnProperty(name = "ticketing.persistence", havingValue = "jpa")
 public class JpaCompanyRepository implements ICompanyRepository {
 
@@ -163,6 +165,12 @@ public class JpaCompanyRepository implements ICompanyRepository {
     @Override
     public void delete(String id) {
         throw new UnsupportedOperationException("Delete not supported");
+    }
+
+    @Override
+    @Transactional
+    public void deleteAll() {
+        delegate.deleteAll();
     }
 
     /**

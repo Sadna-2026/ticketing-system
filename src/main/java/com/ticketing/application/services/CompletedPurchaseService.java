@@ -59,6 +59,7 @@ public class CompletedPurchaseService {
 
     public SalesReportDTO getHierarchicalSalesReport(String token, String companyName) {
         UUID requesterId = requireMember(token);
+        log.info("Hierarchical sales report requested: company={}, by={}", companyName, requesterId);
 
         Company company = companyRepository.findByName(companyName)
                 .orElseThrow(() -> {

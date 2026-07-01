@@ -10,6 +10,7 @@ import com.ticketing.application.services.MemberService;
 import com.ticketing.domain.member.MemberDto;
 import com.ticketing.domain.member.request.UpdateMemberDetailsRequest;
 import com.ticketing.domain.member.response.UpdateMemberDetailsResponse;
+import com.ticketing.presentation.vaadin.util.PresenterErrorClassifier;
 import com.ticketing.presentation.vaadin.util.SessionContext;
 
 @Component
@@ -50,8 +51,9 @@ public class MemberPresenter {
             }
             return UpdateResult.success("Profile updated successfully.");
         } catch (RuntimeException ex) {
-            logger.error("Profile update failed.", ex);
-            return UpdateResult.failure("Profile update failed. Please try again.");
+            PresenterErrorClassifier.logFailure(logger, "Profile update failed", ex);
+            return UpdateResult.failure(
+                    PresenterErrorClassifier.resolveUserMessage(ex, "Profile update failed. Please try again."));
         }
     }
 

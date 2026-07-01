@@ -1,7 +1,9 @@
 package com.ticketing.application;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,6 +31,7 @@ import com.ticketing.domain.event.InventoryZone;
 import com.ticketing.domain.event.LockTimerDuration;
 import com.ticketing.domain.member.Member;
 import com.ticketing.domain.member.Suspension;
+import com.ticketing.domain.order.OrderStatus;
 import com.ticketing.domain.services.OrderTimeDomainService;
 import com.ticketing.infrastructure.InMemoryAdminRepository;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
@@ -48,6 +51,7 @@ class SuspensionLifecycleAcceptanceTest {
 
     private InMemoryMemberRepository memberRepo;
     private InMemoryEventRepository eventRepo;
+    private InMemoryOrderRepository orderRepo;
 
     private UUID adminId;
     private String adminToken;
@@ -64,7 +68,7 @@ class SuspensionLifecycleAcceptanceTest {
     void setUp() {
         memberRepo = new InMemoryMemberRepository();
         eventRepo = new InMemoryEventRepository();
-        InMemoryOrderRepository orderRepo = new InMemoryOrderRepository();
+        orderRepo = new InMemoryOrderRepository();
         InMemoryCompanyRepository companyRepo = new InMemoryCompanyRepository();
         InMemoryAdminRepository adminRepo = new InMemoryAdminRepository();
         InMemorySessionTokenRepository tokenRepo = new InMemorySessionTokenRepository();
@@ -76,10 +80,11 @@ class SuspensionLifecycleAcceptanceTest {
         clock = new TestClock(Instant.now());
         OrderTimeDomainService orderTimeDomainService = new OrderTimeDomainService(orderRepo, eventRepo, clock);
 
-        adminService = new AdminService(memberRepo, companyRepo, tokenService, adminRepo, orderRepo);
         orderService = new OrderService(tokenService, orderRepo, eventRepo, memberRepo,
                 List.of(new StubPaymentGateway()), List.of(new StubTicketSupplyGateway()), clock, null,
                 orderTimeDomainService, null);
+        adminService = new AdminService(memberRepo, companyRepo, tokenService, adminRepo, orderRepo,
+                null, null, orderTimeDomainService);
 
         // Create Admin
         adminId = UUID.randomUUID();
@@ -137,5 +142,23 @@ class SuspensionLifecycleAcceptanceTest {
 
         UUID itemId = assertDoesNotThrow(() -> orderService.addGATicketsToOrder(targetUserToken, eventId, gaZoneId, 1));
         assertNotNull(itemId);
+    }
+
+    @Test
+    @DisplayName("suspend clears active order and releases reserved tickets")
+    void GivenMemberWithActiveCart_WhenSuspended_ThenOrderClearedAndInventoryReleased() {
+        UUID orderId = orderService.createOrder(targetUserToken, eventId);
+        orderService.addGATicketsToOrder(targetUserToken, eventId, gaZoneId, 2);
+
+        Event before = eventRepo.findById(eventId).orElseThrow();
+        int availableAfterReserve = before.findZone(gaZoneId).getAvailableCount();
+
+        adminService.suspendUser(adminToken, targetUserId, Duration.ofDays(7), "Rule violation");
+
+        assertNull(orderService.getActiveOrder(targetUserToken));
+        assertEquals(OrderStatus.CANCELLED, orderRepo.findById(orderId).orElseThrow().getStatus());
+
+        Event after = eventRepo.findById(eventId).orElseThrow();
+        assertEquals(availableAfterReserve + 2, after.findZone(gaZoneId).getAvailableCount());
     }
 }

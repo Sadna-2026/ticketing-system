@@ -48,7 +48,7 @@ class StubGatewaysTest {
 
     @Test
     void GivenSuccessMode_WhenSupplyTickets_ThenSupplied() {
-        List<TicketRequest> requests = List.of(new TicketRequest("evt_1", "zone_1", "tkt_1", "seat_A1"));
+        List<TicketRequest> requests = List.of(new TicketRequest("evt_1", "zone_1", "tkt_1", "seat_A1", "A", "1"));
         CustomerInfo customer = new CustomerInfo("user_1", "test@test.com", "John Doe");
         
         SupplyResult result = supplyGateway.issueTickets(requests, customer);

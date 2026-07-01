@@ -53,6 +53,8 @@ import com.ticketing.domain.queue.QueueConfig;
 import com.ticketing.domain.queue.QueueEntry;
 import com.ticketing.domain.queue.VirtualQueue;
 import com.ticketing.domain.services.OrderTimeDomainService;
+import com.ticketing.infrastructure.persistence.DatabaseConnectivityProbe;
+import com.ticketing.infrastructure.persistence.DbConnectivityFailures;
 
 /**
  * Application service for orders, checkout and the virtual queue.
@@ -66,6 +68,7 @@ import com.ticketing.domain.services.OrderTimeDomainService;
  * tests) the annotations are inert and behavior is unchanged.
  */
 @org.springframework.stereotype.Service
+@org.springframework.context.annotation.Lazy
 @Transactional(readOnly = true)
 public class OrderService {
 
@@ -91,6 +94,12 @@ public class OrderService {
     private int defaultQueueThreshold = 100;
     @org.springframework.beans.factory.annotation.Value("${ticketing.queue.flow-rate:10}")
     private int defaultQueueFlowRate = 10;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DatabaseConnectivityProbe databaseConnectivityProbe;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     public OrderService(ISessionTokenService sessionTokenService,
             IOrderRepository orderRepository,
@@ -140,6 +149,45 @@ public class OrderService {
         this.analyticsCollector = analyticsCollector;
     }
 
+    private boolean isPersistenceDatabaseReady() {
+        return databaseConnectivityProbe == null || databaseConnectivityProbe.isReady();
+    }
+
+    private void runScheduledMaintenance(Runnable task) {
+        try {
+            if (transactionManager != null) {
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+                        .executeWithoutResult(status -> runScheduledMaintenanceBody(task));
+            } else {
+                runScheduledMaintenanceBody(task);
+            }
+        } catch (RuntimeException ex) {
+            if (logScheduledDatabaseSkip(ex)) {
+                return;
+            }
+            throw ex;
+        }
+    }
+
+    private void runScheduledMaintenanceBody(Runnable task) {
+        try {
+            task.run();
+        } catch (RuntimeException ex) {
+            if (logScheduledDatabaseSkip(ex)) {
+                return;
+            }
+            throw ex;
+        }
+    }
+
+    private boolean logScheduledDatabaseSkip(RuntimeException ex) {
+        if (!DbConnectivityFailures.isUnavailable(ex) && !DbConnectivityFailures.isDeferrableAtStartup(ex)) {
+            return false;
+        }
+        log.warn("Scheduled maintenance skipped: database unavailable ({})", ex.toString());
+        return true;
+    }
+
     // ── Order creation & ticket reservation ─────────────────────────
 
     @Transactional
@@ -147,6 +195,7 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Create order requested: eventId={}, sessionId={}, memberId={}", eventId, sessionId, memberId);
         rejectIfMemberSuspended(memberId);
         return findOrCreateActiveOrder(sessionId, memberId, eventId).getId();
     }
@@ -156,6 +205,8 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Add seat requested: eventId={}, zoneId={}, seatId={}, sessionId={}",
+                eventId, zoneId, seatId, sessionId);
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
@@ -170,6 +221,8 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Add GA tickets requested: eventId={}, zoneId={}, quantity={}, sessionId={}",
+                eventId, zoneId, quantity, sessionId);
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, eventId);
         validateOrderOwnership(sessionId, order);
@@ -186,6 +239,8 @@ public class OrderService {
             throw new IllegalArgumentException("request is required");
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Add selection requested: eventId={}, sessionId={}, seats={}, gaPicks={}",
+                request.eventId(), sessionId, request.seats().size(), request.gaQuantities().size());
         rejectIfMemberSuspended(memberId);
         ActiveOrder order = findOrCreateActiveOrder(sessionId, memberId, request.eventId());
         SelectionRequest domainRequest = new SelectionRequest(
@@ -300,9 +355,19 @@ public class OrderService {
         validateToken(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Active order requested: sessionId={}, memberId={}", sessionId, memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null)
             return null;
+        Event event = findEvent(order.getEventId());
+        BigDecimal subtotal = order.getTotalPrice();
+        BigDecimal total = subtotal;
+        try {
+            total = event.calculateOrderTotal(order, systemClock.now());
+        } catch (IllegalArgumentException e) {
+            // Invalid coupon stored? We return subtotal as fallback.
+        }
+
         return new ActiveOrderDto(
                 order.getId(),
                 order.getSessionId(),
@@ -311,10 +376,12 @@ public class OrderService {
                 order.getCreatedAt(),
                 order.getStatus().name(),
                 order.getItemsDto(),
-                order.getTotalPrice(),
+                subtotal,
+                total,
                 null,
                 order.isLotteryWin(),
-                order.getPurchaseWindowDeadline());
+                order.getPurchaseWindowDeadline(),
+                order.getCouponCode());
     }
 
     // ── Checkout ────────────────────────────────────────────────────
@@ -324,10 +391,11 @@ public class OrderService {
      * applying the event discount policy and optional coupon without side effects.
      */
     @Transactional
-    public CheckoutQuote quoteCheckout(String token, String couponCode) {
+    public CheckoutQuote quoteCheckout(String token) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Checkout quote requested: sessionId={}, memberId={}", sessionId, memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) {
             throw new IllegalArgumentException("No active order found");
@@ -337,8 +405,33 @@ public class OrderService {
         }
         Event event = findEvent(order.getEventId());
         BigDecimal subtotal = order.getTotalPrice();
-        BigDecimal total = discountedCheckoutAmount(order, event, normalizeCoupon(couponCode));
+        BigDecimal total = event.calculateOrderTotal(order, systemClock.now());
         return new CheckoutQuote(subtotal, total);
+    }
+
+    @Transactional
+    public void applyCoupon(String token, String couponCode) {
+        validateToken(token);
+        UUID memberId = sessionTokenService.extractMemberId(token);
+        UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Apply coupon requested: sessionId={}, memberId={}, couponCode={}", sessionId, memberId, couponCode);
+
+        ActiveOrder order = getActiveOrder(sessionId, memberId);
+        if (order == null) {
+            throw new IllegalArgumentException("No active order found");
+        }
+        
+        String oldCoupon = order.getCouponCode();
+        order.setCouponCode(couponCode);
+        
+        try {
+            Event event = findEvent(order.getEventId());
+            event.calculateOrderTotal(order, systemClock.now()); // validate it
+            saveOrder(order);
+        } catch (IllegalArgumentException e) {
+            order.setCouponCode(oldCoupon); // rollback in memory
+            throw e;
+        }
     }
 
     public record CheckoutQuote(BigDecimal subtotal, BigDecimal total) {
@@ -362,6 +455,7 @@ public class OrderService {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Purchase policy check requested: sessionId={}, memberId={}", sessionId, memberId);
         ActiveOrder order = getActiveOrder(sessionId, memberId);
         if (order == null) {
             throw new IllegalArgumentException("No active order found");
@@ -400,15 +494,16 @@ public class OrderService {
      * {@code setRollbackOnly()} is required.
      */
     @Transactional
-    public CheckoutCompletion checkout(String token, String couponCode) {
-        return checkout(token, couponCode, null);
+    public CheckoutCompletion checkout(String token) {
+        return checkout(token, null);
     }
 
     @Transactional
-    public CheckoutCompletion checkout(String token, String couponCode, CardPaymentInfo card) {
+    public CheckoutCompletion checkout(String token, CardPaymentInfo card) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
         UUID sessionId = sessionTokenService.extractSessionId(token);
+        log.info("Checkout requested: sessionId={}, memberId={}", sessionId, memberId);
 
         rejectIfMemberSuspended(memberId);
 
@@ -433,7 +528,7 @@ public class OrderService {
             saveOrder(order);
             releaseAllInventoryForOrder(order.getEventId(), order);
             throw new IllegalStateException(
-                    "Your lottery purchase window has expired. The tickets have been released.");
+                    "The lottery has ended — buying tickets is no longer available.");
         }
 
         BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
@@ -441,14 +536,8 @@ public class OrderService {
 
         CompletedPurchase purchase;
         try {
-            purchase = processCheckout(order, event, buyerContact, normalizeCoupon(couponCode), buyerDob, card);
+            purchase = processCheckout(order, event, buyerContact, buyerDob, card);
         } catch (IllegalStateException e) {
-            saveOrder(order);
-            if (e.getMessage() != null && e.getMessage().contains("Ticket generation failed")) {
-                releaseAllInventory(event, order);
-                checkAndPublishAvailable(event);
-                saveEvent(event);
-            }
             log.warn("Failed to checkout order {}: {}", order.getId(), e.getMessage());
             if (notificationService != null && memberId != null) {
                 notificationService.notify(memberId.toString(), "Checkout failed: " + e.getMessage());
@@ -521,7 +610,7 @@ public class OrderService {
             }
             String transactionId = purchase.transactionId();
             if (transactionId == null || transactionId.isBlank()) {
-                log.error("Cancel-event: purchase {} has no payment transaction id; cannot refund",
+                log.warn("Cancel-event: purchase {} has no payment transaction id; cannot refund",
                         purchase.purchaseId());
                 purchase.markRefundFailed();
                 orderRepository.save(purchase);
@@ -590,6 +679,7 @@ public class OrderService {
     public List<PurchaseRecordDTO> getPurchaseHistory(String token) {
         validateToken(token);
         UUID memberId = sessionTokenService.extractMemberId(token);
+        log.info("Member purchase history requested: memberId={}", memberId);
         if (memberId == null) {
             throw new SecurityException("User must be logged in to view purchase history");
         }
@@ -598,6 +688,7 @@ public class OrderService {
         for (CompletedPurchase p : purchases) {
             result.add(PurchaseRecordDTO.from(p));
         }
+        log.info("Member purchase history completed: memberId={}, count={}", memberId, result.size());
         return result;
     }
 
@@ -606,6 +697,7 @@ public class OrderService {
     @Transactional
     public UUID createQueue(String token, UUID eventId, int threshold, int flowRate) {
         validateToken(token);
+        log.info("Create queue requested: eventId={}, threshold={}, flowRate={}", eventId, threshold, flowRate);
 
         eventRepository.findById(eventId)
                 .orElseThrow(() -> {
@@ -642,6 +734,7 @@ public class OrderService {
 
         Event event = findEvent(eventId);
         if (event.getStatus() == EventStatus.SOLD_OUT) {
+            log.warn("Try enter or queue denied: eventId={}, reason=sold-out", eventId);
             throw new IllegalStateException("Event is sold out — no tickets available.");
         }
 
@@ -688,6 +781,7 @@ public class OrderService {
      */
     @Transactional
     public void userLeft(UUID eventId, UUID sessionId) {
+        log.info("User left queue: eventId={}, sessionId={}", eventId, sessionId);
         VirtualQueue queue = queueRepository.findByEventId(eventId).orElse(null);
         if (queue != null) {
             if (sessionId != null) {
@@ -747,14 +841,61 @@ public class OrderService {
     }
 
     public VirtualQueueDto getQueueForEvent(UUID eventId) {
+        log.info("Queue lookup requested: eventId={}", eventId);
         return findQueueByEvent(eventId).toVirtualQueueDto();
     }
 
     @org.springframework.scheduling.annotation.Scheduled(fixedRate = 10_000)
-    @Transactional
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public void expireOrders() {
-        if (orderTimeDomainService != null) {
-            orderTimeDomainService.expireOrders();
+        if (!isPersistenceDatabaseReady()) {
+            return;
+        }
+        runScheduledMaintenance(() -> {
+            log.info("Order expiry job started");
+            if (orderTimeDomainService != null) {
+                orderTimeDomainService.expireOrders();
+            }
+        });
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 60_000)
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    public void retryPendingRefunds() {
+        if (!isPersistenceDatabaseReady()) {
+            return;
+        }
+        runScheduledMaintenance(this::retryPendingRefundsInTransaction);
+    }
+
+    private void retryPendingRefundsInTransaction() {
+        List<com.ticketing.domain.order.FailedCheckoutRefund> pendingRefunds = orderRepository.findPendingRefunds();
+        for (com.ticketing.domain.order.FailedCheckoutRefund pending : pendingRefunds) {
+            log.info("Retrying pending refund for transaction {}", pending.getTransactionId());
+            boolean success = false;
+            for (IPaymentGateway gateway : paymentGateways) {
+                try {
+                    RefundResult result = gateway.refund(pending.getTransactionId(), pending.getAmount().doubleValue());
+                    if (result != null && result.success()) {
+                        success = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    log.error("Retry Refund Gateway failed with exception", e);
+                }
+            }
+            if (success) {
+                pending.markRefunded();
+                orderRepository.save(pending);
+                log.info("Successfully retried pending refund for transaction {}", pending.getTransactionId());
+                safeNotify(pending.getMemberId(), 
+                        "A previous checkout failure has been resolved and your payment of " 
+                        + pending.getAmount().toPlainString() + " has been refunded successfully.");
+            } else {
+                log.warn("Retry failed for pending refund transaction {}", pending.getTransactionId());
+            }
         }
     }
 
@@ -805,7 +946,7 @@ public class OrderService {
                 saveOrder(wo);
                 releaseAllInventoryForOrder(eventId, wo);
                 throw new IllegalStateException(
-                        "Your lottery purchase window has expired. The tickets have been released.");
+                        "The lottery has ended — buying tickets is no longer available.");
             }
             return wo;
         }
@@ -907,7 +1048,9 @@ public class OrderService {
 
             saveEvent(event);
             saveOrder(order);
-            checkAndPublishSoldOut(event);
+            // No sold-out check here: reserving tickets into a cart does not sell them, and the
+            // event must stay PUBLISHED (and inventory-editable) while tickets are merely locked.
+            // Sold-out is decided at checkout, once the tickets are actually sold.
             if (analyticsCollector != null) {
                 analyticsCollector.recordReservation(request.additionalTicketCount());
             }
@@ -962,18 +1105,13 @@ public class OrderService {
     }
 
     private void releaseInventoryForItem(Event event, OrderItem item) {
-        InventoryZone zone = event.findZone(item.getZoneId());
-        if (item.isAssignedSeat()) {
-            zone.releaseSeat(item.getSeatId());
-        } else {
-            zone.releaseGA(item.getQuantity());
-        }
+        event.releaseReservationFor(item);
     }
 
     private void releaseAllInventory(Event event, ActiveOrder order) {
         for (OrderItem item : order.getItems()) {
             try {
-                releaseInventoryForItem(event, item);
+                event.releaseReservationFor(item);
             } catch (Exception e) {
                 log.error("Failed to release inventory for item: {}", item.getId(), e);
             }
@@ -992,9 +1130,20 @@ public class OrderService {
     }
 
     private void checkAndPublishSoldOut(Event event) {
-        if (!event.hasAvailableTickets() && event.isPublished()) {
+        // Only when every ticket is actually SOLD — not merely reserved in carts, which can
+        // still be released. This runs at checkout (after the sale), never at reservation.
+        if (event.isFullySold() && event.isPublished()) {
             event.markSoldOut();
             saveEvent(event);
+            if (notificationService != null && memberRepository != null) {
+                List<Member> staff = memberRepository.findByCompanyAppointment(event.getCompanyName());
+                for (Member member : staff) {
+                    if (member.hasStaffAppointment(event.getCompanyName(), com.ticketing.domain.member.StaffAppointment.StaffRole.OWNER) ||
+                        member.hasStaffAppointment(event.getCompanyName(), com.ticketing.domain.member.StaffAppointment.StaffRole.MANAGER)) {
+                        notificationService.notify(member.getId().toString(), "Event sold out: " + event.getName());
+                    }
+                }
+            }
         }
     }
 
@@ -1003,8 +1152,7 @@ public class OrderService {
      * If so, transitions the event status back to PUBLISHED and persists the change.
      */
     private void checkAndPublishAvailable(Event event) {
-        if (event.hasAvailableTickets() && event.getStatus() == EventStatus.SOLD_OUT) {
-            event.markAvailable();
+        if (event.reopenAvailabilityIfTicketsFreed()) {
             saveEvent(event);
         }
     }
@@ -1012,7 +1160,7 @@ public class OrderService {
     // ── Checkout internals ──────────────────────────────────────────
 
     private CompletedPurchase processCheckout(ActiveOrder order, Event event,
-                                               BuyerContactSnapshot buyerContact, String couponCode,
+                                               BuyerContactSnapshot buyerContact,
                                                LocalDate buyerDateOfBirth, CardPaymentInfo card) {
         // Re-check suspension as late as possible: a member could have been suspended
         // after checkout began but before any payment/issuance side effect runs.
@@ -1020,7 +1168,7 @@ public class OrderService {
         requirePurchasePolicyCompliance(event, PurchaseContext.forOrder(
                 event, order, order.getMemberId(), buyerDateOfBirth));
 
-        BigDecimal finalAmount = discountedCheckoutAmount(order, event, couponCode);
+        BigDecimal finalAmount = event.calculateOrderTotal(order, systemClock.now());
 
         order.startCheckout();
 
@@ -1032,10 +1180,15 @@ public class OrderService {
 
         SupplyResult supply = supplyTickets(order, event, buyerContact);
         if (supply == null || !supply.success()) {
-            refundPayment(payment.transactionId(), finalAmount);
-            order.cancel();
-            throw new IllegalStateException("Ticket generation failed. Payment has been refunded: "
-                    + (supply != null ? supply.errorMessage() : "All gateways failed"));
+            boolean refundSuccess = refundPayment(payment.transactionId(), finalAmount, event.getId(), order.getMemberId());
+            order.revertToActive();
+            if (refundSuccess) {
+                throw new IllegalStateException("Ticket generation failed. Payment has been refunded: "
+                        + (supply != null ? supply.errorMessage() : "All gateways failed"));
+            } else {
+                throw new IllegalStateException("Ticket generation failed. Payment refund is pending: "
+                        + (supply != null ? supply.errorMessage() : "All gateways failed"));
+            }
         }
 
         order.complete();
@@ -1052,22 +1205,31 @@ public class OrderService {
                 systemClock.now());
     }
 
-    public void refundPayment(String transactionId, BigDecimal amount) {
+    public boolean refundPayment(String transactionId, BigDecimal amount, UUID eventId, UUID memberId) {
         RefundResult refund = null;
         for (IPaymentGateway gateway : paymentGateways) {
             try {
                 refund = gateway.refund(transactionId, amount.doubleValue());
                 if (refund != null && refund.success()) {
-                    break;
+                    return true;
                 }
             } catch (Exception e) {
                 log.error("Refund Gateway failed with exception", e);
             }
         }
-        if (refund == null || !refund.success()) {
-            log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
-                    refund != null ? refund.errorMessage() : "All gateways failed");
-        }
+
+        log.error("ESCALATION: Refund failed after ticket supply failure: reason={}",
+                refund != null ? refund.errorMessage() : "All gateways failed");
+        
+        com.ticketing.domain.order.FailedCheckoutRefund pendingRefund = new com.ticketing.domain.order.FailedCheckoutRefund(
+                UUID.randomUUID(), eventId, memberId, transactionId, amount, systemClock.now());
+        orderRepository.save(pendingRefund);
+        
+        safeNotify(memberId, 
+                "Ticket generation failed but we could not immediately refund your payment. "
+                + "A pending refund has been registered and will be processed shortly.");
+        
+        return false;
     }
 
     private void requirePurchasePolicyCompliance(Event event, PurchaseContext ctx) {
@@ -1121,12 +1283,20 @@ public class OrderService {
         List<TicketRequest> tickets = new ArrayList<>();
         for (OrderItem item : order.getItems()) {
             if (item.isAssignedSeat()) {
+                com.ticketing.domain.event.Seat seat = null;
+                try {
+                    seat = event.findZone(item.getZoneId()).getSeats().stream()
+                            .filter(s -> s.getId().equals(item.getSeatId())).findFirst().orElse(null);
+                } catch (Exception e) {}
+                String row = seat != null ? seat.getRow() : "";
+                String number = seat != null ? seat.getSeatNumber() : "";
+                
                 tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
-                        item.getId().toString(), item.getSeatId().toString()));
+                        item.getId().toString(), item.getSeatId().toString(), row, number));
             } else {
                 for (int i = 0; i < item.getQuantity(); i++) {
                     tickets.add(new TicketRequest(event.getId().toString(), item.getZoneId().toString(),
-                            item.getId() + "-" + (i + 1), null));
+                            item.getId() + "-" + (i + 1), null, null, null));
                 }
             }
         }
@@ -1334,13 +1504,5 @@ public class OrderService {
         order.cancel();
         saveOrder(order);
         log.info("Discarded empty active order after failed add: orderId={}", order.getId());
-    }
-
-    private BigDecimal discountedCheckoutAmount(ActiveOrder order, Event event, String couponCode) {
-        return event.getEventDiscountPolicy().priceAfterDiscount(order, couponCode, systemClock.now());
-    }
-
-    private static String normalizeCoupon(String couponCode) {
-        return couponCode == null || couponCode.isBlank() ? null : couponCode.trim();
     }
 }

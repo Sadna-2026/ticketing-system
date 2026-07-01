@@ -132,9 +132,12 @@ class StaffInitialStateScenarioTest {
 
                 VenueLayout layout = event.getVenueLayout();
                 assertNotNull(layout);
-                assertEquals(10, layout.getRows());
+                // 10x10 seat grid plus one extra row carrying the GA (Standing) cell so the buyer
+                // map can sell GA tickets: 11 rows, 100 seat cells + 1 GA cell = 101 cells.
+                assertEquals(11, layout.getRows());
                 assertEquals(10, layout.getCols());
-                assertEquals(100, layout.getCells().size());
+                assertEquals(101, layout.getCells().size());
+                assertEquals(1, layout.cellsOfType(com.ticketing.domain.event.LayoutCellType.GENERAL_ADMISSION).size());
         }
 
         @Test
@@ -222,7 +225,7 @@ class StaffInitialStateScenarioTest {
                 // After logout, bound token symbols are cleared — a follow-up command cannot
                 // reuse them.
                 InitialStateExecutionException ex = assertThrows(InitialStateExecutionException.class,
-                                () -> executor.execute(parser.parse("open-production-company(u1_token, p2);")));
+                                () -> executor.execute(parser.parse("open-production-company(u1_token, p2);", "test.txt")));
                 assertTrue(ex.getMessage().contains("u1_token"), ex.getMessage());
         }
 
@@ -234,7 +237,7 @@ class StaffInitialStateScenarioTest {
                                 guest-registration(u2, u2@example.com, secret2);
                                 login(u1, secret1);
                                 appoint-owner(u1_token, p1, u2);
-                                """);
+                                """, "test.txt");
 
                 InitialStateExecutionException ex = assertThrows(InitialStateExecutionException.class,
                                 () -> executor.execute(ops));
@@ -250,7 +253,7 @@ class StaffInitialStateScenarioTest {
                                 guest-registration(u1, u1@example.com, secret1);
                                 login(u1, secret1);
                                 open-production-company(u1_token, p1);
-                                """));
+                                """, "test.txt"));
                 assertTrue(companyRepository.existsByName("p1"));
         }
 
@@ -261,7 +264,7 @@ class StaffInitialStateScenarioTest {
                                 .replace("set-company-coupon-discount", "set-invalid-coupon");
 
                 InitialStateExecutionException ex = assertThrows(InitialStateExecutionException.class,
-                                () -> executor.execute(parser.parse(broken)));
+                                () -> executor.execute(parser.parse(broken, "test.txt")));
 
                 assertTrue(ex.getMessage().contains("set-invalid-coupon"), ex.getMessage());
         }
@@ -276,7 +279,7 @@ class StaffInitialStateScenarioTest {
                                                 open-production-company(u1_token, p1);
                                                 logout(u1_token);
                                                 open-production-company(u1_token, p2);
-                                                """)));
+                                                """, "test.txt")));
 
                 assertTrue(ex.getMessage().contains("u1_token"), ex.getMessage());
                 assertTrue(companyRepository.existsByName("p1"));
@@ -285,6 +288,6 @@ class StaffInitialStateScenarioTest {
 
         private void runStaffScenario() {
                 executor.execute(parser.parse(
-                                InitialStateFileLoader.load("classpath:initial-state/staff-demo-v3.txt")));
+                                InitialStateFileLoader.load("classpath:initial-state/staff-demo-v3.txt"), "staff-demo-v3.txt"));
         }
 }

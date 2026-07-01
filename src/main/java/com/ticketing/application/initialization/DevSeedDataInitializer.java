@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.application.services.AdminService;
 import com.ticketing.application.services.SystemAnalyticsCollector;
@@ -41,6 +42,7 @@ import com.ticketing.domain.event.OrPolicy;
 import com.ticketing.domain.event.SaleMethod;
 import com.ticketing.domain.event.Seat;
 import com.ticketing.domain.event.SimpleDiscount;
+import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.member.IMemberRepository;
@@ -111,6 +113,11 @@ public class DevSeedDataInitializer {
     public static final UUID COUPON_CHECKOUT_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     public static final UUID COUPON_CHECKOUT_GA_ZONE_ID = UUID.fromString("99999999-0000-0000-0000-000000000001");
     public static final String CHECKOUT_COUPON_CODE = "SAVE20";
+    
+    // Additional Edge-Case Coupon Events
+    public static final UUID COUPON_EXPIRED_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-99999999999a");
+    public static final UUID COUPON_FREE_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-99999999999b");
+    public static final UUID COUPON_STACKED_EVENT_ID = UUID.fromString("99999999-9999-9999-9999-99999999999c");
     public static final UUID MIN_QTY_EVENT_ID = UUID.fromString("bbbb1111-1111-1111-1111-111111111111");
     public static final UUID MIN_QTY_SEAT_ZONE_ID = UUID.fromString("bbbb1111-0000-0000-0000-0000000000a1");
     public static final UUID MIN_QTY_GA_ZONE_ID = UUID.fromString("bbbb1111-0000-0000-0000-0000000000a2");
@@ -201,6 +208,7 @@ public class DevSeedDataInitializer {
         this.analyticsCollector = analyticsCollector;
     }
 
+    @Transactional
     public void runSeed() {
         seedMembersAndAdmin();
         seedCompanies();
@@ -413,6 +421,9 @@ public class DevSeedDataInitializer {
                 EventCategory.CONFERENCE, new AlwaysAllowPolicy(), ADMIN_CLOSE_GA_ZONE_ID, "Demo hall",
                 new BigDecimal("25.00"), 40);
         saveCouponCheckoutEventIfMissing();
+        saveCouponExpiredEventIfMissing();
+        saveCouponFreeEventIfMissing();
+        saveCouponStackedEventIfMissing();
         saveMixedLimitedEventIfMissing();
         saveMinQuantityEventIfMissing();
         saveAndPolicyEventIfMissing();
@@ -550,6 +561,78 @@ public class DevSeedDataInitializer {
         event.publish();
         eventRepository.save(event);
         log.info("Seeded coupon checkout demo event '{}' with coupon {}", event.getName(), CHECKOUT_COUPON_CODE);
+    }
+
+    private void saveCouponExpiredEventIfMissing() {
+        if (eventRepository.findById(COUPON_EXPIRED_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(30));
+        Instant couponExpiry = Instant.now().minus(Duration.ofDays(1)); // Expired yesterday
+        Event event = new Event(COUPON_EXPIRED_EVENT_ID, COMPANY_NAME, "Coupon Expired Demo",
+                "UI-13 manual QA: EC-1. Try to apply coupon 'EXPIRED'. It should be rejected.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("20"), "EXPIRED", couponExpiry));
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        UUID zoneId = UUID.randomUUID();
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 100));
+        event.setVenueMap(new VenueMap(Map.of("Floor", zoneId)));
+        event.setVenueLayout(simpleGaLayout(zoneId, "Floor"));
+        event.publish();
+        eventRepository.save(event);
+    }
+
+    private void saveCouponFreeEventIfMissing() {
+        if (eventRepository.findById(COUPON_FREE_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(30));
+        Instant couponExpiry = Instant.now().plus(Duration.ofDays(365));
+        Event event = new Event(COUPON_FREE_EVENT_ID, COMPANY_NAME, "Coupon Free Demo (100%)",
+                "UI-13 manual QA: EC-3a. Apply coupon 'FREE' to get 100% off. Checkout should complete for $0.",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new CouponDiscount(new BigDecimal("100"), "FREE", couponExpiry));
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        UUID zoneId = UUID.randomUUID();
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 100));
+        event.setVenueMap(new VenueMap(Map.of("Floor", zoneId)));
+        event.setVenueLayout(simpleGaLayout(zoneId, "Floor"));
+        event.publish();
+        eventRepository.save(event);
+    }
+
+    private void saveCouponStackedEventIfMissing() {
+        if (eventRepository.findById(COUPON_STACKED_EVENT_ID).isPresent()) {
+            return;
+        }
+        Instant start = Instant.now().plus(Duration.ofDays(30));
+        Instant couponExpiry = Instant.now().plus(Duration.ofDays(365));
+        Event event = new Event(COUPON_STACKED_EVENT_ID, COMPANY_NAME, "Coupon Stacked Demo (SumComposite)",
+                "UI-13 manual QA: EC-6a. Event has 10% base discount. Apply 'EXTRA' for an additional 20% off (30% total).",
+                EventCategory.CONCERT,
+                new EventSchedule(start, start.plus(Duration.ofHours(3)), start.minus(Duration.ofHours(1))),
+                new LockTimerDuration(Duration.ofMinutes(15)),
+                new AlwaysAllowPolicy(),
+                new SumCompositeDiscount(List.of(
+                        new SimpleDiscount(new BigDecimal("10")),
+                        new CouponDiscount(new BigDecimal("20"), "EXTRA", couponExpiry)
+                )));
+        event.setArtist("QA Band");
+        event.setRegion("Beer Sheva");
+        UUID zoneId = UUID.randomUUID();
+        event.addZone(InventoryZone.createGA(zoneId, "Floor", new BigDecimal("50.00"), 100));
+        event.setVenueMap(new VenueMap(Map.of("Floor", zoneId)));
+        event.setVenueLayout(simpleGaLayout(zoneId, "Floor"));
+        event.publish();
+        eventRepository.save(event);
     }
 
     private void seedCompletedPurchases() {

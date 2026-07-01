@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.FailedCheckoutRefund;
 import com.ticketing.domain.order.IOrderRepository;
 
 @org.springframework.stereotype.Component
@@ -20,6 +21,7 @@ public class InMemoryOrderRepository implements IOrderRepository {
 
     private final ConcurrentHashMap<UUID, ActiveOrder> activeOrders = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, CompletedPurchase> completedPurchases = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, FailedCheckoutRefund> failedCheckoutRefunds = new ConcurrentHashMap<>();
 
     @Override
     public Optional<ActiveOrder> findActiveBySessionId(UUID sessionId) {
@@ -127,6 +129,26 @@ public class InMemoryOrderRepository implements IOrderRepository {
     @Override
     public List<CompletedPurchase> findAllCompleted() {
         return new ArrayList<>(completedPurchases.values());
+    }
+
+    @Override
+    public void deleteAll() {
+        activeOrders.clear();
+        completedPurchases.clear();
+        failedCheckoutRefunds.clear();
+    }
+
+    @Override
+    public void save(FailedCheckoutRefund pendingRefund) {
+        if (pendingRefund == null) throw new IllegalArgumentException("pendingRefund cannot be null");
+        failedCheckoutRefunds.put(pendingRefund.getId(), pendingRefund);
+    }
+
+    @Override
+    public List<FailedCheckoutRefund> findPendingRefunds() {
+        return failedCheckoutRefunds.values().stream()
+                .filter(FailedCheckoutRefund::isPending)
+                .collect(Collectors.toList());
     }
 
 }

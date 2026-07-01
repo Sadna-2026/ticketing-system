@@ -21,6 +21,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResul
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.util.RequiredFields;
 import com.ticketing.presentation.vaadin.util.UiMessages;
+import com.ticketing.presentation.vaadin.util.VenueGridDragPainter;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -100,8 +101,10 @@ public class VenueDesignerDialog extends Dialog {
     private final DateTimePicker lotteryCloseTime = new DateTimePicker("Registration closes");
     private final IntegerField lotteryMaxWinners = new IntegerField("Max winners");
     private final IntegerField lotteryPurchaseWindowHours = new IntegerField("Winner purchase window (hours)");
+    private final IntegerField lotteryPurchaseWindowMinutes = new IntegerField("or minutes (overrides hours)");
     private final HorizontalLayout lotterySection = new HorizontalLayout(
-            lotteryOpenTime, lotteryCloseTime, lotteryMaxWinners, lotteryPurchaseWindowHours);
+            lotteryOpenTime, lotteryCloseTime, lotteryMaxWinners, lotteryPurchaseWindowHours,
+            lotteryPurchaseWindowMinutes);
 
     // Grid controls
     private final IntegerField rowsField = new IntegerField("Rows");
@@ -133,6 +136,7 @@ public class VenueDesignerDialog extends Dialog {
     private boolean eraseMode;
     private UUID eventId;
     private int colorIndex;
+    private final VenueGridDragPainter gridDragPainter = new VenueGridDragPainter(this::paint);
 
     public VenueDesignerDialog(CompanyPresenter presenter, String companyName) {
         this.presenter = presenter;
@@ -167,6 +171,10 @@ public class VenueDesignerDialog extends Dialog {
         lotteryPurchaseWindowHours.setMin(1);
         lotteryPurchaseWindowHours.setValue(48);
         lotteryPurchaseWindowHours.setStepButtonsVisible(true);
+        lotteryPurchaseWindowMinutes.setMin(1);
+        lotteryPurchaseWindowMinutes.setStepButtonsVisible(true);
+        lotteryPurchaseWindowMinutes.setClearButtonVisible(true);
+        lotteryPurchaseWindowMinutes.setHelperText("Leave empty to use hours");
         lotterySection.setVisible(false);
         saleMethodCombo.addValueChangeListener(e -> lotterySection.setVisible("Lottery".equals(e.getValue())));
 
@@ -462,6 +470,7 @@ public class VenueDesignerDialog extends Dialog {
         cellStates = new CellState[rows][cols];
         cellButtons = new Button[rows][cols];
         grid.removeAll();
+        gridDragPainter.reset();
         grid.getStyle()
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(" + cols + ", 30px)")
@@ -474,7 +483,7 @@ public class VenueDesignerDialog extends Dialog {
                         .set("padding", "0").set("border", "1px solid var(--lumo-contrast-30pct)")
                         .set("background", EMPTY_BG).set("font-size", "10px");
                 final int rr = r, cc = c;
-                cell.addClickListener(e -> paint(rr, cc));
+                gridDragPainter.wireCell(cell, rr, cc);
                 cellButtons[r][c] = cell;
                 grid.add(cell);
             }
@@ -482,7 +491,7 @@ public class VenueDesignerDialog extends Dialog {
         eventId = null;
         validate.setEnabled(false);
         publish.setEnabled(false);
-        String ready = "Grid " + rows + "×" + cols + " ready. Select a zone and click cells.";
+        String ready = "Grid " + rows + "×" + cols + " ready. Select a zone and click or drag across cells.";
         status.setText(ready);
         UiMessages.info(ready);
     }
@@ -627,6 +636,7 @@ public class VenueDesignerDialog extends Dialog {
             }
             Integer maxW = lotteryMaxWinners.getValue();
             Integer pwHours = lotteryPurchaseWindowHours.getValue();
+            Integer pwMinutes = lotteryPurchaseWindowMinutes.getValue();
             if (maxW == null || maxW < 1) {
                 UiMessages.error("Max winners must be at least 1.");
                 return;
@@ -635,7 +645,12 @@ public class VenueDesignerDialog extends Dialog {
                 UiMessages.error("Winner purchase window must be at least 1 hour.");
                 return;
             }
-            lotteryWindow = new LotteryWindow(lotteryOpen, lotteryClose, maxW, pwHours);
+            if (pwMinutes != null && pwMinutes < 1) {
+                UiMessages.error("Winner purchase window minutes must be at least 1.");
+                return;
+            }
+            // pwMinutes, when set, overrides the hour value (handy for a 1-minute QA window).
+            lotteryWindow = new LotteryWindow(lotteryOpen, lotteryClose, maxW, pwHours, pwMinutes);
         }
 
         EventActionResult result = presenter.defineVenue(

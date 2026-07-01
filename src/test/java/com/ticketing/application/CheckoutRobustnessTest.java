@@ -11,6 +11,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,7 @@ import com.ticketing.domain.order.IOrderRepository;
 import com.ticketing.domain.order.OrderItem;
 import com.ticketing.infrastructure.gateway.ExternalSystemsHandshakeRunner;
 
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(properties = {
     "ticketing.external.base-url=http://external.test/api/",
     "ticketing.external.ticket-url=http://external.test/api/",
@@ -143,6 +145,23 @@ class CheckoutRobustnessTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Payment failed");
 
+        mockServer.verify();
+    }
+
+    @Test
+    void GivenPaymentConnectionTimeout_WhenCheckout_ThenFailsGracefullyAndOrderNotCommitted() {
+        // A real socket timeout (not a 5xx) surfaces from RestTemplate as a ResourceAccessException.
+        mockServer.expect(requestTo("http://external.test/api/"))
+                .andRespond(request -> {
+                    throw new SocketTimeoutException("simulated read timeout");
+                });
+
+        assertThatThrownBy(() -> orderService.checkout(token, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Payment failed");
+
+        // No partial commit: the order is reverted to active, not completed.
+        assertThat(order.isActive()).isTrue();
         mockServer.verify();
     }
 

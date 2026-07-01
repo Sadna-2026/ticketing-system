@@ -17,6 +17,8 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import com.ticketing.application.ISystemClock;
 import com.ticketing.application.auth.ISessionTokenRepository;
@@ -42,6 +44,7 @@ import com.ticketing.infrastructure.InMemorySessionTokenRepository;
 import com.ticketing.infrastructure.PasswordEncryptionUtils;
 
 @DisplayName("InitialStateExecutor")
+@ExtendWith(OutputCaptureExtension.class)
 class InitialStateExecutorTest {
 
     private InMemoryMemberRepository memberRepository;
@@ -92,7 +95,7 @@ class InitialStateExecutorTest {
                 login(rina, secret1);
                 open-production-company(rina_token, "Demo Co", "A demo company");
                 appoint-manager(rina_token, "Demo Co", dana);
-                """);
+                """, "test.txt");
 
         executor.execute(ops);
 
@@ -114,7 +117,7 @@ class InitialStateExecutorTest {
     @DisplayName("Staff demo scenario boots company, roles, event, coupon and logouts")
     void givenStaffScenarioFile_whenExecute_thenFullStateIsReady() {
         String content = InitialStateFileLoader.load("classpath:initial-state/staff-demo-v3.txt");
-        executor.execute(parser.parse(content));
+        executor.execute(parser.parse(content, "staff-demo-v3.txt"));
 
         assertNotNull(memberRepository.findByUsername("u1").orElse(null));
         assertNotNull(memberRepository.findByUsername("u2").orElse(null));
@@ -150,9 +153,10 @@ class InitialStateExecutorTest {
 
         VenueLayout layout = event.getVenueLayout();
         assertNotNull(layout);
-        assertEquals(10, layout.getRows());
+        // 10x10 seat grid plus one extra row for the GA (Standing) cell: 11 rows, 101 cells.
+        assertEquals(11, layout.getRows());
         assertEquals(10, layout.getCols());
-        assertEquals(100, layout.getCells().size());
+        assertEquals(101, layout.getCells().size());
     }
 
     @Test
@@ -161,16 +165,14 @@ class InitialStateExecutorTest {
         List<InitialStateOperation> ops = parser.parse("""
                 guest-registration(rina, rina@example.com, secret1);
                 open-production-company(ghost_token, "Demo Co", "desc");
-                """);
+                """, "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
 
-        assertTrue(ex.getMessage().contains("#1"), "message should name op index: " + ex.getMessage());
-        assertTrue(ex.getMessage().contains("open-production-company"),
-                "message should name the op: " + ex.getMessage());
         assertTrue(ex.getMessage().contains("ghost_token"),
                 "message should name the unbound token: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:2: open-production-company: unbound token reference 'ghost_token'"));
 
         assertFalse(companyRepository.existsByName("Demo Co"));
     }
@@ -183,34 +185,37 @@ class InitialStateExecutorTest {
                 login(rina, secret1);
                 open-production-company(rina_token, "Demo Co", "desc");
                 appoint-manager(rina_token, "Demo Co", ghost);
-                """);
+                """, "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
         assertTrue(ex.getMessage().contains("ghost"),
                 "message should reference the missing target: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:4: appoint-manager: role appointment target member 'ghost' does not exist"));
     }
 
     @Test
     @DisplayName("Unknown operation name aborts and names the operation")
     void givenUnknownOperation_whenExecute_thenThrows() {
-        List<InitialStateOperation> ops = parser.parse("teleport(rina, mars);");
+        List<InitialStateOperation> ops = parser.parse("teleport(rina, mars);", "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
         assertTrue(ex.getMessage().contains("teleport"),
                 "message should name the unknown op: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:1: teleport: Unknown initial-state operation 'teleport'"));
     }
 
     @Test
     @DisplayName("Wrong argument count aborts")
     void givenWrongArity_whenExecute_thenThrows() {
-        List<InitialStateOperation> ops = parser.parse("login(rina);");
+        List<InitialStateOperation> ops = parser.parse("login(rina);", "test.txt");
 
         InitialStateExecutionException ex =
                 assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
         assertTrue(ex.getMessage().contains("login"),
                 "message should name the failing op: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:1: login: login expects 2 argument(s) but got 1"));
     }
 
     @Test
@@ -218,5 +223,93 @@ class InitialStateExecutorTest {
     void givenNoOperations_whenExecute_thenNothingHappens() {
         executor.execute(List.of());
         assertEquals(0, memberRepository.count());
+    }
+
+    // ── #543 init-file edge cases: every failure aborts with a located error (file:line, op #index/name) ──
+
+    @Test
+    @DisplayName("Duplicate registration: the same username twice aborts with a located error")
+    void givenDuplicateRegistration_whenExecute_thenThrowsLocatedError() {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                guest-registration(rina, other@example.com, secret2);
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("guest-registration"), "names the op: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("rina"), "names the duplicate user: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:2:"),
+                "located error in message: " + ex.getMessage());
+        assertEquals(1, memberRepository.count(), "the duplicate must not create a second member");
+    }
+
+    @Test
+    @DisplayName("Duplicate company name: opening the same company twice aborts with a located error")
+    void givenDuplicateCompanyName_whenExecute_thenThrowsLocatedError() {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                login(rina, secret1);
+                open-production-company(rina_token, "Demo Co", "first");
+                open-production-company(rina_token, "Demo Co", "second");
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("already exists"),
+                "message should describe the duplicate: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:4:"),
+                "located error in message: " + ex.getMessage());
+        assertTrue(companyRepository.existsByName("Demo Co"), "the first company still exists");
+    }
+
+    @Test
+    @DisplayName("Out-of-order: logging in before the user is registered aborts with a located error")
+    void givenLoginBeforeRegister_whenExecute_thenThrowsLocatedError() {
+        List<InitialStateOperation> ops = parser.parse("login(rina, secret1);", "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("login"), "names the op: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("rina"), "names the unknown user: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:1:"),
+                "located error in message: " + ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("Reference to a non-existent company: appointing on a company never opened aborts")
+    void givenAppointOnUnknownCompany_whenExecute_thenThrowsLocatedError() {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                guest-registration(dana, dana@example.com, secret2);
+                login(rina, secret1);
+                appoint-manager(rina_token, "Ghost Co", dana);
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("Company not found")
+                        || ex.getMessage().contains("Ghost Co"),
+                "message should reference the missing company: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:4:"),
+                "located error in message: " + ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("Reference to a non-existent event: setting a layout on an event never created aborts")
+    void givenSetLayoutOnUnknownEvent_whenExecute_thenThrowsLocatedError() {
+        List<InitialStateOperation> ops = parser.parse("""
+                guest-registration(rina, rina@example.com, secret1);
+                login(rina, secret1);
+                open-production-company(rina_token, "Demo Co", "desc");
+                set-event-seating-layout(rina_token, "Demo Co", "GhostEvent", "Seating", 5, 5);
+                """, "test.txt");
+
+        InitialStateExecutionException ex =
+                assertThrows(InitialStateExecutionException.class, () -> executor.execute(ops));
+        assertTrue(ex.getMessage().contains("GhostEvent"),
+                "message should reference the missing event: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[EXECUTION ERROR] test.txt:4:"),
+                "located error in message: " + ex.getMessage());
     }
 }

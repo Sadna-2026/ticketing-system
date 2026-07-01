@@ -12,6 +12,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -144,6 +145,45 @@ class WebSocketNotificationServiceTest {
         }
 
         @Test
+        void GivenPendingNotifications_WhenFlushedOnReconnect_ThenRetainedInHistoryNotReFlushed() throws Exception {
+            // #490: a delivered notification must stay in the member's history inbox, and must not be
+            // re-delivered when a listener connects again (e.g. on the next page load).
+            service.notify("user-9", "Your refund is on its way");
+
+            CountDownLatch first = new CountDownLatch(1);
+            service.registerListener("user-9", msg -> first.countDown());
+            assertTrue(first.await(2, TimeUnit.SECONDS));
+
+            // No longer pending, but retained in history.
+            assertTrue(pendingRepo.getPendingNotifications("user-9").isEmpty());
+            assertEquals(List.of("Your refund is on its way"), pendingRepo.getNotificationHistory("user-9"));
+
+            // A second listener (new page load) must NOT receive it again.
+            service.removeListener("user-9");
+            List<String> secondReceived = Collections.synchronizedList(new ArrayList<>());
+            service.registerListener("user-9", secondReceived::add);
+            Thread.sleep(150);
+            assertTrue(secondReceived.isEmpty(), "already-delivered notification must not be re-flushed");
+        }
+
+        @Test
+        void GivenOnlineUser_WhenNotify_ThenRetainedInHistoryAsSeen() throws Exception {
+            CountDownLatch delivered = new CountDownLatch(1);
+            service.registerListener("user-10", msg -> delivered.countDown());
+
+            service.notify("user-10", "Live update");
+            assertTrue(delivered.await(2, TimeUnit.SECONDS));
+            
+            // Wait for the async executor to finish saving the history
+            Awaitility.await().atMost(2, TimeUnit.SECONDS)
+                .until(() -> pendingRepo.getNotificationHistory("user-10").contains("Live update"));
+
+            // Delivered live -> in history, but not pending (so it is never re-pushed).
+            assertEquals(List.of("Live update"), pendingRepo.getNotificationHistory("user-10"));
+            assertTrue(pendingRepo.getPendingNotifications("user-10").isEmpty());
+        }
+
+        @Test
         void GivenNoPendingNotifications_WhenUserReconnects_ThenNoFlush() {
             List<String> received = Collections.synchronizedList(new ArrayList<>());
             service.registerListener("clean-user", received::add);
@@ -249,11 +289,15 @@ class WebSocketNotificationServiceTest {
             });
 
             service.notify("flaky-user", "Important message");
-            Thread.sleep(500); // allow async executor to complete
+            
+            // Wait for async executor to complete and save to pending
+            Awaitility.await().atMost(2, TimeUnit.SECONDS)
+                .until(() -> pendingRepo.getPendingNotifications("flaky-user").size() == 1);
 
             List<String> pending = pendingRepo.getPendingNotifications("flaky-user");
             assertEquals(1, pending.size());
             assertEquals("Important message", pending.get(0));
+            // no exception, no pending stored
         }
 
         @Test

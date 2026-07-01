@@ -52,6 +52,7 @@ import com.ticketing.infrastructure.gateway.StubTicketSupplyGateway;
  * {@code ddl-auto=create-drop} builds the schema for the test, and
  * {@code ticketing.seed.enabled=false} keeps the DB clean of dev-seed rows.
  */
+@org.junit.jupiter.api.Tag("slow")
 @SpringBootTest(
         properties = {
                 "ticketing.persistence=jpa",
@@ -115,7 +116,7 @@ class CheckoutTransactionJpaTest {
         // checkout method, so Spring rolls back every DB write made in that method.
         supplyGateway.setShouldFail(true);
 
-        assertThatThrownBy(() -> orderService.checkout(token, null))
+        assertThatThrownBy(() -> orderService.checkout(token))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Ticket generation failed");
 
@@ -154,7 +155,7 @@ class CheckoutTransactionJpaTest {
         // Fail after issuing 1 ticket
         supplyGateway.setFailAfterCount(1);
 
-        assertThatThrownBy(() -> orderService.checkout(token, null))
+        assertThatThrownBy(() -> orderService.checkout(token))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Ticket generation failed");
 
@@ -180,6 +181,105 @@ class CheckoutTransactionJpaTest {
     }
 
     @Test
+    @DisplayName("Given a checkout that fails at ticket supply and refund fails, When it throws, Then pending refund is saved")
+    void GivenCheckoutFailsAtSupplyAndRefundFails_WhenItThrows_ThenPendingRefundIsSaved() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        eventRepository.save(publishedGaEvent(eventId, zoneId, 1));
+
+        UUID memberId = UUID.randomUUID();
+        memberRepository.save(member(memberId, "buyer-refund-fail"));
+
+        String token = memberToken(memberId);
+
+        // Reservation
+        orderService.createOrder(token, eventId);
+        orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
+        UUID orderId = orderRepository.findActiveByMemberId(memberId).orElseThrow().getId();
+
+        // Force both supply and payment gateways to fail (payment fails on refund)
+        supplyGateway.setShouldFail(true);
+        paymentGateway.setRefundShouldFail(true);
+
+        assertThatThrownBy(() -> orderService.checkout(token))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Payment refund is pending");
+
+        // Assert pending refund was saved
+        java.util.List<com.ticketing.domain.order.FailedCheckoutRefund> pendingRefunds = orderRepository.findPendingRefunds();
+        assertThat(pendingRefunds).hasSize(1);
+        com.ticketing.domain.order.FailedCheckoutRefund pending = pendingRefunds.get(0);
+        assertThat(pending.getEventId()).isEqualTo(eventId);
+        assertThat(pending.getMemberId()).isEqualTo(memberId);
+        assertThat(pending.getStatus()).isEqualTo(com.ticketing.domain.order.RefundStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("Given a pending refund, When the retry job runs, Then the refund is processed and marked as complete")
+    void GivenPendingRefund_WhenRetryJobRuns_ThenRefundIsProcessed() {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        String txId = "TXN-RETRY-" + UUID.randomUUID().toString().substring(0, 4);
+
+        // Manually insert a pending refund using the new transaction propagation
+        com.ticketing.domain.order.FailedCheckoutRefund pending = new com.ticketing.domain.order.FailedCheckoutRefund(
+            sessionId, eventId, memberId, txId, new java.math.BigDecimal("100.00"), java.time.Instant.now()
+        );
+        orderRepository.save(pending);
+
+        // Ensure it's there
+        assertThat(orderRepository.findPendingRefunds()).hasSize(1);
+
+        // 1. Ensure the payment gateway is configured to succeed
+        paymentGateway.setRefundShouldFail(false);
+
+        // 2. Run the retry job
+        orderService.retryPendingRefunds();
+
+        // 3. Verify the pending refund is now processed (status = REFUNDED, so it drops from the PENDING list)
+        com.ticketing.domain.order.FailedCheckoutRefund afterRetry = orderRepository.findPendingRefunds().stream()
+                .filter(r -> r.getId().equals(pending.getId()))
+                .findFirst()
+                .orElse(null);
+
+        // It shouldn't be in the pending list anymore
+        assertThat(afterRetry).isNull();
+
+        // Verify the payment gateway was called to refund
+        assertThat(paymentGateway.getLastRefundedTransactions()).contains(txId);
+    }
+
+    @Test
+    @DisplayName("Given a pending refund, When the retry job runs but fails again, Then the refund remains pending")
+    void GivenPendingRefund_WhenRetryJobRunsAndFails_ThenRefundRemainsPending() {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        String txId = "TXN-RETRY-FAIL-" + UUID.randomUUID().toString().substring(0, 4);
+
+        com.ticketing.domain.order.FailedCheckoutRefund pending = new com.ticketing.domain.order.FailedCheckoutRefund(
+            sessionId, eventId, memberId, txId, new java.math.BigDecimal("100.00"), java.time.Instant.now()
+        );
+        orderRepository.save(pending);
+
+        // Ensure payment gateway STILL fails
+        paymentGateway.setRefundShouldFail(true);
+
+        // Run the retry job
+        orderService.retryPendingRefunds();
+
+        // Verify the pending refund is STILL in the database (status = PENDING)
+        com.ticketing.domain.order.FailedCheckoutRefund afterRetry = orderRepository.findPendingRefunds().stream()
+                .filter(r -> r.getId().equals(pending.getId()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(afterRetry).isNotNull();
+        assertThat(afterRetry.getStatus()).isEqualTo(com.ticketing.domain.order.RefundStatus.PENDING);
+    }
+
+    @Test
     @DisplayName("Given a healthy checkout, When it completes, Then the sale is committed exactly once")
     void GivenHealthyCheckout_WhenItCompletes_ThenSaleIsCommitted() {
         UUID eventId = UUID.randomUUID();
@@ -193,13 +293,35 @@ class CheckoutTransactionJpaTest {
         orderService.createOrder(token, eventId);
         orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
 
-        UUID purchaseId = orderService.checkout(token, null).purchaseId();
+        UUID purchaseId = orderService.checkout(token).purchaseId();
 
         assertThat(orderRepository.findCompletedById(purchaseId)).isPresent();
         InventoryZone zone = eventRepository.findById(eventId).orElseThrow().findZone(zoneId);
         assertThat(zone.getSoldCount()).isEqualTo(1);
         assertThat(zone.getLockedCount()).isZero();
         assertThat(zone.getAvailableCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("Given a checkout with CVV 988, When it completes, Then it is declined by the gateway because card data propagates end-to-end")
+    void GivenCheckoutWithDeclinedCvv_WhenCheckout_ThenFails() {
+        UUID eventId = UUID.randomUUID();
+        UUID zoneId = UUID.randomUUID();
+        eventRepository.save(publishedGaEvent(eventId, zoneId, 1));
+
+        UUID memberId = UUID.randomUUID();
+        memberRepository.save(member(memberId, "declined-cvv"));
+        String token = memberToken(memberId);
+
+        orderService.createOrder(token, eventId);
+        orderService.addGATicketsToOrder(token, eventId, zoneId, 1);
+
+        com.ticketing.application.CardPaymentInfo card = new com.ticketing.application.CardPaymentInfo(
+                "USD", "2222333344445555", "12", "2030", "Test Buyer", "988", "000000000");
+
+        assertThatThrownBy(() -> orderService.checkout(token, card))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("declined");
     }
 
     // ── Double-sell: @Version optimistic lock across two transactions ─────────────

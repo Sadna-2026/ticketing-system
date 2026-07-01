@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.net.SocketTimeoutException;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -36,11 +37,11 @@ class HttpTicketSupplyGatewayTest {
     private static final CustomerInfo CUSTOMER = new CustomerInfo("user-42", "buyer@test.com", "Jane Buyer");
 
     private static TicketRequest ga(String ticketId) {
-        return new TicketRequest("evt-1", "zone-9", ticketId, null);
+        return new TicketRequest("evt-1", "zone-9", ticketId, null, null, null);
     }
 
     private static TicketRequest seat(String ticketId, String seatId) {
-        return new TicketRequest("evt-1", "zone-9", ticketId, seatId);
+        return new TicketRequest("evt-1", "zone-9", ticketId, seatId, "A", "12");
     }
 
     private HttpTicketSupplyGateway gatewayFor(RestTemplate restTemplate) {
@@ -82,7 +83,8 @@ class HttpTicketSupplyGatewayTest {
                 .andExpect(content().string(containsString("is_seating=true")))
                 // seats is sent as a JSON array; URL-encoded the brackets/quotes survive as %5B%22..%22%5D
                 .andExpect(content().string(containsString("seats=")))
-                .andExpect(content().string(containsString("seat-A1")))
+                .andExpect(content().string(containsString("A")))
+                .andExpect(content().string(containsString("12")))
                 .andExpect(content().string(not(containsString("quantity"))))
                 .andRespond(withSuccess("TKT-2002", MediaType.TEXT_PLAIN));
 
@@ -182,6 +184,21 @@ class HttpTicketSupplyGatewayTest {
         server.verify();
     }
 
+    @Test
+    void GivenConnectionTimeout_WhenIssue_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
+
+        SupplyResult result = gatewayFor(restTemplate).issueTickets(List.of(ga("t-1")), CUSTOMER);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
     // ---- cancel ----------------------------------------------------------------------------
 
     @Test
@@ -235,6 +252,21 @@ class HttpTicketSupplyGatewayTest {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
         server.expect(requestTo(BASE_URL)).andRespond(withServerError());
+
+        CancelResult result = gatewayFor(restTemplate).cancelTickets(List.of("TKT-1"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void GivenConnectionTimeout_WhenCancel_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
 
         CancelResult result = gatewayFor(restTemplate).cancelTickets(List.of("TKT-1"));
 

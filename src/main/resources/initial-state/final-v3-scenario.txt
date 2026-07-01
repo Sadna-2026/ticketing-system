@@ -1,0 +1,62 @@
+# Final V3 checking scenario (issue #561 — V3-INIT-STATE-FINAL)
+#
+# This is the initial-state file the FINAL V3 checking run should use. It is
+# separate from the older staff demo (initial-state/staff-demo-v3.txt), which is
+# kept as an older/demo scenario.
+#
+# Replay with:
+#   ticketing.bootstrap.dataset=initial-state-file
+#   ticketing.seed.enabled=false
+#   ticketing.initial-state.file=classpath:initial-state/final-v3-scenario.txt
+#
+# Precondition: the registered system administrator (Admin) already exists from
+# platform initialization (see ticketing.admin.* in application.yml). The
+# operational database is otherwise empty before this script runs.
+#
+# Final scenario (staff message):
+#   Register User1..User4 (User3 must be over 18).
+#   Login User1; User1 creates company C1.
+#   User1 creates event E1 under C1: 10 standing tickets + 10 assigned seats.
+#   User1 creates event E2 under C1: 10 standing tickets + 10 assigned seats,
+#     where every ticket costs 10 dollars.
+#   Logout User1.
+#
+# Open clarification (E1 price): the staff message gives an explicit price only
+# for E2. The domain requires a price per zone, so E1's tickets default to
+# 10 dollars here. Edit the two "10" price columns on the E1 create-event line
+# below if staff decides E1 should use a different price.
+
+# --- Register the four regular users (default passwords are 6+ chars) ---
+register(u1, u1@example.com, secret1);
+register(u2, u2@example.com, secret2);
+# User3 is over 18: date of birth 2000-01-01 (age > 18 for any checking date).
+register(u3, u3@example.com, secret3, 050-000-0003, 2000-01-01);
+register(u4, u4@example.com, secret4);
+
+# --- User1 logs in and opens company C1 ---
+login(u1, secret1);
+open-production-company(u1_token, C1, Final V3 checking company);
+
+# --- Event E1: 10 standing tickets + 10 assigned seats (2x5 grid) ---
+# create-event(token, company, event, description, category,
+#              standingZone, standingCapacity, standingPrice,
+#              seatingZone, seatingRows, seatingCols, seatingPrice)
+# E1 price defaults to 10 (staff gave no explicit E1 price — see header note).
+create-event(u1_token, C1, E1, Final scenario event one, CONCERT, Standing, 10, 10, Seating, 2, 5, 10);
+set-event-seating-layout(u1_token, C1, E1, Seating, 2, 5);
+# Publish E1 so it is visible (DRAFT events are hidden from the company's event listing).
+publish-event(u1_token, C1, E1);
+
+# --- Event E2: 10 standing tickets + 10 assigned seats (2x5 grid) ---
+# Every E2 ticket costs exactly 10 dollars (standing price = seating price = 10).
+create-event(u1_token, C1, E2, Final scenario event two, CONCERT, Standing, 10, 10, Seating, 2, 5, 10);
+set-event-seating-layout(u1_token, C1, E2, Seating, 2, 5);
+# Publish E2 so it is visible (DRAFT events are hidden from the company's event listing).
+publish-event(u1_token, C1, E2);
+
+# --- Logout User1, and the registration sessions for User2..User4, so no ---
+# --- regular user is left logged in at the end. ---
+logout(u1_token);
+logout(u2_token);
+logout(u3_token);
+logout(u4_token);

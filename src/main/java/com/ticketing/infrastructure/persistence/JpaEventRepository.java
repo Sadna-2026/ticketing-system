@@ -5,12 +5,20 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketing.domain.event.AbstractDiscountPolicy;
+import com.ticketing.domain.event.AbstractPurchasePolicy;
+import com.ticketing.domain.event.AndPolicy;
+import com.ticketing.domain.event.ConditionalDiscount;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.IEventRepository;
+import com.ticketing.domain.event.MaxCompositeDiscount;
+import com.ticketing.domain.event.OrPolicy;
+import com.ticketing.domain.event.SumCompositeDiscount;
 import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.event.VenueMap;
 import com.ticketing.domain.exception.OptimisticLockException;
@@ -39,6 +47,7 @@ import jakarta.persistence.PersistenceContext;
  * </ul>
  */
 @Repository
+@Lazy
 @ConditionalOnProperty(name = "ticketing.persistence", havingValue = "jpa")
 public class JpaEventRepository implements IEventRepository {
 
@@ -75,6 +84,12 @@ public class JpaEventRepository implements IEventRepository {
         return delegate.findAll().stream().map(this::detach).toList();
     }
 
+    @Override
+    @Transactional
+    public void deleteAll() {
+        delegate.deleteAll();
+    }
+
     /**
      * Initialises the LAZY zone/seat graph and detaches the aggregate from the
      * persistence context, so callers receive an independent snapshot (matching the
@@ -97,8 +112,68 @@ public class JpaEventRepository implements IEventRepository {
         if (venueMap != null) {
             venueMap.getSectionToZone().size();
         }
+        if (event.getPurchasePolicy() instanceof AbstractPurchasePolicy purchase) {
+            touchPurchasePolicy(purchase);
+        }
+        if (event.getDiscountPolicy() instanceof AbstractDiscountPolicy discount) {
+            touchDiscountPolicy(discount);
+        }
         entityManager.detach(event);
         return event;
+    }
+
+    private static void touchPurchasePolicy(AbstractPurchasePolicy policy) {
+        if (policy instanceof AndPolicy and) {
+            and.getPolicies().forEach(p -> {
+                if (p instanceof AbstractPurchasePolicy child) {
+                    touchPurchasePolicy(child);
+                }
+            });
+        } else if (policy instanceof OrPolicy or) {
+            or.getPolicies().forEach(p -> {
+                if (p instanceof AbstractPurchasePolicy child) {
+                    touchPurchasePolicy(child);
+                }
+            });
+        }
+    }
+
+    private static void touchDiscountPolicy(AbstractDiscountPolicy policy) {
+        if (policy instanceof SumCompositeDiscount sum) {
+            sum.getPolicies().forEach(p -> {
+                if (p instanceof AbstractDiscountPolicy child) {
+                    touchDiscountPolicy(child);
+                }
+            });
+        } else if (policy instanceof MaxCompositeDiscount max) {
+            max.getPolicies().forEach(p -> {
+                if (p instanceof AbstractDiscountPolicy child) {
+                    touchDiscountPolicy(child);
+                }
+            });
+        } else if (policy instanceof ConditionalDiscount conditional) {
+            if (conditional.getCondition() != null) {
+                conditional.getCondition().getClass();
+            }
+        }
+    }
+
+    /**
+     * Purchase/discount policies are shared rows (also referenced from companies). After a
+     * detached read, {@code CascadeType.ALL} on the {@code @ManyToOne} would otherwise try
+     * to {@code persist} an already-persisted policy on flush. Swap in a managed reference.
+     */
+    private void reattachSharedPolicyReferences(Event event) {
+        if (event.getPurchasePolicy() instanceof AbstractPurchasePolicy purchase
+                && purchase.getId() != null) {
+            event.setPurchasePolicy(
+                    entityManager.getReference(AbstractPurchasePolicy.class, purchase.getId()));
+        }
+        if (event.getDiscountPolicy() instanceof AbstractDiscountPolicy discount
+                && discount.getId() != null) {
+            event.setDiscountPolicy(
+                    entityManager.getReference(AbstractDiscountPolicy.class, discount.getId()));
+        }
     }
 
     @Override
@@ -107,6 +182,7 @@ public class JpaEventRepository implements IEventRepository {
         if (event == null) {
             throw new IllegalArgumentException("event cannot be null");
         }
+        reattachSharedPolicyReferences(event);
         boolean isNew = !delegate.existsById(event.getId());
         try {
             if (isNew) {

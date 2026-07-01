@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -81,6 +82,59 @@ class HttpPaymentGatewayTest {
         PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
 
         assertThat(result.success()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void GivenCvv100_WhenCharge_ThenSucceeds() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("cvv=100")))
+                .andRespond(withSuccess("55000", MediaType.TEXT_PLAIN));
+
+        PaymentDetails buyerCard = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com",
+                "USD", "4111111111111111", "10", "2031", "TESTER", "100", "123456789");
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
+
+        assertThat(result.success()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void GivenCvv988_WhenCharge_ThenDeclined() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("cvv=988")))
+                .andRespond(withSuccess("-1", MediaType.TEXT_PLAIN));
+
+        PaymentDetails buyerCard = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com",
+                "USD", "4111111111111111", "10", "2031", "TESTER", "988", "123456789");
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void GivenCvv986_WhenCharge_ThenDeclinedUnexpected() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("cvv=986")))
+                .andRespond(withSuccess("INVALID_CVV", MediaType.TEXT_PLAIN));
+
+        PaymentDetails buyerCard = new PaymentDetails(UUID.randomUUID(), UUID.randomUUID(), null, "buyer@test.com",
+                "USD", "4111111111111111", "10", "2031", "TESTER", "986", "123456789");
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("150.00"), buyerCard);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
         server.verify();
     }
 
@@ -166,6 +220,21 @@ class HttpPaymentGatewayTest {
         server.verify();
     }
 
+    @Test
+    void GivenConnectionTimeout_WhenCharge_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
+
+        PaymentResult result = gatewayFor(restTemplate).charge(new BigDecimal("10.00"), details());
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
     // ---- refund ----------------------------------------------------------------------------
 
     @Test
@@ -216,6 +285,21 @@ class HttpPaymentGatewayTest {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
         server.expect(requestTo(BASE_URL)).andRespond(withServerError());
+
+        RefundResult result = gatewayFor(restTemplate).refund("55000", 150.00);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void GivenConnectionTimeout_WhenRefund_ThenFailsGracefully() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        server.expect(requestTo(BASE_URL)).andRespond(request -> {
+            throw new SocketTimeoutException("simulated read timeout");
+        });
 
         RefundResult result = gatewayFor(restTemplate).refund("55000", 150.00);
 

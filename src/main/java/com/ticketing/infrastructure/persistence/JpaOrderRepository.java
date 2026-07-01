@@ -6,14 +6,18 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.domain.exception.OptimisticLockException;
 import com.ticketing.domain.order.ActiveOrder;
 import com.ticketing.domain.order.CompletedPurchase;
+import com.ticketing.domain.order.FailedCheckoutRefund;
 import com.ticketing.domain.order.IOrderRepository;
+import com.ticketing.domain.order.RefundStatus;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -44,19 +48,23 @@ import jakarta.persistence.PersistenceContext;
  * </ul>
  */
 @Repository
+@Lazy
 @ConditionalOnProperty(name = "ticketing.persistence", havingValue = "jpa")
 public class JpaOrderRepository implements IOrderRepository {
 
     private final ActiveOrderJpaRepository activeOrders;
     private final CompletedPurchaseJpaRepository completedPurchases;
+    private final FailedCheckoutRefundJpaRepository failedCheckoutRefunds;
 
     @PersistenceContext
     private EntityManager entityManager;
 
     public JpaOrderRepository(ActiveOrderJpaRepository activeOrders,
-                              CompletedPurchaseJpaRepository completedPurchases) {
+                              CompletedPurchaseJpaRepository completedPurchases,
+                              FailedCheckoutRefundJpaRepository failedCheckoutRefunds) {
         this.activeOrders = activeOrders;
         this.completedPurchases = completedPurchases;
+        this.failedCheckoutRefunds = failedCheckoutRefunds;
     }
 
     // ── ActiveOrder ──────────────────────────────────────────────────────────
@@ -214,5 +222,31 @@ public class JpaOrderRepository implements IOrderRepository {
     @Transactional(readOnly = true)
     public List<CompletedPurchase> findAllCompleted() {
         return completedPurchases.findAll();
+    }
+
+    @Override
+    @Transactional
+    public void deleteAll() {
+        activeOrders.deleteAll();
+        completedPurchases.deleteAll();
+        failedCheckoutRefunds.deleteAll();
+    }
+
+    // ── FailedCheckoutRefund ────────────────────────────────────────────────
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void save(FailedCheckoutRefund pendingRefund) {
+        if (pendingRefund == null) {
+            throw new IllegalArgumentException("pendingRefund cannot be null");
+        }
+        entityManager.merge(pendingRefund);
+        entityManager.flush();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FailedCheckoutRefund> findPendingRefunds() {
+        return failedCheckoutRefunds.findByStatus(RefundStatus.PENDING);
     }
 }

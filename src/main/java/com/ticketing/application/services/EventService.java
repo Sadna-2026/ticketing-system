@@ -491,10 +491,18 @@ public class EventService implements ApplicationEventPublisherAware {
             log.info("editEvent: eventId={} artist '{}' -> '{}'", event.getId(), event.getArtist(), request.artist());
             event.setArtist(request.artist());
         }
-        if (request.schedule() != null) {
+        if (request.schedule() != null && !request.schedule().equals(event.getSchedule())) {
             log.info("editEvent: eventId={} schedule updated to start={}",
                     event.getId(), request.schedule().getStartTime());
             event.setSchedule(request.schedule());
+            if (notificationService != null && orderRepository != null) {
+                java.util.Set<UUID> notifiedMembers = new java.util.HashSet<>();
+                for (com.ticketing.domain.order.CompletedPurchase purchase : orderRepository.findCompletedByEventId(event.getId())) {
+                    if (purchase.memberId() != null && notifiedMembers.add(purchase.memberId())) {
+                        notificationService.notify(purchase.memberId().toString(), "Event '" + event.getName() + "' has been rescheduled to start at " + request.schedule().getStartTime() + ".");
+                    }
+                }
+            }
         }
         if (request.lotteryWindow() != null) {
             if (!event.isLottery())
@@ -584,6 +592,7 @@ public class EventService implements ApplicationEventPublisherAware {
         if (eventId == null)
             throw new IllegalArgumentException("eventId is required");
 
+        log.info("Automatic lottery draw requested: eventId={}", eventId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
 
@@ -591,7 +600,9 @@ public class EventService implements ApplicationEventPublisherAware {
             throw new IllegalArgumentException("Event is not a lottery event");
 
         int maxWinners = event.getLotteryWindow() != null ? event.getLotteryWindow().maxWinners() : event.totalCapacity();
-        return performDraw(event, Math.min(maxWinners, event.totalCapacity()));
+        List<ActiveOrder> winners = performDraw(event, Math.min(maxWinners, event.totalCapacity()));
+        log.info("Automatic lottery draw completed: eventId={}, winners={}", eventId, winners.size());
+        return winners;
     }
 
     /**
@@ -621,8 +632,10 @@ public class EventService implements ApplicationEventPublisherAware {
             return new ArrayList<>();
         }
 
-        int purchaseHours = (event.getLotteryWindow() != null) ? event.getLotteryWindow().purchaseWindowHours() : 48;
-        Instant purchaseWindowDeadline = systemClock.now().plus(Duration.ofHours(purchaseHours));
+        Duration purchaseWindow = (event.getLotteryWindow() != null)
+                ? event.getLotteryWindow().purchaseWindowDuration()
+                : Duration.ofHours(48);
+        Instant purchaseWindowDeadline = systemClock.now().plus(purchaseWindow);
         List<ActiveOrder> createdOrders = new ArrayList<>();
 
         for (LotteryEntry winner : winners) {
@@ -645,7 +658,8 @@ public class EventService implements ApplicationEventPublisherAware {
                 if (order.getMemberId() != null) {
                     winnerMemberIds.add(order.getMemberId());
                     notificationService.notify(order.getMemberId().toString(),
-                            "You have won the lottery! You have 48 hours to choose and purchase your tickets. Go to the Events page to select your tickets.");
+                            "You have won the lottery! You have " + describePurchaseWindow(purchaseWindow)
+                                    + " to choose and purchase your tickets. Go to the Events page to select your tickets.");
                 }
             }
             for (LotteryEntry entry : allEntries) {
@@ -656,6 +670,17 @@ public class EventService implements ApplicationEventPublisherAware {
             }
         }
         return createdOrders;
+    }
+
+    // Human-readable purchase window for winner notifications: whole hours when the window
+    // divides evenly into hours (e.g. "48 hours"), otherwise minutes (e.g. "1 minute").
+    private static String describePurchaseWindow(Duration window) {
+        long totalMinutes = window.toMinutes();
+        if (totalMinutes >= 60 && totalMinutes % 60 == 0) {
+            long hours = totalMinutes / 60;
+            return hours + (hours == 1 ? " hour" : " hours");
+        }
+        return totalMinutes + (totalMinutes == 1 ? " minute" : " minutes");
     }
 
     // Winner count is capacity-bounded: a uniformly random sample of up to `capacity` entries.
@@ -685,6 +710,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setPurchasePolicy(policy);
         saveEvent(event);
+        log.info("Event purchase policy updated: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -699,6 +725,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setPurchasePolicy(company.getPurchasePolicy());
         saveEvent(event);
+        log.info("Event purchase policy reset to company default: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -719,6 +746,7 @@ public class EventService implements ApplicationEventPublisherAware {
                 : new AndPolicy(List.of(current, policy));
         event.setPurchasePolicy(composed);
         saveEvent(event);
+        log.info("Event purchase policy composed: eventId={}, by={}, useOr={}", eventId, memberId, useOr);
     }
 
     // ── Event-scoped discount policy ────────────────────────────────
@@ -737,6 +765,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setDiscountPolicy(policy);
         saveEvent(event);
+        log.info("Event discount policy updated: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -751,6 +780,7 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizePolicy(appt);
         event.setDiscountPolicy(company.getDiscountPolicy());
         saveEvent(event);
+        log.info("Event discount policy reset to company default: eventId={}, by={}", eventId, memberId);
     }
 
     @Transactional
@@ -771,17 +801,20 @@ public class EventService implements ApplicationEventPublisherAware {
                 : new MaxCompositeDiscount(List.of(current, policy));
         event.setDiscountPolicy(composed);
         saveEvent(event);
+        log.info("Event discount policy composed: eventId={}, by={}, useStacking={}", eventId, memberId, useStacking);
     }
 
     // ── Read helpers (event policy queries) ─────────────────────────
 
     public IPurchasePolicy getEventPurchasePolicy(String token, UUID eventId) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Event purchase policy requested: eventId={}, by={}", eventId, memberId);
         return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventPurchasePolicy();
     }
 
     public IDiscountPolicy getEventDiscountPolicy(String token, UUID eventId) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Event discount policy requested: eventId={}, by={}", eventId, memberId);
         return eventRepository.findById(eventId).orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId)).getEventDiscountPolicy();
     }
 
@@ -884,10 +917,12 @@ public class EventService implements ApplicationEventPublisherAware {
     // ── Query (event map) ───────────────────────────────────────────
 
     public Optional<EventMapDTO> getEventMap(UUID eventId) {
+        log.info("Event map requested: eventId={}", eventId);
         return getEventMap(eventId, false);
     }
 
     public Optional<EventMapDTO> getEventMapForManagement(UUID eventId) {
+        log.info("Event map for management requested: eventId={}", eventId);
         return getEventMap(eventId, true);
     }
 
@@ -972,6 +1007,7 @@ public class EventService implements ApplicationEventPublisherAware {
     public void validateEventLayout(String token, UUID eventId) {
         if (eventId == null) throw new IllegalArgumentException("eventId is required");
         UUID memberId = authenticateMember(token);
+        log.info("Event layout validation requested: eventId={}, by={}", eventId, memberId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
         Company company = loadActiveCompany(event.getCompanyName());
@@ -979,12 +1015,15 @@ public class EventService implements ApplicationEventPublisherAware {
         authorizeMapDefinition(appt);
         VenueLayout layout = event.getVenueLayout();
         if (layout == null) {
+            log.warn("Event layout validation failed: eventId={}, reason=no-layout", eventId);
             throw new IllegalStateException("No layout has been saved for this event");
         }
         if (!layout.hasSellableCell()) {
+            log.warn("Event layout validation failed: eventId={}, reason=no-sellable-cells", eventId);
             throw new IllegalStateException("Layout must contain at least one seat or general-admission area");
         }
         validateLayoutReferences(event, layout);
+        log.info("Event layout validation succeeded: eventId={}", eventId);
     }
 
     private void validateLayoutReferences(Event event, VenueLayout layout) {
@@ -1054,14 +1093,17 @@ public class EventService implements ApplicationEventPublisherAware {
     }
 
     public List<EventSummaryDTO> listCompanyEvents(String token, String companyName) {
-        authenticateMember(token);
+        UUID memberId = authenticateMember(token);
+        log.info("Company events list requested: company={}, by={}", companyName, memberId);
         if (companyName == null || companyName.isBlank()) {
             return List.of();
         }
-        return eventRepository.findByCompanyName(companyName).stream()
+        List<EventSummaryDTO> events = eventRepository.findByCompanyName(companyName).stream()
                 .map(EventSummaryDTO::from)
                 .sorted(Comparator.comparing(EventSummaryDTO::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
+        log.info("Company events list completed: company={}, count={}", companyName, events.size());
+        return events;
     }
 
     // ── Private helpers ─────────────────────────────────────────────
