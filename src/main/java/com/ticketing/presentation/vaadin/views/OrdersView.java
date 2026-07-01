@@ -143,7 +143,8 @@ public class OrdersView extends VerticalLayout {
         orderItemsGrid.addColumn(item -> formatPrice(item.getPricePerTicket())).setHeader("Price").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> formatPrice(item.getTotalPrice())).setHeader("Line total").setAutoWidth(true);
         orderItemsGrid.addColumn(item -> item.isAssignedSeat() ? "Assigned seat" : "GA").setHeader("Type").setAutoWidth(true);
-        orderItemsGrid.setAllRowsVisible(true);
+        orderItemsGrid.setPageSize(100);
+        orderItemsGrid.setHeight("420px");
         orderItemsGrid.asSingleSelect().addValueChangeListener(event -> {
             selectedOrderItem = event.getValue();
             refreshItemActionState();

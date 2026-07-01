@@ -54,6 +54,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.dom.DomEvent;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
@@ -116,8 +117,15 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
     private final Map<UUID, Button> seatCellButtons = new HashMap<>();
     private final Map<UUID, String> seatBaseColor = new HashMap<>();
     private final Map<UUID, UUID> seatZoneId = new HashMap<>();
+    private final Map<UUID, SeatGridPosition> seatGridPositions = new HashMap<>();
     private Span selectionSummary;
     private Button addSelectedButton;
+    private UUID dragAnchorSeatId;
+    private boolean seatDragActive;
+    private boolean seatDragMoved;
+    private boolean suppressNextSeatClick;
+
+    private record SeatGridPosition(int row, int col) {}
 
     public EventsView(EventsPresenter presenter, OrdersPresenter ordersPresenter, QueuePresenter queuePresenter) {
         this.presenter = presenter;
@@ -752,7 +760,7 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         for (int r = 0; r < layout.rows(); r++) {
             for (int c = 0; c < layout.cols(); c++) {
                 gridBox.add(buildMapCell(byPos.get((long) r * layout.cols() + c),
-                        zoneById, zoneColor, seatById, canReserve));
+                        zoneById, zoneColor, seatById, canReserve, r, c));
             }
         }
 
@@ -775,11 +783,13 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
 
     private Component buildMapCell(EventMapDTO.CellInfo cell,
             Map<UUID, EventMapDTO.ZoneInfo> zoneById, Map<UUID, String> zoneColor,
-            Map<UUID, EventMapDTO.SeatInfo> seatById, boolean canReserve) {
+            Map<UUID, EventMapDTO.SeatInfo> seatById, boolean canReserve, int row, int col) {
         Button d = new Button();
         d.getStyle().set("min-width", "28px").set("width", "28px").set("height", "28px")
                 .set("padding", "0").set("border", "1px solid var(--lumo-contrast-20pct)")
-                .set("font-size", "10px").set("color", "white").set("background", "var(--lumo-contrast-5pct)");
+                .set("font-size", "10px").set("color", "white").set("background", "var(--lumo-contrast-5pct)")
+                .set("user-select", "none").set("-webkit-user-select", "none").set("touch-action", "none");
+        d.getElement().setAttribute("draggable", "false");
         if (cell == null) {
             d.setEnabled(false);
             d.getStyle().set("color", "inherit");
@@ -802,7 +812,22 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
                         UUID seatId = seat.id();
                         seatCellButtons.put(seatId, d);
                         seatBaseColor.put(seatId, color);
-                        d.addClickListener(e -> toggleSeat(seatId));
+                        seatGridPositions.put(seatId, new SeatGridPosition(row, col));
+                        d.addClickListener(e -> {
+                            if (suppressNextSeatClick) {
+                                suppressNextSeatClick = false;
+                                return;
+                            }
+                            toggleSeat(seatId);
+                        });
+                        d.getElement().addEventListener("pointerdown", e -> beginSeatDrag(seatId, e))
+                                .addEventData("event.button")
+                                .preventDefault();
+                        d.getElement().addEventListener("pointerenter", e -> extendSeatDrag(seatId, e))
+                                .addEventData("event.buttons");
+                        d.getElement().addEventListener("pointerup", e -> finishSeatDrag(seatId));
+                        d.getElement().addEventListener("dragstart", e -> {
+                        }).preventDefault();
                     }
                 }
             }
@@ -874,6 +899,84 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
                 : "Add selected seats to cart (" + n + ")");
     }
 
+    private void beginSeatDrag(UUID seatId, DomEvent event) {
+        if (!isPrimaryPointerButton(event)) {
+            return;
+        }
+        dragAnchorSeatId = seatId;
+        seatDragActive = true;
+        seatDragMoved = false;
+        suppressNextSeatClick = false;
+    }
+
+    private void extendSeatDrag(UUID seatId, DomEvent event) {
+        if (!seatDragActive || dragAnchorSeatId == null || !isPrimaryPointerDown(event)) {
+            return;
+        }
+        if (seatId.equals(dragAnchorSeatId)) {
+            return;
+        }
+        seatDragMoved = true;
+        selectSeatRange(dragAnchorSeatId, seatId);
+    }
+
+    private void finishSeatDrag(UUID seatId) {
+        if (seatDragActive && seatDragMoved && dragAnchorSeatId != null) {
+            selectSeatRange(dragAnchorSeatId, seatId);
+            suppressNextSeatClick = true;
+        }
+        dragAnchorSeatId = null;
+        seatDragActive = false;
+        seatDragMoved = false;
+    }
+
+    // Package-private for view-layer tests.
+    void selectSeatRange(UUID fromSeatId, UUID toSeatId) {
+        SeatGridPosition from = seatGridPositions.get(fromSeatId);
+        SeatGridPosition to = seatGridPositions.get(toSeatId);
+        if (from == null || to == null) {
+            return;
+        }
+        int minRow = Math.min(from.row(), to.row());
+        int maxRow = Math.max(from.row(), to.row());
+        int minCol = Math.min(from.col(), to.col());
+        int maxCol = Math.max(from.col(), to.col());
+        for (Map.Entry<UUID, SeatGridPosition> entry : seatGridPositions.entrySet()) {
+            SeatGridPosition position = entry.getValue();
+            if (position.row() >= minRow && position.row() <= maxRow
+                    && position.col() >= minCol && position.col() <= maxCol) {
+                selectSeat(entry.getKey());
+            }
+        }
+        updateSeatSelectionSummary();
+    }
+
+    private void selectSeat(UUID seatId) {
+        Button btn = seatCellButtons.get(seatId);
+        if (btn == null) {
+            return;
+        }
+        selectedSeatIds.add(seatId);
+        btn.getStyle().set("background", SELECTED_COLOR);
+    }
+
+    private void updateSeatSelectionSummary() {
+        int n = selectedSeatIds.size();
+        selectionSummary.setText(n == 0 ? "No seats selected." : n + " seat(s) selected.");
+        addSelectedButton.setEnabled(n > 0);
+        addSelectedButton.setText(n == 0
+                ? "Add selected seats to cart"
+                : "Add selected seats to cart (" + n + ")");
+    }
+
+    private boolean isPrimaryPointerButton(DomEvent event) {
+        return event.getEventData().getNumber("event.button") == 0;
+    }
+
+    private boolean isPrimaryPointerDown(DomEvent event) {
+        return ((int) event.getEventData().getNumber("event.buttons") & 1) == 1;
+    }
+
     void addSelectedSeats() {
         UUID eventId = currentEventId();
         if (eventId == null || selectedSeatIds.isEmpty()) {
@@ -936,6 +1039,11 @@ public class EventsView extends VerticalLayout implements BeforeEnterObserver {
         seatCellButtons.clear();
         seatBaseColor.clear();
         seatZoneId.clear();
+        seatGridPositions.clear();
+        dragAnchorSeatId = null;
+        seatDragActive = false;
+        seatDragMoved = false;
+        suppressNextSeatClick = false;
     }
 
     private static String glyphFor(LayoutCellType type) {
