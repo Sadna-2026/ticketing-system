@@ -369,7 +369,7 @@ public class CompanyService {
         log.info("Company discount policy requested: company={}, by={}", companyName, memberId);
         return loadCompany(companyName).getDiscountPolicy();
     }
-
+//
     // ── Query (inlined from CompanyQueryDomainService) ──────────────
 
     public Optional<CompanyPublicDTO> getCompanyInfo(String companyName) {
