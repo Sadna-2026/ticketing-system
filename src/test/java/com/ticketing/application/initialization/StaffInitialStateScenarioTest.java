@@ -132,9 +132,12 @@ class StaffInitialStateScenarioTest {
 
                 VenueLayout layout = event.getVenueLayout();
                 assertNotNull(layout);
-                assertEquals(10, layout.getRows());
+                // 10x10 seat grid plus one extra row carrying the GA (Standing) cell so the buyer
+                // map can sell GA tickets: 11 rows, 100 seat cells + 1 GA cell = 101 cells.
+                assertEquals(11, layout.getRows());
                 assertEquals(10, layout.getCols());
-                assertEquals(100, layout.getCells().size());
+                assertEquals(101, layout.getCells().size());
+                assertEquals(1, layout.cellsOfType(com.ticketing.domain.event.LayoutCellType.GENERAL_ADMISSION).size());
         }
 
         @Test
