@@ -104,8 +104,10 @@ public class OrderTimeDomainService {
 
         if (notificationService != null && order.getMemberId() != null) {
             try {
-                notificationService.notify(order.getMemberId().toString(),
-                        "Your reservation has expired and your reserved tickets have been released.");
+                String message = order.isLotteryWin()
+                        ? "The lottery has ended — buying tickets is no longer available."
+                        : "Your reservation has expired and your reserved tickets have been released.";
+                notificationService.notify(order.getMemberId().toString(), message);
             } catch (RuntimeException e) {
                 log.warn("Failed to notify member {} of order expiry", order.getMemberId(), e);
             }

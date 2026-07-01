@@ -528,7 +528,7 @@ public class OrderService {
             saveOrder(order);
             releaseAllInventoryForOrder(order.getEventId(), order);
             throw new IllegalStateException(
-                    "Your lottery purchase window has expired. The tickets have been released.");
+                    "The lottery has ended — buying tickets is no longer available.");
         }
 
         BuyerContactSnapshot buyerContact = buyerContactFor(memberId);
@@ -946,7 +946,7 @@ public class OrderService {
                 saveOrder(wo);
                 releaseAllInventoryForOrder(eventId, wo);
                 throw new IllegalStateException(
-                        "Your lottery purchase window has expired. The tickets have been released.");
+                        "The lottery has ended — buying tickets is no longer available.");
             }
             return wo;
         }
