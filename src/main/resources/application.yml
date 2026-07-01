@@ -80,10 +80,14 @@ ticketing:
     clear-db-on-start: ${TICKETING_BOOTSTRAP_CLEAR_DB_ON_START:false}
   seed:
     enabled: true
-  # Initial-state file (V3-15 / #415): used when bootstrap.dataset=initial-state-file, or when
-  # seed.enabled=false and this path is set. Supports filesystem paths and classpath: resources.
+  # Initial-state file (V3-15 / #415, final scenario #561): used when
+  # bootstrap.dataset=initial-state-file, or when seed.enabled=false and this path is set.
+  # Supports filesystem paths and classpath: resources. The default points at the FINAL
+  # V3 checking scenario; the older staff demo is classpath:initial-state/staff-demo-v3.txt.
+  # (dev-seed remains the default dataset via seed.enabled=true, so normal runs are unaffected
+  # until you select bootstrap.dataset=initial-state-file.)
   initial-state:
-    file: ${TICKETING_INITIAL_STATE_FILE:}
+    file: ${TICKETING_INITIAL_STATE_FILE:classpath:initial-state/final-v3-scenario.txt}
   # External systems integration (V3-16): the WSEP payment + ticket endpoint is a single HTTP
   # POST endpoint keyed by action_type ("handshake" returns "OK"). The base URL is config-driven;
   # when set, ExternalSystemsHandshakeRunner verifies connectivity at startup (integrity rule) and
