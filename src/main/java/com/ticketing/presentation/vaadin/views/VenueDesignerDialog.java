@@ -21,6 +21,7 @@ import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.ActionResul
 import com.ticketing.presentation.vaadin.presenters.CompanyPresenter.EventActionResult;
 import com.ticketing.presentation.vaadin.util.RequiredFields;
 import com.ticketing.presentation.vaadin.util.UiMessages;
+import com.ticketing.presentation.vaadin.util.VenueGridDragPainter;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -133,6 +134,7 @@ public class VenueDesignerDialog extends Dialog {
     private boolean eraseMode;
     private UUID eventId;
     private int colorIndex;
+    private final VenueGridDragPainter gridDragPainter = new VenueGridDragPainter(this::paint);
 
     public VenueDesignerDialog(CompanyPresenter presenter, String companyName) {
         this.presenter = presenter;
@@ -462,6 +464,7 @@ public class VenueDesignerDialog extends Dialog {
         cellStates = new CellState[rows][cols];
         cellButtons = new Button[rows][cols];
         grid.removeAll();
+        gridDragPainter.reset();
         grid.getStyle()
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(" + cols + ", 30px)")
@@ -474,7 +477,7 @@ public class VenueDesignerDialog extends Dialog {
                         .set("padding", "0").set("border", "1px solid var(--lumo-contrast-30pct)")
                         .set("background", EMPTY_BG).set("font-size", "10px");
                 final int rr = r, cc = c;
-                cell.addClickListener(e -> paint(rr, cc));
+                gridDragPainter.wireCell(cell, rr, cc);
                 cellButtons[r][c] = cell;
                 grid.add(cell);
             }
@@ -482,7 +485,7 @@ public class VenueDesignerDialog extends Dialog {
         eventId = null;
         validate.setEnabled(false);
         publish.setEnabled(false);
-        String ready = "Grid " + rows + "×" + cols + " ready. Select a zone and click cells.";
+        String ready = "Grid " + rows + "×" + cols + " ready. Select a zone and click or drag across cells.";
         status.setText(ready);
         UiMessages.info(ready);
     }
