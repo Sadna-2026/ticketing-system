@@ -165,8 +165,8 @@ class LotteryDrawEdgeCasesTest {
         // Acting on the expired win order releases the reserved ticket and reports the expiry.
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> orderService.checkout(winnerToken, null));
-        assertTrue(ex.getMessage().toLowerCase().contains("expired"),
-                "winner is told their purchase window expired, was: " + ex.getMessage());
+        assertTrue(ex.getMessage().toLowerCase().contains("lottery has ended"),
+                "winner is told the lottery has ended and tickets are unavailable, was: " + ex.getMessage());
 
         Event after = eventRepository.findById(eventId).orElseThrow();
         assertEquals(100, after.findZone(zoneId).getAvailableCount(), "the unclaimed ticket is released back");
