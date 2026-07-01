@@ -79,6 +79,47 @@ The script performs:
 
 Default passwords in the file: `secret1` … `secret4` (minimum 6 characters).
 
+## Final V3 checking scenario (V3-INIT-STATE-FINAL / #561)
+
+Repository file: [`src/main/resources/initial-state/final-v3-scenario.txt`](../src/main/resources/initial-state/final-v3-scenario.txt)
+
+This is the scenario the **final** V3 checking meeting uses. It is separate from the staff demo
+above (which remains as an older/demo scenario). It is also the **default** value of
+`ticketing.initial-state.file`, so selecting `bootstrap.dataset=initial-state-file` without an
+explicit file replays it.
+
+Precondition: the registered system administrator (**Admin**) already exists from platform
+initialization; the operational database is otherwise empty.
+
+The script performs:
+
+1. Register `u1`–`u4` (User3 has date of birth `2000-01-01`, so it is **over 18**)
+2. `u1` logs in and opens company `C1`
+3. `u1` creates event `E1`: **10** standing tickets + **10** assigned seats (2×5 grid), then
+   **publishes** it
+4. `u1` creates event `E2`: **10** standing tickets + **10** assigned seats (2×5 grid), where
+   **every ticket costs 10 dollars** (standing price = seating price = 10), then **publishes** it
+5. `u1` logs out; the `u2`–`u4` registration sessions are also logged out so no regular user
+   remains logged in
+
+Both events are published because a company's event listing (and the buyer-facing browse page)
+only shows `PUBLISHED`/`SOLD_OUT` events — a `DRAFT` event would not appear during UI verification.
+
+Run it:
+
+```bash
+mvn spring-boot:run \
+  "-Dspring-boot.run.arguments=--ticketing.bootstrap.dataset=initial-state-file --ticketing.seed.enabled=false --ticketing.initial-state.file=classpath:initial-state/final-v3-scenario.txt"
+```
+
+**E1 price (open clarification):** the staff message gives an explicit price only for E2. The domain
+requires a price per zone, so E1's tickets default to **10 dollars** in the file. Edit the two `10`
+price columns on the E1 `create-event` line if staff decides E1 should use a different price.
+
+Tests: `FinalV3ScenarioTest` covers registration, User3 over 18, login, `C1`, `E1`/`E2` inventory,
+every-E2-ticket-is-10-dollars, logout, invalid-file failure, and the configured-file replay. The
+Admin precondition is covered by `PlatformInitializationServiceTest`.
+
 ## Switching between dev seed and initial-state file
 
 | Meeting need | Configuration |

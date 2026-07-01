@@ -118,6 +118,7 @@ public class InitialStateExecutor {
             case "appoint-owner", "offer-owner-role" -> appointOwner(args, boundTokens);
             case "accept-role-offer", "respond-role-offer" -> acceptRoleOffer(args, boundTokens);
             case "create-event" -> createEvent(args, boundTokens);
+            case "publish-event" -> publishEvent(args, boundTokens);
             case "set-event-seating-layout" -> setEventSeatingLayout(args, boundTokens);
             case "set-company-coupon-discount" -> setCompanyCouponDiscount(args, boundTokens);
             case "logout" -> logout(args, boundTokens);
@@ -252,6 +253,16 @@ public class InitialStateExecutor {
                 Map.of(standingZoneName, standingZoneName, seatingZoneName, seatingZoneName));
 
         eventService.createEvent(token, request);
+    }
+
+    private void publishEvent(List<String> args, Map<String, String> boundTokens) {
+        requireArity("publish-event", args, 3, 3);
+        String token = resolveToken(args.get(0), boundTokens);
+        String companyName = args.get(1);
+        String eventName = args.get(2);
+
+        Event event = findEvent(companyName, eventName);
+        eventService.publishEvent(token, event.getId());
     }
 
     private void setEventSeatingLayout(List<String> args, Map<String, String> boundTokens) {

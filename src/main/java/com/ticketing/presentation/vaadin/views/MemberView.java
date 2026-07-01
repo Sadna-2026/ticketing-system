@@ -15,7 +15,6 @@ import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
-import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.TextField;
@@ -51,13 +50,11 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
 
         add(new H2("My Profile"));
 
-        if (!SessionContext.isLoggedInMember()) {
-            add(new Span("You must be logged in to view your profile."));
-            return;
-        }
-
+        // The form is built once here; the profile data is (re)loaded in beforeEnter so that this
+        // UI-scoped view always reflects the current session. Loading in the constructor showed a
+        // stale snapshot after logging out and back in as a different member (the @UIScope instance
+        // and its data survive a client-side login/logout navigation).
         buildForm();
-        loadMemberData();
     }
 
     private void buildForm() {
@@ -137,6 +134,9 @@ public class MemberView extends VerticalLayout implements BeforeEnterObserver {
             event.forwardTo(HomeView.class);
             UI.getCurrent().access(() ->
                     UiMessages.error("You cannot access the profile page as a guest. Please log in first."));
+            return;
         }
+        // Refresh from the current session on every entry so a user switch never shows stale data.
+        loadMemberData();
     }
 }

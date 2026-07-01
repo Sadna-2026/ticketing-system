@@ -328,6 +328,7 @@ So `login(rina, pw)` makes `rina_token` usable by `open-production-company(rina_
 | `appoint-owner` (`offer-owner-role`) | `token, companyName, targetUsername` | `CompanyService.offerRoleAppointment` (OWNER role) |
 | `accept-role-offer` (`respond-role-offer`) | `token, companyName, ROLE` | `CompanyService.respondToRoleAppointment` (accepts the pending offer matching company + role) |
 | `create-event` | `token, company, eventName, description, CATEGORY, standingZone, standingCap, standingPrice, seatingZone, seatRows, seatCols, seatingPrice` | `EventService.createEvent` (GA standing zone + assigned seating grid) |
+| `publish-event` | `token, company, eventName` | `EventService.publishEvent` (DRAFT → PUBLISHED so the event is visible in listings) |
 | `set-event-seating-layout` | `token, company, eventName, seatingZone, gridRows, gridCols` | `EventService.setEventLayout` (10×10 seat grid for the assigned zone) |
 | `set-company-coupon-discount` | `token, company, percent, code[, expiryDays]` | `CompanyService.setCompanyDiscountPolicy` (`CouponDiscount`) |
 | `logout` | `token` | `MemberService.logout` |
@@ -342,7 +343,16 @@ Choose **one** data bootstrap via `ticketing.bootstrap.dataset`:
 | `initial-state-file` | Replay an external script via `InitialStateExecutor` |
 | `none` | Empty application data (platform init only) |
 
-**Staff demo scenario (#415)** — empty DB + file bootstrap:
+**Final V3 checking scenario (#561)** — empty DB + file bootstrap (this is the file the final
+checking run should use; it is the **default** `initial-state.file`):
+
+```
+--ticketing.bootstrap.dataset=initial-state-file
+--ticketing.seed.enabled=false
+--ticketing.initial-state.file=classpath:initial-state/final-v3-scenario.txt
+```
+
+**Staff demo scenario (#415)** — the older/demo scenario, still available:
 
 ```
 --ticketing.bootstrap.dataset=initial-state-file
@@ -352,7 +362,9 @@ Choose **one** data bootstrap via `ticketing.bootstrap.dataset`:
 
 For a filesystem path, set `ticketing.initial-state.file` to a readable path. Classpath resources
 use the `classpath:` prefix. When `bootstrap.dataset` is unset, legacy rules apply:
-`seed.enabled=true` selects dev seed; otherwise a configured `initial-state.file` selects file bootstrap.
+`seed.enabled=true` selects dev seed; otherwise a configured `initial-state.file` selects file
+bootstrap. The default `initial-state.file` is `classpath:initial-state/final-v3-scenario.txt`, so
+selecting `bootstrap.dataset=initial-state-file` without an explicit file replays the final scenario.
 
 `DataBootstrapRunner` initializes the platform, then loads, parses and executes the file
 (all-or-nothing).

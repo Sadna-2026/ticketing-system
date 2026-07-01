@@ -1,5 +1,6 @@
 package com.ticketing.application.initialization;
 
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.application.listener.ManagerPermissionsChangedHandler;
@@ -15,7 +16,16 @@ import com.ticketing.domain.member.IMemberRepository;
 
 import jakarta.annotation.PostConstruct;
 
+// Forced eager (@Lazy(false)) because spring.main.lazy-initialization=true would otherwise
+// never instantiate this bean (nothing injects it), so its @PostConstruct that subscribes the
+// domain event listeners — including CompanyOpened → founder-owner assignment — would never run.
+// The initial-state bootstrap and the UI both depend on these subscriptions being live at startup.
+// Forced eager (@Lazy(false)) because spring.main.lazy-initialization=true would otherwise
+// never instantiate this bean (nothing injects it), so its @PostConstruct that subscribes the
+// domain event listeners — including CompanyOpened → founder-owner assignment — would never run.
+// The initial-state bootstrap and the UI both depend on these subscriptions being live at startup.
 @Component
+@Lazy(false)
 public class EventListenerRegistrar {
 
     private final ICompanyRepository companyRepository;
