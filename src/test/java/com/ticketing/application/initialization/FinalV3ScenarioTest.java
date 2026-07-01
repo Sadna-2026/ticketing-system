@@ -28,6 +28,9 @@ import com.ticketing.domain.company.Company;
 import com.ticketing.domain.event.Event;
 import com.ticketing.domain.event.EventStatus;
 import com.ticketing.domain.event.InventoryZone;
+import com.ticketing.domain.event.LayoutCell;
+import com.ticketing.domain.event.LayoutCellType;
+import com.ticketing.domain.event.VenueLayout;
 import com.ticketing.domain.member.Member;
 import com.ticketing.infrastructure.InMemoryCompanyRepository;
 import com.ticketing.infrastructure.InMemoryEventPublisher;
@@ -179,6 +182,22 @@ class FinalV3ScenarioTest {
                 "every E2 standing ticket must cost 10 dollars");
         assertEquals(0, new BigDecimal("10").compareTo(seating.getPricePerTicket()),
                 "every E2 seated ticket must cost 10 dollars");
+    }
+
+    @Test
+    @DisplayName("Both events expose a general-admission cell so GA tickets are purchasable on the map")
+    void givenFinalScenario_thenEventsHaveGaLayoutCell() {
+        runFinalScenario();
+
+        for (String name : List.of("E1", "E2")) {
+            Event e = event(name);
+            VenueLayout layout = e.getVenueLayout();
+            assertNotNull(layout, name + " should have a venue layout");
+            List<LayoutCell> gaCells = layout.cellsOfType(LayoutCellType.GENERAL_ADMISSION);
+            assertEquals(1, gaCells.size(), name + " should have exactly one GA (Standing) cell on the map");
+            assertEquals(zone(e, "Standing").getId(), gaCells.get(0).getZoneId(),
+                    name + "'s GA cell must reference the Standing zone");
+        }
     }
 
     @Test

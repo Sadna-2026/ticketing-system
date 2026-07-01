@@ -301,7 +301,25 @@ public class InitialStateExecutor {
             }
         }
 
-        eventService.setEventLayout(token, event.getId(), new VenueLayout(gridRows, gridCols, cells));
+        // Place each general-admission zone as a cell in an extra row so the buyer's venue map
+        // exposes a purchasable GA area. Without this, a mixed GA + assigned event shows the GA
+        // zone only in the legend with no way to add GA tickets (the map is built from cells).
+        List<InventoryZone> gaZones = event.getZones().stream()
+                .filter(z -> !z.isAssigned())
+                .toList();
+        int layoutRows = gridRows;
+        int layoutCols = gridCols;
+        if (!gaZones.isEmpty()) {
+            int gaRow = gridRows;
+            int gaCol = 0;
+            for (InventoryZone gaZone : gaZones) {
+                cells.add(LayoutCell.ga(gaRow, gaCol++, gaZone.getId(), gaZone.getName()));
+            }
+            layoutRows = gridRows + 1;
+            layoutCols = Math.max(gridCols, gaZones.size());
+        }
+
+        eventService.setEventLayout(token, event.getId(), new VenueLayout(layoutRows, layoutCols, cells));
     }
 
     private void setCompanyCouponDiscount(List<String> args, Map<String, String> boundTokens) {
