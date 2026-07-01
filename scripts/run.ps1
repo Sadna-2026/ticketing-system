@@ -64,8 +64,8 @@ switch ($Mode) {
     "normal"  { $env:DB_DDL_AUTO = if ($Target -eq "local") { "none" } else { "validate" }; Write-Host "Mode: NORMAL (validate schema)" -ForegroundColor Cyan }
     "initial" {
         $env:DB_DDL_AUTO = if ($Target -eq "local") { "none" } else { "create" }
-        $runArgs = "-Dspring-boot.run.arguments=--ticketing.bootstrap.dataset=initial-state-file --ticketing.seed.enabled=false --ticketing.initial-state.file=classpath:initial-state/staff-demo-v3.txt"
-        Write-Host "Mode: INITIAL STATE (wipe + load staff-demo-v3.txt)" -ForegroundColor Magenta
+        $runArgs = "-Dspring-boot.run.arguments=--ticketing.bootstrap.dataset=initial-state-file --ticketing.seed.enabled=false --ticketing.initial-state.file=classpath:initial-state/final-v3-scenario.txt"
+        Write-Host "Mode: INITIAL STATE (wipe + load final-v3-scenario.txt)" -ForegroundColor Magenta
     }
 }
 
